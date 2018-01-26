@@ -1,9 +1,11 @@
-/*
- * Example of using esp-homekit library to control
- * a simple $5 Sonoff Basic using HomeKit.
- * The esp-wifi-config library is also used in this
- * example. This means you don't have to specify
- * your network's SSID and password before building.
+/* Sonoff Basic
+ *
+ * An extra function has been added to GPIO14:
+ * A switch (a mount wall switch, for example), can be
+ * attached to GPIO14 and ground pin.
+ *
+ * To reset HomeKit config, you can push quickly button until
+ * LED turns on.
  *
  * In order to flash the sonoff basic you will have to
  * have a 3,3v (logic level) FTDI adapter.
@@ -39,7 +41,7 @@ const int relay_gpio = 12;
 const int led_gpio = 13;
 // The GPIO pin that is connected to an optional external switch with ground.
 const int switch_gpio = 14;
-// The GPIO pin that is oconnected to the button on the Sonoff Basic.
+// The GPIO pin that is connected to the button on the Sonoff Basic.
 const int button_gpio = 0;
 // The minimum amount that has to occur between each button press.
 const uint16_t button_event_debounce_time = 350 / portTICK_PERIOD_MS;
