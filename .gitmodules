@@ -1,0 +1,12 @@
+[submodule "components/cJSON"]
+	path = components/cJSON
+	url = https://github.com/maximkulkin/esp-cjson.git
+[submodule "components/homekit"]
+	path = components/homekit
+	url = https://github.com/maximkulkin/esp-homekit.git
+[submodule "components/wifi_config"]
+	path = components/wifi_config
+	url = https://github.com/maximkulkin/esp-wifi-config.git
+[submodule "components/wolfssl"]
+	path = components/wolfssl
+	url = https://github.com/maximkulkin/esp-wolfssl.git
