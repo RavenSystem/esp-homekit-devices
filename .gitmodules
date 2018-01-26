@@ -10,3 +10,6 @@
 [submodule "components/wolfssl"]
 	path = components/wolfssl
 	url = https://github.com/maximkulkin/esp-wolfssl.git
+[submodule "sdk/esp-open-rtos"]
+	path = sdk/esp-open-rtos
+	url = https://github.com/SuperHouse/esp-open-rtos.git
