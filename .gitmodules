@@ -13,3 +13,6 @@
 [submodule "sdk/esp-open-rtos"]
 	path = sdk/esp-open-rtos
 	url = https://github.com/SuperHouse/esp-open-rtos.git
+[submodule "components/led_codes"]
+	path = components/led_codes
+	url = https://github.com/RavenSystem/esp-led-codes.git
