@@ -6,7 +6,8 @@ EXTRA_COMPONENTS = \
 	$(abspath ../../components/wifi_config) \
 	$(abspath ../../components/wolfssl) \
 	$(abspath ../../components/cJSON) \
-	$(abspath ../../components/homekit)
+	$(abspath ../../components/homekit) \
+    $(abspath ../../components/led_codes)
 
 FLASH_SIZE = 8
 FLASH_MODE = dout
