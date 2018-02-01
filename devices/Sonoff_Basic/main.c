@@ -29,24 +29,22 @@
 #include <FreeRTOS.h>
 #include <task.h>
 #include <espressif/esp_wifi.h>
-#include <espressif/esp_system.h>
 
 #include <homekit/homekit.h>
 #include <homekit/characteristics.h>
 #include <wifi_config.h>
 
-// GPIO
-#define BUTTON_GPIO     0
-#define LED_GPIO        13
-#define RELAY_GPIO      12
-#define SWITCH_GPIO     14
+#include <led_codes.h>
 
-// The minimum amount that has to occur between each button press.
-const uint16_t button_event_debounce_time = 350 / portTICK_PERIOD_MS;
-// The last time the button was pressed, in ticks.
+#define BUTTON_GPIO         0
+#define LED_GPIO            13
+#define RELAY_GPIO          12
+#define SWITCH_GPIO         14
+
+#define DEBOUNCE_TIME       300     / portTICK_PERIOD_MS
+#define RESET_TIME          10000   / portTICK_PERIOD_MS
+
 uint32_t last_button_event_time;
-// Times button has been pushed quickly
-uint8_t times = 0;
 
 void relay_write(bool on) {
     gpio_write(RELAY_GPIO, on ? 1 : 0);
@@ -59,6 +57,7 @@ void led_write(bool on) {
 void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context);
 
 void button_intr_callback(uint8_t gpio);
+void switch_intr_callback(uint8_t gpio);
 
 homekit_characteristic_t switch_on = HOMEKIT_CHARACTERISTIC_(ON, false, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(switch_on_callback));
 
@@ -70,64 +69,67 @@ void gpio_init() {
     relay_write(switch_on.value.bool_value);
     
     gpio_set_pullup(BUTTON_GPIO, true, true);
-    gpio_set_interrupt(BUTTON_GPIO, GPIO_INTTYPE_EDGE_NEG, button_intr_callback);
+    gpio_set_interrupt(BUTTON_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
     
     gpio_enable(SWITCH_GPIO, GPIO_INPUT);
     gpio_set_pullup(SWITCH_GPIO, true, true);
-    gpio_set_interrupt(SWITCH_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
+    gpio_set_interrupt(SWITCH_GPIO, GPIO_INTTYPE_EDGE_ANY, switch_intr_callback);
 }
 
 void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
-    printf(">>> Switching\n");
     relay_write(switch_on.value.bool_value);
 }
 
 void identify_task(void *_args) {
-    // Identify Sonoff by turning on builtin LED for 3 seconds
-    led_write(true);
-    vTaskDelay(3000 / portTICK_PERIOD_MS);
-    led_write(false);
+    led_code(LED_GPIO, IDENTIFY_ACCESSORY);
     vTaskDelete(NULL);
 }
 
-void switch_reset_task(void *_args) {
-    // Remove HomeKit config and reset device
-    printf(">>> Resetting HomeKit setup\n");
-    homekit_server_reset();
-    
-    // Turn on LED for 2 seconds
-    led_write(true);
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
-    led_write(false);
-    
-    printf(">>> Restarting device\n");
-    sdk_system_restart();
+void wifi_connected_task(void *_args) {
+    led_code(LED_GPIO, WIFI_CONNECTED);
     vTaskDelete(NULL);
+}
+
+void reset_task(void *_args) {
+    homekit_server_reset();
+    wifi_config_reset();
+    
+    led_code(LED_GPIO, RESTART_DEVICE);
+    
+    abort();
+    vTaskDelete(NULL);
+}
+
+void toggle_switch() {
+    switch_on.value.bool_value = !switch_on.value.bool_value;
+    relay_write(switch_on.value.bool_value);
+    homekit_characteristic_notify(&switch_on, switch_on.value);
+}
+
+void switch_intr_callback(uint8_t gpio) {
+    uint32_t now = xTaskGetTickCountFromISR();
+    
+    if (!((now - last_button_event_time) < DEBOUNCE_TIME)) {
+        last_button_event_time = now;
+        toggle_switch();
+    }
 }
 
 void button_intr_callback(uint8_t gpio) {
     uint32_t now = xTaskGetTickCountFromISR();
     
-    if ((now - last_button_event_time) < button_event_debounce_time) {
-        // Debounce time, ignore switching events, but cheking to perform a HomeKit config reset
-        if (gpio == BUTTON_GPIO) {
-            times++;
-            if (times == 5) {
-                xTaskCreate(switch_reset_task, "Switch reset", 128, NULL, 1, NULL);
-            }
+    if (!((now - last_button_event_time) < DEBOUNCE_TIME) && (gpio_read(BUTTON_GPIO) == 1)) {
+        if ((now - last_button_event_time) > RESET_TIME) {
+            xTaskCreate(reset_task, "Reset", 128, NULL, 1, NULL);
+        } else {
+            last_button_event_time = now;
+            toggle_switch();
         }
-    } else {
-        times = 0;
-        last_button_event_time = now;
-        switch_on.value.bool_value = !switch_on.value.bool_value;
-        relay_write(switch_on.value.bool_value);
-        homekit_characteristic_notify(&switch_on, switch_on.value);
     }
 }
 
 void identify(homekit_value_t _value) {
-    printf(">>> Identifying\n");
-    xTaskCreate(identify_task, "Switch identify", 128, NULL, 2, NULL);
+    xTaskCreate(identify_task, "Identify", 128, NULL, 2, NULL);
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff Switch");
@@ -160,11 +162,9 @@ homekit_server_config_t config = {
 };
 
 void create_accessory_name() {
-    // Get MAC address
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     
-    // Use MAC address as part of accesory name and serial number
     uint8_t name_len = snprintf(NULL, 0, "SonoffB %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
     char *name_value = malloc(name_len+1);
     snprintf(name_value, name_len+1, "SonoffB %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
@@ -174,11 +174,10 @@ void create_accessory_name() {
 }
 
 void on_wifi_ready() {
-    xTaskCreate(identify_task, "Identify", 128, NULL, 1, NULL);
+    xTaskCreate(wifi_connected_task, "Wifi connected", 128, NULL, 1, NULL);
     
     create_accessory_name();
         
-    // Start HomeKit
     homekit_server_init(&config);
 }
 
