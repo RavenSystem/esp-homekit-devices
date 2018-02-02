@@ -4,7 +4,7 @@
  * A switch (a mount wall switch, for example), can be
  * attached to GPIO14 and ground pin.
  *
- * To reset HomeKit config, you can long pressed button
+ * To reset config, you can hold down the button
  * for at least 10 seconds and then release it.
  *
  * In order to flash the sonoff basic you will have to
@@ -13,6 +13,7 @@
  * To flash this example connect 3,3v, TX, RX, GND
  * in this order, beginning in the (square) pin header
  * next to the button.
+ * 
  * Next hold down the button and connect the FTDI adapter
  * to your computer. The sonoff is now in flash mode and
  * you can flash the custom firmware.
@@ -45,6 +46,7 @@
 #define RESET_TIME          10000   / portTICK_PERIOD_MS
 
 uint32_t last_button_event_time;
+uint32_t last_reset_event_time;
 
 void relay_write(bool on) {
     gpio_write(RELAY_GPIO, on ? 1 : 0);
@@ -74,6 +76,8 @@ void gpio_init() {
     gpio_enable(SWITCH_GPIO, GPIO_INPUT);
     gpio_set_pullup(SWITCH_GPIO, true, true);
     gpio_set_interrupt(SWITCH_GPIO, GPIO_INTTYPE_EDGE_ANY, switch_intr_callback);
+    
+    last_button_event_time = xTaskGetTickCountFromISR();
 }
 
 void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
@@ -125,12 +129,14 @@ void button_intr_callback(uint8_t gpio) {
     uint32_t now = xTaskGetTickCountFromISR();
     
     if (((now - last_button_event_time) > DEBOUNCE_TIME) && (gpio_read(BUTTON_GPIO) == 1)) {
-        if ((now - last_button_event_time) > RESET_TIME) {
+        if ((now - last_reset_event_time) > RESET_TIME) {
             xTaskCreate(reset_task, "Reset", 128, NULL, 1, NULL);
         } else {
+            last_button_event_time = now;
             toggle_switch();
         }
-        last_button_event_time = now;
+    } else if (gpio_read(BUTTON_GPIO) == 0) {
+        last_reset_event_time = now;
     }
 }
 
@@ -148,7 +154,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
             HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff Basic"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "1.0"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.1.0"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),
