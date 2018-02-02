@@ -18,14 +18,10 @@
 
 #include <stdio.h>
 #include <esp/uart.h>
-#include <esplibs/libmain.h>
 #include <esp8266.h>
 #include <FreeRTOS.h>
 #include <task.h>
-#include <etstimer.h>
 #include <espressif/esp_wifi.h>
-#include <espressif/esp_system.h>
-#include <espressif/esp_sta.h>
 
 #include <homekit/homekit.h>
 #include <homekit/characteristics.h>
@@ -35,14 +31,19 @@
 
 #include <dht/dht.h>
 
-#define BUTTON_GPIO     0
-#define LED_GPIO        13
-#define RELAY_GPIO      12
-#define SENSOR_GPIO     14
+#define BUTTON_GPIO         0
+#define LED_GPIO            13
+#define RELAY_GPIO          12
+#define SENSOR_GPIO         14
 
-#define POLL_PERIOD_A     10000
-#define POLL_PERIOD_B     20000
+#define DEBOUNCE_TIME       300     / portTICK_PERIOD_MS
+#define RESET_TIME          10000   / portTICK_PERIOD_MS
 
+#define POLL_PERIOD_A       10000   / portTICK_PERIOD_MS
+#define POLL_PERIOD_B       20000   / portTICK_PERIOD_MS
+
+uint32_t last_button_event_time;
+uint32_t last_reset_event_time;
 
 void relay_write(bool on) {
     gpio_write(RELAY_GPIO, on ? 1 : 0);
@@ -68,20 +69,49 @@ void wifi_connected_task(void *_args) {
     vTaskDelete(NULL);
 }
 
+void function_off_task(void *_args) {
+    led_code(LED_GPIO, FUNCTION_A);
+    vTaskDelete(NULL);
+}
+
+void function_heat_task(void *_args) {
+    led_code(LED_GPIO, FUNCTION_B);
+    vTaskDelete(NULL);
+}
+
+void function_cool_task(void *_args) {
+    led_code(LED_GPIO, FUNCTION_C);
+    vTaskDelete(NULL);
+}
+
+void reset_task(void *_args) {
+    homekit_server_reset();
+    wifi_config_reset();
+    
+    led_code(LED_GPIO, RESTART_DEVICE);
+    
+    abort();
+    vTaskDelete(NULL);
+}
+
 void identify(homekit_value_t _value) {
-    printf(">>> Identifying\n");
     xTaskCreate(identify_task, "Identify", 128, NULL, 2, NULL);
 }
 
-homekit_characteristic_t current_temperature = HOMEKIT_CHARACTERISTIC_(CURRENT_TEMPERATURE, 17);
-homekit_characteristic_t target_temperature  = HOMEKIT_CHARACTERISTIC_(TARGET_TEMPERATURE, 22, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(on_update));
+homekit_characteristic_t current_temperature = HOMEKIT_CHARACTERISTIC_(CURRENT_TEMPERATURE, 0);
+homekit_characteristic_t target_temperature  = HOMEKIT_CHARACTERISTIC_(TARGET_TEMPERATURE, 23, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(on_update));
 homekit_characteristic_t units = HOMEKIT_CHARACTERISTIC_(TEMPERATURE_DISPLAY_UNITS, 0);
 homekit_characteristic_t current_state = HOMEKIT_CHARACTERISTIC_(CURRENT_HEATING_COOLING_STATE, 0);
 homekit_characteristic_t target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_COOLING_STATE, 0, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(on_update));
-homekit_characteristic_t current_humidity = HOMEKIT_CHARACTERISTIC_(CURRENT_RELATIVE_HUMIDITY, 50);
+homekit_characteristic_t current_humidity = HOMEKIT_CHARACTERISTIC_(CURRENT_RELATIVE_HUMIDITY, 0);
 
 void update_state() {
     uint8_t state = target_state.value.int_value;
+    if (state == 3) {
+        state = 0;
+        target_state.value = HOMEKIT_UINT8(0);
+        homekit_characteristic_notify(&target_state, target_state.value);
+    }
     if (state == 1 && current_temperature.value.float_value < target_temperature.value.float_value) {
         if (current_state.value.int_value != 1) {
             current_state.value = HOMEKIT_UINT8(1);
@@ -104,18 +134,58 @@ void update_state() {
     }
 }
 
+void button_intr_callback(uint8_t gpio) {
+    uint32_t now = xTaskGetTickCountFromISR();
+    
+    if (((now - last_button_event_time) > DEBOUNCE_TIME) && (gpio_read(BUTTON_GPIO) == 1)) {
+        if ((now - last_reset_event_time) > RESET_TIME) {
+            xTaskCreate(reset_task, "Reset", 128, NULL, 1, NULL);
+        } else {
+            last_button_event_time = now;
+            
+            uint8_t state = target_state.value.int_value + 1;
+            switch (state) {
+                case 1:
+                    xTaskCreate(function_heat_task, "Function heat", 128, NULL, 1, NULL);
+                    break;
+                    
+                case 2:
+                    xTaskCreate(function_cool_task, "Function cool", 128, NULL, 1, NULL);
+                    break;
+                    
+                default:
+                    state = 0;
+                    xTaskCreate(function_off_task, "Function off", 128, NULL, 1, NULL);
+                    break;
+            }
+            
+            target_state.value = HOMEKIT_UINT8(state);
+            homekit_characteristic_notify(&target_state, target_state.value);
+            
+            update_state();
+        }
+    } else if (gpio_read(BUTTON_GPIO) == 0) {
+        last_reset_event_time = now;
+    }
+}
+
 void temperature_sensor_task(void *_args) {
     gpio_enable(LED_GPIO, GPIO_OUTPUT);
     led_write(false);
+    
+    gpio_set_pullup(BUTTON_GPIO, true, true);
+    gpio_set_interrupt(BUTTON_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
     
     gpio_set_pullup(SENSOR_GPIO, false, false);
     
     gpio_enable(RELAY_GPIO, GPIO_OUTPUT);
     relay_write(false);
     
+    last_button_event_time = xTaskGetTickCountFromISR();
+    
     float humidity_value, temperature_value;
     while (1) {
-        vTaskDelay(POLL_PERIOD_A / portTICK_PERIOD_MS);
+        vTaskDelay(POLL_PERIOD_A);
         
         if (dht_read_float_data(DHT_TYPE_DHT22, SENSOR_GPIO, &humidity_value, &temperature_value)) {
             printf(">>> Sensor: temperature %g, humidity %g\n", temperature_value, humidity_value);
@@ -127,7 +197,7 @@ void temperature_sensor_task(void *_args) {
             
             update_state();
             
-            vTaskDelay(POLL_PERIOD_B / portTICK_PERIOD_MS);
+            vTaskDelay(POLL_PERIOD_B);
         } else {
             printf(">>> Sensor: ERROR\n");
             
@@ -157,7 +227,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
             HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff TH"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "1.0"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.1.0"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),
@@ -182,11 +252,9 @@ homekit_server_config_t config = {
 };
 
 void create_accessory_name() {
-    // Get MAC address
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     
-    // Use MAC address as part of accesory name and serial number
     uint8_t name_len = snprintf(NULL, 0, "SonoffTH %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
     char *name_value = malloc(name_len+1);
     snprintf(name_value, name_len+1, "SonoffTH %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
@@ -200,7 +268,6 @@ void on_wifi_ready() {
     
     create_accessory_name();
         
-    // Start HomeKit
     homekit_server_init(&config);
 }
 
