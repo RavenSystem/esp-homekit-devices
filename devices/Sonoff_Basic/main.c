@@ -4,8 +4,8 @@
  * A switch (a mount wall switch, for example), can be
  * attached to GPIO14 and ground pin.
  *
- * To reset HomeKit config, you can push quickly button until
- * LED turns on.
+ * To reset HomeKit config, you can long pressed button
+ * for at least 10 seconds and then release it.
  *
  * In order to flash the sonoff basic you will have to
  * have a 3,3v (logic level) FTDI adapter.
@@ -80,6 +80,11 @@ void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void 
     relay_write(switch_on.value.bool_value);
 }
 
+void function_task(void *_args) {
+    led_code(LED_GPIO, FUNCTION_A);
+    vTaskDelete(NULL);
+}
+
 void identify_task(void *_args) {
     led_code(LED_GPIO, IDENTIFY_ACCESSORY);
     vTaskDelete(NULL);
@@ -101,6 +106,7 @@ void reset_task(void *_args) {
 }
 
 void toggle_switch() {
+    xTaskCreate(function_task, "Function", 128, NULL, 2, NULL);
     switch_on.value.bool_value = !switch_on.value.bool_value;
     relay_write(switch_on.value.bool_value);
     homekit_characteristic_notify(&switch_on, switch_on.value);
@@ -109,7 +115,7 @@ void toggle_switch() {
 void switch_intr_callback(uint8_t gpio) {
     uint32_t now = xTaskGetTickCountFromISR();
     
-    if (!((now - last_button_event_time) < DEBOUNCE_TIME)) {
+    if ((now - last_button_event_time) > DEBOUNCE_TIME) {
         last_button_event_time = now;
         toggle_switch();
     }
@@ -118,13 +124,13 @@ void switch_intr_callback(uint8_t gpio) {
 void button_intr_callback(uint8_t gpio) {
     uint32_t now = xTaskGetTickCountFromISR();
     
-    if (!((now - last_button_event_time) < DEBOUNCE_TIME) && (gpio_read(BUTTON_GPIO) == 1)) {
+    if (((now - last_button_event_time) > DEBOUNCE_TIME) && (gpio_read(BUTTON_GPIO) == 1)) {
         if ((now - last_button_event_time) > RESET_TIME) {
             xTaskCreate(reset_task, "Reset", 128, NULL, 1, NULL);
         } else {
-            last_button_event_time = now;
             toggle_switch();
         }
+        last_button_event_time = now;
     }
 }
 
