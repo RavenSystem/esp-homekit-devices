@@ -55,6 +55,7 @@ void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void 
 void button_intr_callback(uint8_t gpio);
 
 homekit_characteristic_t switch_on = HOMEKIT_CHARACTERISTIC_(ON, false, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(switch_on_callback));
+homekit_characteristic_t switch_outlet_in_use = HOMEKIT_CHARACTERISTIC_(OUTLET_IN_USE, false);
 
 void gpio_init() {
     gpio_enable(LED_GPIO, GPIO_OUTPUT);
@@ -71,6 +72,7 @@ void gpio_init() {
 
 void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
     relay_write(switch_on.value.bool_value);
+    homekit_characteristic_notify(&switch_outlet_in_use, switch_on.value);
 }
 
 void function_task(void *_args) {
@@ -111,6 +113,7 @@ void button_intr_callback(uint8_t gpio) {
             switch_on.value.bool_value = !switch_on.value.bool_value;
             relay_write(switch_on.value.bool_value);
             homekit_characteristic_notify(&switch_on, switch_on.value);
+            homekit_characteristic_notify(&switch_outlet_in_use, switch_on.value);
         }
     } else if (gpio_read(BUTTON_GPIO) == 0) {
         last_reset_event_time = now;
@@ -135,9 +138,10 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),
-        HOMEKIT_SERVICE(SWITCH, .primary=true, .characteristics=(homekit_characteristic_t*[]){
+        HOMEKIT_SERVICE(OUTLET, .primary=true, .characteristics=(homekit_characteristic_t*[]){
             HOMEKIT_CHARACTERISTIC(NAME, "Sonoff S20"),
             &switch_on,
+            &switch_outlet_in_use,
             NULL
         }),
         NULL
