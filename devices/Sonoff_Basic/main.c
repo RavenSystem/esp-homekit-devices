@@ -1,27 +1,7 @@
-/* Sonoff Basic
+/*
+ * Sonoff Basic
  *
- * An extra function has been added to GPIO14:
- * A switch (a mount wall switch, for example), can be
- * attached to GPIO14 and ground pin.
- *
- * To reset config, you can hold down the button
- * for at least 10 seconds and then release it.
- *
- * In order to flash the sonoff basic you will have to
- * have a 3,3v (logic level) FTDI adapter.
- *
- * To flash this example connect 3,3v, TX, RX, GND
- * in this order, beginning in the (square) pin header
- * next to the button.
- * 
- * Next hold down the button and connect the FTDI adapter
- * to your computer. The sonoff is now in flash mode and
- * you can flash the custom firmware.
- *
- * WARNING: Do not connect the sonoff to AC while it's
- * connected to the FTDI adapter! This may fry your
- * computer and sonoff.
- *
+ * v0.1.0
  */
 
 #include <stdio.h>
@@ -30,11 +10,11 @@
 #include <FreeRTOS.h>
 #include <task.h>
 #include <espressif/esp_wifi.h>
+#include <espressif/esp_common.h>
 
 #include <homekit/homekit.h>
 #include <homekit/characteristics.h>
 #include <wifi_config.h>
-
 #include <led_codes.h>
 
 #define BUTTON_GPIO         0
@@ -105,7 +85,7 @@ void reset_task(void *_args) {
     
     led_code(LED_GPIO, RESTART_DEVICE);
     
-    abort();
+    sdk_system_restart();
     vTaskDelete(NULL);
 }
 
