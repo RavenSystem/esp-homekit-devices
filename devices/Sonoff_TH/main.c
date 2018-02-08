@@ -1,7 +1,7 @@
 /*
- * Sonoff TH10/16
+ * Sonoff TH
  *
- * v0.1.0
+ * v0.1.1
  */
 
 #include <stdio.h>
@@ -27,11 +27,12 @@
 #define DEBOUNCE_TIME       300     / portTICK_PERIOD_MS
 #define RESET_TIME          10000   / portTICK_PERIOD_MS
 
-#define POLL_PERIOD_A       10000   / portTICK_PERIOD_MS
-#define POLL_PERIOD_B       20000   / portTICK_PERIOD_MS
+#define delay_ms(ms)        vTaskDelay((ms) / portTICK_PERIOD_MS)
 
-uint32_t last_button_event_time;
-uint32_t last_reset_event_time;
+#define POLL_PERIOD_A       10000
+#define POLL_PERIOD_B       20000
+
+volatile uint32_t last_button_event_time, last_reset_event_time;
 
 void relay_write(bool on) {
     gpio_write(RELAY_GPIO, on ? 1 : 0);
@@ -83,7 +84,7 @@ void reset_task(void *_args) {
 }
 
 void identify(homekit_value_t _value) {
-    xTaskCreate(identify_task, "Identify", 128, NULL, 2, NULL);
+    xTaskCreate(identify_task, "Identify", 256, NULL, 3, NULL);
 }
 
 homekit_characteristic_t current_temperature = HOMEKIT_CHARACTERISTIC_(CURRENT_TEMPERATURE, 0);
@@ -127,23 +128,23 @@ void button_intr_callback(uint8_t gpio) {
     
     if (((now - last_button_event_time) > DEBOUNCE_TIME) && (gpio_read(BUTTON_GPIO) == 1)) {
         if ((now - last_reset_event_time) > RESET_TIME) {
-            xTaskCreate(reset_task, "Reset", 128, NULL, 1, NULL);
+            xTaskCreate(reset_task, "Reset", 256, NULL, 1, NULL);
         } else {
             last_button_event_time = now;
             
             uint8_t state = target_state.value.int_value + 1;
             switch (state) {
                 case 1:
-                    xTaskCreate(function_heat_task, "Function heat", 128, NULL, 1, NULL);
+                    xTaskCreate(function_heat_task, "Function heat", 256, NULL, 3, NULL);
                     break;
                     
                 case 2:
-                    xTaskCreate(function_cool_task, "Function cool", 128, NULL, 1, NULL);
+                    xTaskCreate(function_cool_task, "Function cool", 256, NULL,3, NULL);
                     break;
                     
                 default:
                     state = 0;
-                    xTaskCreate(function_off_task, "Function off", 128, NULL, 1, NULL);
+                    xTaskCreate(function_off_task, "Function off", 256, NULL, 3, NULL);
                     break;
             }
             
@@ -171,9 +172,10 @@ void temperature_sensor_task(void *_args) {
     
     last_button_event_time = xTaskGetTickCountFromISR();
     
-    float humidity_value, temperature_value;
     while (1) {
-        vTaskDelay(POLL_PERIOD_A);
+        delay_ms(POLL_PERIOD_A);
+        
+        float humidity_value, temperature_value;
         
         if (dht_read_float_data(DHT_TYPE_DHT22, SENSOR_GPIO, &humidity_value, &temperature_value)) {
             printf(">>> Sensor: temperature %g, humidity %g\n", temperature_value, humidity_value);
@@ -185,7 +187,7 @@ void temperature_sensor_task(void *_args) {
             
             update_state();
             
-            vTaskDelay(POLL_PERIOD_B);
+            delay_ms(POLL_PERIOD_B);
         } else {
             printf(">>> Sensor: ERROR\n");
             
@@ -215,7 +217,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
             HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff TH"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.1.0"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.1.1"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),
@@ -243,16 +245,16 @@ void create_accessory_name() {
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     
-    uint8_t name_len = snprintf(NULL, 0, "SonoffTH %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
+    uint8_t name_len = snprintf(NULL, 0, "SonoffTH %02X%02X", macaddr[4], macaddr[5]);
     char *name_value = malloc(name_len+1);
-    snprintf(name_value, name_len+1, "SonoffTH %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
+    snprintf(name_value, name_len+1, "SonoffTH %02X%02X", macaddr[4], macaddr[5]);
     
     name.value = HOMEKIT_STRING(name_value);
     serial.value = HOMEKIT_STRING(name_value);
 }
 
 void on_wifi_ready() {
-    xTaskCreate(wifi_connected_task, "Wifi connected", 128, NULL, 1, NULL);
+    xTaskCreate(wifi_connected_task, "Wifi connected", 256, NULL, 3, NULL);
     
     create_accessory_name();
         
