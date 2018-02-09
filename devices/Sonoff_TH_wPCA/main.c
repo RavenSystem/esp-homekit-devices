@@ -31,6 +31,7 @@
 
 #define POLL_PERIOD_A       10000
 #define POLL_PERIOD_B       20000
+#define PAUSE               600
 
 #define PCW_DELAY           35000
 
@@ -196,21 +197,29 @@ void temperature_sensor_task(void *_args) {
     
     last_button_event_time = xTaskGetTickCountFromISR();
     
+    float humidity_value, temperature_value;
+    float old_humidity_value = 0.0, old_temperature_value = 0.0;
     while (1) {
         delay_ms(POLL_PERIOD_A);
         
-        float humidity_value, temperature_value;
-        
         if (dht_read_float_data(DHT_TYPE_DHT22, SENSOR_GPIO, &humidity_value, &temperature_value)) {
             printf(">>> Sensor: temperature %g, humidity %g\n", temperature_value, humidity_value);
-            current_temperature.value = HOMEKIT_FLOAT(temperature_value);
-            current_humidity.value = HOMEKIT_FLOAT(humidity_value);
             
-            homekit_characteristic_notify(&current_temperature, current_temperature.value);
-            homekit_characteristic_notify(&current_humidity, current_humidity.value);
-            
-            update_state();
-            
+            if (temperature_value != old_temperature_value) {
+                old_temperature_value = temperature_value;
+                current_temperature.value = HOMEKIT_FLOAT(temperature_value);
+                homekit_characteristic_notify(&current_temperature, current_temperature.value);
+                
+                if (humidity_value != old_humidity_value) {
+                    delay_ms(PAUSE);
+                    old_humidity_value = humidity_value;
+                    current_humidity.value = HOMEKIT_FLOAT(humidity_value);
+                    homekit_characteristic_notify(&current_humidity, current_humidity.value);
+                }
+                
+                update_state();
+            }
+
             delay_ms(POLL_PERIOD_B);
         } else {
             printf(">>> Sensor: ERROR\n");
