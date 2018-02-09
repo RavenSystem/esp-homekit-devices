@@ -29,9 +29,9 @@
 #define OUTLET_TIME         3000    / portTICK_PERIOD_MS
 #define RESET_TIME          15000   / portTICK_PERIOD_MS
 
-volatile uint32_t last_button_event_time, last_reset_event_time;
+uint32_t last_button_event_time, last_reset_event_time;
 ETSTimer press_timer;
-volatile uint8_t press_count = 0;
+uint8_t press_count = 0;
 
 void relay_write(bool on) {
     gpio_write(RELAY_GPIO, on ? 1 : 0);
