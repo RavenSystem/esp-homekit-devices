@@ -24,10 +24,10 @@
 #define RELAY_GPIO          12
 
 #define DEBOUNCE_TIME       50      / portTICK_PERIOD_MS
-#define DOUBLE_PRESS_TIME   500
-#define LONGPRESS_TIME      1000    / portTICK_PERIOD_MS
-#define OUTLET_TIME         3000    / portTICK_PERIOD_MS
-#define RESET_TIME          15000   / portTICK_PERIOD_MS
+#define DOUBLE_PRESS_TIME   400
+#define LONGPRESS_TIME      750     / portTICK_PERIOD_MS
+#define OUTLET_TIME         2500    / portTICK_PERIOD_MS
+#define RESET_TIME          10000   / portTICK_PERIOD_MS
 
 uint32_t last_button_event_time, last_reset_event_time;
 ETSTimer press_timer;
