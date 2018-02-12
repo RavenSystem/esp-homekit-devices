@@ -31,7 +31,7 @@
 
 #define POLL_PERIOD_A       10000
 #define POLL_PERIOD_B       20000
-#define PAUSE               600
+#define PAUSE               1000
 
 uint32_t last_button_event_time, last_reset_event_time;
 
@@ -254,9 +254,9 @@ void create_accessory_name() {
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     
-    uint8_t name_len = snprintf(NULL, 0, "SonoffTH %02X%02X", macaddr[4], macaddr[5]);
+    uint8_t name_len = snprintf(NULL, 0, "SonoffTH %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
     char *name_value = malloc(name_len+1);
-    snprintf(name_value, name_len+1, "SonoffTH %02X%02X", macaddr[4], macaddr[5]);
+    snprintf(name_value, name_len+1, "SonoffTH %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
     
     name.value = HOMEKIT_STRING(name_value);
     serial.value = HOMEKIT_STRING(name_value);
