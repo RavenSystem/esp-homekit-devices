@@ -1,5 +1,5 @@
 /*
- * Sonoff Basic with Power Cut Alarm
+ * Sonoff Basic with Power Outage Warning
  *
  * v0.1.1
  */
@@ -27,7 +27,7 @@
 
 #define delay_ms(ms)        vTaskDelay((ms) / portTICK_PERIOD_MS)
 
-#define PCW_DELAY           35000
+#define POW_DELAY           30000
 
 uint32_t last_button_event_time, last_reset_event_time;
 
@@ -46,22 +46,24 @@ void switch_intr_callback(uint8_t gpio);
 
 homekit_characteristic_t switch_on = HOMEKIT_CHARACTERISTIC_(ON, false, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(switch_on_callback));
 
-homekit_characteristic_t power_cut_alarm = HOMEKIT_CHARACTERISTIC_(MOTION_DETECTED, false);
+homekit_characteristic_t power_cut_alarm = HOMEKIT_CHARACTERISTIC_(MOTION_DETECTED, true);
 
-void power_cut_alarm_task(void *_args) {
-    printf(">>> Power Cut Alarm: INIT OFF\n");
+void power_outage_warning_task(void *_args) {
+    delay_ms(POW_DELAY);
+    
+    printf(">>> Power Outage Warning: OFF event sent\n");
     power_cut_alarm.value = HOMEKIT_BOOL(false);
     homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(false));
     
-    delay_ms(PCW_DELAY);
+    delay_ms(POW_DELAY);
     
-    printf(">>> Power Cut Alarm: ON\n");
+    printf(">>> Power Outage Warning: ON event sent\n");
     power_cut_alarm.value = HOMEKIT_BOOL(true);
     homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(true));
     
-    delay_ms(PCW_DELAY);
+    delay_ms(POW_DELAY);
     
-    printf(">>> Power Cut Alarm: OFF\n");
+    printf(">>> Power Outage Warning: OFF event sent\n");
     power_cut_alarm.value = HOMEKIT_BOOL(false);
     homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(false));
     
@@ -158,7 +160,7 @@ homekit_accessory_t *accessories[] = {
             &name,
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
-            HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff Basic wPCA"),
+            HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff Basic wPOW"),
             HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.1.1"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
@@ -169,7 +171,7 @@ homekit_accessory_t *accessories[] = {
             NULL
         }),
         HOMEKIT_SERVICE(MOTION_SENSOR, .primary=true, .characteristics=(homekit_characteristic_t*[]) {
-            HOMEKIT_CHARACTERISTIC(NAME, "Power Alarm"),
+            HOMEKIT_CHARACTERISTIC(NAME, "Power Outage"),
             &power_cut_alarm,
             NULL
         }),
@@ -187,9 +189,9 @@ void create_accessory_name() {
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     
-    uint8_t name_len = snprintf(NULL, 0, "SonoffB %02X%02X", macaddr[4], macaddr[5]);
+    uint8_t name_len = snprintf(NULL, 0, "SonoffB %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
     char *name_value = malloc(name_len+1);
-    snprintf(name_value, name_len+1, "SonoffB %02X%02X", macaddr[4], macaddr[5]);
+    snprintf(name_value, name_len+1, "SonoffB %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
     
     name.value = HOMEKIT_STRING(name_value);
     serial.value = name.value;
@@ -202,7 +204,7 @@ void on_wifi_ready() {
         
     homekit_server_init(&config);
     
-    xTaskCreate(power_cut_alarm_task, "Power Cut Alarm", 256, NULL, 4, NULL);
+    xTaskCreate(power_outage_warning_task, "Power Outage Warning", 256, NULL, 4, NULL);
 }
 
 void user_init(void) {
