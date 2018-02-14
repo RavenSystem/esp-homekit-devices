@@ -7,7 +7,7 @@ EXTRA_COMPONENTS = \
     $(abspath ../../external_libs/cJSON) \
     $(abspath ../../external_libs/homekit) \
     $(abspath ../../libs/led_codes) \
-    $(abspath ../../libs/wifi_config)
+    $(abspath ../../libs/legacy_config)
 
 FLASH_SIZE = 8
 FLASH_MODE = dout

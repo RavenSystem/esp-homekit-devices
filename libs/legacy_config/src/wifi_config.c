@@ -629,14 +629,3 @@ void wifi_config_reset() {
     sysparam_set_string("wifi_password", "");
 }
 
-
-void wifi_config_get(char **ssid, char **password) {
-    sysparam_get_string("wifi_ssid", ssid);
-    sysparam_get_string("wifi_password", password);
-}
-
-
-void wifi_config_set(const char *ssid, const char *password) {
-    sysparam_set_string("wifi_ssid", ssid);
-    sysparam_set_string("wifi_password", password);
-}
