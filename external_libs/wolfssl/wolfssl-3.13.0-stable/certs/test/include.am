@@ -1,0 +1,19 @@
+# vim:ft=automake
+# All paths should be given relative to the root
+#
+
+EXTRA_DIST += \
+	     certs/test/cert-ext-ia.cfg \
+	     certs/test/cert-ext-ia.der \
+	     certs/test/cert-ext-nc.cfg \
+	     certs/test/cert-ext-nc.der \
+	     certs/test/cert-ext-ns.der \
+	     certs/test/gen-ext-certs.sh \
+         certs/test/server-duplicate-policy.pem
+
+# The certs/server-cert with the last byte (signature byte) changed
+EXTRA_DIST += \
+         certs/test/server-cert-rsa-badsig.der \
+         certs/test/server-cert-rsa-badsig.pem \
+		 certs/test/server-cert-ecc-badsig.der \
+         certs/test/server-cert-ecc-badsig.pem
