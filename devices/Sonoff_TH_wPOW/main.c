@@ -100,23 +100,32 @@ homekit_characteristic_t current_humidity = HOMEKIT_CHARACTERISTIC_(CURRENT_RELA
 homekit_characteristic_t power_cut_alarm = HOMEKIT_CHARACTERISTIC_(MOTION_DETECTED, true);
 
 void power_outage_warning_task(void *_args) {
-    delay_ms(POW_DELAY);
+    uint8_t connected_clients = 0;
     
-    printf(">>> Power Outage Warning: OFF event sent\n");
-    power_cut_alarm.value = HOMEKIT_BOOL(false);
-    homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(false));
-    
-    delay_ms(POW_DELAY);
-    
-    printf(">>> Power Outage Warning: ON event sent\n");
-    power_cut_alarm.value = HOMEKIT_BOOL(true);
-    homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(true));
-    
-    delay_ms(POW_DELAY);
-    
-    printf(">>> Power Outage Warning: OFF event sent\n");
-    power_cut_alarm.value = HOMEKIT_BOOL(false);
-    homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(false));
+    uint8_t i;
+    for (i=0; i<255; i++) {
+        delay_ms(POW_DELAY);
+        
+        uint8_t n;
+        connected_clients_count(&n);
+        
+        if (n != connected_clients) {
+            connected_clients = n;
+            printf(">>> Connected clients: %d\n", n);
+            
+            delay_ms(POW_DELAY);
+            
+            printf(">>> Power Outage Warning: ON event sent\n");
+            power_cut_alarm.value = HOMEKIT_BOOL(true);
+            homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(true));
+            
+            delay_ms(POW_DELAY);
+            
+            printf(">>> Power Outage Warning: OFF event sent\n");
+            power_cut_alarm.value = HOMEKIT_BOOL(false);
+            homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(false));
+        }
+    }
     
     vTaskDelete(NULL);
 }
