@@ -24,4 +24,7 @@ void homekit_server_init(homekit_server_config_t *config);
 // Reset HomeKit accessory server, removing all pairings
 void homekit_server_reset();
 
+// Returns connected clients
+void connected_clients_count(uint8_t *count);
+
 #endif // __HOMEKIT_H__

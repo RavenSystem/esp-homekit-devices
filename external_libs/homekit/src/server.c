@@ -175,6 +175,12 @@ void server_free(homekit_server_t *server) {
     free(server);
 }
 
+uint8_t connected_clients = 0;
+
+void connected_clients_count(uint8_t *count) {
+    *count = connected_clients;
+}
+
 #ifdef HOMEKIT_DEBUG
 #define TLV_DEBUG(values) tlv_debug(values)
 #else
@@ -2881,6 +2887,8 @@ void homekit_server_close_client(homekit_server_t *server, client_context_t *con
     );
 
     client_context_free(context);
+    
+    connected_clients--;
 }
 
 
@@ -2910,6 +2918,8 @@ client_context_t *homekit_server_accept_client(homekit_server_t *server) {
     server->fds[server->nfds].fd = s;
     server->fds[server->nfds].events = POLLIN;
     server->nfds++;
+    
+    connected_clients++;
 
     return context;
 }
@@ -3053,6 +3063,7 @@ static void homekit_run_server(homekit_server_t *server)
         }
 
         homekit_server_process_notifications(server);
+        
     }
 
     server_free(server);
