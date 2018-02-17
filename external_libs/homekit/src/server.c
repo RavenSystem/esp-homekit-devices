@@ -3024,7 +3024,7 @@ static void homekit_run_server(homekit_server_t *server)
     listen(listenfd, 10);
 
     server->nfds = 1;
-    connected_clients = 1;
+    connected_clients = 0;
     server->fds[0].fd = listenfd;
     server->fds[0].events = POLLIN;
 
