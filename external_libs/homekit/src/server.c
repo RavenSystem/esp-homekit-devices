@@ -1865,6 +1865,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             context->encrypted = true;
 
             CLIENT_INFO(context, "Verification successful, secure session established");
+            connected_clients++;
 
             break;
         }
@@ -2919,7 +2920,6 @@ client_context_t *homekit_server_accept_client(homekit_server_t *server) {
     server->fds[server->nfds].fd = s;
     server->fds[server->nfds].events = POLLIN;
     server->nfds++;
-    connected_clients++;
 
     return context;
 }
