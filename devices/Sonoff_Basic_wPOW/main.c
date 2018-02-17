@@ -27,7 +27,7 @@
 
 #define delay_ms(ms)        vTaskDelay((ms) / portTICK_PERIOD_MS)
 
-#define POW_DELAY           3500
+#define POW_DELAY           10000
 
 uint32_t last_button_event_time, last_reset_event_time;
 
@@ -52,7 +52,7 @@ void power_outage_warning_task(void *_args) {
     uint8_t connected_clients = 0;
     
     uint8_t i;
-    for (i=0; i<255; i++) {
+    for (i=0; i<90; i++) {
         delay_ms(POW_DELAY);
         
         uint8_t n;
@@ -61,8 +61,6 @@ void power_outage_warning_task(void *_args) {
         if (n != connected_clients) {
             connected_clients = n;
             printf(">>> Connected clients: %d\n", n);
-            
-            delay_ms(POW_DELAY);
             
             printf(">>> Power Outage Warning: ON event sent\n");
             power_cut_alarm.value = HOMEKIT_BOOL(true);
