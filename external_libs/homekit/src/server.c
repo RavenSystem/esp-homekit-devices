@@ -2889,8 +2889,6 @@ void homekit_server_close_client(homekit_server_t *server, client_context_t *con
     );
 
     client_context_free(context);
-    
-    connected_clients--;
 }
 
 
