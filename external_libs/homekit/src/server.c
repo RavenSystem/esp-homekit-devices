@@ -2859,6 +2859,7 @@ void homekit_server_close_client(homekit_server_t *server, client_context_t *con
         if (server->fds[i].fd == context->socket) {
             server->fds[i] = server->fds[server->nfds-1];
             server->nfds--;
+            connected_clients--;
             break;
         }
     }
@@ -2918,7 +2919,6 @@ client_context_t *homekit_server_accept_client(homekit_server_t *server) {
     server->fds[server->nfds].fd = s;
     server->fds[server->nfds].events = POLLIN;
     server->nfds++;
-    
     connected_clients++;
 
     return context;
@@ -3024,6 +3024,7 @@ static void homekit_run_server(homekit_server_t *server)
     listen(listenfd, 10);
 
     server->nfds = 1;
+    connected_clients = 1;
     server->fds[0].fd = listenfd;
     server->fds[0].events = POLLIN;
 
@@ -3047,6 +3048,7 @@ static void homekit_run_server(homekit_server_t *server)
                 if (!context) {
                     // cleanup orphan FD, although should not happen
                     server->nfds--;
+                    connected_clients--;
                     server->fds[i] = server->fds[server->nfds];
                     i--;
                     continue;
