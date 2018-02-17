@@ -2860,7 +2860,6 @@ void homekit_server_close_client(homekit_server_t *server, client_context_t *con
         if (server->fds[i].fd == context->socket) {
             server->fds[i] = server->fds[server->nfds-1];
             server->nfds--;
-            connected_clients--;
             break;
         }
     }
