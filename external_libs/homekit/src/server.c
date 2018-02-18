@@ -3120,7 +3120,8 @@ void homekit_setup_mdns(homekit_server_t *server) {
     // should be in format XX:XX:XX:XX:XX:XX, otherwise devices will ignore it
     add_txt("id=%s", server->accessory_id);
     // current configuration number (required)
-    add_txt("c#=%d", accessory->config_number);
+    uint8_t r = 1 + (hwrand() % 255);
+    add_txt("c#=%d", r);
     // current state number (required)
     add_txt("s#=1");
     // feature flags (required if non-zero)
