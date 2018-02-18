@@ -1865,7 +1865,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             context->encrypted = true;
 
             CLIENT_INFO(context, "Verification successful, secure session established");
-            connected_clients++;
+            //connected_clients++;
 
             break;
         }
@@ -1942,6 +1942,8 @@ void homekit_server_on_get_accessories(client_context_t *context) {
     json_free(json);
 
     client_send_chunk(NULL, 0, context);
+    
+    connected_clients++;
 }
 
 void homekit_server_on_get_characteristics(client_context_t *context) {
@@ -3135,7 +3137,7 @@ void homekit_setup_mdns(homekit_server_t *server) {
     add_txt("ci=%d", accessory->category);
 
     mdns_clear();
-    mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 60);
+    mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 120);
 }
 
 char *homekit_accessory_id_generate() {
