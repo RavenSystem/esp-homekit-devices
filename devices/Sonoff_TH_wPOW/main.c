@@ -33,7 +33,7 @@
 #define POLL_PERIOD_B       20000
 #define PAUSE               1000
 
-#define POW_DELAY           10000
+#define POW_DELAY           20000
 
 uint32_t last_button_event_time, last_reset_event_time;
 
@@ -103,7 +103,7 @@ void power_outage_warning_task(void *_args) {
     uint8_t connected_clients = 0;
     
     uint8_t i;
-    for (i=0; i<90; i++) {
+    for (i=0; i<15; i++) {
         delay_ms(POW_DELAY);
         
         uint8_t n;
