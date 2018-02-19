@@ -3159,7 +3159,7 @@ void homekit_setup_mdns(homekit_server_t *server) {
     // accessory model name (required)
     add_txt("md=%s", model->value.string_value);
     // protocol version (required)
-    add_txt("pv=1.0");
+    add_txt("pv=1.1");
     // device ID (required)
     // should be in format XX:XX:XX:XX:XX:XX, otherwise devices will ignore it
     add_txt("id=%s", server->accessory_id);
@@ -3171,7 +3171,7 @@ void homekit_setup_mdns(homekit_server_t *server) {
     // feature flags (required if non-zero)
     //   bit 0 - supports HAP pairing. required for all HomeKit accessories
     //   bits 1-7 - reserved
-    add_txt("ff=0");
+    add_txt("ff=1");
     // status flags
     //   bit 0 - not paired
     //   bit 1 - not configured to join WiFi
