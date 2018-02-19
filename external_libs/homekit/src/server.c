@@ -3068,6 +3068,50 @@ static void homekit_run_server(homekit_server_t *server)
     server_free(server);
 }
 
+typedef struct {
+    char *name;
+    char *txt_rec;
+} mDNS_params;
+
+void mdns_announcement_task(void *pvParameters) {
+    mDNS_params *params = pvParameters;
+    
+    uint8_t name_len = snprintf(NULL, 0, "%s", params->name);
+    char *name = malloc(name_len + 1);
+    snprintf(name, name_len + 1, "%s", params->name);
+    
+    uint8_t txt_rec_len = snprintf(NULL, 0, "%s", params->txt_rec);
+    char *txt_rec = malloc(txt_rec_len + 1);
+    snprintf(txt_rec, txt_rec_len + 1, "%s", params->txt_rec);
+    
+    free(params);
+    
+    // First announcement
+    mdns_clear();
+    mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 120);
+    INFO("mDNS announcement: Name=%s %s Port=%d TTL=120", name, txt_rec, PORT);
+    
+    // Exponential Back-off announcement
+    uint16_t announce_delay = 1;
+    uint8_t j;
+    for (j=0; j<8; j++) {
+        vTaskDelay(announce_delay * 1000 / portTICK_PERIOD_MS);
+        mdns_clear();
+        mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 120);
+        INFO("mDNS announcement: Name=%s %s Port=%d TTL=120", name, txt_rec, PORT);
+        announce_delay = announce_delay * 3;
+    }
+    
+    // 1 hour interval announcement
+    while(1) {
+        vTaskDelay(3600 * 1000 / portTICK_PERIOD_MS);
+        mdns_clear();
+        mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 120);
+       INFO("mDNS announcement: Name=%s %s Port=%d TTL=120", name, txt_rec, PORT);
+    }
+    
+    vTaskDelete(NULL);
+}
 
 void homekit_setup_mdns(homekit_server_t *server) {
     INFO("Configuring mDNS");
@@ -3136,27 +3180,11 @@ void homekit_setup_mdns(homekit_server_t *server) {
     add_txt("sf=%d", (server->paired) ? 0 : 1);
     // accessory category identifier
     add_txt("ci=%d", accessory->category);
-
-    // First announcement
-    mdns_clear();
-    mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 120);
     
-    // Exponential Back-off announcement
-    uint16_t announce_delay = 1;
-    uint8_t j;
-    for (j=0; j<8; j++) {
-        vTaskDelay(announce_delay * 1000 / portTICK_PERIOD_MS);
-        mdns_clear();
-        mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 120);
-        announce_delay = announce_delay * 3;
-    }
-    
-    // 1 hour interval announcement
-    while(1) {
-        vTaskDelay(3600 * 1000 / portTICK_PERIOD_MS);
-        mdns_clear();
-        mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 120);
-    }
+    mDNS_params *params = malloc(sizeof(mDNS_params));
+    params->name = name->value.string_value;
+    params->txt_rec = txt_rec;
+    xTaskCreate(mdns_announcement_task, "mDNS Announcement", 512, params, 3, NULL);
 }
 
 char *homekit_accessory_id_generate() {
