@@ -3137,8 +3137,26 @@ void homekit_setup_mdns(homekit_server_t *server) {
     // accessory category identifier
     add_txt("ci=%d", accessory->category);
 
+    // First announcement
     mdns_clear();
     mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 120);
+    
+    // Exponential Back-off announcement
+    uint16_t announce_delay = 1;
+    uint8_t j;
+    for (j=0; j<8; j++) {
+        vTaskDelay(announce_delay * 1000 / portTICK_PERIOD_MS);
+        mdns_clear();
+        mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 120);
+        announce_delay = announce_delay * 3;
+    }
+    
+    // 1 hour interval announcement
+    while(1) {
+        vTaskDelay(3600 * 1000 / portTICK_PERIOD_MS);
+        mdns_clear();
+        mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 120);
+    }
 }
 
 char *homekit_accessory_id_generate() {
