@@ -3238,6 +3238,7 @@ void homekit_server_task(void *args) {
         server->accessory_key = homekit_accessory_key_generate();
         homekit_storage_save_accessory_key(server->accessory_key);
         
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
         sdk_system_restart();
     } else {
         INFO("Using existing accessory ID: %s", server->accessory_id);
