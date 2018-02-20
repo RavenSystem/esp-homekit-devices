@@ -3087,8 +3087,8 @@ void mdns_announcement_task(void *pvParameters) {
     free(params);
     
     // First announcement
-    mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 120);
-    INFO("mDNS first announcement: Name=%s %s Port=%d TTL=120", name, txt_rec, PORT);
+    mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 255);
+    INFO("mDNS first announcement: Name=%s %s Port=%d TTL=255", name, txt_rec, PORT);
     
     // Exponential Back-off announcement
     uint16_t announce_delay = 1;
@@ -3096,7 +3096,7 @@ void mdns_announcement_task(void *pvParameters) {
     for (j=0; j<8; j++) {
         vTaskDelay(announce_delay * 1000 / portTICK_PERIOD_MS);
         mdns_clear();
-        mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 120);
+        mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 255);
         INFO("mDNS Exponential Back-off announcement");
         announce_delay = announce_delay * 3;
     }
@@ -3105,7 +3105,7 @@ void mdns_announcement_task(void *pvParameters) {
     while(1) {
         vTaskDelay(3600 * 1000 / portTICK_PERIOD_MS);
         mdns_clear();
-        mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 120);
+        mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 255);
         INFO("mDNS 1 hour interval announcement");
     }
     
@@ -3155,25 +3155,24 @@ void homekit_setup_mdns(homekit_server_t *server) {
             mdns_TXT_append(txt_rec, sizeof(txt_rec), buffer, buffer_len);
     }
 
-    // accessory model name (required)
-    add_txt("md=%s", model->value.string_value);
-    // protocol version (required)
-    add_txt("pv=1.0");
-    // device ID (required)
-    // should be in format XX:XX:XX:XX:XX:XX, otherwise devices will ignore it
-    add_txt("id=%s", server->accessory_id);
+    
     // current configuration number (required)
     uint8_t r = 1;
     if(server->paired) {
         r = 1 + (hwrand() % 255);
     }
     add_txt("c#=%d", r);
-    // current state number (required)
-    add_txt("s#=1");
     // feature flags (required if non-zero)
     //   bit 0 - supports HAP pairing. required for all HomeKit accessories
     //   bits 1-7 - reserved
-    add_txt("ff=1");
+    add_txt("ff=0");
+    // device ID (required)
+    // should be in format XX:XX:XX:XX:XX:XX, otherwise devices will ignore it
+    add_txt("id=%s", server->accessory_id);
+    // accessory model name (required)
+    add_txt("md=%s", model->value.string_value);
+    // protocol version (required)
+    add_txt("pv=1.0");
     // status flags
     //   bit 0 - not paired
     //   bit 1 - not configured to join WiFi
@@ -3182,6 +3181,8 @@ void homekit_setup_mdns(homekit_server_t *server) {
     add_txt("sf=%d", (server->paired) ? 0 : 1);
     // accessory category identifier
     add_txt("ci=%d", accessory->category);
+    // current state number (required)
+    add_txt("s#=1");
     
     mdns_clear();
     
@@ -3191,8 +3192,8 @@ void homekit_setup_mdns(homekit_server_t *server) {
         params->txt_rec = txt_rec;
         xTaskCreate(mdns_announcement_task, "mDNS Announcement", 512, params, 3, NULL);
     } else {
-        mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 60);
-        INFO("mDNS innitial announcement (not paired)");
+        mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 255);
+        INFO("mDNS innitial announcement (not paired): Name=%s %s Port=%d TTL=255", name->value.string_value, txt_rec, PORT);
     }
 }
 
@@ -3236,6 +3237,8 @@ void homekit_server_task(void *args) {
 
         server->accessory_key = homekit_accessory_key_generate();
         homekit_storage_save_accessory_key(server->accessory_key);
+        
+        sdk_system_restart();
     } else {
         INFO("Using existing accessory ID: %s", server->accessory_id);
     }
