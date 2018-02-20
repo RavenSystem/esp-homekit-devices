@@ -176,7 +176,7 @@ homekit_accessory_t *accessories[] = {
             &button_event,
             NULL
         }),
-        HOMEKIT_SERVICE(OUTLET, .primary=true, .characteristics=(homekit_characteristic_t*[]){
+        HOMEKIT_SERVICE(OUTLET, .primary=false, .characteristics=(homekit_characteristic_t*[]){
             HOMEKIT_CHARACTERISTIC(NAME, "Sonoff S20"),
             &switch_on,
             &switch_outlet_in_use,
