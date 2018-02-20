@@ -142,9 +142,8 @@ void create_accessory_name() {
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     
-    uint8_t name_len = snprintf(NULL, 0, "SonoffS20 %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
-    char *name_value = malloc(name_len+1);
-    snprintf(name_value, name_len+1, "SonoffS20 %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
+    char *name_value = malloc(17);
+    snprintf(name_value, 17, "SonoffS20 %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
     
     name.value = HOMEKIT_STRING(name_value);
     serial.value = name.value;

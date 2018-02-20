@@ -172,7 +172,7 @@ homekit_accessory_t *accessories[] = {
             &switch_on,
             NULL
         }),
-        HOMEKIT_SERVICE(MOTION_SENSOR, .primary=true, .characteristics=(homekit_characteristic_t*[]) {
+        HOMEKIT_SERVICE(MOTION_SENSOR, .primary=false, .characteristics=(homekit_characteristic_t*[]) {
             HOMEKIT_CHARACTERISTIC(NAME, "Power Outage"),
             &power_cut_alarm,
             NULL
@@ -191,9 +191,8 @@ void create_accessory_name() {
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     
-    uint8_t name_len = snprintf(NULL, 0, "SonoffB %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
-    char *name_value = malloc(name_len+1);
-    snprintf(name_value, name_len+1, "SonoffB %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
+    char *name_value = malloc(15);
+    snprintf(name_value, 15, "SonoffB %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
     
     name.value = HOMEKIT_STRING(name_value);
     serial.value = name.value;
