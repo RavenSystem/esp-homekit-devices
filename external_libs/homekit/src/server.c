@@ -3158,7 +3158,7 @@ void homekit_setup_mdns(homekit_server_t *server) {
     // accessory model name (required)
     add_txt("md=%s", model->value.string_value);
     // protocol version (required)
-    add_txt("pv=1");
+    add_txt("pv=1.0");
     // device ID (required)
     // should be in format XX:XX:XX:XX:XX:XX, otherwise devices will ignore it
     add_txt("id=%s", server->accessory_id);
@@ -3197,11 +3197,11 @@ void homekit_setup_mdns(homekit_server_t *server) {
 }
 
 char *homekit_accessory_id_generate() {
-    char *accessory_id = malloc(13);
+    char *accessory_id = malloc(18);
 
     byte buf[6];
     hwrand_fill(buf, sizeof(buf));
-    snprintf(accessory_id, 13, "%02X%02X%02X%02X%02X%02X",
+    snprintf(accessory_id, 18, "%02X:%02X:%02X:%02X:%02X:%02X",
              buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
 
     INFO("Generated new accessory ID: %s", accessory_id);
