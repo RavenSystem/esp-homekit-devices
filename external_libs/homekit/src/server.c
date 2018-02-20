@@ -3087,9 +3087,8 @@ void mdns_announcement_task(void *pvParameters) {
     free(params);
     
     // First announcement
-    mdns_clear();
     mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 120);
-    INFO("mDNS announcement: Name=%s %s Port=%d TTL=120", name, txt_rec, PORT);
+    INFO("mDNS first announcement: Name=%s %s Port=%d TTL=120", name, txt_rec, PORT);
     
     // Exponential Back-off announcement
     uint16_t announce_delay = 1;
@@ -3098,7 +3097,7 @@ void mdns_announcement_task(void *pvParameters) {
         vTaskDelay(announce_delay * 1000 / portTICK_PERIOD_MS);
         mdns_clear();
         mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 120);
-        INFO("mDNS announcement: Name=%s %s Port=%d TTL=120", name, txt_rec, PORT);
+        INFO("mDNS Exponential Back-off announcement");
         announce_delay = announce_delay * 3;
     }
     
@@ -3107,7 +3106,7 @@ void mdns_announcement_task(void *pvParameters) {
         vTaskDelay(3600 * 1000 / portTICK_PERIOD_MS);
         mdns_clear();
         mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 120);
-       INFO("mDNS announcement: Name=%s %s Port=%d TTL=120", name, txt_rec, PORT);
+        INFO("mDNS 1 hour interval announcement");
     }
     
     vTaskDelete(NULL);
@@ -3159,12 +3158,15 @@ void homekit_setup_mdns(homekit_server_t *server) {
     // accessory model name (required)
     add_txt("md=%s", model->value.string_value);
     // protocol version (required)
-    add_txt("pv=1.1");
+    add_txt("pv=1");
     // device ID (required)
     // should be in format XX:XX:XX:XX:XX:XX, otherwise devices will ignore it
     add_txt("id=%s", server->accessory_id);
     // current configuration number (required)
-    uint8_t r = 1 + (hwrand() % 255);
+    uint8_t r = 1;
+    if(server->paired) {
+        r = 1 + (hwrand() % 255);
+    }
     add_txt("c#=%d", r);
     // current state number (required)
     add_txt("s#=1");
@@ -3181,18 +3183,25 @@ void homekit_setup_mdns(homekit_server_t *server) {
     // accessory category identifier
     add_txt("ci=%d", accessory->category);
     
-    mDNS_params *params = malloc(sizeof(mDNS_params));
-    params->name = name->value.string_value;
-    params->txt_rec = txt_rec;
-    xTaskCreate(mdns_announcement_task, "mDNS Announcement", 512, params, 3, NULL);
+    mdns_clear();
+    
+    if(server->paired) {
+        mDNS_params *params = malloc(sizeof(mDNS_params));
+        params->name = name->value.string_value;
+        params->txt_rec = txt_rec;
+        xTaskCreate(mdns_announcement_task, "mDNS Announcement", 512, params, 3, NULL);
+    } else {
+        mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 60);
+        INFO("mDNS innitial announcement (not paired)");
+    }
 }
 
 char *homekit_accessory_id_generate() {
-    char *accessory_id = malloc(18);
+    char *accessory_id = malloc(13);
 
     byte buf[6];
     hwrand_fill(buf, sizeof(buf));
-    snprintf(accessory_id, 18, "%02X:%02X:%02X:%02X:%02X:%02X",
+    snprintf(accessory_id, 13, "%02X%02X%02X%02X%02X%02X",
              buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
 
     INFO("Generated new accessory ID: %s", accessory_id);
