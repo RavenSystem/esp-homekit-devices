@@ -3106,8 +3106,8 @@ void mdns_announcement_task(void *pvParameters) {
     
     // First announcement
     mdns_clear();
-    mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
-    INFO("mDNS first announcement: Name=%s %s Port=%d TTL=%d", name, txt_rec, PORT, TTL);
+    mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 120);
+    INFO("mDNS first announcement: Name=%s %s Port=%d TTL=120", name, txt_rec, PORT);
     
     // Exponential Back-off announcement
     uint16_t announce_delay = 1;
@@ -3116,7 +3116,7 @@ void mdns_announcement_task(void *pvParameters) {
         vTaskDelay(announce_delay * 1000 / portTICK_PERIOD_MS);
         mdns_clear();
         mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
-        INFO("mDNS Exponential Back-off announcement %d with delay %d seconds", i, announce_delay);
+        INFO("mDNS Exponential Back-off announcement %d with delay %d seconds and TTL=%d", i, announce_delay, TTL);
         announce_delay = announce_delay * 3;
     }
     
@@ -3125,7 +3125,7 @@ void mdns_announcement_task(void *pvParameters) {
         vTaskDelay(3600 * 1000 / portTICK_PERIOD_MS);
         mdns_clear();
         mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
-        INFO("mDNS 1 hour interval announcement");
+        INFO("mDNS 1 hour interval announcement with TTL=%d", TTL);
     }
     
     vTaskDelete(NULL);
