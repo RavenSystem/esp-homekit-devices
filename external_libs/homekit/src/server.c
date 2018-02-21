@@ -32,6 +32,10 @@
 
 #define PORT 5556
 
+#ifndef TTL
+#define TTL 4500
+#endif
+
 #ifndef HOMEKIT_MAX_CLIENTS
 #define HOMEKIT_MAX_CLIENTS 16
 #endif
@@ -3073,6 +3077,8 @@ typedef struct {
     char *txt_rec;
 } mDNS_params;
 
+static TaskHandle_t mdns_announcement_task_handle = NULL;
+
 void mdns_announcement_task(void *pvParameters) {
     mDNS_params *params = pvParameters;
     
@@ -3087,17 +3093,17 @@ void mdns_announcement_task(void *pvParameters) {
     free(params);
     
     // First announcement
-    mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 255);
-    INFO("mDNS first announcement: Name=%s %s Port=%d TTL=255", name, txt_rec, PORT);
+    mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
+    INFO("mDNS first announcement: Name=%s %s Port=%d TTL=%d", name, txt_rec, PORT, TTL);
     
     // Exponential Back-off announcement
     uint16_t announce_delay = 1;
-    uint8_t j;
-    for (j=0; j<8; j++) {
+    uint8_t i;
+    for (i=1; i<9; i++) {
         vTaskDelay(announce_delay * 1000 / portTICK_PERIOD_MS);
         mdns_clear();
-        mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 255);
-        INFO("mDNS Exponential Back-off announcement");
+        mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
+        INFO("mDNS Exponential Back-off announcement %d with delay %d", i, announce_delay);
         announce_delay = announce_delay * 3;
     }
     
@@ -3105,7 +3111,7 @@ void mdns_announcement_task(void *pvParameters) {
     while(1) {
         vTaskDelay(3600 * 1000 / portTICK_PERIOD_MS);
         mdns_clear();
-        mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 255);
+        mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
         INFO("mDNS 1 hour interval announcement");
     }
     
@@ -3184,17 +3190,15 @@ void homekit_setup_mdns(homekit_server_t *server) {
     // current state number (required)
     add_txt("s#=1");
     
-    mdns_clear();
+    mDNS_params *params = malloc(sizeof(mDNS_params));
+    params->name = name->value.string_value;
+    params->txt_rec = txt_rec;
     
-    if(server->paired) {
-        mDNS_params *params = malloc(sizeof(mDNS_params));
-        params->name = name->value.string_value;
-        params->txt_rec = txt_rec;
-        xTaskCreate(mdns_announcement_task, "mDNS Announcement", 512, params, 3, NULL);
-    } else {
-        mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 255);
-        INFO("mDNS innitial announcement (not paired): Name=%s %s Port=%d TTL=255", name->value.string_value, txt_rec, PORT);
+    if (mdns_announcement_task_handle) {
+        vTaskDelete(mdns_announcement_task_handle);
     }
+    mdns_clear();
+    xTaskCreate(mdns_announcement_task, "mDNS Announcement", 512, params, 3, &mdns_announcement_task_handle);
 }
 
 char *homekit_accessory_id_generate() {
