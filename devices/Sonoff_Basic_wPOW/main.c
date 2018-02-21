@@ -27,7 +27,7 @@
 
 #define delay_ms(ms)        vTaskDelay((ms) / portTICK_PERIOD_MS)
 
-#define POW_DELAY           15000
+#define POW_DELAY           20000
 
 uint32_t last_button_event_time, last_reset_event_time;
 

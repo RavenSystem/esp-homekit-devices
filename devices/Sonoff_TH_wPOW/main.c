@@ -33,7 +33,7 @@
 #define POLL_PERIOD_B       20000
 #define PAUSE               1000
 
-#define POW_DELAY           15000
+#define POW_DELAY           20000
 
 uint32_t last_button_event_time, last_reset_event_time;
 
