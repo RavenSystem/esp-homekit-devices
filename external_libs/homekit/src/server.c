@@ -3092,7 +3092,20 @@ void mdns_announcement_task(void *pvParameters) {
     
     free(params);
     
+    // Removal announcement
+    mdns_clear();
+    mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, -1);
+    INFO("mDNS removal announcement: Name=%s %s Port=%d TTL=-1", name, txt_rec, PORT);
+    vTaskDelay(1500 / portTICK_PERIOD_MS);
+    
+    // Goodbye announcement
+    mdns_clear();
+    mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 0);
+    INFO("mDNS goodbye announcement: Name=%s %s Port=%d TTL=0", name, txt_rec, PORT);
+    vTaskDelay(1500 / portTICK_PERIOD_MS);
+    
     // First announcement
+    mdns_clear();
     mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
     INFO("mDNS first announcement: Name=%s %s Port=%d TTL=%d", name, txt_rec, PORT, TTL);
     
@@ -3103,7 +3116,7 @@ void mdns_announcement_task(void *pvParameters) {
         vTaskDelay(announce_delay * 1000 / portTICK_PERIOD_MS);
         mdns_clear();
         mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
-        INFO("mDNS Exponential Back-off announcement %d with delay %d", i, announce_delay);
+        INFO("mDNS Exponential Back-off announcement %d with delay %d seconds", i, announce_delay);
         announce_delay = announce_delay * 3;
     }
     
@@ -3197,7 +3210,6 @@ void homekit_setup_mdns(homekit_server_t *server) {
     if (mdns_announcement_task_handle) {
         vTaskDelete(mdns_announcement_task_handle);
     }
-    mdns_clear();
     xTaskCreate(mdns_announcement_task, "mDNS Announcement", 512, params, 3, &mdns_announcement_task_handle);
 }
 
@@ -3242,7 +3254,7 @@ void homekit_server_task(void *args) {
         server->accessory_key = homekit_accessory_key_generate();
         homekit_storage_save_accessory_key(server->accessory_key);
         
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        vTaskDelay(3000 / portTICK_PERIOD_MS);
         sdk_system_restart();
     } else {
         INFO("Using existing accessory ID: %s", server->accessory_id);
