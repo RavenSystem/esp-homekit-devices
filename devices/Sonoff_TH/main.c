@@ -213,7 +213,7 @@ void temperature_sensor_task(void *_args) {
 }
 
 void thermostat_init() {
-    xTaskCreate(temperature_sensor_task, "Thermostat", 256, NULL, 2, NULL);
+    xTaskCreate(temperature_sensor_task, "Thermostat", 512, NULL, 2, NULL);
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff Thermostat");
