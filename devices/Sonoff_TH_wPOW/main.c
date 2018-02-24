@@ -1,7 +1,21 @@
 /*
  * Sonoff TH with Power Outage Warning
- *
+ * 
  * v0.1.1
+ * 
+ * Copyright 2018 José A. Jiménez (@RavenSystem)
+ *  
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ * 
+ * http://www.apache.org/licenses/LICENSE-2.0
+ 
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 
 #include <stdio.h>
@@ -33,7 +47,8 @@
 #define POLL_PERIOD_B       20000
 #define PAUSE               1000
 
-#define POW_DELAY           20000
+#define POW_DELAY           15000
+#define POW_WORKING_TIME    600000
 
 uint32_t last_button_event_time, last_reset_event_time;
 
@@ -97,28 +112,30 @@ homekit_characteristic_t current_state = HOMEKIT_CHARACTERISTIC_(CURRENT_HEATING
 homekit_characteristic_t target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_COOLING_STATE, 0, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(on_update));
 homekit_characteristic_t current_humidity = HOMEKIT_CHARACTERISTIC_(CURRENT_RELATIVE_HUMIDITY, 0);
 
-homekit_characteristic_t power_cut_alarm = HOMEKIT_CHARACTERISTIC_(MOTION_DETECTED, true);
+homekit_characteristic_t power_cut_alarm = HOMEKIT_CHARACTERISTIC_(MOTION_DETECTED, false);
 
 void power_outage_warning_task(void *_args) {
-    delay_ms(POW_DELAY);
-    
-    uint8_t n = 0;
-    while (n==0) {
-        delay_ms(POW_DELAY);
-        connected_clients_count(&n);
-    }
-    
-    printf(">>> Connected clients: %d\n", n);
-    
-    printf(">>> Power Outage Warning: ON event sent\n");
-    power_cut_alarm.value = HOMEKIT_BOOL(true);
-    homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(true));
-    
     delay_ms(POW_DELAY);
     
     printf(">>> Power Outage Warning: OFF event sent\n");
     power_cut_alarm.value = HOMEKIT_BOOL(false);
     homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(false));
+    homekit_characteristic_set_delayed_notify1(&power_cut_alarm, HOMEKIT_BOOL(false));
+    
+    delay_ms(3000);
+    
+    printf(">>> Power Outage Warning: ON event sent\n");
+    power_cut_alarm.value = HOMEKIT_BOOL(true);
+    homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(true));
+    homekit_characteristic_set_delayed_notify2(&power_cut_alarm, HOMEKIT_BOOL(true));
+    
+    delay_ms(POW_WORKING_TIME);
+    
+    printf(">>> Power Outage Warning: OFF event sent\n");
+    power_cut_alarm.value = HOMEKIT_BOOL(false);
+    homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(false));
+    homekit_characteristic_remove_delayed_notify1();
+    homekit_characteristic_remove_delayed_notify2();
     
     vTaskDelete(NULL);
 }
