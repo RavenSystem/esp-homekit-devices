@@ -1,5 +1,5 @@
 /* 
- * Sonoff 4ch
+ * Sonoff 4CH
  * 
  * v0.1.1
  * 
@@ -196,7 +196,7 @@ homekit_accessory_t *accessories[] = {
             &name,
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
-            HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff 4ch"),
+            HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff 4CH"),
             HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.1.1"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
