@@ -1869,7 +1869,6 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             context->encrypted = true;
 
             CLIENT_INFO(context, "Verification successful, secure session established");
-            //connected_clients++;
 
             break;
         }
@@ -1882,6 +1881,35 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
     tlv_free(message);
 }
 
+bool delayed_notify_enable1 = false;
+characteristic_event_t *delayed_notify1;
+
+bool delayed_notify_enable2 = false;
+characteristic_event_t *delayed_notify2;
+
+void homekit_characteristic_set_delayed_notify1(homekit_characteristic_t *ch, const homekit_value_t value) {
+    delayed_notify_enable1 = true;
+    delayed_notify1 = malloc(sizeof(characteristic_event_t));
+    delayed_notify1->characteristic = ch;
+    delayed_notify1->value = value;
+}
+
+void homekit_characteristic_set_delayed_notify2(homekit_characteristic_t *ch, const homekit_value_t value) {
+    delayed_notify_enable2 = true;
+    delayed_notify2 = malloc(sizeof(characteristic_event_t));
+    delayed_notify2->characteristic = ch;
+    delayed_notify2->value = value;
+}
+
+void homekit_characteristic_remove_delayed_notify1() {
+    delayed_notify_enable1 = false;
+    free(delayed_notify1);
+}
+
+void homekit_characteristic_remove_delayed_notify2() {
+    delayed_notify_enable2 = false;
+    free(delayed_notify2);
+}
 
 void homekit_server_on_get_accessories(client_context_t *context) {
     CLIENT_INFO(context, "Get Accessories");
@@ -1948,6 +1976,17 @@ void homekit_server_on_get_accessories(client_context_t *context) {
     client_send_chunk(NULL, 0, context);
     
     connected_clients++;
+    
+    if (delayed_notify_enable1) {
+        CLIENT_INFO(context, "Send delayed event 1");
+        client_notify_characteristic(delayed_notify1->characteristic, delayed_notify1->value, context);
+    }
+    
+    if (delayed_notify_enable2) {
+        vTaskDelay(3000 / portTICK_PERIOD_MS);
+        CLIENT_INFO(context, "Send delayed event 2");
+        client_notify_characteristic(delayed_notify2->characteristic, delayed_notify2->value, context);
+    }
 }
 
 void homekit_server_on_get_characteristics(client_context_t *context) {
@@ -3092,18 +3131,15 @@ void mdns_announcement_task(void *pvParameters) {
     
     free(params);
     
-    // Removal announcement
-    mdns_clear();
-    mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, -1);
-    INFO("mDNS removal announcement: Name=%s %s Port=%d TTL=-1", name, txt_rec, PORT);
-    vTaskDelay(1500 / portTICK_PERIOD_MS);
-    
+    uint8_t i;
     // Goodbye announcement
-    mdns_clear();
-    mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 0);
-    INFO("mDNS goodbye announcement: Name=%s %s Port=%d TTL=0", name, txt_rec, PORT);
-    vTaskDelay(1500 / portTICK_PERIOD_MS);
-    
+    for (i=1; i<3; i++) {
+        mdns_clear();
+        mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 0);
+        INFO("mDNS goodbye announcement %d: Name=%s %s Port=%d TTL=0", i, name, txt_rec, PORT);
+        vTaskDelay(1500 / portTICK_PERIOD_MS);
+    }
+
     // First announcement
     mdns_clear();
     mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, 120);
@@ -3111,7 +3147,7 @@ void mdns_announcement_task(void *pvParameters) {
     
     // Exponential Back-off announcement
     uint16_t announce_delay = 1;
-    uint8_t i;
+    
     for (i=1; i<9; i++) {
         vTaskDelay(announce_delay * 1000 / portTICK_PERIOD_MS);
         mdns_clear();
@@ -3254,8 +3290,8 @@ void homekit_server_task(void *args) {
         server->accessory_key = homekit_accessory_key_generate();
         homekit_storage_save_accessory_key(server->accessory_key);
         
-        vTaskDelay(3000 / portTICK_PERIOD_MS);
-        sdk_system_restart();
+        //vTaskDelay(3000 / portTICK_PERIOD_MS);
+        //sdk_system_restart();
     } else {
         INFO("Using existing accessory ID: %s", server->accessory_id);
     }
@@ -3325,7 +3361,7 @@ void homekit_server_init(homekit_server_config_t *config) {
     homekit_server_t *server = server_new();
     server->config = config;
 
-    xTaskCreate(homekit_server_task, "HomeKit Server", 2048, server, 1, NULL);
+    xTaskCreate(homekit_server_task, "HomeKit Server", 2560, server, 1, NULL);
 }
 
 void homekit_server_reset() {
