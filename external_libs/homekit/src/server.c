@@ -1911,6 +1911,26 @@ void homekit_characteristic_remove_delayed_notify2() {
     free(delayed_notify2);
 }
 
+void delayed_notify_task(void *pvParameters) {
+    client_context_t *context = pvParameters;
+    
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
+    
+    if (delayed_notify_enable1) {
+        CLIENT_INFO(context, "Send delayed event 1");
+        client_notify_characteristic(delayed_notify1->characteristic, delayed_notify1->value, context);
+    }
+    
+    if (delayed_notify_enable2) {
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
+        
+        CLIENT_INFO(context, "Send delayed event 2");
+        client_notify_characteristic(delayed_notify2->characteristic, delayed_notify2->value, context);
+    }
+    
+    vTaskDelete(NULL);
+}
+
 void homekit_server_on_get_accessories(client_context_t *context) {
     CLIENT_INFO(context, "Get Accessories");
     DEBUG_HEAP();
@@ -1977,15 +1997,8 @@ void homekit_server_on_get_accessories(client_context_t *context) {
     
     connected_clients++;
     
-    if (delayed_notify_enable1) {
-        CLIENT_INFO(context, "Send delayed event 1");
-        client_notify_characteristic(delayed_notify1->characteristic, delayed_notify1->value, context);
-    }
-    
-    if (delayed_notify_enable2) {
-        vTaskDelay(3000 / portTICK_PERIOD_MS);
-        CLIENT_INFO(context, "Send delayed event 2");
-        client_notify_characteristic(delayed_notify2->characteristic, delayed_notify2->value, context);
+    if ((delayed_notify_enable1) || (delayed_notify_enable2)) {
+        xTaskCreate(delayed_notify_task, "Delayed notify", 256, context, 2, NULL);
     }
 }
 
@@ -3213,9 +3226,9 @@ void homekit_setup_mdns(homekit_server_t *server) {
     
     // current configuration number (required)
     uint8_t r = 1;
-    if(server->paired) {
+    /*if(server->paired) {
         r = 1 + (hwrand() % 255);
-    }
+    }*/
     add_txt("c#=%d", r);
     // feature flags (required if non-zero)
     //   bit 0 - supports HAP pairing. required for all HomeKit accessories
@@ -3289,9 +3302,6 @@ void homekit_server_task(void *args) {
 
         server->accessory_key = homekit_accessory_key_generate();
         homekit_storage_save_accessory_key(server->accessory_key);
-        
-        //vTaskDelay(3000 / portTICK_PERIOD_MS);
-        //sdk_system_restart();
     } else {
         INFO("Using existing accessory ID: %s", server->accessory_id);
     }
