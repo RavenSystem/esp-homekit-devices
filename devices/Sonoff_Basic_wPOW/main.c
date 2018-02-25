@@ -65,24 +65,21 @@ homekit_characteristic_t power_cut_alarm = HOMEKIT_CHARACTERISTIC_(MOTION_DETECT
 
 void power_outage_warning_task(void *_args) {
     delay_ms(POW_DELAY);
-    
-    printf(">>> Power Outage Warning: OFF event sent\n");
-    power_cut_alarm.value = HOMEKIT_BOOL(false);
-    homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(false));
-    homekit_characteristic_set_delayed_notify1(&power_cut_alarm, HOMEKIT_BOOL(false));
-    
-    delay_ms(3000);
-    
+
     printf(">>> Power Outage Warning: ON event sent\n");
     power_cut_alarm.value = HOMEKIT_BOOL(true);
     homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(true));
-    homekit_characteristic_set_delayed_notify2(&power_cut_alarm, HOMEKIT_BOOL(true));
+    homekit_characteristic_set_delayed_notify1(&power_cut_alarm, HOMEKIT_BOOL(true));
+    homekit_characteristic_set_delayed_notify2(&power_cut_alarm, HOMEKIT_BOOL(false));
     
-    delay_ms(POW_WORKING_TIME);
+     delay_ms(2000);
     
     printf(">>> Power Outage Warning: OFF event sent\n");
     power_cut_alarm.value = HOMEKIT_BOOL(false);
     homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(false));
+    
+    delay_ms(POW_WORKING_TIME);
+    
     homekit_characteristic_remove_delayed_notify1();
     homekit_characteristic_remove_delayed_notify2();
     
