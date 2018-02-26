@@ -134,21 +134,21 @@ void button_intr_callback(uint8_t gpio) {
             xTaskCreate(reset_task, "Reset", 256, NULL, 1, NULL);
         } else if ((now - last_reset_event_time) > OUTLET_TIME) {
             press_count = 0;
-            xTaskCreate(functionD_task, "Function D", 256, NULL, 3, NULL);
+            xTaskCreate(functionD_task, "Function D", 128, NULL, 3, NULL);
             switch_on.value.bool_value = !switch_on.value.bool_value;
             relay_write(switch_on.value.bool_value);
             homekit_characteristic_notify(&switch_on, switch_on.value);
             homekit_characteristic_notify(&switch_outlet_in_use, switch_on.value);
         } else if ((now - last_reset_event_time) > LONGPRESS_TIME) {
             press_count = 0;
-            xTaskCreate(functionC_task, "Function C", 256, NULL, 3, NULL);
+            xTaskCreate(functionC_task, "Function C", 128, NULL, 3, NULL);
             homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(2));
         } else {
             press_count++;
             if (press_count > 1) {
                 press_count = 0;
                 sdk_os_timer_disarm(&press_timer);
-                xTaskCreate(functionB_task, "Function B", 256, NULL, 3, NULL);
+                xTaskCreate(functionB_task, "Function B", 128, NULL, 3, NULL);
                 homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(1));
             } else {
                 sdk_os_timer_arm(&press_timer, DOUBLE_PRESS_TIME, 1);
@@ -163,12 +163,12 @@ void button_timer_callback() {
     press_count = 0;
     sdk_os_timer_disarm(&press_timer);
     
-    xTaskCreate(functionA_task, "Function A", 256, NULL, 3, NULL);
+    xTaskCreate(functionA_task, "Function A", 128, NULL, 3, NULL);
     homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(0));
 }
 
 void identify(homekit_value_t _value) {
-    xTaskCreate(identify_task, "Identify", 256, NULL, 3, NULL);
+    xTaskCreate(identify_task, "Identify", 128, NULL, 3, NULL);
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff S20 Button");

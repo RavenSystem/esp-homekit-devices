@@ -99,7 +99,7 @@ void reset_task(void *_args) {
 }
 
 void identify(homekit_value_t _value) {
-    xTaskCreate(identify_task, "Identify", 256, NULL, 3, NULL);
+    xTaskCreate(identify_task, "Identify", 128, NULL, 3, NULL);
 }
 
 homekit_characteristic_t current_temperature = HOMEKIT_CHARACTERISTIC_(CURRENT_TEMPERATURE, 0);
@@ -150,16 +150,16 @@ void button_intr_callback(uint8_t gpio) {
             uint8_t state = target_state.value.int_value + 1;
             switch (state) {
                 case 1:
-                    xTaskCreate(function_heat_task, "Function heat", 256, NULL, 3, NULL);
+                    xTaskCreate(function_heat_task, "Function heat", 128, NULL, 3, NULL);
                     break;
                     
                 case 2:
-                    xTaskCreate(function_cool_task, "Function cool", 256, NULL,3, NULL);
+                    xTaskCreate(function_cool_task, "Function cool", 128, NULL,3, NULL);
                     break;
                     
                 default:
                     state = 0;
-                    xTaskCreate(function_off_task, "Function off", 256, NULL, 3, NULL);
+                    xTaskCreate(function_off_task, "Function off", 128, NULL, 3, NULL);
                     break;
             }
             

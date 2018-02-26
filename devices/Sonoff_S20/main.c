@@ -107,7 +107,7 @@ void button_intr_callback(uint8_t gpio) {
         } else {
             last_button_event_time = now;
             
-            xTaskCreate(function_task, "Function", 256, NULL, 3, NULL);
+            xTaskCreate(function_task, "Function", 128, NULL, 3, NULL);
             switch_on.value.bool_value = !switch_on.value.bool_value;
             relay_write(switch_on.value.bool_value);
             homekit_characteristic_notify(&switch_on, switch_on.value);
@@ -119,7 +119,7 @@ void button_intr_callback(uint8_t gpio) {
 }
 
 void identify(homekit_value_t _value) {
-    xTaskCreate(identify_task, "Identify", 256, NULL, 3, NULL);
+    xTaskCreate(identify_task, "Identify", 128, NULL, 3, NULL);
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff S20");
