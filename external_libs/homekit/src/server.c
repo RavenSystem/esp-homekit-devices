@@ -3145,7 +3145,6 @@ void mdns_announcement_task(void *pvParameters) {
     free(params);
 
     // First announcement
-    mdns_clear();
     mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
     INFO("mDNS first announcement: Name=%s %s Port=%d TTL=%d", name, txt_rec, PORT, TTL);
     
@@ -3214,13 +3213,8 @@ void homekit_setup_mdns(homekit_server_t *server) {
             mdns_TXT_append(txt_rec, sizeof(txt_rec), buffer, buffer_len);
     }
 
-    
     // current configuration number (required)
-    uint8_t r = 1;
-    /*if(server->paired) {
-        r = 1 + (hwrand() % 255);
-    }*/
-    add_txt("c#=%d", r);
+    add_txt("c#=1");
     // feature flags (required if non-zero)
     //   bit 0 - supports HAP pairing. required for all HomeKit accessories
     //   bits 1-7 - reserved
@@ -3242,15 +3236,20 @@ void homekit_setup_mdns(homekit_server_t *server) {
     add_txt("ci=%d", accessory->category);
     // current state number (required)
     add_txt("s#=1");
-    
-    mDNS_params *params = malloc(sizeof(mDNS_params));
-    params->name = name->value.string_value;
-    params->txt_rec = txt_rec;
-    
+
     if (mdns_announcement_task_handle) {
         vTaskDelete(mdns_announcement_task_handle);
     }
-    xTaskCreate(mdns_announcement_task, "mDNS Announcement", 256, params, 3, &mdns_announcement_task_handle);
+    
+    mdns_clear();
+    if (server->paired) {
+        mDNS_params *params = malloc(sizeof(mDNS_params));
+        params->name = name->value.string_value;
+        params->txt_rec = txt_rec;
+        xTaskCreate(mdns_announcement_task, "mDNS Announcement", 256, params, 3, &mdns_announcement_task_handle);
+    } else {
+        mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 120);
+    }
 }
 
 char *homekit_accessory_id_generate() {
