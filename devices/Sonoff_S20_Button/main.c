@@ -1,7 +1,7 @@
 /*
  * Sonoff S20 Button
  * 
- * v0.1.1
+ * v0.2
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -181,7 +181,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
             HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff S20 Button"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.1.1"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),
