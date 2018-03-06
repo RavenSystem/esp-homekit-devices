@@ -34,7 +34,6 @@ typedef enum {
 
 
 typedef struct {
-    bool active;
     char *ssid_prefix;
     char *password;
     TickType_t connect_start_time;
@@ -339,19 +338,36 @@ static void http_task(void *arg) {
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     serv_addr.sin_port = htons(WIFI_CONFIG_SERVER_PORT);
+    int flags;
+    if ((flags = lwip_fcntl(listenfd, F_GETFL, 0)) < 0) {
+        ERROR("Failed to get HTTP socket flags");
+        lwip_close(listenfd);
+        vTaskDelete(NULL);
+        return;
+    };
+    if (lwip_fcntl(listenfd, F_SETFL, flags | O_NONBLOCK) < 0) {
+        ERROR("Failed to set HTTP socket flags");
+        lwip_close(listenfd);
+        vTaskDelete(NULL);
+        return;
+    }
     bind(listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
     listen(listenfd, 2);
 
     char data[64];
 
     for (;;) {
-        int fd = accept(listenfd, (struct sockaddr *)NULL, (socklen_t *)NULL);
-        if (fd < 0)
-            continue;
+        if (sdk_wifi_get_opmode() != STATIONAP_MODE)
+            break;
 
-        const struct timeval timeout = { 10, 0 }; /* 10 second timeout */
+        int fd = accept(listenfd, (struct sockaddr *)NULL, (socklen_t *)NULL);
+        if (fd < 0) {
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+            continue;
+        }
+
+        const struct timeval timeout = { 2, 0 }; /* 2 second timeout */
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-        setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
 
         client_t *client = client_new();
         client->fd = fd;
@@ -380,19 +396,17 @@ static void http_task(void *arg) {
 
         lwip_close(client->fd);
         client_free(client);
-
-        if (!context->active)
-            break;
     }
 
+    INFO("Stopping HTTP server");
+
+    lwip_close(listenfd);
     vTaskDelete(NULL);
 }
 
 
 void dns_task(void *arg)
 {
-    wifi_config_context_t *context = arg;
-
     INFO("Starting DNS server");
 
     ip4_addr_t server_addr;
@@ -406,6 +420,9 @@ void dns_task(void *arg)
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     serv_addr.sin_port = htons(53);
     bind(fd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
+
+    const struct timeval timeout = { 2, 0 }; /* 2 second timeout */
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
     const struct ifreq ifreq1 = { "en1" };
     setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, &ifreq1, sizeof(ifreq1));
@@ -457,9 +474,13 @@ void dns_task(void *arg)
             sendto(fd, buffer, reply_len, 0, &src_addr, src_addr_len);
         }
 
-        if (!context->active)
+        if (sdk_wifi_get_opmode() != STATIONAP_MODE)
             break;
     }
+
+    INFO("Stopping DNS server");
+
+    lwip_close(fd);
 
     vTaskDelete(NULL);
 }
@@ -477,8 +498,6 @@ static void wifi_config_context_free(wifi_config_context_t *context) {
 
 static void wifi_config_softap_start(wifi_config_context_t *context) {
     INFO("Starting AP mode");
-
-    context->active = true;
 
     sdk_wifi_set_opmode(STATIONAP_MODE);
 
@@ -531,7 +550,6 @@ static void wifi_config_softap_start(wifi_config_context_t *context) {
 
 
 static void wifi_config_softap_stop(wifi_config_context_t *context) {
-    context->active = false;
     dhcpserver_stop();
     sdk_wifi_set_opmode(STATION_MODE);
 }
@@ -604,6 +622,7 @@ static int wifi_config_station_connect(wifi_config_context_t *context) {
 
 
 void wifi_config_init(const char *ssid_prefix, const char *password, void (*on_wifi_ready)()) {
+    INFO("Initializing WiFi config");
     if (password && strlen(password) < 8) {
         ERROR("Password should be at least 8 characters");
         return;
@@ -629,3 +648,14 @@ void wifi_config_reset() {
     sysparam_set_string("wifi_password", "");
 }
 
+
+void wifi_config_get(char **ssid, char **password) {
+    sysparam_get_string("wifi_ssid", ssid);
+    sysparam_get_string("wifi_password", password);
+}
+
+
+void wifi_config_set(const char *ssid, const char *password) {
+    sysparam_set_string("wifi_ssid", ssid);
+    sysparam_set_string("wifi_password", password);
+}
