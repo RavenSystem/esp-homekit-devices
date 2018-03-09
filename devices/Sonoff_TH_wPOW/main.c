@@ -1,7 +1,7 @@
 /*
  * Sonoff TH with Power Outage Warning
  * 
- * v0.2.1
+ * v0.2.2
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -43,12 +43,10 @@
 
 #define delay_ms(ms)        vTaskDelay((ms) / portTICK_PERIOD_MS)
 
-#define POLL_PERIOD_A       10000
-#define POLL_PERIOD_B       20000
-#define PAUSE               1000
+#define POLL_PERIOD         30000
 
-#define POW_DELAY           15000
-#define POW_WORKING_TIME    600000
+#define POW_DELAY           20000
+#define POW_DURATION        3000
 
 uint32_t last_button_event_time, last_reset_event_time;
 
@@ -65,6 +63,8 @@ void update_state();
 void on_update(homekit_characteristic_t *ch, homekit_value_t value, void *context) {
     update_state();
 }
+
+void on_target(homekit_characteristic_t *ch, homekit_value_t value, void *context);
 
 void identify_task(void *_args) {
     led_code(LED_GPIO, IDENTIFY_ACCESSORY);
@@ -102,39 +102,61 @@ void reset_task(void *_args) {
 }
 
 void identify(homekit_value_t _value) {
-    xTaskCreate(identify_task, "Identify", 128, NULL, 3, NULL);
+    xTaskCreate(identify_task, "Identify", 96, NULL, 3, NULL);
 }
 
 homekit_characteristic_t current_temperature = HOMEKIT_CHARACTERISTIC_(CURRENT_TEMPERATURE, 0);
 homekit_characteristic_t target_temperature  = HOMEKIT_CHARACTERISTIC_(TARGET_TEMPERATURE, 23, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(on_update));
 homekit_characteristic_t units = HOMEKIT_CHARACTERISTIC_(TEMPERATURE_DISPLAY_UNITS, 0);
 homekit_characteristic_t current_state = HOMEKIT_CHARACTERISTIC_(CURRENT_HEATING_COOLING_STATE, 0);
-homekit_characteristic_t target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_COOLING_STATE, 0, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(on_update));
+homekit_characteristic_t target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_COOLING_STATE, 0, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(on_target));
 homekit_characteristic_t current_humidity = HOMEKIT_CHARACTERISTIC_(CURRENT_RELATIVE_HUMIDITY, 0);
 
 homekit_characteristic_t power_cut_alarm = HOMEKIT_CHARACTERISTIC_(MOTION_DETECTED, false);
+homekit_characteristic_t power_cut_switch = HOMEKIT_CHARACTERISTIC_(ON, true);
 
 void power_outage_warning_task(void *_args) {
-    delay_ms(POW_DELAY);
+    uint8_t i;
+    for (i=0; i<150; i++) {
+        delay_ms(POW_DELAY - POW_DURATION);
+        
+        if (!power_cut_switch.value.bool_value) {
+            break;
+        }
+        
+        printf(">>> Power Outage Warning: ON event sent\n");
+        power_cut_alarm.value = HOMEKIT_BOOL(true);
+        homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(true));
+        
+        delay_ms(POW_DURATION);
+        
+        printf(">>> Power Outage Warning: OFF event sent\n");
+        power_cut_alarm.value = HOMEKIT_BOOL(false);
+        homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(false));
+    }
     
-    printf(">>> Power Outage Warning: ON event sent\n");
-    power_cut_alarm.value = HOMEKIT_BOOL(true);
-    homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(true));
-    homekit_characteristic_set_delayed_notify1(&power_cut_alarm, HOMEKIT_BOOL(true));
-    homekit_characteristic_set_delayed_notify2(&power_cut_alarm, HOMEKIT_BOOL(false));
-    
-    delay_ms(2000);
-    
-    printf(">>> Power Outage Warning: OFF event sent\n");
-    power_cut_alarm.value = HOMEKIT_BOOL(false);
-    homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(false));
-    
-    delay_ms(POW_WORKING_TIME);
-    
-    homekit_characteristic_remove_delayed_notify1();
-    homekit_characteristic_remove_delayed_notify2();
+    power_cut_switch.value = HOMEKIT_BOOL(false);
+    homekit_characteristic_notify(&power_cut_switch, HOMEKIT_BOOL(false));
     
     vTaskDelete(NULL);
+}
+
+void on_target(homekit_characteristic_t *ch, homekit_value_t value, void *context) {
+    switch (target_state.value.int_value) {
+        case 1:
+            xTaskCreate(function_heat_task, "Function heat", 96, NULL, 3, NULL);
+            break;
+            
+        case 2:
+            xTaskCreate(function_cool_task, "Function cool", 96, NULL, 3, NULL);
+            break;
+            
+        default:
+            xTaskCreate(function_off_task, "Function off", 96, NULL, 3, NULL);
+            break;
+    }
+    
+    update_state();
 }
 
 void update_state() {
@@ -171,23 +193,23 @@ void button_intr_callback(uint8_t gpio) {
     
     if (((now - last_button_event_time) > DEBOUNCE_TIME) && (gpio_read(BUTTON_GPIO) == 1)) {
         if ((now - last_reset_event_time) > RESET_TIME) {
-            xTaskCreate(reset_task, "Reset", 256, NULL, 1, NULL);
+            xTaskCreate(reset_task, "Reset", 128, NULL, 1, NULL);
         } else {
             last_button_event_time = now;
             
             uint8_t state = target_state.value.int_value + 1;
             switch (state) {
                 case 1:
-                    xTaskCreate(function_heat_task, "Function heat", 128, NULL, 3, NULL);
+                    xTaskCreate(function_heat_task, "Function heat", 96, NULL, 3, NULL);
                     break;
                     
                 case 2:
-                    xTaskCreate(function_cool_task, "Function cool", 128, NULL, 3, NULL);
+                    xTaskCreate(function_cool_task, "Function cool", 96, NULL, 3, NULL);
                     break;
                     
                 default:
                     state = 0;
-                    xTaskCreate(function_off_task, "Function off", 128, NULL, 3, NULL);
+                    xTaskCreate(function_off_task, "Function off", 96, NULL, 3, NULL);
                     break;
             }
             
@@ -218,7 +240,7 @@ void temperature_sensor_task(void *_args) {
     float humidity_value, temperature_value;
     float old_humidity_value = 0.0, old_temperature_value = 0.0;
     while (1) {
-        delay_ms(POLL_PERIOD_A);
+        delay_ms(POLL_PERIOD);
         
         if (dht_read_float_data(DHT_TYPE_DHT22, SENSOR_GPIO, &humidity_value, &temperature_value)) {
             printf(">>> Sensor: temperature %g, humidity %g\n", temperature_value, humidity_value);
@@ -229,7 +251,7 @@ void temperature_sensor_task(void *_args) {
                 homekit_characteristic_notify(&current_temperature, current_temperature.value);
                 
                 if (humidity_value != old_humidity_value) {
-                    delay_ms(PAUSE);
+                    delay_ms(500);
                     old_humidity_value = humidity_value;
                     current_humidity.value = HOMEKIT_FLOAT(humidity_value);
                     homekit_characteristic_notify(&current_humidity, current_humidity.value);
@@ -238,9 +260,9 @@ void temperature_sensor_task(void *_args) {
                 update_state();
             }
 
-            delay_ms(POLL_PERIOD_B);
         } else {
             printf(">>> Sensor: ERROR\n");
+            led_code(LED_GPIO, SENSOR_ERROR);
             
             if (current_state.value.int_value != 0) {
                 current_state.value = HOMEKIT_UINT8(0);
@@ -249,13 +271,14 @@ void temperature_sensor_task(void *_args) {
                 relay_write(false);
             }
             
-            led_code(LED_GPIO, SENSOR_ERROR);
         }
     }
+    
+    vTaskDelete(NULL);
 }
 
 void thermostat_init() {
-    xTaskCreate(temperature_sensor_task, "Thermostat", 512, NULL, 2, NULL);
+    xTaskCreate(temperature_sensor_task, "Thermostat", 256, NULL, 2, NULL);
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff Thermostat");
@@ -268,7 +291,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
             HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff TH wPOW"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.1"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.2"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),
@@ -285,6 +308,11 @@ homekit_accessory_t *accessories[] = {
         HOMEKIT_SERVICE(MOTION_SENSOR, .primary=false, .characteristics=(homekit_characteristic_t*[]) {
             HOMEKIT_CHARACTERISTIC(NAME, "Power Outage"),
             &power_cut_alarm,
+            NULL
+        }),
+        HOMEKIT_SERVICE(SWITCH, .primary=false, .characteristics=(homekit_characteristic_t*[]){
+            HOMEKIT_CHARACTERISTIC(NAME, "PO Switch"),
+            &power_cut_switch,
             NULL
         }),
         NULL
@@ -309,13 +337,13 @@ void create_accessory_name() {
 }
 
 void on_wifi_ready() {
-    xTaskCreate(wifi_connected_task, "Wifi connected", 256, NULL, 3, NULL);
+    xTaskCreate(wifi_connected_task, "Wifi connected", 96, NULL, 3, NULL);
     
     create_accessory_name();
         
     homekit_server_init(&config);
     
-    xTaskCreate(power_outage_warning_task, "Power Outage Warning", 256, NULL, 4, NULL);
+    xTaskCreate(power_outage_warning_task, "Power Outage Warning", 128, NULL, 4, NULL);
 }
 
 void user_init(void) {

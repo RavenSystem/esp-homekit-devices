@@ -1,7 +1,7 @@
 /*
  * Sonoff Basic with Power Outage Warning
  * 
- * v0.2.1
+ * v0.2.2
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -25,6 +25,7 @@
 #include <task.h>
 #include <espressif/esp_wifi.h>
 #include <espressif/esp_common.h>
+#include <espressif/user_interface.h>
 
 #include <homekit/homekit.h>
 #include <homekit/characteristics.h>
@@ -41,8 +42,8 @@
 
 #define delay_ms(ms)        vTaskDelay((ms) / portTICK_PERIOD_MS)
 
-#define POW_DELAY           15000
-#define POW_WORKING_TIME    600000
+#define POW_DELAY           20000
+#define POW_DURATION        3000
 
 uint32_t last_button_event_time, last_reset_event_time;
 
@@ -62,26 +63,30 @@ void switch_intr_callback(uint8_t gpio);
 homekit_characteristic_t switch_on = HOMEKIT_CHARACTERISTIC_(ON, false, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(switch_on_callback));
 
 homekit_characteristic_t power_cut_alarm = HOMEKIT_CHARACTERISTIC_(MOTION_DETECTED, false);
+homekit_characteristic_t power_cut_switch = HOMEKIT_CHARACTERISTIC_(ON, true);
 
 void power_outage_warning_task(void *_args) {
-    delay_ms(POW_DELAY);
-
-    printf(">>> Power Outage Warning: ON event sent\n");
-    power_cut_alarm.value = HOMEKIT_BOOL(true);
-    homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(true));
-    homekit_characteristic_set_delayed_notify1(&power_cut_alarm, HOMEKIT_BOOL(true));
-    homekit_characteristic_set_delayed_notify2(&power_cut_alarm, HOMEKIT_BOOL(false));
+    uint8_t i;
+    for (i=0; i<150; i++) {
+        delay_ms(POW_DELAY - POW_DURATION);
+        
+        if (!power_cut_switch.value.bool_value) {
+            break;
+        }
+        
+        printf(">>> Power Outage Warning: ON event sent\n");
+        power_cut_alarm.value = HOMEKIT_BOOL(true);
+        homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(true));
+        
+        delay_ms(POW_DURATION);
+        
+        printf(">>> Power Outage Warning: OFF event sent\n");
+        power_cut_alarm.value = HOMEKIT_BOOL(false);
+        homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(false));
+    }
     
-     delay_ms(2000);
-    
-    printf(">>> Power Outage Warning: OFF event sent\n");
-    power_cut_alarm.value = HOMEKIT_BOOL(false);
-    homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(false));
-    
-    delay_ms(POW_WORKING_TIME);
-    
-    homekit_characteristic_remove_delayed_notify1();
-    homekit_characteristic_remove_delayed_notify2();
+    power_cut_switch.value = HOMEKIT_BOOL(false);
+    homekit_characteristic_notify(&power_cut_switch, HOMEKIT_BOOL(false));
     
     vTaskDelete(NULL);
 }
@@ -101,10 +106,6 @@ void gpio_init() {
     gpio_set_interrupt(SWITCH_GPIO, GPIO_INTTYPE_EDGE_ANY, switch_intr_callback);
     
     last_button_event_time = xTaskGetTickCountFromISR();
-}
-
-void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
-    relay_write(switch_on.value.bool_value);
 }
 
 void function_task(void *_args) {
@@ -132,8 +133,13 @@ void reset_task(void *_args) {
     vTaskDelete(NULL);
 }
 
+void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
+    xTaskCreate(function_task, "Function", 96, NULL, 3, NULL);
+    relay_write(switch_on.value.bool_value);
+}
+
 void toggle_switch() {
-    xTaskCreate(function_task, "Function", 128, NULL, 3, NULL);
+    xTaskCreate(function_task, "Function", 96, NULL, 3, NULL);
     switch_on.value.bool_value = !switch_on.value.bool_value;
     relay_write(switch_on.value.bool_value);
     homekit_characteristic_notify(&switch_on, switch_on.value);
@@ -153,7 +159,7 @@ void button_intr_callback(uint8_t gpio) {
     
     if (((now - last_button_event_time) > DEBOUNCE_TIME) && (gpio_read(BUTTON_GPIO) == 1)) {
         if ((now - last_reset_event_time) > RESET_TIME) {
-            xTaskCreate(reset_task, "Reset", 256, NULL, 1, NULL);
+            xTaskCreate(reset_task, "Reset", 128, NULL, 1, NULL);
         } else {
             last_button_event_time = now;
             toggle_switch();
@@ -164,7 +170,7 @@ void button_intr_callback(uint8_t gpio) {
 }
 
 void identify(homekit_value_t _value) {
-    xTaskCreate(identify_task, "Identify", 128, NULL, 3, NULL);
+    xTaskCreate(identify_task, "Identify", 96, NULL, 3, NULL);
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff Switch");
@@ -177,7 +183,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
             HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff Basic wPOW"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.1"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.2"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),
@@ -189,6 +195,11 @@ homekit_accessory_t *accessories[] = {
         HOMEKIT_SERVICE(MOTION_SENSOR, .primary=false, .characteristics=(homekit_characteristic_t*[]) {
             HOMEKIT_CHARACTERISTIC(NAME, "Power Outage"),
             &power_cut_alarm,
+            NULL
+        }),
+        HOMEKIT_SERVICE(SWITCH, .primary=false, .characteristics=(homekit_characteristic_t*[]){
+            HOMEKIT_CHARACTERISTIC(NAME, "PO Switch"),
+            &power_cut_switch,
             NULL
         }),
         NULL
@@ -213,13 +224,13 @@ void create_accessory_name() {
 }
 
 void on_wifi_ready() {
-    xTaskCreate(wifi_connected_task, "Wifi connected", 256, NULL, 3, NULL);
+    xTaskCreate(wifi_connected_task, "Wifi connected", 96, NULL, 3, NULL);
     
     create_accessory_name();
         
     homekit_server_init(&config);
     
-    xTaskCreate(power_outage_warning_task, "Power Outage Warning", 256, NULL, 4, NULL);
+    xTaskCreate(power_outage_warning_task, "Power Outage Warning", 128, NULL, 4, NULL);
 }
 
 void user_init(void) {
