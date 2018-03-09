@@ -1,7 +1,7 @@
 /*
  * Sonoff Basic
  * 
- * v0.2.1
+ * v0.2.2
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -73,10 +73,6 @@ void gpio_init() {
     last_button_event_time = xTaskGetTickCountFromISR();
 }
 
-void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
-    relay_write(switch_on.value.bool_value);
-}
-
 void function_task(void *_args) {
     led_code(LED_GPIO, FUNCTION_A);
     vTaskDelete(NULL);
@@ -102,8 +98,13 @@ void reset_task(void *_args) {
     vTaskDelete(NULL);
 }
 
+void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
+    xTaskCreate(function_task, "Function", 96, NULL, 3, NULL);
+    relay_write(switch_on.value.bool_value);
+}
+
 void toggle_switch() {
-    xTaskCreate(function_task, "Function", 128, NULL, 3, NULL);
+    xTaskCreate(function_task, "Function", 96, NULL, 3, NULL);
     switch_on.value.bool_value = !switch_on.value.bool_value;
     relay_write(switch_on.value.bool_value);
     homekit_characteristic_notify(&switch_on, switch_on.value);
@@ -123,7 +124,7 @@ void button_intr_callback(uint8_t gpio) {
     
     if (((now - last_button_event_time) > DEBOUNCE_TIME) && (gpio_read(BUTTON_GPIO) == 1)) {
         if ((now - last_reset_event_time) > RESET_TIME) {
-            xTaskCreate(reset_task, "Reset", 256, NULL, 1, NULL);
+            xTaskCreate(reset_task, "Reset", 128, NULL, 1, NULL);
         } else {
             last_button_event_time = now;
             toggle_switch();
@@ -134,7 +135,7 @@ void button_intr_callback(uint8_t gpio) {
 }
 
 void identify(homekit_value_t _value) {
-    xTaskCreate(identify_task, "Identify", 128, NULL, 3, NULL);
+    xTaskCreate(identify_task, "Identify", 96, NULL, 3, NULL);
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff Switch");
@@ -147,7 +148,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
             HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff Basic"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.1"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.2"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),
@@ -178,7 +179,7 @@ void create_accessory_name() {
 }
 
 void on_wifi_ready() {
-    xTaskCreate(wifi_connected_task, "Wifi connected", 256, NULL, 3, NULL);
+    xTaskCreate(wifi_connected_task, "Wifi connected", 96, NULL, 3, NULL);
     
     create_accessory_name();
         

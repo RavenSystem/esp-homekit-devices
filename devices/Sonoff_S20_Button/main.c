@@ -1,7 +1,7 @@
 /*
  * Sonoff S20 Button
  * 
- * v0.2.1
+ * v0.2.2
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -40,7 +40,7 @@
 #define DEBOUNCE_TIME       50      / portTICK_PERIOD_MS
 #define DOUBLE_PRESS_TIME   400
 #define LONGPRESS_TIME      750     / portTICK_PERIOD_MS
-#define OUTLET_TIME         2500    / portTICK_PERIOD_MS
+#define OUTLET_TIME         2200    / portTICK_PERIOD_MS
 #define RESET_TIME          10000   / portTICK_PERIOD_MS
 
 uint32_t last_button_event_time, last_reset_event_time;
@@ -77,11 +77,6 @@ void gpio_init() {
     
     sdk_os_timer_disarm(&press_timer);
     sdk_os_timer_setfn(&press_timer, button_timer_callback, NULL);
-}
-
-void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
-    relay_write(switch_on.value.bool_value);
-    homekit_characteristic_notify(&switch_outlet_in_use, switch_on.value);
 }
 
 void functionA_task(void *_args) {
@@ -124,6 +119,12 @@ void reset_task(void *_args) {
     vTaskDelete(NULL);
 }
 
+void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
+    xTaskCreate(functionD_task, "Function D", 96, NULL, 3, NULL);
+    relay_write(switch_on.value.bool_value);
+    homekit_characteristic_notify(&switch_outlet_in_use, switch_on.value);
+}
+
 void button_intr_callback(uint8_t gpio) {
     uint32_t now = xTaskGetTickCountFromISR();
     
@@ -131,24 +132,24 @@ void button_intr_callback(uint8_t gpio) {
         last_button_event_time = now;
         
         if ((now - last_reset_event_time) > RESET_TIME) {
-            xTaskCreate(reset_task, "Reset", 256, NULL, 1, NULL);
+            xTaskCreate(reset_task, "Reset", 128, NULL, 1, NULL);
         } else if ((now - last_reset_event_time) > OUTLET_TIME) {
             press_count = 0;
-            xTaskCreate(functionD_task, "Function D", 128, NULL, 3, NULL);
+            xTaskCreate(functionD_task, "Function D", 96, NULL, 3, NULL);
             switch_on.value.bool_value = !switch_on.value.bool_value;
             relay_write(switch_on.value.bool_value);
             homekit_characteristic_notify(&switch_on, switch_on.value);
             homekit_characteristic_notify(&switch_outlet_in_use, switch_on.value);
         } else if ((now - last_reset_event_time) > LONGPRESS_TIME) {
             press_count = 0;
-            xTaskCreate(functionC_task, "Function C", 128, NULL, 3, NULL);
+            xTaskCreate(functionC_task, "Function C", 96, NULL, 3, NULL);
             homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(2));
         } else {
             press_count++;
             if (press_count > 1) {
                 press_count = 0;
                 sdk_os_timer_disarm(&press_timer);
-                xTaskCreate(functionB_task, "Function B", 128, NULL, 3, NULL);
+                xTaskCreate(functionB_task, "Function B", 96, NULL, 3, NULL);
                 homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(1));
             } else {
                 sdk_os_timer_arm(&press_timer, DOUBLE_PRESS_TIME, 1);
@@ -163,12 +164,12 @@ void button_timer_callback() {
     press_count = 0;
     sdk_os_timer_disarm(&press_timer);
     
-    xTaskCreate(functionA_task, "Function A", 128, NULL, 3, NULL);
+    xTaskCreate(functionA_task, "Function A", 96, NULL, 3, NULL);
     homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(0));
 }
 
 void identify(homekit_value_t _value) {
-    xTaskCreate(identify_task, "Identify", 128, NULL, 3, NULL);
+    xTaskCreate(identify_task, "Identify", 96, NULL, 3, NULL);
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff S20 Button");
@@ -181,7 +182,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
             HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff S20 Button"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.1"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.2"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),
@@ -218,7 +219,7 @@ void create_accessory_name() {
 }
 
 void on_wifi_ready() {
-    xTaskCreate(wifi_connected_task, "Wifi connected", 256, NULL, 3, NULL);
+    xTaskCreate(wifi_connected_task, "Wifi connected", 96, NULL, 3, NULL);
     
     create_accessory_name();
         

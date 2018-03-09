@@ -1,7 +1,7 @@
 /* 
  * Sonoff 4CH
  * 
- * v0.2.1
+ * v0.2.2
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -99,18 +99,22 @@ void gpio_init() {
 }
 
 void switch_on_callback1(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
+    xTaskCreate(function_task, "Function", 96, NULL, 3, NULL);
     relay_write(switch1_on.value.bool_value, RELAY1_GPIO);
 }
 
 void switch_on_callback2(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
+    xTaskCreate(function_task, "Function", 96, NULL, 3, NULL);
     relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
 }
 
 void switch_on_callback3(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
+    xTaskCreate(function_task, "Function", 96, NULL, 3, NULL);
     relay_write(switch3_on.value.bool_value, RELAY3_GPIO);
 }
 
 void switch_on_callback4(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
+    xTaskCreate(function_task, "Function", 96, NULL, 3, NULL);
     relay_write(switch4_on.value.bool_value, RELAY4_GPIO);
 }
 
@@ -144,10 +148,10 @@ void button_intr_callback(uint8_t gpio) {
     
     if (((now - last_button_event_time) > DEBOUNCE_TIME) && (gpio_read(gpio) == 1) && (pushed_gpio == gpio)) {
         if ((now - last_reset_event_time) > RESET_TIME && (gpio == BUTTON1_GPIO)) {
-            xTaskCreate(reset_task, "Reset", 256, NULL, 1, NULL);
+            xTaskCreate(reset_task, "Reset", 128, NULL, 1, NULL);
         } else {
             last_button_event_time = now;
-            xTaskCreate(function_task, "Function", 256, NULL, 3, NULL);
+            xTaskCreate(function_task, "Function", 96, NULL, 3, NULL);
             switch (gpio) {
                 case BUTTON1_GPIO:
                     switch1_on.value.bool_value = !switch1_on.value.bool_value;
@@ -184,7 +188,7 @@ void button_intr_callback(uint8_t gpio) {
 }
 
 void identify(homekit_value_t _value) {
-    xTaskCreate(identify_task, "Identify", 256, NULL, 3, NULL);
+    xTaskCreate(identify_task, "Identify", 96, NULL, 3, NULL);
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff Switch");
@@ -197,7 +201,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
             HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff 4CH"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.1"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.2"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),
@@ -243,7 +247,7 @@ void create_accessory_name() {
 }
 
 void on_wifi_ready() {
-    xTaskCreate(wifi_connected_task, "Wifi connected", 256, NULL, 3, NULL);
+    xTaskCreate(wifi_connected_task, "Wifi connected", 96, NULL, 3, NULL);
     
     create_accessory_name();
         
