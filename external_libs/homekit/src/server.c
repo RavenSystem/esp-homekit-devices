@@ -33,7 +33,7 @@
 #define PORT 5556
 
 #ifndef TTL
-#define TTL 4500
+#define TTL 255
 #endif
 
 #ifndef HOMEKIT_MAX_CLIENTS
@@ -177,12 +177,6 @@ void server_free(homekit_server_t *server) {
     }
 
     free(server);
-}
-
-uint8_t connected_clients = 0;
-
-void connected_clients_count(uint8_t *count) {
-    *count = connected_clients;
 }
 
 #ifdef HOMEKIT_DEBUG
@@ -1881,56 +1875,6 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
     tlv_free(message);
 }
 
-bool delayed_notify_enable1 = false;
-characteristic_event_t *delayed_notify1;
-
-bool delayed_notify_enable2 = false;
-characteristic_event_t *delayed_notify2;
-
-void homekit_characteristic_set_delayed_notify1(homekit_characteristic_t *ch, const homekit_value_t value) {
-    delayed_notify_enable1 = true;
-    delayed_notify1 = malloc(sizeof(characteristic_event_t));
-    delayed_notify1->characteristic = ch;
-    delayed_notify1->value = value;
-}
-
-void homekit_characteristic_set_delayed_notify2(homekit_characteristic_t *ch, const homekit_value_t value) {
-    delayed_notify_enable2 = true;
-    delayed_notify2 = malloc(sizeof(characteristic_event_t));
-    delayed_notify2->characteristic = ch;
-    delayed_notify2->value = value;
-}
-
-void homekit_characteristic_remove_delayed_notify1() {
-    delayed_notify_enable1 = false;
-    free(delayed_notify1);
-}
-
-void homekit_characteristic_remove_delayed_notify2() {
-    delayed_notify_enable2 = false;
-    free(delayed_notify2);
-}
-
-void delayed_notify_task(void *pvParameters) {
-    client_context_t *context = pvParameters;
-    
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
-    
-    if (delayed_notify_enable1) {
-        CLIENT_INFO(context, "Send delayed event 1");
-        client_notify_characteristic(delayed_notify1->characteristic, delayed_notify1->value, context);
-    }
-    
-    if (delayed_notify_enable2) {
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
-        
-        CLIENT_INFO(context, "Send delayed event 2");
-        client_notify_characteristic(delayed_notify2->characteristic, delayed_notify2->value, context);
-    }
-    
-    vTaskDelete(NULL);
-}
-
 void homekit_server_on_get_accessories(client_context_t *context) {
     CLIENT_INFO(context, "Get Accessories");
     DEBUG_HEAP();
@@ -1994,12 +1938,6 @@ void homekit_server_on_get_accessories(client_context_t *context) {
     json_free(json);
 
     client_send_chunk(NULL, 0, context);
-    
-    connected_clients++;
-    
-    if ((delayed_notify_enable1) || (delayed_notify_enable2)) {
-        xTaskCreate(delayed_notify_task, "Delayed notify", 256, context, 2, NULL);
-    }
 }
 
 void homekit_server_on_get_characteristics(client_context_t *context) {
@@ -3083,7 +3021,7 @@ static void homekit_run_server(homekit_server_t *server)
     server->fds[0].events = POLLIN;
 
     for (;;) {
-        int triggered_nfds = poll(server->fds, server->nfds, 1000);
+        int triggered_nfds = poll(server->fds, server->nfds, 1500);
         if (triggered_nfds) {
             if (server->fds[0].revents & POLLIN) {
                 homekit_server_accept_client(server);
@@ -3129,8 +3067,40 @@ typedef struct {
     char *txt_rec;
 } mDNS_params;
 
-static TaskHandle_t mdns_announcement_task_handle = NULL;
+bool run_announcement_system = false;
 
+void mdns_announcement_task(void *pvParameters) {
+    mDNS_params *params = pvParameters;
+    
+    uint8_t name_len = snprintf(NULL, 0, "%s", params->name);
+    char *name = malloc(name_len + 1);
+    snprintf(name, name_len + 1, "%s", params->name);
+    
+    uint8_t txt_rec_len = snprintf(NULL, 0, "%s", params->txt_rec);
+    char *txt_rec = malloc(txt_rec_len + 1);
+    snprintf(txt_rec, txt_rec_len + 1, "%s", params->txt_rec);
+    
+    free(params);
+    
+    INFO("mDNS announcement system started: Name=%s %s Port=%d TTL=%d", name, txt_rec, PORT, TTL);
+    
+    // Announcement
+    while(run_announcement_system) {
+        mdns_clear();
+        mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
+        
+        vTaskDelay((120 * 1000) / portTICK_PERIOD_MS);
+    }
+    
+    free(name);
+    free(txt_rec);
+    
+    INFO("mDNS announcement system stopped");
+    
+    vTaskDelete(NULL);
+}
+
+/*
 void mdns_announcement_task(void *pvParameters) {
     mDNS_params *params = pvParameters;
     
@@ -3145,20 +3115,21 @@ void mdns_announcement_task(void *pvParameters) {
     free(params);
 
     // First announcement
-    LOCK_TCPIP_CORE();
     mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
     INFO("mDNS first announcement: Name=%s %s Port=%d TTL=%d", name, txt_rec, PORT, TTL);
-    UNLOCK_TCPIP_CORE();
     
     // Exponential Back-off announcement
     uint16_t announce_delay = 1;
     uint8_t i;
     for (i=1; i<9; i++) {
         vTaskDelay(announce_delay * 1000 / portTICK_PERIOD_MS);
+        
+        if (!run_announcement_system) {
+            break;
+        }
+        
         mdns_clear();
-        LOCK_TCPIP_CORE();
         mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
-        UNLOCK_TCPIP_CORE();
         INFO("mDNS Exponential Back-off announcement %d with delay %d seconds", i, announce_delay);
         announce_delay = announce_delay * 3;
     }
@@ -3166,18 +3137,26 @@ void mdns_announcement_task(void *pvParameters) {
     // 1 hour interval announcement
     while(1) {
         vTaskDelay(3600 * 1000 / portTICK_PERIOD_MS);
+        
+        if (!run_announcement_system) {
+            break;
+        }
+        
         mdns_clear();
-        LOCK_TCPIP_CORE();
         mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
-        UNLOCK_TCPIP_CORE();
         INFO("mDNS 1 hour interval announcement");
     }
     
+    free(name);
+    free(txt_rec);
+    
     vTaskDelete(NULL);
 }
+*/
 
 void homekit_setup_mdns(homekit_server_t *server) {
     INFO("Configuring mDNS");
+    run_announcement_system = false;
 
     homekit_accessory_t *accessory = server->config->accessories[0];
     homekit_service_t *accessory_info =
@@ -3242,21 +3221,16 @@ void homekit_setup_mdns(homekit_server_t *server) {
     add_txt("ci=%d", accessory->category);
     // current state number (required)
     add_txt("s#=1");
-
-    if (mdns_announcement_task_handle) {
-        vTaskDelete(mdns_announcement_task_handle);
-    }
     
     mdns_clear();
     if (server->paired) {
         mDNS_params *params = malloc(sizeof(mDNS_params));
         params->name = name->value.string_value;
         params->txt_rec = txt_rec;
-        xTaskCreate(mdns_announcement_task, "mDNS Announcement", 256, params, 3, &mdns_announcement_task_handle);
+        run_announcement_system = true;
+        xTaskCreate(mdns_announcement_task, "mDNS Announcement", 256, params, 3, NULL);
     } else {
-        LOCK_TCPIP_CORE();
         mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 120);
-        UNLOCK_TCPIP_CORE();
     }
 }
 
@@ -3300,10 +3274,6 @@ void homekit_server_task(void *args) {
 
         server->accessory_key = homekit_accessory_key_generate();
         homekit_storage_save_accessory_key(server->accessory_key);
-        
-        INFO("Restarting device...");
-        vTaskDelay(3000 / portTICK_PERIOD_MS);
-        sdk_system_restart();
     } else {
         INFO("Using existing accessory ID: %s", server->accessory_id);
     }
@@ -3373,7 +3343,7 @@ void homekit_server_init(homekit_server_config_t *config) {
     homekit_server_t *server = server_new();
     server->config = config;
 
-    xTaskCreate(homekit_server_task, "HomeKit Server", 2304, server, 1, NULL);
+    xTaskCreate(homekit_server_task, "HomeKit Server", 2048, server, 1, NULL);
 }
 
 void homekit_server_reset() {
