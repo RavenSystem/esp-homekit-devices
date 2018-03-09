@@ -16,6 +16,9 @@ HOMEKIT_SPI_FLASH_BASE_ADDR = 0x7A000
 
 EXTRA_CFLAGS += -I../.. -DHOMEKIT_SHORT_APPLE_UUIDS -DMDNS_RESPONDER_REPLY_SIZE=1500
 
+## DEBUG
+#EXTRA_CFLAGS += -DqDebugLog -DHOMEKIT_DEBUG=1
+
 include $(abspath ../../sdk/esp-open-rtos/common.mk)
 
 monitor:
