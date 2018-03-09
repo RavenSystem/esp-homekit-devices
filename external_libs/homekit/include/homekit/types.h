@@ -255,10 +255,6 @@ homekit_characteristic_t *homekit_service_characteristic_by_type(homekit_service
 homekit_characteristic_t *homekit_characteristic_by_aid_and_iid(homekit_accessory_t **accessories, int aid, int iid);
 
 void homekit_characteristic_notify(homekit_characteristic_t *ch, const homekit_value_t value);
-void homekit_characteristic_set_delayed_notify1(homekit_characteristic_t *ch, const homekit_value_t value);
-void homekit_characteristic_set_delayed_notify2(homekit_characteristic_t *ch, const homekit_value_t value);
-void homekit_characteristic_remove_delayed_notify1();
-void homekit_characteristic_remove_delayed_notify2();
 void homekit_characteristic_add_notify_callback(
     homekit_characteristic_t *ch,
     homekit_characteristic_change_callback_fn callback,
