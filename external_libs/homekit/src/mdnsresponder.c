@@ -672,7 +672,9 @@ static void mdns_send_mcast(const ip_addr_t *addr, u8_t* msgP, int nBytes)
         } else {
             dest_addr = &gMulticastV4Addr;
         }
+        LOCK_TCPIP_CORE();
         err = udp_sendto(gMDNS_pcb, p, dest_addr, LWIP_IANA_PORT_MDNS);
+        UNLOCK_TCPIP_CORE();
         if (err == ERR_OK) {
 #ifdef qDebugLog
             printf(" - responded with %d bytes err %d\n", nBytes, err);
