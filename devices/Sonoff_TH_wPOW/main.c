@@ -343,7 +343,7 @@ void on_wifi_ready() {
         
     homekit_server_init(&config);
     
-    xTaskCreate(power_outage_warning_task, "Power Outage Warning", 128, NULL, 4, NULL);
+    xTaskCreate(power_outage_warning_task, "Power Outage Warning", 256, NULL, 4, NULL);
 }
 
 void user_init(void) {
