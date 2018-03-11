@@ -3089,7 +3089,7 @@ void mdns_announcement_task(void *pvParameters) {
         mdns_clear();
         mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
         
-        vTaskDelay((120 * 1000) / portTICK_PERIOD_MS);
+        vTaskDelay((TTL * 1000) / portTICK_PERIOD_MS);
     }
     
     free(name);
@@ -3099,60 +3099,6 @@ void mdns_announcement_task(void *pvParameters) {
     
     vTaskDelete(NULL);
 }
-
-/*
-void mdns_announcement_task(void *pvParameters) {
-    mDNS_params *params = pvParameters;
-    
-    uint8_t name_len = snprintf(NULL, 0, "%s", params->name);
-    char *name = malloc(name_len + 1);
-    snprintf(name, name_len + 1, "%s", params->name);
-    
-    uint8_t txt_rec_len = snprintf(NULL, 0, "%s", params->txt_rec);
-    char *txt_rec = malloc(txt_rec_len + 1);
-    snprintf(txt_rec, txt_rec_len + 1, "%s", params->txt_rec);
-    
-    free(params);
-
-    // First announcement
-    mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
-    INFO("mDNS first announcement: Name=%s %s Port=%d TTL=%d", name, txt_rec, PORT, TTL);
-    
-    // Exponential Back-off announcement
-    uint16_t announce_delay = 1;
-    uint8_t i;
-    for (i=1; i<9; i++) {
-        vTaskDelay(announce_delay * 1000 / portTICK_PERIOD_MS);
-        
-        if (!run_announcement_system) {
-            break;
-        }
-        
-        mdns_clear();
-        mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
-        INFO("mDNS Exponential Back-off announcement %d with delay %d seconds", i, announce_delay);
-        announce_delay = announce_delay * 3;
-    }
-    
-    // 1 hour interval announcement
-    while(1) {
-        vTaskDelay(3600 * 1000 / portTICK_PERIOD_MS);
-        
-        if (!run_announcement_system) {
-            break;
-        }
-        
-        mdns_clear();
-        mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
-        INFO("mDNS 1 hour interval announcement");
-    }
-    
-    free(name);
-    free(txt_rec);
-    
-    vTaskDelete(NULL);
-}
-*/
 
 void homekit_setup_mdns(homekit_server_t *server) {
     INFO("Configuring mDNS");
