@@ -3176,7 +3176,7 @@ void homekit_setup_mdns(homekit_server_t *server) {
         run_announcement_system = true;
         xTaskCreate(mdns_announcement_task, "mDNS Announcement", 256, params, 3, NULL);
     } else {
-        mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 120);
+        mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, TTL);
     }
 }
 
