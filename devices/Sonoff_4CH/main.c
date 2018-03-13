@@ -87,12 +87,15 @@ void gpio_init() {
     gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
     
     gpio_set_pullup(BUTTON2_GPIO, true, true);
+    gpio_enable(BUTTON2_GPIO, GPIO_INPUT);
     gpio_set_interrupt(BUTTON2_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
     
     gpio_set_pullup(BUTTON3_GPIO, true, true);
+    gpio_enable(BUTTON3_GPIO, GPIO_INPUT);
     gpio_set_interrupt(BUTTON3_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
     
     gpio_set_pullup(BUTTON4_GPIO, true, true);
+    gpio_enable(BUTTON4_GPIO, GPIO_INPUT);
     gpio_set_interrupt(BUTTON4_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
     
     last_button_event_time = xTaskGetTickCountFromISR();
@@ -118,22 +121,22 @@ void switch_on_callback4(homekit_characteristic_t *_ch, homekit_value_t on, void
     relay_write(switch4_on.value.bool_value, RELAY4_GPIO);
 }
 
-void function_task(void *_args) {
+void function_task() {
     led_code(LED_GPIO, FUNCTION_A);
     vTaskDelete(NULL);
 }
 
-void identify_task(void *_args) {
+void identify_task() {
     led_code(LED_GPIO, IDENTIFY_ACCESSORY);
     vTaskDelete(NULL);
 }
 
-void wifi_connected_task(void *_args) {
+void wifi_connected_task() {
     led_code(LED_GPIO, WIFI_CONNECTED);
     vTaskDelete(NULL);
 }
 
-void reset_task(void *_args) {
+void reset_task() {
     homekit_server_reset();
     wifi_config_reset();
     
