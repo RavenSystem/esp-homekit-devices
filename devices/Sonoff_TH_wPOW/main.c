@@ -66,32 +66,32 @@ void on_update(homekit_characteristic_t *ch, homekit_value_t value, void *contex
 
 void on_target(homekit_characteristic_t *ch, homekit_value_t value, void *context);
 
-void identify_task(void *_args) {
+void identify_task() {
     led_code(LED_GPIO, IDENTIFY_ACCESSORY);
     vTaskDelete(NULL);
 }
 
-void wifi_connected_task(void *_args) {
+void wifi_connected_task() {
     led_code(LED_GPIO, WIFI_CONNECTED);
     vTaskDelete(NULL);
 }
 
-void function_off_task(void *_args) {
+void function_off_task() {
     led_code(LED_GPIO, FUNCTION_A);
     vTaskDelete(NULL);
 }
 
-void function_heat_task(void *_args) {
+void function_heat_task() {
     led_code(LED_GPIO, FUNCTION_B);
     vTaskDelete(NULL);
 }
 
-void function_cool_task(void *_args) {
+void function_cool_task() {
     led_code(LED_GPIO, FUNCTION_C);
     vTaskDelete(NULL);
 }
 
-void reset_task(void *_args) {
+void reset_task() {
     homekit_server_reset();
     wifi_config_reset();
     
@@ -115,7 +115,7 @@ homekit_characteristic_t current_humidity = HOMEKIT_CHARACTERISTIC_(CURRENT_RELA
 homekit_characteristic_t power_cut_alarm = HOMEKIT_CHARACTERISTIC_(MOTION_DETECTED, false);
 homekit_characteristic_t power_cut_switch = HOMEKIT_CHARACTERISTIC_(ON, true);
 
-void power_outage_warning_task(void *_args) {
+void power_outage_warning_task() {
     uint8_t i;
     for (i=0; i<150; i++) {
         delay_ms(POW_DELAY - POW_DURATION);
@@ -223,7 +223,7 @@ void button_intr_callback(uint8_t gpio) {
     }
 }
 
-void temperature_sensor_task(void *_args) {
+void temperature_sensor_task() {
     gpio_enable(LED_GPIO, GPIO_OUTPUT);
     led_write(false);
     
@@ -250,14 +250,14 @@ void temperature_sensor_task(void *_args) {
                 current_temperature.value = HOMEKIT_FLOAT(temperature_value);
                 homekit_characteristic_notify(&current_temperature, current_temperature.value);
                 
+                update_state();
+                
                 if (humidity_value != old_humidity_value) {
-                    delay_ms(500);
+                    delay_ms(1000);
                     old_humidity_value = humidity_value;
                     current_humidity.value = HOMEKIT_FLOAT(humidity_value);
                     homekit_characteristic_notify(&current_humidity, current_humidity.value);
                 }
-                
-                update_state();
             }
 
         } else {
@@ -343,7 +343,7 @@ void on_wifi_ready() {
         
     homekit_server_init(&config);
     
-    xTaskCreate(power_outage_warning_task, "Power Outage Warning", 256, NULL, 4, NULL);
+    xTaskCreate(power_outage_warning_task, "Power Outage Warning", 192, NULL, 4, NULL);
 }
 
 void user_init(void) {
