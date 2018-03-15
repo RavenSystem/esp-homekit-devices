@@ -188,17 +188,17 @@ homekit_accessory_t *accessories[] = {
             NULL
         }),
         HOMEKIT_SERVICE(SWITCH, .primary=true, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(NAME, "Sonoff Switch"),
+            HOMEKIT_CHARACTERISTIC(NAME, "Switch"),
             &switch_on,
             NULL
         }),
         HOMEKIT_SERVICE(MOTION_SENSOR, .primary=false, .characteristics=(homekit_characteristic_t*[]) {
-            HOMEKIT_CHARACTERISTIC(NAME, "Power Outage"),
+            HOMEKIT_CHARACTERISTIC(NAME, "Power Outage Warning"),
             &power_cut_alarm,
             NULL
         }),
         HOMEKIT_SERVICE(SWITCH, .primary=false, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(NAME, "PO Switch"),
+            HOMEKIT_CHARACTERISTIC(NAME, "Power Outage System"),
             &power_cut_switch,
             NULL
         }),
@@ -230,7 +230,7 @@ void on_wifi_ready() {
         
     homekit_server_init(&config);
     
-    xTaskCreate(power_outage_warning_task, "Power Outage Warning", 192, NULL, 4, NULL);
+    xTaskCreate(power_outage_warning_task, "Power Outage Warning", 192, NULL, 3, NULL);
 }
 
 void user_init(void) {
