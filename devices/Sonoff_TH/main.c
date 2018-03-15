@@ -264,7 +264,7 @@ homekit_accessory_t *accessories[] = {
             NULL
         }),
         HOMEKIT_SERVICE(THERMOSTAT, .primary=true, .characteristics=(homekit_characteristic_t*[]) {
-            HOMEKIT_CHARACTERISTIC(NAME, "Sonoff Thermostat"),
+            HOMEKIT_CHARACTERISTIC(NAME, "Thermostat"),
             &current_temperature,
             &target_temperature,
             &current_state,

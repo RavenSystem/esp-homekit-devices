@@ -153,7 +153,7 @@ homekit_accessory_t *accessories[] = {
             NULL
         }),
         HOMEKIT_SERVICE(SWITCH, .primary=true, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(NAME, "Sonoff Switch"),
+            HOMEKIT_CHARACTERISTIC(NAME, "Switch"),
             &switch_on,
             NULL
         }),

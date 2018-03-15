@@ -172,7 +172,7 @@ void identify(homekit_value_t _value) {
     xTaskCreate(identify_task, "Identify", 96, NULL, 3, NULL);
 }
 
-homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff S20 Button");
+homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff Button");
 homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, "SonoffS20 N/A");
 
 homekit_accessory_t *accessories[] = {
@@ -187,12 +187,12 @@ homekit_accessory_t *accessories[] = {
             NULL
         }),
         HOMEKIT_SERVICE(STATELESS_PROGRAMMABLE_SWITCH, .primary=true, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(NAME, "Sonoff Button"),
+            HOMEKIT_CHARACTERISTIC(NAME, "Button"),
             &button_event,
             NULL
         }),
         HOMEKIT_SERVICE(OUTLET, .primary=false, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(NAME, "Sonoff S20"),
+            HOMEKIT_CHARACTERISTIC(NAME, "Outlet"),
             &switch_on,
             &switch_outlet_in_use,
             NULL

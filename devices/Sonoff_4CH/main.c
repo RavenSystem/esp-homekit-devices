@@ -194,7 +194,7 @@ void identify(homekit_value_t _value) {
     xTaskCreate(identify_task, "Identify", 96, NULL, 3, NULL);
 }
 
-homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff Switch");
+homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff 4CH Switch");
 homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, "Sonoff4 N/A");
 
 homekit_accessory_t *accessories[] = {
@@ -209,22 +209,22 @@ homekit_accessory_t *accessories[] = {
             NULL
         }),
         HOMEKIT_SERVICE(SWITCH, .primary=true, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(NAME, "Sonoff Switch 1"),
+            HOMEKIT_CHARACTERISTIC(NAME, "Switch 1"),
             &switch1_on,
             NULL
         }),
         HOMEKIT_SERVICE(SWITCH, .primary=true, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(NAME, "Sonoff Switch 2"),
+            HOMEKIT_CHARACTERISTIC(NAME, "Switch 2"),
             &switch2_on,
             NULL
         }),
         HOMEKIT_SERVICE(SWITCH, .primary=true, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(NAME, "Sonoff Switch 3"),
+            HOMEKIT_CHARACTERISTIC(NAME, "Switch 3"),
             &switch3_on,
             NULL
         }),
         HOMEKIT_SERVICE(SWITCH, .primary=true, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(NAME, "Sonoff Switch 4"),
+            HOMEKIT_CHARACTERISTIC(NAME, "Switch 4"),
             &switch4_on,
             NULL
         }),
