@@ -1,7 +1,7 @@
 /*
  * Sonoff TH with Power Outage Warning
  * 
- * v0.2.2
+ * v0.3b1
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -38,7 +38,7 @@
 #define RELAY_GPIO          12
 #define SENSOR_GPIO         14
 
-#define DEBOUNCE_TIME       300     / portTICK_PERIOD_MS
+#define DEBOUNCE_TIME       500     / portTICK_PERIOD_MS
 #define RESET_TIME          10000   / portTICK_PERIOD_MS
 
 #define delay_ms(ms)        vTaskDelay((ms) / portTICK_PERIOD_MS)
@@ -291,7 +291,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
             HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff TH wPOW"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.2"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.3"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),

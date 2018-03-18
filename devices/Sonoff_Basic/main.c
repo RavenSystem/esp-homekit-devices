@@ -1,7 +1,7 @@
 /*
  * Sonoff Basic
  * 
- * v0.2.2
+ * v0.3b1
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -36,7 +36,7 @@
 #define RELAY_GPIO          12
 #define SWITCH_GPIO         14
 
-#define DEBOUNCE_TIME       300     / portTICK_PERIOD_MS
+#define DEBOUNCE_TIME       500     / portTICK_PERIOD_MS
 #define RESET_TIME          10000   / portTICK_PERIOD_MS
 
 uint32_t last_button_event_time, last_reset_event_time;
@@ -66,8 +66,8 @@ void gpio_init() {
     gpio_set_pullup(BUTTON_GPIO, true, true);
     gpio_set_interrupt(BUTTON_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
     
-    gpio_set_pullup(SWITCH_GPIO, true, true);
     gpio_enable(SWITCH_GPIO, GPIO_INPUT);
+    gpio_set_pullup(SWITCH_GPIO, true, true);
     gpio_set_interrupt(SWITCH_GPIO, GPIO_INTTYPE_EDGE_ANY, switch_intr_callback);
     
     last_button_event_time = xTaskGetTickCountFromISR();
@@ -148,7 +148,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
             HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff Basic"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.2"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.3"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),

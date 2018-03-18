@@ -1,7 +1,7 @@
 /*
  * Sonoff S20 Button
  * 
- * v0.2.2
+ * v0.3b1
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -39,8 +39,8 @@
 
 #define DEBOUNCE_TIME       50      / portTICK_PERIOD_MS
 #define DOUBLE_PRESS_TIME   400
-#define LONGPRESS_TIME      750     / portTICK_PERIOD_MS
-#define OUTLET_TIME         2200    / portTICK_PERIOD_MS
+#define LONGPRESS_TIME      600     / portTICK_PERIOD_MS
+#define OUTLET_TIME         1400    / portTICK_PERIOD_MS
 #define RESET_TIME          10000   / portTICK_PERIOD_MS
 
 uint32_t last_button_event_time, last_reset_event_time;
@@ -182,7 +182,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
             HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff S20 Button"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.2"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.3"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),

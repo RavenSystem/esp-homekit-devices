@@ -1,7 +1,7 @@
 /* 
  * Sonoff 4CH
  * 
- * v0.2.2
+ * v0.3b1
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -86,16 +86,16 @@ void gpio_init() {
     gpio_set_pullup(BUTTON1_GPIO, true, true);
     gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
     
-    gpio_set_pullup(BUTTON2_GPIO, true, true);
     gpio_enable(BUTTON2_GPIO, GPIO_INPUT);
+    gpio_set_pullup(BUTTON2_GPIO, true, true);
     gpio_set_interrupt(BUTTON2_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
     
-    gpio_set_pullup(BUTTON3_GPIO, true, true);
     gpio_enable(BUTTON3_GPIO, GPIO_INPUT);
+    gpio_set_pullup(BUTTON3_GPIO, true, true);
     gpio_set_interrupt(BUTTON3_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
     
-    gpio_set_pullup(BUTTON4_GPIO, true, true);
     gpio_enable(BUTTON4_GPIO, GPIO_INPUT);
+    gpio_set_pullup(BUTTON4_GPIO, true, true);
     gpio_set_interrupt(BUTTON4_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
     
     last_button_event_time = xTaskGetTickCountFromISR();
@@ -204,7 +204,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
             HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff 4CH"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.2.2"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.3"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),
