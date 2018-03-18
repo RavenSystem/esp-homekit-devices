@@ -3289,7 +3289,7 @@ void homekit_server_init(homekit_server_config_t *config) {
     homekit_server_t *server = server_new();
     server->config = config;
 
-    xTaskCreate(homekit_server_task, "HomeKit Server", 2048, server, 1, NULL);
+    xTaskCreate(homekit_server_task, "HomeKit Server", 2560, server, 1, NULL);
 }
 
 void homekit_server_reset() {
