@@ -3062,47 +3062,25 @@ static void homekit_run_server(homekit_server_t *server)
     server_free(server);
 }
 
-typedef struct {
-    char *name;
-    char *txt_rec;
-} mDNS_params;
+static TaskHandle_t mdns_announcement_task_handle = NULL;
+static char *mDNS_params_name = NULL;
+static char *mDNS_params_txt_rec = NULL;
 
-bool run_announcement_system = false;
-
-void mdns_announcement_task(void *pvParameters) {
-    mDNS_params *params = pvParameters;
+void mdns_announcement_task() {
+    INFO("mDNS announcement system started: Name=%s %s Port=%d TTL=%d", mDNS_params_name, mDNS_params_txt_rec, PORT, TTL);
     
-    uint8_t name_len = snprintf(NULL, 0, "%s", params->name);
-    char *name = malloc(name_len + 1);
-    snprintf(name, name_len + 1, "%s", params->name);
-    
-    uint8_t txt_rec_len = snprintf(NULL, 0, "%s", params->txt_rec);
-    char *txt_rec = malloc(txt_rec_len + 1);
-    snprintf(txt_rec, txt_rec_len + 1, "%s", params->txt_rec);
-    
-    free(params);
-    
-    INFO("mDNS announcement system started: Name=%s %s Port=%d TTL=%d", name, txt_rec, PORT, TTL);
-    
-    // Announcement
-    while(run_announcement_system) {
+    while(1) {
         mdns_clear();
-        mdns_add_facility(name, "_hap", txt_rec, mdns_TCP, PORT, TTL);
+        mdns_add_facility(mDNS_params_name, "_hap", mDNS_params_txt_rec, mdns_TCP, PORT, TTL);
         
         vTaskDelay((TTL * 1000) / portTICK_PERIOD_MS);
     }
-    
-    free(name);
-    free(txt_rec);
-    
-    INFO("mDNS announcement system stopped");
     
     vTaskDelete(NULL);
 }
 
 void homekit_setup_mdns(homekit_server_t *server) {
     INFO("Configuring mDNS");
-    run_announcement_system = false;
 
     homekit_accessory_t *accessory = server->config->accessories[0];
     homekit_service_t *accessory_info =
@@ -3168,16 +3146,30 @@ void homekit_setup_mdns(homekit_server_t *server) {
     // current state number (required)
     add_txt("s#=1");
     
-    mdns_clear();
-    if (server->paired) {
-        mDNS_params *params = malloc(sizeof(mDNS_params));
-        params->name = name->value.string_value;
-        params->txt_rec = txt_rec;
-        run_announcement_system = true;
-        xTaskCreate(mdns_announcement_task, "mDNS Announcement", 256, params, 3, NULL);
-    } else {
-        mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, TTL);
+    if (mdns_announcement_task_handle) {
+        vTaskDelete(mdns_announcement_task_handle);
+        mdns_announcement_task_handle = NULL;
     }
+    
+    if (mDNS_params_name) {
+        free(mDNS_params_name);
+        mDNS_params_name = NULL;
+    }
+    
+    if (mDNS_params_txt_rec) {
+        free(mDNS_params_txt_rec);
+        mDNS_params_txt_rec = NULL;
+    }
+    
+    uint8_t name_len = snprintf(NULL, 0, "%s", name->value.string_value);
+    mDNS_params_name = malloc(name_len + 1);
+    snprintf(mDNS_params_name, name_len + 1, "%s", name->value.string_value);
+        
+    uint8_t txt_rec_len = snprintf(NULL, 0, "%s", txt_rec);
+    mDNS_params_txt_rec = malloc(txt_rec_len + 1);
+    snprintf(mDNS_params_txt_rec, txt_rec_len + 1, "%s", txt_rec);
+        
+    xTaskCreate(mdns_announcement_task, "mDNS Announcement", 256, NULL, 3, &mdns_announcement_task_handle);
 }
 
 char *homekit_accessory_id_generate() {
@@ -3289,7 +3281,7 @@ void homekit_server_init(homekit_server_config_t *config) {
     homekit_server_t *server = server_new();
     server->config = config;
 
-    xTaskCreate(homekit_server_task, "HomeKit Server", 2560, server, 1, NULL);
+    xTaskCreate(homekit_server_task, "HomeKit Server", 2048, server, 1, NULL);
 }
 
 void homekit_server_reset() {
