@@ -1,7 +1,7 @@
 /*
  * Sonoff Basic with Power Outage Warning
  * 
- * v0.3b1
+ * v0.3b2
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
