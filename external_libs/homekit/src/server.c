@@ -33,7 +33,7 @@
 #define PORT 5556
 
 #ifndef TTL
-#define TTL 255
+#define TTL 31536000
 #endif
 
 #ifndef HOMEKIT_MAX_CLIENTS
@@ -3062,23 +3062,6 @@ static void homekit_run_server(homekit_server_t *server)
     server_free(server);
 }
 
-static TaskHandle_t mdns_announcement_task_handle = NULL;
-static char *mDNS_params_name = NULL;
-static char *mDNS_params_txt_rec = NULL;
-
-void mdns_announcement_task() {
-    INFO("mDNS announcement system started: Name=%s %s Port=%d TTL=%d", mDNS_params_name, mDNS_params_txt_rec, PORT, TTL);
-    
-    while(1) {
-        mdns_clear();
-        mdns_add_facility(mDNS_params_name, "_hap", mDNS_params_txt_rec, mdns_TCP, PORT, TTL);
-        
-        vTaskDelay((TTL * 1000) / portTICK_PERIOD_MS);
-    }
-    
-    vTaskDelete(NULL);
-}
-
 void homekit_setup_mdns(homekit_server_t *server) {
     INFO("Configuring mDNS");
 
@@ -3145,31 +3128,12 @@ void homekit_setup_mdns(homekit_server_t *server) {
     add_txt("ci=%d", accessory->category);
     // current state number (required)
     add_txt("s#=1");
-    
-    if (mdns_announcement_task_handle) {
-        vTaskDelete(mdns_announcement_task_handle);
-        mdns_announcement_task_handle = NULL;
-    }
-    
-    if (mDNS_params_name) {
-        free(mDNS_params_name);
-        mDNS_params_name = NULL;
-    }
-    
-    if (mDNS_params_txt_rec) {
-        free(mDNS_params_txt_rec);
-        mDNS_params_txt_rec = NULL;
-    }
-    
-    uint8_t name_len = snprintf(NULL, 0, "%s", name->value.string_value);
-    mDNS_params_name = malloc(name_len + 1);
-    snprintf(mDNS_params_name, name_len + 1, "%s", name->value.string_value);
-        
-    uint8_t txt_rec_len = snprintf(NULL, 0, "%s", txt_rec);
-    mDNS_params_txt_rec = malloc(txt_rec_len + 1);
-    snprintf(mDNS_params_txt_rec, txt_rec_len + 1, "%s", txt_rec);
-        
-    xTaskCreate(mdns_announcement_task, "mDNS Announcement", 256, NULL, 3, &mdns_announcement_task_handle);
+
+    mdns_clear();
+    mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 0);
+    vTaskDelay(2200 / portTICK_PERIOD_MS);
+    mdns_clear();
+    mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, TTL);
 }
 
 char *homekit_accessory_id_generate() {
