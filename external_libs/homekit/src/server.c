@@ -1875,6 +1875,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
     tlv_free(message);
 }
 
+
 void homekit_server_on_get_accessories(client_context_t *context) {
     CLIENT_INFO(context, "Get Accessories");
     DEBUG_HEAP();
@@ -1979,7 +1980,8 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
     bool success = true;
 
     char *ch_id;
-    while ((ch_id = strsep(&id, ","))) {
+    char *_id = id;
+    while ((ch_id = strsep(&_id, ","))) {
         char *dot = strstr(ch_id, ".");
         if (!dot) {
             send_json_error_response(context, 400, HAPStatus_InvalidValue);
@@ -2025,7 +2027,8 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
         json_object_end(json);
     }
 
-    while ((ch_id = strsep(&id, ","))) {
+    _id = id;
+    while ((ch_id = strsep(&_id, ","))) {
         char *dot = strstr(ch_id, ".");
         *dot = 0;
         int aid = atoi(ch_id);
@@ -2903,6 +2906,18 @@ client_context_t *homekit_server_accept_client(homekit_server_t *server) {
     const struct timeval rcvtimeout = { 10, 0 }; /* 10 second timeout */
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
 
+    const int yes = 1; /* enable sending keepalive probes for socket */
+    setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes));
+
+    const int idle = 180; /* 180 sec iddle before start sending probes */
+    setsockopt(s, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
+
+    const int interval = 30; /* 30 sec between probes */
+    setsockopt(s, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval));
+
+    const int maxpkt = 4; /* Drop connection after 4 probes without response */
+    setsockopt(s, IPPROTO_TCP, TCP_KEEPCNT, &maxpkt, sizeof(maxpkt));
+    
     client_context_t *context = client_context_new();
     context->server = server;
     context->socket = s;
@@ -3021,7 +3036,7 @@ static void homekit_run_server(homekit_server_t *server)
     server->fds[0].events = POLLIN;
 
     for (;;) {
-        int triggered_nfds = poll(server->fds, server->nfds, 1500);
+        int triggered_nfds = poll(server->fds, server->nfds, 1000);
         if (triggered_nfds) {
             if (server->fds[0].revents & POLLIN) {
                 homekit_server_accept_client(server);
@@ -3056,11 +3071,11 @@ static void homekit_run_server(homekit_server_t *server)
         }
 
         homekit_server_process_notifications(server);
-        
     }
 
     server_free(server);
 }
+
 
 void homekit_setup_mdns(homekit_server_t *server) {
     INFO("Configuring mDNS");
@@ -3105,19 +3120,21 @@ void homekit_setup_mdns(homekit_server_t *server) {
             mdns_TXT_append(txt_rec, sizeof(txt_rec), buffer, buffer_len);
     }
 
-    // current configuration number (required)
-    add_txt("c#=1");
-    // feature flags (required if non-zero)
-    //   bit 0 - supports HAP pairing. required for all HomeKit accessories
-    //   bits 1-7 - reserved
-    add_txt("ff=0");
-    // device ID (required)
-    // should be in format XX:XX:XX:XX:XX:XX, otherwise devices will ignore it
-    add_txt("id=%s", server->accessory_id);
     // accessory model name (required)
     add_txt("md=%s", model->value.string_value);
     // protocol version (required)
     add_txt("pv=1.0");
+    // device ID (required)
+    // should be in format XX:XX:XX:XX:XX:XX, otherwise devices will ignore it
+    add_txt("id=%s", server->accessory_id);
+    // current configuration number (required)
+    add_txt("c#=%d", accessory->config_number);
+    // current state number (required)
+    add_txt("s#=1");
+    // feature flags (required if non-zero)
+    //   bit 0 - supports HAP pairing. required for all HomeKit accessories
+    //   bits 1-7 - reserved
+    add_txt("ff=0");
     // status flags
     //   bit 0 - not paired
     //   bit 1 - not configured to join WiFi
@@ -3126,8 +3143,6 @@ void homekit_setup_mdns(homekit_server_t *server) {
     add_txt("sf=%d", (server->paired) ? 0 : 1);
     // accessory category identifier
     add_txt("ci=%d", accessory->category);
-    // current state number (required)
-    add_txt("s#=1");
 
     mdns_clear();
     mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 0);
