@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <esp/hwrand.h>
 #include <espressif/esp_common.h>
+#include <esplibs/libmain.h>
 
 #include <lwip/sockets.h>
 
@@ -32,8 +33,8 @@
 
 #define PORT 5556
 
-#ifndef TTL
-#define TTL 31536000
+#ifndef MDNS_TTL
+#define MDNS_TTL 4500
 #endif
 
 #ifndef HOMEKIT_MAX_CLIENTS
@@ -1447,10 +1448,25 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
     tlv_free(message);
 }
 
+static ETSTimer pair_verify_disable_overclock_timer;
+
+void pair_verify_disable_overclock() {
+    sdk_system_restoreclock();
+    sdk_os_timer_disarm(&pair_verify_disable_overclock_timer);
+}
+
 void homekit_server_on_pair_verify(client_context_t *context, const byte *data, size_t size) {
     DEBUG("HomeKit Pair Verify");
     DEBUG_HEAP();
 
+    //CLIENT_INFO(context, "Start timestamp: %i", xTaskGetTickCountFromISR() * portTICK_PERIOD_MS);
+    
+    sdk_system_overclock();
+    
+    sdk_os_timer_disarm(&pair_verify_disable_overclock_timer);
+    sdk_os_timer_setfn(&pair_verify_disable_overclock_timer, pair_verify_disable_overclock, NULL);
+    sdk_os_timer_arm(&pair_verify_disable_overclock_timer, 400, 0);
+    
     tlv_values_t *message = tlv_new();
     tlv_parse(data, size, message);
 
@@ -1873,6 +1889,10 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
     }
 
     tlv_free(message);
+    
+    sdk_system_restoreclock();
+    
+    //CLIENT_INFO(context, "End timestamp: %i", xTaskGetTickCountFromISR() * portTICK_PERIOD_MS);
 }
 
 
@@ -3076,7 +3096,6 @@ static void homekit_run_server(homekit_server_t *server)
     server_free(server);
 }
 
-
 void homekit_setup_mdns(homekit_server_t *server) {
     INFO("Configuring mDNS");
 
@@ -3143,12 +3162,10 @@ void homekit_setup_mdns(homekit_server_t *server) {
     add_txt("sf=%d", (server->paired) ? 0 : 1);
     // accessory category identifier
     add_txt("ci=%d", accessory->category);
-
+    
+    INFO("mDNS announcement: Name=%s %s Port=%d TTL=%d", name->value.string_value, txt_rec, PORT, MDNS_TTL);
     mdns_clear();
-    mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, 0);
-    vTaskDelay(2200 / portTICK_PERIOD_MS);
-    mdns_clear();
-    mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, TTL);
+    mdns_add_facility(name->value.string_value, "_hap", txt_rec, mdns_TCP, PORT, MDNS_TTL);
 }
 
 char *homekit_accessory_id_generate() {
