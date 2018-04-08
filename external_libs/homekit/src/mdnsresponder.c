@@ -18,6 +18,9 @@
 #include <string.h>
 #include <stdio.h>
 
+#include <etstimer.h>
+#include <esplibs/libmain.h>
+
 #include <FreeRTOS.h>
 #include <task.h>
 #include <semphr.h>
@@ -418,10 +421,13 @@ static u8_t* mdns_get_question(u8_t* hdrP, u8_t* qp, char* qStr, uint16_t* qClas
 }
 
 //---------------------------------------------------------------------------
-static void mdns_announce(struct netif *netif, const ip_addr_t *addr);
+static void mdns_announce_netif(struct netif *netif, const ip_addr_t *addr);
 
+static ETSTimer mdns_announce_timer;
 
 void mdns_clear() {
+    sdk_os_timer_disarm(&mdns_announce_timer);
+    
     xSemaphoreTake(gDictMutex, portMAX_DELAY);
 
     mdns_rsrc *rsrc = gDictP;
@@ -538,6 +544,16 @@ void mdns_add_AAAA(const char* rKey, u32_t ttl, const ip6_addr_t *addr)
 }
 #endif
 
+void mdns_announce() {
+    struct netif *netif = sdk_system_get_netif(STATION_IF);
+#if LWIP_IPV4
+    mdns_announce_netif(netif, &gMulticastV4Addr);
+#endif
+#if LWIP_IPV6
+    mdns_announce_netif(netif, &gMulticastV6Addr);
+#endif
+}
+
 void mdns_add_facility( const char* instanceName,   // Friendly name, need not be unique
                         const char* serviceName,    // Must be "_name", e.g. "_hap" or "_http"
                         const char* addText,        // Must be <key>=<value>
@@ -590,13 +606,12 @@ void mdns_add_facility( const char* instanceName,   // Friendly name, need not b
     free(fullName);
     free(devName);
 
-    struct netif *netif = sdk_system_get_netif(STATION_IF);
-#if LWIP_IPV4
-    mdns_announce(netif, &gMulticastV4Addr);
-#endif
-#if LWIP_IPV6
-    mdns_announce(netif, &gMulticastV6Addr);
-#endif
+    sdk_os_timer_disarm(&mdns_announce_timer);
+    
+    mdns_announce();
+    
+    sdk_os_timer_setfn(&mdns_announce_timer, mdns_announce, NULL);
+    sdk_os_timer_arm(&mdns_announce_timer, ttl * 1000, 1);
 }
 
 static mdns_rsrc* mdns_match(const char* qstr, u16_t qType)
@@ -810,7 +825,7 @@ static void mdns_reply(const ip_addr_t *addr, struct mdns_hdr* hdrP)
 }
 
 // Announce all configured services
-static void mdns_announce(struct netif *netif, const ip_addr_t *addr)
+static void mdns_announce_netif(struct netif *netif, const ip_addr_t *addr)
 {
     u8_t *mdns_response = malloc(MDNS_RESPONDER_REPLY_SIZE);
     if (mdns_response == NULL) {
