@@ -1,7 +1,7 @@
 /*
  * Sonoff TH with Power Outage Warning
  * 
- * v0.3b2
+ * v0.4
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -26,6 +26,9 @@
 #include <espressif/esp_wifi.h>
 #include <espressif/esp_common.h>
 
+#include <etstimer.h>
+#include <esplibs/libmain.h>
+
 #include <homekit/homekit.h>
 #include <homekit/characteristics.h>
 #include <wifi_config.h>
@@ -41,14 +44,15 @@
 #define DEBOUNCE_TIME       500     / portTICK_PERIOD_MS
 #define RESET_TIME          10000   / portTICK_PERIOD_MS
 
-#define delay_ms(ms)        vTaskDelay((ms) / portTICK_PERIOD_MS)
-
 #define POLL_PERIOD         30000
 
 #define POW_DELAY           20000
 #define POW_DURATION        3000
 
 uint32_t last_button_event_time, last_reset_event_time;
+uint8_t pow_count = 0;
+float old_humidity_value = 0.0, old_temperature_value = 0.0;
+static ETSTimer thermostat_timer, pow_a_timer, pow_b_timer;
 
 void relay_write(bool on) {
     gpio_write(RELAY_GPIO, on ? 1 : 0);
@@ -66,43 +70,22 @@ void on_update(homekit_characteristic_t *ch, homekit_value_t value, void *contex
 
 void on_target(homekit_characteristic_t *ch, homekit_value_t value, void *context);
 
-void identify_task() {
-    led_code(LED_GPIO, IDENTIFY_ACCESSORY);
-    vTaskDelete(NULL);
-}
-
-void wifi_connected_task() {
-    led_code(LED_GPIO, WIFI_CONNECTED);
-    vTaskDelete(NULL);
-}
-
-void function_off_task() {
-    led_code(LED_GPIO, FUNCTION_A);
-    vTaskDelete(NULL);
-}
-
-void function_heat_task() {
-    led_code(LED_GPIO, FUNCTION_B);
-    vTaskDelete(NULL);
-}
-
-void function_cool_task() {
-    led_code(LED_GPIO, FUNCTION_C);
-    vTaskDelete(NULL);
-}
-
 void reset_task() {
+    sdk_os_timer_disarm(&thermostat_timer);
+    
     homekit_server_reset();
     wifi_config_reset();
     
     led_code(LED_GPIO, RESTART_DEVICE);
+    
+    vTaskDelay(4000 / portTICK_PERIOD_MS);
     
     sdk_system_restart();
     vTaskDelete(NULL);
 }
 
 void identify(homekit_value_t _value) {
-    xTaskCreate(identify_task, "Identify", 96, NULL, 3, NULL);
+    led_code(LED_GPIO, IDENTIFY_ACCESSORY);
 }
 
 homekit_characteristic_t current_temperature = HOMEKIT_CHARACTERISTIC_(CURRENT_TEMPERATURE, 0);
@@ -115,44 +98,44 @@ homekit_characteristic_t current_humidity = HOMEKIT_CHARACTERISTIC_(CURRENT_RELA
 homekit_characteristic_t power_cut_alarm = HOMEKIT_CHARACTERISTIC_(MOTION_DETECTED, false);
 homekit_characteristic_t power_cut_switch = HOMEKIT_CHARACTERISTIC_(ON, true);
 
-void power_outage_warning_task() {
-    uint8_t i;
-    for (i=0; i<150; i++) {
-        delay_ms(POW_DELAY - POW_DURATION);
-        
-        if (!power_cut_switch.value.bool_value) {
-            break;
-        }
-        
-        printf(">>> Power Outage Warning: ON event sent\n");
-        power_cut_alarm.value = HOMEKIT_BOOL(true);
-        homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(true));
-        
-        delay_ms(POW_DURATION);
-        
-        printf(">>> Power Outage Warning: OFF event sent\n");
-        power_cut_alarm.value = HOMEKIT_BOOL(false);
-        homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(false));
-    }
+void power_outage_warning_b() {
+    printf(">>> Power Outage Warning: OFF event sent\n");
+    power_cut_alarm.value = HOMEKIT_BOOL(false);
+    homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(false));
     
     power_cut_switch.value = HOMEKIT_BOOL(false);
     homekit_characteristic_notify(&power_cut_switch, HOMEKIT_BOOL(false));
     
-    vTaskDelete(NULL);
+    sdk_os_timer_disarm(&pow_b_timer);
+}
+
+void power_outage_warning_a() {
+    if (!power_cut_switch.value.bool_value || pow_count > 150) {
+        sdk_os_timer_disarm(&pow_a_timer);
+    }
+    
+    printf(">>> Power Outage Warning: ON event sent\n");
+    power_cut_alarm.value = HOMEKIT_BOOL(true);
+    homekit_characteristic_notify(&power_cut_alarm, HOMEKIT_BOOL(true));
+
+    sdk_os_timer_arm(&pow_b_timer, POW_DURATION, 0);
 }
 
 void on_target(homekit_characteristic_t *ch, homekit_value_t value, void *context) {
     switch (target_state.value.int_value) {
         case 1:
-            xTaskCreate(function_heat_task, "Function heat", 96, NULL, 3, NULL);
+            // Heat
+            led_code(LED_GPIO, FUNCTION_B);
             break;
             
         case 2:
-            xTaskCreate(function_cool_task, "Function cool", 96, NULL, 3, NULL);
+            // Cool
+            led_code(LED_GPIO, FUNCTION_C);
             break;
             
         default:
-            xTaskCreate(function_off_task, "Function off", 96, NULL, 3, NULL);
+            // Off
+            led_code(LED_GPIO, FUNCTION_A);
             break;
     }
     
@@ -200,16 +183,19 @@ void button_intr_callback(uint8_t gpio) {
             uint8_t state = target_state.value.int_value + 1;
             switch (state) {
                 case 1:
-                    xTaskCreate(function_heat_task, "Function heat", 96, NULL, 3, NULL);
+                    // Heat
+                    led_code(LED_GPIO, FUNCTION_B);
                     break;
                     
                 case 2:
-                    xTaskCreate(function_cool_task, "Function cool", 96, NULL, 3, NULL);
+                    // Cool
+                    led_code(LED_GPIO, FUNCTION_C);
                     break;
                     
                 default:
                     state = 0;
-                    xTaskCreate(function_off_task, "Function off", 96, NULL, 3, NULL);
+                    // Off
+                    led_code(LED_GPIO, FUNCTION_A);
                     break;
             }
             
@@ -224,6 +210,38 @@ void button_intr_callback(uint8_t gpio) {
 }
 
 void temperature_sensor_task() {
+    float humidity_value, temperature_value;
+    
+    if (dht_read_float_data(DHT_TYPE_DHT22, SENSOR_GPIO, &humidity_value, &temperature_value)) {
+        printf(">>> Sensor: temperature %g, humidity %g\n", temperature_value, humidity_value);
+        
+        if (temperature_value != old_temperature_value) {
+            old_temperature_value = temperature_value;
+            current_temperature.value = HOMEKIT_FLOAT(temperature_value);
+            homekit_characteristic_notify(&current_temperature, current_temperature.value);
+            
+            if (humidity_value != old_humidity_value) {
+                old_humidity_value = humidity_value;
+                current_humidity.value = HOMEKIT_FLOAT(humidity_value);
+                homekit_characteristic_notify(&current_humidity, current_humidity.value);
+            }
+            
+            update_state();
+        }
+    } else {
+        printf(">>> Sensor: ERROR\n");
+        led_code(LED_GPIO, SENSOR_ERROR);
+        
+        if (current_state.value.int_value != 0) {
+            current_state.value = HOMEKIT_UINT8(0);
+            homekit_characteristic_notify(&current_state, current_state.value);
+            
+            relay_write(false);
+        }
+    }
+}
+
+void thermostat_init() {
     gpio_enable(LED_GPIO, GPIO_OUTPUT);
     led_write(false);
     
@@ -237,52 +255,12 @@ void temperature_sensor_task() {
     
     last_button_event_time = xTaskGetTickCountFromISR();
     
-    float humidity_value, temperature_value;
-    float old_humidity_value = 0.0, old_temperature_value = 0.0;
-    while (1) {
-        delay_ms(POLL_PERIOD);
-        
-        if (dht_read_float_data(DHT_TYPE_DHT22, SENSOR_GPIO, &humidity_value, &temperature_value)) {
-            printf(">>> Sensor: temperature %g, humidity %g\n", temperature_value, humidity_value);
-            
-            if (temperature_value != old_temperature_value) {
-                old_temperature_value = temperature_value;
-                current_temperature.value = HOMEKIT_FLOAT(temperature_value);
-                homekit_characteristic_notify(&current_temperature, current_temperature.value);
-                
-                update_state();
-                
-                if (humidity_value != old_humidity_value) {
-                    delay_ms(1000);
-                    old_humidity_value = humidity_value;
-                    current_humidity.value = HOMEKIT_FLOAT(humidity_value);
-                    homekit_characteristic_notify(&current_humidity, current_humidity.value);
-                }
-            }
-
-        } else {
-            printf(">>> Sensor: ERROR\n");
-            led_code(LED_GPIO, SENSOR_ERROR);
-            
-            if (current_state.value.int_value != 0) {
-                current_state.value = HOMEKIT_UINT8(0);
-                homekit_characteristic_notify(&current_state, current_state.value);
-                
-                relay_write(false);
-            }
-            
-        }
-    }
-    
-    vTaskDelete(NULL);
-}
-
-void thermostat_init() {
-    xTaskCreate(temperature_sensor_task, "Thermostat", 256, NULL, 2, NULL);
+    sdk_os_timer_setfn(&thermostat_timer, temperature_sensor_task, NULL);
+    sdk_os_timer_arm(&thermostat_timer, POLL_PERIOD, 1);
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff Thermostat");
-homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, "SonoffTH N/A");
+homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, "Sonoff N/A");
 
 homekit_accessory_t *accessories[] = {
     HOMEKIT_ACCESSORY(.id=1, .category=homekit_accessory_category_thermostat, .services=(homekit_service_t*[]) {
@@ -291,7 +269,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
             HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff TH wPOW"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.3"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.4"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),
@@ -329,27 +307,33 @@ void create_accessory_name() {
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     
-    char *name_value = malloc(16);
-    snprintf(name_value, 16, "SonoffTH %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
+    char *name_value = malloc(14);
+    snprintf(name_value, 14, "Sonoff %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
     
     name.value = HOMEKIT_STRING(name_value);
     serial.value = HOMEKIT_STRING(name_value);
 }
 
 void on_wifi_ready() {
-    xTaskCreate(wifi_connected_task, "Wifi connected", 96, NULL, 3, NULL);
+    led_code(LED_GPIO, WIFI_CONNECTED);
     
     create_accessory_name();
         
     homekit_server_init(&config);
     
-    xTaskCreate(power_outage_warning_task, "Power Outage Warning", 192, NULL, 3, NULL);
+    sdk_os_timer_disarm(&pow_a_timer);
+    sdk_os_timer_disarm(&pow_b_timer);
+    
+    sdk_os_timer_setfn(&pow_a_timer, power_outage_warning_a, NULL);
+    sdk_os_timer_setfn(&pow_b_timer, power_outage_warning_b, NULL);
+    
+    sdk_os_timer_arm(&pow_a_timer, POW_DELAY - POW_DURATION, 1);
 }
 
 void user_init(void) {
     uart_set_baud(0, 115200);
     
-    wifi_config_init("SonoffTH", NULL, on_wifi_ready);
+    wifi_config_init("Sonoff", NULL, on_wifi_ready);
     
     thermostat_init();
 }
