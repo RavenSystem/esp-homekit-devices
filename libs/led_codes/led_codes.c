@@ -46,12 +46,12 @@ void led_code_run() {
         led_params.delay = (led_params.blinking_params.duration * 1000) + 90;
     } else {
         led_params.delay = DURATION_OFF;
+        led_params.count++;
     }
     
     sdk_os_timer_disarm(&led_params.timer);
     
     if (led_params.count < led_params.blinking_params.times) {
-        led_params.count++;
         sdk_os_timer_arm(&led_params.timer, led_params.delay, 0);
     }
 }
