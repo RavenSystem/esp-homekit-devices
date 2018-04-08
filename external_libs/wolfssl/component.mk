@@ -11,8 +11,8 @@ EXTRA_CFLAGS += -DWOLFSSL_USER_SETTINGS \
     -DNO_SESSION_CACHE \
     -DRSA_LOW_MEM \
     -DGCM_SMALL \
-    -DCURVE25519_SMALL \
-    -DED25519_SMALL \
+#    -DCURVE25519_SMALL \
+#    -DED25519_SMALL \
     -DUSE_SLOW_SHA512
 
 $(eval $(call component_compile_rules,wolfssl))
