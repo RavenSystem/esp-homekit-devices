@@ -1,7 +1,7 @@
 /*
  * Sonoff S20 Button
  * 
- * v0.3b2
+ * v0.4
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -79,48 +79,20 @@ void gpio_init() {
     sdk_os_timer_setfn(&press_timer, button_timer_callback, NULL);
 }
 
-void functionA_task(void *_args) {
-    led_code(LED_GPIO, FUNCTION_A);
-    vTaskDelete(NULL);
-}
-
-void functionB_task(void *_args) {
-    led_code(LED_GPIO, FUNCTION_B);
-    vTaskDelete(NULL);
-}
-
-void functionC_task(void *_args) {
-    led_code(LED_GPIO, FUNCTION_C);
-    vTaskDelete(NULL);
-}
-
-void functionD_task(void *_args) {
-    led_code(LED_GPIO, FUNCTION_D);
-    vTaskDelete(NULL);
-}
-
-void identify_task(void *_args) {
-    led_code(LED_GPIO, IDENTIFY_ACCESSORY);
-    vTaskDelete(NULL);
-}
-
-void wifi_connected_task(void *_args) {
-    led_code(LED_GPIO, WIFI_CONNECTED);
-    vTaskDelete(NULL);
-}
-
 void reset_task(void *_args) {
     homekit_server_reset();
     wifi_config_reset();
     
     led_code(LED_GPIO, RESTART_DEVICE);
     
+    vTaskDelay(4000 / portTICK_PERIOD_MS);
+    
     sdk_system_restart();
     vTaskDelete(NULL);
 }
 
 void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
-    xTaskCreate(functionD_task, "Function D", 96, NULL, 3, NULL);
+    led_code(LED_GPIO, FUNCTION_D);
     relay_write(switch_on.value.bool_value);
     homekit_characteristic_notify(&switch_outlet_in_use, switch_on.value);
 }
@@ -135,21 +107,21 @@ void button_intr_callback(uint8_t gpio) {
             xTaskCreate(reset_task, "Reset", 128, NULL, 1, NULL);
         } else if ((now - last_reset_event_time) > OUTLET_TIME) {
             press_count = 0;
-            xTaskCreate(functionD_task, "Function D", 96, NULL, 3, NULL);
+            led_code(LED_GPIO, FUNCTION_D);
             switch_on.value.bool_value = !switch_on.value.bool_value;
             relay_write(switch_on.value.bool_value);
             homekit_characteristic_notify(&switch_on, switch_on.value);
             homekit_characteristic_notify(&switch_outlet_in_use, switch_on.value);
         } else if ((now - last_reset_event_time) > LONGPRESS_TIME) {
             press_count = 0;
-            xTaskCreate(functionC_task, "Function C", 96, NULL, 3, NULL);
+            led_code(LED_GPIO, FUNCTION_C);
             homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(2));
         } else {
             press_count++;
             if (press_count > 1) {
                 press_count = 0;
                 sdk_os_timer_disarm(&press_timer);
-                xTaskCreate(functionB_task, "Function B", 96, NULL, 3, NULL);
+                led_code(LED_GPIO, FUNCTION_B);
                 homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(1));
             } else {
                 sdk_os_timer_arm(&press_timer, DOUBLE_PRESS_TIME, 1);
@@ -164,16 +136,16 @@ void button_timer_callback() {
     press_count = 0;
     sdk_os_timer_disarm(&press_timer);
     
-    xTaskCreate(functionA_task, "Function A", 96, NULL, 3, NULL);
+    led_code(LED_GPIO, FUNCTION_A);
     homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(0));
 }
 
 void identify(homekit_value_t _value) {
-    xTaskCreate(identify_task, "Identify", 96, NULL, 3, NULL);
+    led_code(LED_GPIO, IDENTIFY_ACCESSORY);
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff Button");
-homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, "SonoffS20 N/A");
+homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, "Sonoff N/A");
 
 homekit_accessory_t *accessories[] = {
     HOMEKIT_ACCESSORY(.id=1, .category=homekit_accessory_category_programmable_switch, .services=(homekit_service_t*[]){
@@ -182,7 +154,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
             HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff S20 Button"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.3"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.4"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),
@@ -211,15 +183,15 @@ void create_accessory_name() {
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     
-    char *name_value = malloc(17);
-    snprintf(name_value, 17, "SonoffS20 %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
+    char *name_value = malloc(14);
+    snprintf(name_value, 14, "Sonoff %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
     
     name.value = HOMEKIT_STRING(name_value);
     serial.value = name.value;
 }
 
 void on_wifi_ready() {
-    xTaskCreate(wifi_connected_task, "Wifi connected", 96, NULL, 3, NULL);
+    led_code(LED_GPIO, WIFI_CONNECTED);
     
     create_accessory_name();
         
@@ -229,7 +201,7 @@ void on_wifi_ready() {
 void user_init(void) {
     uart_set_baud(0, 115200);
     
-    wifi_config_init("SonoffS20", NULL, on_wifi_ready);
+    wifi_config_init("Sonoff", NULL, on_wifi_ready);
     
     gpio_init();
 }
