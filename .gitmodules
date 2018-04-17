@@ -4,3 +4,6 @@
 [submodule "sdk/esp-open-rtos"]
 	path = sdk/esp-open-rtos
 	url = https://github.com/SuperHouse/esp-open-rtos.git
+[submodule "external_libs/homekit"]
+	path = external_libs/homekit
+	url = https://github.com/maximkulkin/esp-homekit.git
