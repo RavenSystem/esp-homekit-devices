@@ -17,7 +17,6 @@
 
 #include <string.h>
 #include <stdio.h>
-
 #include <etstimer.h>
 #include <esplibs/libmain.h>
 
@@ -607,9 +606,9 @@ void mdns_add_facility( const char* instanceName,   // Friendly name, need not b
     free(devName);
 
     sdk_os_timer_disarm(&mdns_announce_timer);
-    
+
     mdns_announce();
-    
+
     sdk_os_timer_setfn(&mdns_announce_timer, mdns_announce, NULL);
     sdk_os_timer_arm(&mdns_announce_timer, ttl * 1000, 1);
 }

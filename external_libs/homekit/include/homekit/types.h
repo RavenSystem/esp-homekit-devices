@@ -4,9 +4,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-struct _client_context_t;
-typedef struct _client_context_t client_context_t;
-
 typedef enum {
     homekit_format_bool,
     homekit_format_uint8,
