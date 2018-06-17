@@ -1,0 +1,76 @@
+# vim:ft=automake
+# included from Top Level Makefile.am
+# All paths should be given relative to the root
+
+
+
+if BUILD_SNIFFTEST
+dist_noinst_SCRIPTS+= scripts/sniffer-testsuite.test
+endif
+
+if BUILD_EXAMPLE_SERVERS
+
+dist_noinst_SCRIPTS+= scripts/resume.test
+
+EXTRA_DIST+= scripts/benchmark.test
+
+if BUILD_CRL
+# make revoked test rely on completion of resume test
+dist_noinst_SCRIPTS+= scripts/crl-revoked.test
+scripts/crl-revoked.log: scripts/resume.log
+endif
+
+if BUILD_OCSP
+dist_noinst_SCRIPTS+= scripts/ocsp.test
+endif
+
+if BUILD_OCSP_STAPLING
+dist_noinst_SCRIPTS+= scripts/ocsp-stapling.test
+scripts/ocsp-stapling.log: scripts/ocsp.log
+dist_noinst_SCRIPTS+= scripts/ocsp-stapling-with-ca-as-responder.test
+scripts/ocsp-stapling-with-ca-as-responder.log: scripts/ocsp-stapling.log
+endif
+
+if BUILD_OCSP_STAPLING_V2
+dist_noinst_SCRIPTS+= scripts/ocsp-stapling2.test
+
+if BUILD_OCSP_STAPLING
+scripts/ocsp-stapling2.log: scripts/ocsp-stapling-with-ca-as-responder.log
+else
+scripts/ocsp-stapling2.log: scripts/ocsp.log
+endif
+
+endif
+
+if BUILD_PSK
+dist_noinst_SCRIPTS+= scripts/psk.test
+endif
+
+if BUILD_TRUST_PEER_CERT
+dist_noinst_SCRIPTS+= scripts/trusted_peer.test
+endif
+
+if BUILD_PKCALLBACKS
+dist_noinst_SCRIPTS+= scripts/pkcallbacks.test
+scripts/pkcallbacks.log: scripts/resume.log
+endif
+
+if BUILD_TLS13
+dist_noinst_SCRIPTS+= scripts/tls13.test
+endif
+
+endif # end of BUILD_EXAMPLE_SERVERS
+
+if BUILD_EXAMPLE_CLIENTS
+if !BUILD_IPV6
+dist_noinst_SCRIPTS+= scripts/external.test
+dist_noinst_SCRIPTS+= scripts/google.test
+dist_noinst_SCRIPTS+= scripts/openssl.test
+endif
+endif
+
+EXTRA_DIST +=  scripts/testsuite.pcap \
+               scripts/ping.test
+
+# leave openssl.test as extra until non bash works
+EXTRA_DIST +=  scripts/openssl.test

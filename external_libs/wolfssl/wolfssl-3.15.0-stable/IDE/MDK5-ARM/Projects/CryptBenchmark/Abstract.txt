@@ -1,0 +1,11 @@
+wolfCrypt Benchmark
+
+Use Configuration Wizard tab
+user_settings.h for wolfCrypt options
+
+For further options, details, see wolfSSL User Manual.
+
+
+Support
+-------
+Please send questions or comments to support@wolfssl.com

@@ -1,0 +1,108 @@
+# Set to @ if you want to suppress command echo
+CMD_ECHO = 
+
+# Important directories
+BUILD_DIR = ./Build
+
+# Toolchain location and prefix
+TOOLCHAIN = /opt/gcc-arm-none-eabi/bin/arm-none-eabi-
+
+INC = -I./Header \
+	  -I./Source \
+	  -I../..
+
+# Memory Map
+SRC_LD = -T./linker.ld
+
+# Defines
+DEF = -DWOLFSSL_USER_SETTINGS
+
+# Compiler and linker flags
+ARCHFLAGS = -mcpu=cortex-m0 -mthumb -mabi=aapcs
+DBGFLAGS = -ggdb
+ASFLAGS = $(ARCHFLAGS)
+
+# CC: Place functions and data into separate sections to allow dead code removal
+# by the linker (-f*-sections). Enable link time optimization (-flto)
+CFLAGS = $(ARCHFLAGS) -std=gnu99 -Wall -Wno-cpp \
+		 -ffunction-sections -fdata-sections \
+		 -Os -flto $(DBGFLAGS)
+
+# LD: Remove unused sections
+LDFLAGS = $(ARCHFLAGS) -Wl,--gc-sections
+
+# LD: Link with newlib-nano implementation
+LDFLAGS += --specs=nano.specs --specs=nosys.specs
+
+# LD: generate map
+LDFLAGS += -Wl,-Map=$(BUILD_DIR)/$(BIN).map $(DBGFLAGS)
+
+# LD: Entry point
+LDFLAGS += -Wl,-ereset_handler
+
+# Math lib (for DH)
+LIBS = -lm
+
+SRC_C += ./Source/armtarget.c
+SRC_C += $(wildcard ../../src/*.c ../../wolfcrypt/src/*.c ../../wolfcrypt/benchmark/*.c ../../wolfcrypt/test/*.c)
+FILENAMES_C = $(notdir $(SRC_C))
+FILENAMES_C := $(filter-out evp.c, $(FILENAMES_C))
+OBJS_C = $(addprefix $(BUILD_DIR)/, $(FILENAMES_C:.c=.o))
+vpath %.c $(dir $(SRC_C))
+
+# Tools selection
+CC = $(TOOLCHAIN)gcc
+AS = $(TOOLCHAIN)gcc
+LD = $(TOOLCHAIN)gcc
+AR = $(TOOLCHAIN)ar
+NM = $(TOOLCHAIN)nm
+OBJCOPY = $(TOOLCHAIN)objcopy
+OBJDUMP = $(TOOLCHAIN)objdump
+SIZE = $(TOOLCHAIN)size
+
+build_hex: $(BUILD_DIR) $(BUILD_DIR)/$(BIN).hex
+	@echo ""
+	$(CMD_ECHO) @$(SIZE) $(BUILD_DIR)/$(BIN).elf
+
+build_static: $(BUILD_DIR) $(BUILD_DIR)/$(BIN).a
+	@echo ""
+	$(CMD_ECHO) @$(SIZE) $(BUILD_DIR)/$(BIN).a
+
+$(BUILD_DIR):
+	$(CMD_ECHO) mkdir -p $(BUILD_DIR)
+
+$(BUILD_DIR)/$(BIN).hex: $(BUILD_DIR)/$(BIN).elf
+	@echo "Generating HEX binary: $(notdir $@)"
+	$(CMD_ECHO) $(OBJCOPY) -O ihex $< $@
+
+$(BUILD_DIR)/%.o: %.s
+	@echo "Compiling ASM file: $(notdir $<)"
+	$(CMD_ECHO) $(AS) $(ASFLAGS) $(DEF) $(INC) -c -o $@ $<
+
+$(BUILD_DIR)/%.o: %.c
+	@echo "Compiling C file: $(notdir $<)"
+	$(CMD_ECHO) $(CC) $(CFLAGS) $(DEF) $(INC) -c -o $@ $<
+
+$(BUILD_DIR)/$(BIN).elf: $(OBJS_ASM) $(OBJS_C)
+	@echo "Linking ELF binary: $(notdir $@)"
+	$(CMD_ECHO) $(LD) $(LDFLAGS) $(SRC_LD) -o $@ $^ $(LIBS)
+
+	@echo "Generating name list: $(BIN).sym"
+	$(CMD_ECHO) $(NM) -n $@ > $(BUILD_DIR)/$(BIN).sym
+
+	@echo "Generating disassembly: $(BIN).disasm"
+	$(CMD_ECHO) $(OBJDUMP) -S $@ > $(BUILD_DIR)/$(BIN).disasm
+
+$(BUILD_DIR)/$(BIN).a: $(OBJS_ASM) $(OBJS_C)
+	@echo "Building static library: $(notdir $@)"
+	$(CMD_ECHO) $(AR) -r $@ $^
+
+	@echo "Generating name list: $(BIN).sym"
+	$(CMD_ECHO) $(NM) -n $@ > $(BUILD_DIR)/$(BIN).sym
+
+	@echo "Generating disassembly: $(BIN).disasm"
+	$(CMD_ECHO) $(OBJDUMP) -S $@ > $(BUILD_DIR)/$(BIN).disasm
+
+clean:
+	rm -f $(BUILD_DIR)/*.elf $(BUILD_DIR)/*.hex $(BUILD_DIR)/*.map
+	rm -f $(BUILD_DIR)/*.o $(BUILD_DIR)/*.a $(BUILD_DIR)/*.sym $(BUILD_DIR)/*.disasm

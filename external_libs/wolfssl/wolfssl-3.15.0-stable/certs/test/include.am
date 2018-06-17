@@ -1,0 +1,44 @@
+# vim:ft=automake
+# All paths should be given relative to the root
+#
+
+EXTRA_DIST += \
+         certs/test/cert-ext-ia.cfg \
+         certs/test/cert-ext-ia.der \
+         certs/test/cert-ext-nc.cfg \
+         certs/test/cert-ext-nc.der \
+         certs/test/cert-ext-ns.der \
+         certs/test/gen-ext-certs.sh \
+         certs/test/server-duplicate-policy.pem
+
+# The certs/server-cert with the last byte (signature byte) changed
+EXTRA_DIST += \
+         certs/test/server-cert-rsa-badsig.der \
+         certs/test/server-cert-rsa-badsig.pem \
+         certs/test/server-cert-ecc-badsig.der \
+         certs/test/server-cert-ecc-badsig.pem
+
+EXTRA_DIST += \
+         certs/test/gen-testcerts.sh \
+         certs/test/server-badaltnamenull.conf \
+         certs/test/server-badaltnamenull.csr \
+         certs/test/server-badaltnamenull.key \
+         certs/test/server-badaltnamenull.pem \
+         certs/test/server-badaltnamenull.der \
+         certs/test/server-nomatch.conf \
+         certs/test/server-nomatch.csr \
+         certs/test/server-nomatch.key \
+         certs/test/server-nomatch.pem \
+         certs/test/server-nomatch.der
+
+EXTRA_DIST += \
+		 certs/test/crit-cert.pem \
+		 certs/test/crit-key.pem \
+		 certs/test/dh1024.der \
+		 certs/test/dh1024.pem \
+		 certs/test/dh512.der \
+		 certs/test/dh512.pem \
+		 certs/test/digsigku.pem \
+		 certs/test/expired-ca.pem \
+		 certs/test/expired-cert.pem \
+		 certs/test/expired-key.pem
