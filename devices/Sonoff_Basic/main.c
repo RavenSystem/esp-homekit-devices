@@ -1,7 +1,7 @@
 /*
  * Sonoff Basic
  * 
- * v0.4
+ * v0.5
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -22,9 +22,11 @@
 #include <esp/uart.h>
 #include <esp8266.h>
 #include <FreeRTOS.h>
-#include <task.h>
 #include <espressif/esp_wifi.h>
 #include <espressif/esp_common.h>
+
+#include <etstimer.h>
+#include <esplibs/libmain.h>
 
 #include <homekit/homekit.h>
 #include <homekit/characteristics.h>
@@ -37,9 +39,19 @@
 #define SWITCH_GPIO         14
 
 #define DEBOUNCE_TIME       500     / portTICK_PERIOD_MS
-#define RESET_TIME          10000   / portTICK_PERIOD_MS
+#define RESET_TIME          10000
 
-uint32_t last_button_event_time, last_reset_event_time;
+uint32_t last_button_event_time;
+ETSTimer switch_timer, reset_timer, device_restart_timer;
+
+uint8_t switch_old_state = 0, switch_state = 0;
+uint16_t switch_value = 0;
+
+void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context);
+void button_intr_callback(uint8_t gpio);
+void switch_worker();
+
+homekit_characteristic_t switch_on = HOMEKIT_CHARACTERISTIC_(ON, false, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(switch_on_callback));
 
 void relay_write(bool on) {
     gpio_write(RELAY_GPIO, on ? 1 : 0);
@@ -49,12 +61,19 @@ void led_write(bool on) {
     gpio_write(LED_GPIO, on ? 0 : 1);
 }
 
-void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context);
+void device_restart() {
+    sdk_system_restart();
+}
 
-void button_intr_callback(uint8_t gpio);
-void switch_intr_callback(uint8_t gpio);
-
-homekit_characteristic_t switch_on = HOMEKIT_CHARACTERISTIC_(ON, false, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(switch_on_callback));
+void reset_call() {
+    homekit_server_reset();
+    wifi_config_reset();
+    
+    led_code(LED_GPIO, RESTART_DEVICE);
+    
+    sdk_os_timer_setfn(&device_restart_timer, device_restart, NULL);
+    sdk_os_timer_arm(&device_restart_timer, 5000, 0);
+}
 
 void gpio_init() {
     gpio_enable(LED_GPIO, GPIO_OUTPUT);
@@ -65,24 +84,15 @@ void gpio_init() {
     
     gpio_set_pullup(BUTTON_GPIO, true, true);
     gpio_set_interrupt(BUTTON_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
-    
+
     gpio_enable(SWITCH_GPIO, GPIO_INPUT);
     gpio_set_pullup(SWITCH_GPIO, true, true);
-    gpio_set_interrupt(SWITCH_GPIO, GPIO_INTTYPE_EDGE_ANY, switch_intr_callback);
+    sdk_os_timer_setfn(&switch_timer, switch_worker, NULL);
+    sdk_os_timer_arm(&switch_timer, 40, 1);
+    
+    sdk_os_timer_setfn(&reset_timer, reset_call, NULL);
     
     last_button_event_time = xTaskGetTickCountFromISR();
-}
-
-void reset_task() {
-    homekit_server_reset();
-    wifi_config_reset();
-    
-    led_code(LED_GPIO, RESTART_DEVICE);
-    
-    vTaskDelay(4000 / portTICK_PERIOD_MS);
-    
-    sdk_system_restart();
-    vTaskDelete(NULL);
 }
 
 void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
@@ -97,27 +107,26 @@ void toggle_switch() {
     homekit_characteristic_notify(&switch_on, switch_on.value);
 }
 
-void switch_intr_callback(uint8_t gpio) {
-    uint32_t now = xTaskGetTickCountFromISR();
-    
-    if ((now - last_button_event_time) > DEBOUNCE_TIME) {
-        last_button_event_time = now;
-        toggle_switch();
-    }
-}
-
 void button_intr_callback(uint8_t gpio) {
     uint32_t now = xTaskGetTickCountFromISR();
     
     if (((now - last_button_event_time) > DEBOUNCE_TIME) && (gpio_read(BUTTON_GPIO) == 1)) {
-        if ((now - last_reset_event_time) > RESET_TIME) {
-            xTaskCreate(reset_task, "Reset", 128, NULL, 1, NULL);
-        } else {
-            last_button_event_time = now;
-            toggle_switch();
-        }
+        sdk_os_timer_disarm(&reset_timer);
+        last_button_event_time = now;
+        toggle_switch();
     } else if (gpio_read(BUTTON_GPIO) == 0) {
-        last_reset_event_time = now;
+        sdk_os_timer_arm(&reset_timer, RESET_TIME, 0);
+    }
+}
+
+#define maxvalue_unsigned(x) ((1 << (8 * sizeof(x))) - 1)
+void switch_worker() {      // Based on https://github.com/pcsaito/esp-homekit-demo/tree/LPFToggle
+    switch_value += ((gpio_read(SWITCH_GPIO) * maxvalue_unsigned(switch_value)) - switch_value) >> 3;
+    switch_state = (switch_value > (maxvalue_unsigned(switch_value) >> 1));
+    
+    if (switch_state != switch_old_state) {
+        switch_old_state = switch_state;
+        toggle_switch();
     }
 }
 
@@ -135,7 +144,7 @@ homekit_accessory_t *accessories[] = {
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
             HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff Basic"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.4"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.5"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),
