@@ -44,7 +44,7 @@
 uint8_t switch_old_state, switch_state;
 uint16_t switch_value = 65535;
 uint32_t last_button_event_time;
-ETSTimer switch_timer, reset_timer, device_restart_timer;
+static ETSTimer switch_timer, reset_timer, device_restart_timer;
 
 void switch_on_callback();
 void button_intr_callback(uint8_t gpio);
