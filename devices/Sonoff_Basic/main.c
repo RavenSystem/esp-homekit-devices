@@ -41,11 +41,10 @@
 #define DEBOUNCE_TIME       500     / portTICK_PERIOD_MS
 #define RESET_TIME          10000
 
+uint8_t switch_old_state, switch_state;
+uint16_t switch_value = 65535;
 uint32_t last_button_event_time;
 ETSTimer switch_timer, reset_timer, device_restart_timer;
-
-uint8_t switch_old_state = 0, switch_state = 0;
-uint16_t switch_value = 0;
 
 void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context);
 void button_intr_callback(uint8_t gpio);
@@ -72,7 +71,13 @@ void reset_call() {
     led_code(LED_GPIO, RESTART_DEVICE);
     
     sdk_os_timer_setfn(&device_restart_timer, device_restart, NULL);
-    sdk_os_timer_arm(&device_restart_timer, 5000, 0);
+    sdk_os_timer_arm(&device_restart_timer, 5500, 0);
+}
+
+#define maxvalue_unsigned(x) ((1 << (8 * sizeof(x))) - 1)
+void switch_evaluate() {        // Based on https://github.com/pcsaito/esp-homekit-demo/tree/LPFToggle
+    switch_value += ((gpio_read(SWITCH_GPIO) * maxvalue_unsigned(switch_value)) - switch_value) >> 3;
+    switch_state = (switch_value > (maxvalue_unsigned(switch_value) >> 1));
 }
 
 void gpio_init() {
@@ -89,6 +94,9 @@ void gpio_init() {
     gpio_set_pullup(SWITCH_GPIO, true, true);
     sdk_os_timer_setfn(&switch_timer, switch_worker, NULL);
     sdk_os_timer_arm(&switch_timer, 40, 1);
+    
+    switch_evaluate();
+    switch_old_state = switch_state;
     
     sdk_os_timer_setfn(&reset_timer, reset_call, NULL);
     
@@ -108,21 +116,20 @@ void toggle_switch() {
 }
 
 void button_intr_callback(uint8_t gpio) {
-    uint32_t now = xTaskGetTickCountFromISR();
+    sdk_os_timer_disarm(&reset_timer);
     
+    uint32_t now = xTaskGetTickCountFromISR();
+
     if (((now - last_button_event_time) > DEBOUNCE_TIME) && (gpio_read(BUTTON_GPIO) == 1)) {
-        sdk_os_timer_disarm(&reset_timer);
-        last_button_event_time = now;
         toggle_switch();
     } else if (gpio_read(BUTTON_GPIO) == 0) {
         sdk_os_timer_arm(&reset_timer, RESET_TIME, 0);
+        last_button_event_time = now;
     }
 }
 
-#define maxvalue_unsigned(x) ((1 << (8 * sizeof(x))) - 1)
-void switch_worker() {      // Based on https://github.com/pcsaito/esp-homekit-demo/tree/LPFToggle
-    switch_value += ((gpio_read(SWITCH_GPIO) * maxvalue_unsigned(switch_value)) - switch_value) >> 3;
-    switch_state = (switch_value > (maxvalue_unsigned(switch_value) >> 1));
+void switch_worker() {
+    switch_evaluate();
     
     if (switch_state != switch_old_state) {
         switch_old_state = switch_state;
