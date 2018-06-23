@@ -46,7 +46,7 @@ uint16_t switch_value = 65535;
 uint32_t last_button_event_time;
 ETSTimer switch_timer, reset_timer, device_restart_timer;
 
-void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context);
+void switch_on_callback();
 void button_intr_callback(uint8_t gpio);
 void switch_worker();
 
@@ -103,15 +103,14 @@ void gpio_init() {
     last_button_event_time = xTaskGetTickCountFromISR();
 }
 
-void switch_on_callback(homekit_characteristic_t *_ch, homekit_value_t on, void *context) {
+void switch_on_callback() {
     led_code(LED_GPIO, FUNCTION_A);
     relay_write(switch_on.value.bool_value);
 }
 
 void toggle_switch() {
-    led_code(LED_GPIO, FUNCTION_A);
     switch_on.value.bool_value = !switch_on.value.bool_value;
-    relay_write(switch_on.value.bool_value);
+    switch_on_callback();
     homekit_characteristic_notify(&switch_on, switch_on.value);
 }
 
