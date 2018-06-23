@@ -116,18 +116,20 @@ void toggle_switch() {
 }
 
 void button_intr_callback(uint8_t gpio) {
-    sdk_os_timer_disarm(&reset_timer);
-    
     uint32_t now = xTaskGetTickCountFromISR();
 
-    if (((now - last_button_event_time) > DEBOUNCE_TIME) && (gpio_read(BUTTON_GPIO) == 1)) {
-        toggle_switch();
-    } else if (gpio_read(BUTTON_GPIO) == 0) {
+    if (gpio_read(BUTTON_GPIO) == 0) {
         sdk_os_timer_arm(&reset_timer, RESET_TIME, 0);
-        last_button_event_time = now;
+    } else {
+        sdk_os_timer_disarm(&reset_timer);
+        
+        if ((now - last_button_event_time) > DEBOUNCE_TIME) {
+            last_button_event_time = now;
+            toggle_switch();
+        }
     }
 }
-
+ 
 void switch_worker() {
     switch_evaluate();
     
