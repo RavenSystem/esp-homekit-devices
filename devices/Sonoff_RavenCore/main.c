@@ -1,7 +1,7 @@
 /*
  * Sonoff RavenCore
  * 
- * v0.1.0
+ * v0.1.1
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -61,6 +61,7 @@ void button_intr_callback(uint8_t gpio);
 void switch_worker();
 
 void change_settings_callback();
+void show_setup_callback();
 void ota_firmware_callback();
 void gpio14_toggle_callback();
 
@@ -69,8 +70,9 @@ homekit_characteristic_t switch2_on = HOMEKIT_CHARACTERISTIC_(ON, false, .callba
 homekit_characteristic_t switch3_on = HOMEKIT_CHARACTERISTIC_(ON, false, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(switch1_on_callback));
 homekit_characteristic_t switch4_on = HOMEKIT_CHARACTERISTIC_(ON, false, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(switch1_on_callback));
 
-homekit_characteristic_t show_setup = HOMEKIT_CHARACTERISTIC_(CUSTOM_SHOW_SETUP, false, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
+homekit_characteristic_t show_setup = HOMEKIT_CHARACTERISTIC_(CUSTOM_SHOW_SETUP, false, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(show_setup_callback));
 homekit_characteristic_t ota_firmware = HOMEKIT_CHARACTERISTIC_(CUSTOM_OTA_UPDATE, false, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(ota_firmware_callback));
+homekit_characteristic_t reboot_device = HOMEKIT_CHARACTERISTIC_(CUSTOM_REBOOT_DEVICE, false, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(ota_firmware_callback));
 homekit_characteristic_t device_type = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE, 1, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t gpio14_toggle = HOMEKIT_CHARACTERISTIC_(CUSTOM_GPIO14_TOGGLE, true, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(gpio14_toggle_callback));
 
@@ -114,7 +116,6 @@ void save_settings() {
         default:
             break;
     }
-    
 }
 
 void device_restart() {
@@ -130,6 +131,17 @@ void set_restart_countdown() {
     sdk_os_timer_arm(&device_restart_timer, 5500, 0);
 }
 
+void show_setup_callback() {
+    if (show_setup.value.bool_value) {
+        sdk_os_timer_setfn(&device_restart_timer, set_restart_countdown, NULL);
+        sdk_os_timer_arm(&device_restart_timer, 10000, 0);
+    } else {
+        sdk_os_timer_disarm(&device_restart_timer);
+    }
+    
+    save_settings();
+}
+
 void reset_call() {
     homekit_server_reset();
     wifi_config_reset();
@@ -138,7 +150,7 @@ void reset_call() {
 }
 
 void ota_firmware_callback() {
-    if (ota_firmware.value.bool_value) {
+    if (ota_firmware.value.bool_value || reboot_device.value.bool_value) {
         sdk_os_timer_setfn(&device_restart_timer, set_restart_countdown, NULL);
         sdk_os_timer_arm(&device_restart_timer, 10000, 0);
     } else {
@@ -246,7 +258,7 @@ homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff RavenCore"
 homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, "iTEAD");
 homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, "Sonoff N/A");
 homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "Sonoff RavenCore");
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.1.0");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.1.1");
 homekit_characteristic_t identify_function = HOMEKIT_CHARACTERISTIC_(IDENTIFY, identify);
 
 homekit_characteristic_t switch1_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Switch 1");
@@ -309,7 +321,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = homekit_accessory_category_switch;
-        sonoff->config_number = 000100;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
+        sonoff->config_number = 000101;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
@@ -350,14 +362,14 @@ void create_accessory() {
                 sonoff_setup->type = HOMEKIT_SERVICE_CUSTOM_SETUP;
                 sonoff_setup->primary = false;
         
-                uint8_t setting_count = 4, setting_number = 1;
+                uint8_t setting_count = 5, setting_number = 1;
                 
                 status = sysparam_get_string("ota_repo", &char_value);
                 if (status == SYSPARAM_OK) {
                     setting_count++;
                 }
                 
-                if (gpio14_toggle.value.bool_value) {
+                if (device_type.value.int_value == 1) {
                     setting_count++;
                 }
         
@@ -371,7 +383,9 @@ void create_accessory() {
                     setting_number++;
                     sonoff_setup->characteristics[setting_number] = &device_type;
                     setting_number++;
-                    if (gpio14_toggle.value.bool_value) {
+                    sonoff_setup->characteristics[setting_number] = &reboot_device;
+                    setting_number++;
+                    if (device_type.value.int_value == 1) {
                         sonoff_setup->characteristics[setting_number] = &gpio14_toggle;
                     }
             }

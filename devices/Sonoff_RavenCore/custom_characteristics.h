@@ -45,6 +45,17 @@
     .value = HOMEKIT_BOOL_(_value), \
     ##__VA_ARGS__
 
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_REBOOT_DEVICE HOMEKIT_CUSTOM_UUID("F0000102")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_REBOOT_DEVICE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_REBOOT_DEVICE, \
+    .description = "Reboot", \
+    .format = homekit_format_bool, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .value = HOMEKIT_BOOL_(_value), \
+    ##__VA_ARGS__
+
 /* Device Types
  1. Switch Basic
  2. Switch Dual
