@@ -1,7 +1,9 @@
 /*
- * Sonoff Basic
+ * Sonoff Basic TH SENSOR
+ *
+ * GPIO14 connect DHT11 or DHT22 sensor
  * 
- * v0.5
+ * v0.5.1
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -59,12 +61,11 @@ void temperature_sensor_identify(homekit_value_t _value) {
 
 homekit_characteristic_t temperature = HOMEKIT_CHARACTERISTIC_(CURRENT_TEMPERATURE, 0);
 homekit_characteristic_t humidity    = HOMEKIT_CHARACTERISTIC_(CURRENT_RELATIVE_HUMIDITY, 0);
-
 homekit_characteristic_t switch_on = HOMEKIT_CHARACTERISTIC_(ON, false, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(switch_on_callback));
 
 void temperature_sensor_task(void *_args) {
     gpio_enable(TH_SENSOR_GPIO, GPIO_INPUT);
-	gpio_set_pullup(TH_SENSOR_GPIO, false, false);
+    gpio_set_pullup(TH_SENSOR_GPIO, false, false);
     printf("gpio_enable 123456789\n");
     float humidity_value, temperature_value;
     while (1) {
@@ -88,7 +89,7 @@ void temperature_sensor_task(void *_args) {
             printf("Couldnt read data from sensor\n");
         }
 
-        vTaskDelay(30000 / portTICK_PERIOD_MS);
+        vTaskDelay(10000 / portTICK_PERIOD_MS);
     }
 }
 
@@ -199,23 +200,23 @@ homekit_accessory_t *accessories[] = {
             &name,
             HOMEKIT_CHARACTERISTIC(MANUFACTURER, "iTEAD"),
             &serial,
-            HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff 开关&温湿度"),
-            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.5"),
+            HOMEKIT_CHARACTERISTIC(MODEL, "Sonoff Basic TH"),
+            HOMEKIT_CHARACTERISTIC(FIRMWARE_REVISION, "0.5.1"),
             HOMEKIT_CHARACTERISTIC(IDENTIFY, identify),
             NULL
         }),
         HOMEKIT_SERVICE(SWITCH, .primary=true, .characteristics=(homekit_characteristic_t*[]){
-            HOMEKIT_CHARACTERISTIC(NAME, "开关"),
+            HOMEKIT_CHARACTERISTIC(NAME, "SWITCH"),
             &switch_on,
             NULL
         }),
 		        HOMEKIT_SERVICE(TEMPERATURE_SENSOR, .primary=true, .characteristics=(homekit_characteristic_t*[]) {
-            HOMEKIT_CHARACTERISTIC(NAME, "温度"),
+            HOMEKIT_CHARACTERISTIC(NAME, "TEMPERATURE_SENSOR"),
             &temperature,
             NULL
         }),
         HOMEKIT_SERVICE(HUMIDITY_SENSOR, .characteristics=(homekit_characteristic_t*[]) {
-            HOMEKIT_CHARACTERISTIC(NAME, "湿度"),
+            HOMEKIT_CHARACTERISTIC(NAME, "HUMIDITY_SENSOR"),
             &humidity,
             NULL
         }),
@@ -252,6 +253,6 @@ void user_init(void) {
     uart_set_baud(0, 115200);
     wifi_config_init("Sonoff", NULL, on_wifi_ready);
     homekit_server_init(&config);
-	temperature_sensor_init();
+    temperature_sensor_init();
     gpio_init();
 }
