@@ -73,6 +73,9 @@ void temperature_sensor_task(void *_args) {
             DHT_TYPE_DHT11, TH_SENSOR_GPIO,
             &humidity_value, &temperature_value
         );
+	 // EDIT LINE 73 
+	//DHT_TYPE_DHT11 OR DHT_TYPE_DHT22
+       //
         if (success) {
 	    printf("gpio_read_dht_success\n");
             temperature.value.float_value = temperature_value;
