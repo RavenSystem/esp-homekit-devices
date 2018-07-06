@@ -124,7 +124,7 @@ void button_intr_callback(uint8_t gpio) {
                 led_code(LED_GPIO, FUNCTION_B);
                 homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(1));
             } else {
-                sdk_os_timer_arm(&press_timer, DOUBLE_PRESS_TIME, 1);
+                sdk_os_timer_arm(&press_timer, DOUBLE_PRESS_TIME, 0);
             }
         }
     } else {
@@ -134,7 +134,6 @@ void button_intr_callback(uint8_t gpio) {
 
 void button_timer_callback() {
     press_count = 0;
-    sdk_os_timer_disarm(&press_timer);
     
     led_code(LED_GPIO, FUNCTION_A);
     homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(0));
