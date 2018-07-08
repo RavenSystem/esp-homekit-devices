@@ -59,7 +59,7 @@
 /* Device Types
  1. Switch Basic
  2. Switch Dual
- 3. Socket + Button
+ 3. Button + Socket
  4. Switch 4ch
  5. Thermostat
  6. Switch Basic + TH Sensor
