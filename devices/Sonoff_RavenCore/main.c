@@ -18,6 +18,16 @@
  * limitations under the License.
  */
 
+/* Device Types
+ 1. Switch Basic
+ 2. Switch Dual
+ 3. Button + Socket
+ 4. Switch 4ch
+ 5. Thermostat
+ 6. Switch Basic + TH Sensor
+ 7. Irrigation System
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <esp/uart.h>
@@ -42,6 +52,7 @@
 
 #define LED_GPIO            13
 #define SWITCH_GPIO         14
+#define SENSOR_GPIO         14
 
 #define BUTTON1_GPIO        0
 #define BUTTON2_GPIO        9
@@ -53,15 +64,15 @@
 #define RELAY3_GPIO         4
 #define RELAY4_GPIO         15
 
-#define DEBOUNCE_TIME       50      / portTICK_PERIOD_MS
-#define DOUBLE_PRESS_TIME   350
-#define LONGPRESS_TIME      500     / portTICK_PERIOD_MS
+#define DEBOUNCE_TIME       60      / portTICK_PERIOD_MS
+#define DOUBLE_PRESS_TIME   400
+#define LONGPRESS_TIME      450     / portTICK_PERIOD_MS
 #define OUTLET_TIME         1200    / portTICK_PERIOD_MS
 #define RESET_TIME          10000
 
 #define POLL_PERIOD         30000
 
-uint8_t switch_old_state, switch_state, press_count = 0;
+uint8_t switch_old_state, switch_state, press_count = 0, device_type_static = 1;
 uint16_t switch_value = 65535;
 uint32_t last_button_event_time, last_reset_event_time;
 float old_humidity_value = 0.0, old_temperature_value = 0.0;
@@ -121,7 +132,7 @@ void save_settings() {
         }
     }
     
-    switch (device_type.value.int_value) {
+    switch (device_type_static) {
         case 1:
             status = sysparam_get_bool("gpio14_toggle", &bool_value);
             if (status == SYSPARAM_OK) {
@@ -160,7 +171,16 @@ void show_setup_callback() {
     save_settings();
 }
 
+void ravencore_config_reset() {
+    sysparam_set_bool("show_setup", false);
+    sysparam_set_int8("device_type", 1);
+    sysparam_set_bool("gpio14_toggle", true);
+}
+
 void reset_call() {
+    printf(">>> Resetting device to factory defaults\n");
+    
+    ravencore_config_reset();
     homekit_server_reset();
     wifi_config_reset();
 
@@ -203,29 +223,14 @@ void gpio14_toggle_callback() {
     change_settings_callback();
 }
 
-void gpio_init() {
-    gpio_enable(LED_GPIO, GPIO_OUTPUT);
-    led_write(false);
-    
-    gpio_set_pullup(BUTTON1_GPIO, true, true);
-    gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
-    
-    gpio_enable(RELAY1_GPIO, GPIO_OUTPUT);
-    relay_write(switch1_on.value.bool_value, RELAY1_GPIO);
-
-    sdk_os_timer_setfn(&switch_timer, switch_worker, NULL);
-    sdk_os_timer_setfn(&reset_timer, reset_call, NULL);
-    sdk_os_timer_setfn(&change_settings_timer, save_settings, NULL);
-    
-    last_button_event_time = xTaskGetTickCountFromISR();
-}
-
 void switch1_on_callback() {
-    led_code(LED_GPIO, FUNCTION_A);
     relay_write(switch1_on.value.bool_value, RELAY1_GPIO);
     
-    if (device_type.value.int_value == 3) {
+    if (device_type_static == 3) {
+        led_code(LED_GPIO, FUNCTION_D);
         homekit_characteristic_notify(&switch_outlet_in_use, switch1_on.value);
+    } else {
+        led_code(LED_GPIO, FUNCTION_A);
     }
 }
 
@@ -314,7 +319,6 @@ void button_complex_intr_callback(uint8_t gpio) {
         if ((now - last_reset_event_time) > OUTLET_TIME) {
             printf(">>> Button: Very Long press\n");
             press_count = 0;
-            led_code(LED_GPIO, FUNCTION_D);
             switch1_on.value.bool_value = !switch1_on.value.bool_value;
             relay_write(switch1_on.value.bool_value, RELAY1_GPIO);
             homekit_characteristic_notify(&switch1_on, switch1_on.value);
@@ -358,12 +362,137 @@ void switch_worker() {
     
     if (switch_state != switch_old_state) {
         switch_old_state = switch_state;
+        printf(">>> GPIO 14: External switch toggled\n");
         toggle_switch();
     }
 }
 
 void identify(homekit_value_t _value) {
     led_code(LED_GPIO, IDENTIFY_ACCESSORY);
+}
+
+void gpio_init() {
+    gpio_enable(LED_GPIO, GPIO_OUTPUT);
+    led_write(false);
+    
+    gpio_set_pullup(BUTTON1_GPIO, true, true);
+    
+    gpio_enable(RELAY1_GPIO, GPIO_OUTPUT);
+    relay_write(switch1_on.value.bool_value, RELAY1_GPIO);
+    
+    sdk_os_timer_setfn(&switch_timer, switch_worker, NULL);
+    sdk_os_timer_setfn(&reset_timer, reset_call, NULL);
+    sdk_os_timer_setfn(&change_settings_timer, save_settings, NULL);
+    
+    last_button_event_time = xTaskGetTickCountFromISR();
+    
+    sysparam_status_t status;
+    bool bool_value;
+    int8_t int8_value;
+    
+    status = sysparam_get_bool("show_setup", &bool_value);
+    if (status == SYSPARAM_OK) {
+        show_setup.value.bool_value = bool_value;
+        printf(">>> Loading show_setup -> %i\n", show_setup.value.bool_value);
+    } else {
+        status = sysparam_set_bool("show_setup", false);
+        printf(">>> Setting show_setup to default -> false\n");
+    }
+    
+    status = sysparam_get_int8("device_type", &int8_value);
+    if (status == SYSPARAM_OK) {
+        device_type.value.int_value = int8_value;
+        device_type_static = int8_value;
+        printf(">>> Loading device_type -> %i\n", device_type.value.int_value);
+    } else {
+        status = sysparam_set_int8("device_type", 1);
+        printf(">>> Setting device_type to default -> 1\n");
+    }
+    
+    switch (device_type_static) {
+        case 1:
+            printf(">>> Loading device gpio settings for 1\n");
+            status = sysparam_get_bool("gpio14_toggle", &bool_value);
+            if (status == SYSPARAM_OK) {
+                gpio14_toggle.value.bool_value = bool_value;
+            } else {
+                status = sysparam_set_bool("gpio14_toggle", true);
+            }
+            
+            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
+            gpio14_toggle_callback();
+            break;
+            
+        case 2:
+            printf(">>> Loading device gpio settings for 2\n");
+            gpio_enable(RELAY2_GPIO, GPIO_OUTPUT);
+            relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
+            
+            gpio_enable(BUTTON3_GPIO, GPIO_INPUT);
+            gpio_set_pullup(BUTTON3_GPIO, true, true);
+            gpio_set_interrupt(BUTTON3_GPIO, GPIO_INTTYPE_EDGE_ANY, button_dual_intr_callback);
+            
+            sdk_os_timer_setfn(&press_timer, button_dual_timer_callback, NULL);
+            break;
+            
+        case 3:
+            printf(">>> Loading device gpio settings for 3\n");
+            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_complex_intr_callback);
+            sdk_os_timer_setfn(&press_timer, button_timer_callback, NULL);
+            break;
+            
+        case 4:
+            printf(">>> Loading device gpio settings for 4\n");
+            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
+            
+            gpio_enable(BUTTON2_GPIO, GPIO_INPUT);
+            gpio_set_pullup(BUTTON2_GPIO, true, true);
+            gpio_set_interrupt(BUTTON2_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
+            
+            gpio_enable(BUTTON3_GPIO, GPIO_INPUT);
+            gpio_set_pullup(BUTTON3_GPIO, true, true);
+            gpio_set_interrupt(BUTTON3_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
+            
+            gpio_enable(BUTTON4_GPIO, GPIO_INPUT);
+            gpio_set_pullup(BUTTON4_GPIO, true, true);
+            gpio_set_interrupt(BUTTON4_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
+            
+            gpio_enable(RELAY2_GPIO, GPIO_OUTPUT);
+            relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
+            
+            gpio_enable(RELAY3_GPIO, GPIO_OUTPUT);
+            relay_write(switch3_on.value.bool_value, RELAY3_GPIO);
+            
+            gpio_enable(RELAY4_GPIO, GPIO_OUTPUT);
+            relay_write(switch4_on.value.bool_value, RELAY4_GPIO);
+            break;
+            
+        case 5:
+            printf(">>> Loading device gpio settings for 5\n");
+            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
+            
+            gpio_set_pullup(SENSOR_GPIO, false, false);
+            
+            //sdk_os_timer_setfn(&thermostat_timer, thersmotat_task, NULL);
+            //sdk_os_timer_arm(&thermostat_timer, POLL_PERIOD, 1);
+        case 6:
+            printf(">>> Loading device gpio settings for 6\n");
+            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
+            
+            gpio_set_pullup(SENSOR_GPIO, false, false);
+            
+            //sdk_os_timer_setfn(&thermostat_timer, temperature_sensor_task, NULL);
+            //sdk_os_timer_arm(&thermostat_timer, POLL_PERIOD, 1);
+            break;
+            
+        case 7:
+            printf(">>> Loading device gpio settings for 7\n");
+            break;
+            
+        default:
+            // A wish from compiler
+            break;
+    }
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff RavenCore");
@@ -399,70 +528,14 @@ void create_accessory_name() {
 homekit_server_config_t config;
 
 void create_accessory() {
-    ////// Load saved settings section
-    sysparam_status_t status;
-    bool bool_value;
-    int8_t int8_value;
-    char *char_value;
-    
-    // Load common settings
-    status = sysparam_get_bool("show_setup", &bool_value);
-    if (status == SYSPARAM_OK) {
-        show_setup.value.bool_value = bool_value;
-        printf(">>> Loading show_setup -> %i\n", show_setup.value.bool_value);
-    } else {
-        status = sysparam_set_bool("show_setup", false);
-        printf(">>> Setting show_setup to default -> false\n");
-    }
-
-    status = sysparam_get_int8("device_type", &int8_value);
-    if (status == SYSPARAM_OK) {
-        device_type.value.int_value = int8_value;
-        //device_type.value.int_value = 1;
-        printf(">>> Loading device_type -> %i\n", device_type.value.int_value);
-    } else {
-        status = sysparam_set_int8("device_type", 1);
-        printf(">>> Setting device_type to default -> 1\n");
-    }
-    
-    // Load device type settings
-    /* Device Types
-     1. Switch Basic
-     2. Switch Dual
-     3. Button + Socket
-     4. Switch 4ch
-     5. Thermostat
-     6. Switch Basic + TH Sensor
-     */
-    switch (device_type.value.int_value) {
-        case 1:
-            printf(">>> Loading device type settings for 1\n");
-            status = sysparam_get_bool("gpio14_toggle", &bool_value);
-            if (status == SYSPARAM_OK) {
-                gpio14_toggle.value.bool_value = bool_value;
-            } else {
-                status = sysparam_set_bool("gpio14_toggle", true);
-            }
-            break;
-            
-        case 5:
-        case 6:
-            printf(">>> Loading device type settings for 5 and 6\n");
-            break;
-            
-        default:
-            break;
-    }
-    ////// End load saved settings section
-
     uint8_t service_count = 3, service_number = 2;
     if (show_setup.value.bool_value) {
         service_count++;
     }
     
-    if (device_type.value.int_value == 2 || device_type.value.int_value == 3) {
+    if (device_type_static == 2 || device_type_static == 3) {
         service_count++;
-    } else if (device_type.value.int_value == 4) {
+    } else if (device_type_static == 4) {
         service_count += 3;
     }
     
@@ -485,30 +558,12 @@ void create_accessory() {
                 sonoff_info->characteristics[4] = &firmware;
                 sonoff_info->characteristics[5] = &identify_function;
 
-            /* Device Types
-             1. Switch Basic
-             2. Switch Dual
-             3. Button + Socket
-             4. Switch 4ch
-             5. Thermostat
-             6. Switch Basic + TH Sensor
-             */
-            if (device_type.value.int_value == 2) {
+            if (device_type_static == 2) {
                 printf(">>> Creating accessory for type 2\n");
                 
                 char *device_type_name_value = malloc(12);
                 snprintf(device_type_name_value, 12, "Switch Dual");
                 device_type_name.value = HOMEKIT_STRING(device_type_name_value);
-                
-                gpio_enable(RELAY2_GPIO, GPIO_OUTPUT);
-                relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
-
-                gpio_enable(BUTTON3_GPIO, GPIO_INPUT);
-                gpio_set_pullup(BUTTON3_GPIO, true, true);
-                gpio_set_interrupt(BUTTON3_GPIO, GPIO_INTTYPE_EDGE_ANY, button_dual_intr_callback);
-                
-                sdk_os_timer_setfn(&press_timer, button_dual_timer_callback, NULL);
-                
                 
                 homekit_service_t *sonoff_switch1 = sonoff->services[1] = calloc(1, sizeof(homekit_service_t));
                 sonoff_switch1->id = 8;
@@ -528,16 +583,12 @@ void create_accessory() {
                 sonoff_switch2->characteristics[1] = &switch2_on;
                 
                 service_number = 3;
-            } else if (device_type.value.int_value == 3) {
+            } else if (device_type_static == 3) {
                 printf(">>> Creating accessory for type 3\n");
                 
                 char *device_type_name_value = malloc(14);
                 snprintf(device_type_name_value, 14, "Button Socket");
                 device_type_name.value = HOMEKIT_STRING(device_type_name_value);
-                
-                gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_complex_intr_callback);
-                
-                sdk_os_timer_setfn(&press_timer, button_timer_callback, NULL);
                 
                 homekit_service_t *sonoff_button = sonoff->services[1] = calloc(1, sizeof(homekit_service_t));
                 sonoff_button->id = 21;
@@ -558,34 +609,12 @@ void create_accessory() {
                     sonoff_outlet->characteristics[2] = &switch_outlet_in_use;
                 
                 service_number = 3;
-            } else if (device_type.value.int_value == 4) {
+            } else if (device_type_static == 4) {
                 printf(">>> Creating accessory for type 4\n");
                 
                 char *device_type_name_value = malloc(11);
                 snprintf(device_type_name_value, 11, "Switch 4ch");
                 device_type_name.value = HOMEKIT_STRING(device_type_name_value);
-                
-                gpio_enable(BUTTON2_GPIO, GPIO_INPUT);
-                gpio_set_pullup(BUTTON2_GPIO, true, true);
-                gpio_set_interrupt(BUTTON2_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
-                
-                gpio_enable(BUTTON3_GPIO, GPIO_INPUT);
-                gpio_set_pullup(BUTTON3_GPIO, true, true);
-                gpio_set_interrupt(BUTTON3_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
-                
-                gpio_enable(BUTTON4_GPIO, GPIO_INPUT);
-                gpio_set_pullup(BUTTON4_GPIO, true, true);
-                gpio_set_interrupt(BUTTON4_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
-                
-                gpio_enable(RELAY2_GPIO, GPIO_OUTPUT);
-                relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
-                
-                gpio_enable(RELAY3_GPIO, GPIO_OUTPUT);
-                relay_write(switch3_on.value.bool_value, RELAY3_GPIO);
-                
-                gpio_enable(RELAY4_GPIO, GPIO_OUTPUT);
-                relay_write(switch4_on.value.bool_value, RELAY4_GPIO);
-
                 
                 homekit_service_t *sonoff_switch1 = sonoff->services[1] = calloc(1, sizeof(homekit_service_t));
                 sonoff_switch1->id = 8;
@@ -621,36 +650,33 @@ void create_accessory() {
                     sonoff_switch4->characteristics[1] = &switch4_on;
                 
                 service_number = 5;
-            } else if (device_type.value.int_value == 5) {
+            } else if (device_type_static == 5) {
                 printf(">>> Creating accessory for type 5\n");
                 
                 char *device_type_name_value = malloc(11);
                 snprintf(device_type_name_value, 11, "Thermostat");
                 device_type_name.value = HOMEKIT_STRING(device_type_name_value);
                 
-            } else if (device_type.value.int_value == 6) {
+            } else if (device_type_static == 6) {
                 printf(">>> Creating accessory for type 6\n");
                 
                 char *device_type_name_value = malloc(17);
                 snprintf(device_type_name_value, 17, "Switch TH Sensor");
                 device_type_name.value = HOMEKIT_STRING(device_type_name_value);
                 
-            } else { // device_type.value.int_value == 1
+            } else if (device_type_static == 7) {
+                printf(">>> Creating accessory for type 7\n");
+                
+                char *device_type_name_value = malloc(17);
+                snprintf(device_type_name_value, 17, "Switch TH Sensor");
+                device_type_name.value = HOMEKIT_STRING(device_type_name_value);
+                
+            } else { // device_type_static == 1
                 printf(">>> Creating accessory for type 1\n");
                 
                 char *device_type_name_value = malloc(13);
                 snprintf(device_type_name_value, 13, "Switch Basic");
                 device_type_name.value = HOMEKIT_STRING(device_type_name_value);
-                
-                if (gpio14_toggle.value.bool_value) {
-                    gpio_enable(SWITCH_GPIO, GPIO_INPUT);
-                    gpio_set_pullup(SWITCH_GPIO, true, true);
-                    sdk_os_timer_arm(&switch_timer, 40, 1);
-                    
-                    switch_evaluate();
-                    switch_old_state = switch_state;
-                }
-                
                 
                 homekit_service_t *sonoff_switch = sonoff->services[1] = calloc(1, sizeof(homekit_service_t));
                 sonoff_switch->id = 8;
@@ -671,12 +697,15 @@ void create_accessory() {
         
                 uint8_t setting_count = 5, setting_number = 4;
                 
+                sysparam_status_t status;
+                char *char_value;
+                
                 status = sysparam_get_string("ota_repo", &char_value);
                 if (status == SYSPARAM_OK) {
                     setting_count++;
                 }
                 
-                if (device_type.value.int_value == 1) {
+                if (device_type_static == 1) {
                     setting_count++;
                 }
         
@@ -689,7 +718,7 @@ void create_accessory() {
                         sonoff_setup->characteristics[setting_number] = &ota_firmware;
                         setting_number++;
                     }
-                    if (device_type.value.int_value == 1) {
+                    if (device_type_static == 1) {
                         sonoff_setup->characteristics[setting_number] = &gpio14_toggle;
                         setting_number++;
                     }
