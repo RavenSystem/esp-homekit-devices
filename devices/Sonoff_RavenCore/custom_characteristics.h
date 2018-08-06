@@ -63,21 +63,23 @@
  4. Switch 4ch
  5. Thermostat
  6. Switch Basic + TH Sensor
+ 7. Water Valve
+ 8. Garage Door
  */
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_DEVICE_TYPE HOMEKIT_CUSTOM_UUID("F0000102")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_DEVICE_TYPE(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_DEVICE_TYPE, \
-    .description = "Select Type", \
+    .description = "Device Type", \
     .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
     .min_value = (float[]) {1}, \
-    .max_value = (float[]) {6}, \
+    .max_value = (float[]) {8}, \
     .min_step = (float[]) {1}, \
     .valid_values = { \
-    .count = 6, \
-    .values = (uint8_t[]) {1, 2, 3, 4, 5, 6}, \
+    .count = 8, \
+    .values = (uint8_t[]) {1, 2, 3, 4, 5, 6, 7, 8}, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
@@ -100,6 +102,42 @@
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
     .value = HOMEKIT_BOOL_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_DHT_SENSOR_TYPE HOMEKIT_CUSTOM_UUID("F0000105")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_DHT_SENSOR_TYPE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_DHT_SENSOR_TYPE, \
+    .description = "Sensor DHT", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {1}, \
+    .max_value = (float[]) {3}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+    .count = 3, \
+    .values = (uint8_t[]) {1, 2, 3}, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_VALVE_TYPE HOMEKIT_CUSTOM_UUID("F0000106")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_VALVE_TYPE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_VALVE_TYPE, \
+    .description = "Valve Type", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {3}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+    .count = 4, \
+    .values = (uint8_t[]) {0, 1, 2, 3}, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_PING_CHECK HOMEKIT_CUSTOM_UUID("F0000201")
