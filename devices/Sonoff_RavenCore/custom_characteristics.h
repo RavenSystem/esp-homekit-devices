@@ -107,7 +107,7 @@
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_DHT_SENSOR_TYPE HOMEKIT_CUSTOM_UUID("F0000105")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_DHT_SENSOR_TYPE(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_DHT_SENSOR_TYPE, \
-    .description = "Sensor DHT", \
+    .description = "Sensor Type", \
     .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
