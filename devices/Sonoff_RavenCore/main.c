@@ -1,7 +1,7 @@
 /*
  * Sonoff RavenCore
  * 
- * v0.2.3
+ * v0.2.4
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -289,7 +289,7 @@ void ravencore_config_reset() {
     printf(">>> Resetting RavenCore settings\n");
     sysparam_set_bool("show_setup", false);
     sysparam_set_int8("device_type", 1);
-    sysparam_set_bool("gpio14_toggle", true);
+    sysparam_set_bool("gpio14_toggle", false);
     sysparam_set_int8("dht_sensor_type", 2);
     sysparam_set_int8("valve_type", 0);
     sysparam_set_int32("set_duration", 900);
@@ -513,22 +513,24 @@ void button_intr_callback(uint8_t gpio) {
 void button_dual_intr_callback(uint8_t gpio) {
     uint32_t now = xTaskGetTickCountFromISR();
     
-    if (((now - last_button_event_time) > DEBOUNCE_TIME) && (gpio_read(BUTTON3_GPIO) == 1)) {
-        last_button_event_time = xTaskGetTickCountFromISR();
-        
+    if (gpio_read(BUTTON3_GPIO) == 1) {
         sdk_os_timer_disarm(&reset_timer);
+        
+        if ((now - last_button_event_time) > DEBOUNCE_TIME) {
+            last_button_event_time = now;
 
-        press_count++;
-        if (press_count > 1) {
-            printf(">>> Button: Double press\n");
-            press_count = 0;
-            sdk_os_timer_disarm(&press_timer);
-            led_code(LED_GPIO, FUNCTION_B);
-            switch2_on.value.bool_value = !switch2_on.value.bool_value;
-            relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
-            homekit_characteristic_notify(&switch2_on, switch2_on.value);
-        } else {
-            sdk_os_timer_arm(&press_timer, DOUBLE_PRESS_TIME, 0);
+            press_count++;
+            if (press_count > 1) {
+                printf(">>> Button: Double press\n");
+                press_count = 0;
+                sdk_os_timer_disarm(&press_timer);
+                led_code(LED_GPIO, FUNCTION_B);
+                switch2_on.value.bool_value = !switch2_on.value.bool_value;
+                relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
+                homekit_characteristic_notify(&switch2_on, switch2_on.value);
+            } else {
+                sdk_os_timer_arm(&press_timer, DOUBLE_PRESS_TIME, 0);
+            }
         }
     } else {
         sdk_os_timer_arm(&reset_timer, RESET_TIME, 0);
@@ -548,34 +550,36 @@ void button_dual_timer_callback() {
 void button_complex_intr_callback(uint8_t gpio) {
     uint32_t now = xTaskGetTickCountFromISR();
     
-    if (((now - last_button_event_time) > DEBOUNCE_TIME) && (gpio_read(BUTTON1_GPIO) == 1)) {
-        last_button_event_time = now;
-        
+    if (gpio_read(BUTTON1_GPIO) == 1) {
         sdk_os_timer_disarm(&reset_timer);
         
-        if ((now - last_reset_event_time) > OUTLET_TIME) {
-            printf(">>> Button: Very Long press\n");
-            press_count = 0;
-            switch1_on.value.bool_value = !switch1_on.value.bool_value;
-            relay_write(switch1_on.value.bool_value, RELAY1_GPIO);
-            printf(">>> Relay 1 -> %i\n", switch1_on.value.bool_value);
-            homekit_characteristic_notify(&switch1_on, switch1_on.value);
-            homekit_characteristic_notify(&switch_outlet_in_use, switch1_on.value);
-        } else if ((now - last_reset_event_time) > LONGPRESS_TIME) {
-            printf(">>> Button: Long press\n");
-            press_count = 0;
-            led_code(LED_GPIO, FUNCTION_C);
-            homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(2));
-        } else {
-            press_count++;
-            if (press_count > 1) {
-                printf(">>> Button: Double press\n");
+        if ((now - last_button_event_time) > DEBOUNCE_TIME) {
+            last_button_event_time = now;
+        
+            if ((now - last_reset_event_time) > OUTLET_TIME) {
+                printf(">>> Button: Very Long press\n");
                 press_count = 0;
-                sdk_os_timer_disarm(&press_timer);
-                led_code(LED_GPIO, FUNCTION_B);
-                homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(1));
+                switch1_on.value.bool_value = !switch1_on.value.bool_value;
+                relay_write(switch1_on.value.bool_value, RELAY1_GPIO);
+                printf(">>> Relay 1 -> %i\n", switch1_on.value.bool_value);
+                homekit_characteristic_notify(&switch1_on, switch1_on.value);
+                homekit_characteristic_notify(&switch_outlet_in_use, switch1_on.value);
+            } else if ((now - last_reset_event_time) > LONGPRESS_TIME) {
+                printf(">>> Button: Long press\n");
+                press_count = 0;
+                led_code(LED_GPIO, FUNCTION_C);
+                homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(2));
             } else {
-                sdk_os_timer_arm(&press_timer, DOUBLE_PRESS_TIME, 0);
+                press_count++;
+                if (press_count > 1) {
+                    printf(">>> Button: Double press\n");
+                    press_count = 0;
+                    sdk_os_timer_disarm(&press_timer);
+                    led_code(LED_GPIO, FUNCTION_B);
+                    homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(1));
+                } else {
+                    sdk_os_timer_arm(&press_timer, DOUBLE_PRESS_TIME, 0);
+                }
             }
         }
     } else {
@@ -874,7 +878,7 @@ homekit_characteristic_t switch2_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "S
 homekit_characteristic_t switch3_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Switch 3");
 homekit_characteristic_t switch4_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Switch 4");
 
-homekit_characteristic_t button_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Button");
+homekit_characteristic_t button_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Custom Button");
 homekit_characteristic_t outlet_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Outlet");
 homekit_characteristic_t th_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Thermostat");
 homekit_characteristic_t temp_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Temperature");
@@ -885,7 +889,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.2.3");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.2.4");
 
 void create_accessory_name() {
     uint8_t macaddr[6];
@@ -920,7 +924,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = homekit_accessory_category_switch;
-        sonoff->config_number = 000203;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
+        sonoff->config_number = 000204;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
