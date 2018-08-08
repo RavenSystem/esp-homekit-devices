@@ -1,7 +1,7 @@
 /*
  * Sonoff RavenCore
  * 
- * v0.2.2
+ * v0.2.3
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -97,8 +97,10 @@ void on_target(homekit_value_t value);
 homekit_value_t read_on_target();
 void update_state();
 
-void valve_on_callback();
+void valve_on_callback(homekit_value_t value);
 homekit_value_t read_valve_on_callback();
+homekit_value_t read_in_use_on_callback();
+homekit_value_t read_remaining_duration_on_callback();
 
 void garage_on_callback(homekit_value_t value);
 homekit_value_t read_garage_on_callback();
@@ -124,10 +126,10 @@ homekit_characteristic_t target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_C
 homekit_characteristic_t current_humidity = HOMEKIT_CHARACTERISTIC_(CURRENT_RELATIVE_HUMIDITY, 0);
 
 homekit_characteristic_t active = HOMEKIT_CHARACTERISTIC_(ACTIVE, 0, .getter=read_valve_on_callback, .setter=valve_on_callback);
-homekit_characteristic_t in_use = HOMEKIT_CHARACTERISTIC_(IN_USE, 0);
+homekit_characteristic_t in_use = HOMEKIT_CHARACTERISTIC_(IN_USE, 0, .getter=read_in_use_on_callback);
 homekit_characteristic_t valve_type = HOMEKIT_CHARACTERISTIC_(VALVE_TYPE, 0);
 homekit_characteristic_t set_duration = HOMEKIT_CHARACTERISTIC_(SET_DURATION, 900, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
-homekit_characteristic_t remaining_duration = HOMEKIT_CHARACTERISTIC_(REMAINING_DURATION, 0);
+homekit_characteristic_t remaining_duration = HOMEKIT_CHARACTERISTIC_(REMAINING_DURATION, 0, .getter=read_remaining_duration_on_callback);
 
 homekit_characteristic_t current_door_state = HOMEKIT_CHARACTERISTIC_(CURRENT_DOOR_STATE, 1);
 homekit_characteristic_t target_door_state = HOMEKIT_CHARACTERISTIC_(TARGET_DOOR_STATE, 1, .getter=read_garage_on_callback, .setter=garage_on_callback);
@@ -143,6 +145,7 @@ homekit_characteristic_t dht_sensor_type = HOMEKIT_CHARACTERISTIC_(CUSTOM_DHT_SE
 homekit_characteristic_t custom_valve_type = HOMEKIT_CHARACTERISTIC_(CUSTOM_VALVE_TYPE, 0, .id=113, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 
 void relay_write(bool on, int gpio) {
+    last_button_event_time = xTaskGetTickCountFromISR();
     gpio_write(gpio, on ? 1 : 0);
 }
 
@@ -168,7 +171,7 @@ void on_target(homekit_value_t value) {
             led_code(LED_GPIO, FUNCTION_A);
             break;
     }
-    last_button_event_time = xTaskGetTickCountFromISR();
+
     update_state();
 }
 
@@ -341,7 +344,6 @@ void gpio14_toggle_callback() {
 void switch1_on_callback(homekit_value_t value) {
     printf(">>> Toggle Switch 1\n");
     switch1_on.value = value;
-    last_button_event_time = xTaskGetTickCountFromISR();
     relay_write(switch1_on.value.bool_value, RELAY1_GPIO);
     printf(">>> Relay 1 -> %i\n", switch1_on.value.bool_value);
     
@@ -361,7 +363,6 @@ void switch2_on_callback(homekit_value_t value) {
     printf(">>> Toggle Switch 2\n");
     led_code(LED_GPIO, FUNCTION_A);
     switch2_on.value = value;
-    last_button_event_time = xTaskGetTickCountFromISR();
     relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
     printf(">>> Relay 2 -> %i\n", switch2_on.value.bool_value);
 }
@@ -374,7 +375,6 @@ void switch3_on_callback(homekit_value_t value) {
     printf(">>> Toggle Switch 3\n");
     led_code(LED_GPIO, FUNCTION_A);
     switch3_on.value = value;
-    last_button_event_time = xTaskGetTickCountFromISR();
     relay_write(switch3_on.value.bool_value, RELAY3_GPIO);
     printf(">>> Relay 3 -> %i\n", switch3_on.value.bool_value);
 }
@@ -387,7 +387,6 @@ void switch4_on_callback(homekit_value_t value) {
     printf(">>> Toggle Switch 4\n");
     led_code(LED_GPIO, FUNCTION_A);
     switch4_on.value = value;
-    last_button_event_time = xTaskGetTickCountFromISR();
     relay_write(switch4_on.value.bool_value, RELAY4_GPIO);
     printf(">>> Relay 4 -> %i\n", switch4_on.value.bool_value);
 }
@@ -400,7 +399,6 @@ void toggle_switch() {
     printf(">>> Toggle Switch manual\n");
     led_code(LED_GPIO, FUNCTION_A);
     switch1_on.value.bool_value = !switch1_on.value.bool_value;
-    last_button_event_time = xTaskGetTickCountFromISR();
     relay_write(switch1_on.value.bool_value, RELAY1_GPIO);
     printf(">>> Relay 1 -> %i\n", switch1_on.value.bool_value);
     homekit_characteristic_notify(&switch1_on, switch1_on.value);
@@ -414,7 +412,7 @@ void toggle_valve() {
     }
     
     homekit_characteristic_notify(&active, active.value);
-    valve_on_callback();
+    valve_on_callback(active.value);
 }
 
 void valve_control() {
@@ -424,28 +422,21 @@ void valve_control() {
         led_code(LED_GPIO, FUNCTION_D);
         
         sdk_os_timer_disarm(&extra_func_timer);
-        last_button_event_time = xTaskGetTickCountFromISR();
         relay_write(false, RELAY1_GPIO);
+        
         active.value.int_value = 0;
-        in_use.value.int_value = active.value.int_value;
+        in_use.value.int_value = 0;
+        
         homekit_characteristic_notify(&active, active.value);
         homekit_characteristic_notify(&in_use, in_use.value);
     }
-    
-    homekit_characteristic_notify(&remaining_duration, remaining_duration.value);
 }
 
-void valve_on_callback() {
+void valve_on_callback(homekit_value_t value) {
     led_code(LED_GPIO, FUNCTION_A);
     
-    if (active.value.int_value == 1) {
-        active.value.int_value = 0;
-    } else {
-        active.value.int_value = 1;
-    }
-    
+    active.value = value;
     in_use.value.int_value = active.value.int_value;
-    last_button_event_time = xTaskGetTickCountFromISR();
     
     if (active.value.int_value == 1) {
         printf(">>> Valve ON\n");
@@ -459,7 +450,6 @@ void valve_on_callback() {
         remaining_duration.value.int_value = 0;
     }
     
-    homekit_characteristic_notify(&active, active.value);
     homekit_characteristic_notify(&in_use, in_use.value);
     homekit_characteristic_notify(&remaining_duration, remaining_duration.value);
 }
@@ -468,17 +458,23 @@ homekit_value_t read_valve_on_callback() {
     return active.value;
 }
 
+homekit_value_t read_in_use_on_callback() {
+    return in_use.value;
+}
+
+homekit_value_t read_remaining_duration_on_callback() {
+    return remaining_duration.value;
+}
+
 void garage_on_callback(homekit_value_t value) {
     printf(">>> Garage Door activated\n");
     led_code(LED_GPIO, FUNCTION_A);
     target_door_state.value = value;
-    last_button_event_time = xTaskGetTickCountFromISR();
     relay_write(true, RELAY1_GPIO);
     sdk_os_timer_arm(&extra_func_timer, 400, 0);
 }
 
 void relay_off() {
-    last_button_event_time = xTaskGetTickCountFromISR();
     relay_write(false, RELAY1_GPIO);
 }
 
@@ -506,7 +502,7 @@ void button_intr_callback(uint8_t gpio) {
             printf(">>> Button pressed\n");
             
             if (device_type_static == 7) {
-                valve_on_callback();
+                toggle_valve();
             } else {
                 toggle_switch();
             }
@@ -518,7 +514,7 @@ void button_dual_intr_callback(uint8_t gpio) {
     uint32_t now = xTaskGetTickCountFromISR();
     
     if (((now - last_button_event_time) > DEBOUNCE_TIME) && (gpio_read(BUTTON3_GPIO) == 1)) {
-        last_button_event_time = now;
+        last_button_event_time = xTaskGetTickCountFromISR();
         
         sdk_os_timer_disarm(&reset_timer);
 
@@ -536,8 +532,6 @@ void button_dual_intr_callback(uint8_t gpio) {
         }
     } else {
         sdk_os_timer_arm(&reset_timer, RESET_TIME, 0);
-        
-        last_reset_event_time = now;
     }
 }
 
@@ -873,7 +867,6 @@ homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff RavenCore"
 homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, "iTEAD");
 homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, "Sonoff N/A");
 homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "Sonoff RavenCore");
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.2.2");
 homekit_characteristic_t identify_function = HOMEKIT_CHARACTERISTIC_(IDENTIFY, identify);
 
 homekit_characteristic_t switch1_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Switch 1");
@@ -891,6 +884,8 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
+
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.2.3");
 
 void create_accessory_name() {
     uint8_t macaddr[6];
@@ -925,7 +920,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = homekit_accessory_category_switch;
-        sonoff->config_number = 000202;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
+        sonoff->config_number = 000203;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
