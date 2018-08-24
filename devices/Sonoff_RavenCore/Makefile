@@ -1,15 +1,15 @@
 PROGRAM = Sonoff_RavenCore
 
 EXTRA_COMPONENTS = \
-    extras/dht \
+	extras/dht \
 	extras/http-parser \
 	extras/dhcpserver \
-    extras/rboot-ota \
-    $(abspath ../../external_libs/wolfssl) \
-    $(abspath ../../external_libs/cJSON) \
-    $(abspath ../../external_libs/homekit) \
-    $(abspath ../../libs/led_codes) \
-    $(abspath ../../libs/legacy_config)
+	extras/rboot-ota \
+	$(abspath ../../external_libs/wolfssl) \
+	$(abspath ../../external_libs/cJSON) \
+	$(abspath ../../external_libs/homekit) \
+    $(abspath ../../external_libs/wifi_config) \
+	$(abspath ../../libs/led_codes)
 
 FLASH_SIZE = 8
 FLASH_MODE = dout
@@ -29,5 +29,7 @@ monitor:
 	$(FILTEROUTPUT) --port $(ESPPORT) --baud 115200 --elf $(PROGRAM_OUT)
 
 signature:
-    $(openssl sha384 -binary -out firmware/Sonoff_RavenCore.bin.sig firmware/Sonoff_RavenCore.bin)
-    $(printf "%08x" `cat firmware/Sonoff_RavenCore.bin | wc -c` | xxd -r -p >> firmware/Sonoff_RavenCore.bin.sig)
+	$(openssl sha384 -binary -out firmware/Sonoff_RavenCore.bin.sig firmware/Sonoff_RavenCore.bin)
+	$(printf "%08x" `cat firmware/Sonoff_RavenCore.bin | wc -c` | xxd -r -p >> firmware/Sonoff_RavenCore.bin.sig)
+	$(mv firmware/Sonoff_RavenCore.bin firmware/sonoff_ravencore.bin)
+	$(mv firmware/Sonoff_RavenCore.bin.sig firmware/sonoff_ravencore.bin.sig)
