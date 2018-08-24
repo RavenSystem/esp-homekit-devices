@@ -55,10 +55,10 @@ typedef enum {
     homekit_accessory_category_ip_camera = 17,
     homekit_accessory_category_video_door_bell = 18,
     homekit_accessory_category_air_purifier = 19,
-    homekit_accessory_category_air_heater = 20,
+    homekit_accessory_category_heater = 20,
     homekit_accessory_category_air_conditioner = 21,
-    homekit_accessory_category_air_humidifier = 22,
-    homekit_accessory_category_air_dehumidifier = 23,
+    homekit_accessory_category_humidifier = 22,
+    homekit_accessory_category_dehumidifier = 23,
     homekit_accessory_category_speaker = 26,
     homekit_accessory_category_sprinkler = 28,
     homekit_accessory_category_faucet = 29,
@@ -167,7 +167,7 @@ typedef struct _homekit_characteristic_change_callback {
 } homekit_characteristic_change_callback_t;
 
 
-#define HOMEKIT_CHARACTERISTIC_CALLBACK(f) &(homekit_characteristic_change_callback_t) { .function = f }
+#define HOMEKIT_CHARACTERISTIC_CALLBACK(f, ...) &(homekit_characteristic_change_callback_t) { .function = f, ##__VA_ARGS__ }
 
 
 struct _homekit_characteristic {

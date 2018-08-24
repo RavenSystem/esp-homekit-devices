@@ -112,6 +112,10 @@ void homekit_accessories_init(homekit_accessory_t **accessories) {
             accessory->id = aid++;
         }
 
+        if (accessory->config_number < 1) {
+            accessory->config_number = 1;
+        }
+
         int iid = 1;
         for (homekit_service_t **service_it = accessory->services; *service_it; service_it++) {
             homekit_service_t *service = *service_it;

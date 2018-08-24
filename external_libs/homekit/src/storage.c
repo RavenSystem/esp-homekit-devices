@@ -1,9 +1,9 @@
 #include <string.h>
 #include <ctype.h>
-#include <spiflash.h>
 #include "debug.h"
 #include "crypto.h"
 #include "pairing.h"
+#include "port.h"
 
 #ifndef SPIFLASH_BASE_ADDR
 #define SPIFLASH_BASE_ADDR 0x200000

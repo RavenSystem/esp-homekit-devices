@@ -10,7 +10,7 @@
 
 #define DEBUG_STATE(json) \
     DEBUG("State = %d, last JSON output: %s", \
-          json->state, json->buffer + MAX(0, json->pos - 20));
+          json->state, json->buffer + MAX(0, (long int)json->pos - 20));
 
 typedef enum {
     JSON_STATE_START = 1,

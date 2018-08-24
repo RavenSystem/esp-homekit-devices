@@ -600,6 +600,54 @@
  */
 #define HOMEKIT_SERVICE_VALVE HOMEKIT_APPLE_UUID2("D0")
 
+/**
+ Defines that the accessory contains a heater and/or cooler.
+ 
+ Accessory Category:
+ - 20: Heaters
+ - 21: Air Conditioners
+ 
+ Required Characteristics:
+ - ACTIVE
+ - CURRENT_TEMPERATURE
+ - CURRENT_HEATER_COOLER_STATE
+ - TARGET_HEATER_COOLER_STATE
+ 
+ Optional Characteristics:
+ - NAME
+ - ROTATION_SPEED
+ - TEMPERATURE_DISPLAY_UNITS
+ - SWING_MODE
+ - COOLING_THRESHOLD_TEMPERATURE
+ - HEATING_THRESHOLD_TEMPERATURE
+ - LOCK_PHYSICAL_CONTROLS
+ */
+#define HOMEKIT_SERVICE_HEATER_COOLER HOMEKIT_APPLE_UUID2("BC")
+
+/**
+ Defines that the accessory contains a humidifier and/or dehumidifier.
+ 
+ Accessory Category:
+ - 22: Humidifiers
+ - 23: Dehumidifiers
+ 
+ Required Characteristics:
+ - ACTIVE
+ - CURRENT_RELATIVE_HUMIDITY
+ - CURRENT_HUMIDIFIER_DEHUMIDIFIER_STATE
+ - TARGET_HUMIDIFIER_DEHUMIDIFIER_STATE
+ 
+ Optional Characteristics:
+ - NAME
+ - RELATIVE_HUMIDITY_DEHUMIDIFIER_THRESHOLD
+ - RELATIVE_HUMIDITY_HUMIDIFIER_THRESHOLD
+ - ROTATION_SPEED
+ - SWING_MODE
+ - WATER_LEVEL
+ - LOCK_PHYSICAL_CONTROLS
+ */
+#define HOMEKIT_SERVICE_HUMIDIFIER_DEHUMIDIFIER HOMEKIT_APPLE_UUID2("BD")
+
 // MARK: - Characteristics
 
 #define HOMEKIT_CHARACTERISTIC_ADMINISTRATOR_ONLY_ACCESS HOMEKIT_APPLE_UUID1("1")
@@ -2149,6 +2197,117 @@
         .values = (uint8_t[]) { 0, 1, 2, 3 }, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CURRENT_HEATER_COOLER_STATE HOMEKIT_APPLE_UUID2("B1")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CURRENT_HEATER_COOLER_STATE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CURRENT_HEATER_COOLER_STATE, \
+    .description = "Current Heater Cooler State", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+                 | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {3}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+        .count = 4, \
+        .values = (uint8_t[]) { 0, 1, 2, 3 }, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_TARGET_HEATER_COOLER_STATE HOMEKIT_APPLE_UUID2("B2")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_TARGET_HEATER_COOLER_STATE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_TARGET_HEATER_COOLER_STATE, \
+    .description = "Target Heater Cooler State", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+                 | homekit_permissions_paired_write \
+                 | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {2}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+        .count = 3, \
+        .values = (uint8_t[]) { 0, 1, 2 }, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CURRENT_HUMIDIFIER_DEHUMIDIFIER_STATE HOMEKIT_APPLE_UUID2("B3")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CURRENT_HUMIDIFIER_DEHUMIDIFIER_STATE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CURRENT_HUMIDIFIER_DEHUMIDIFIER_STATE, \
+    .description = "Current Humidifier Dehumidifier State", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+                 | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {3}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+        .count = 4, \
+        .values = (uint8_t[]) { 0, 1, 2, 3 }, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_TARGET_HUMIDIFIER_DEHUMIDIFIER_STATE HOMEKIT_APPLE_UUID2("B4")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_TARGET_HUMIDIFIER_DEHUMIDIFIER_STATE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_TARGET_HUMIDIFIER_DEHUMIDIFIER_STATE, \
+    .description = "Target Humidifier Dehumidifier State", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+                 | homekit_permissions_paired_write \
+                 | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {2}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+        .count = 3, \
+        .values = (uint8_t[]) { 0, 1, 2 }, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_WATER_LEVEL HOMEKIT_APPLE_UUID2("B5")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_WATER_LEVEL(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_WATER_LEVEL, \
+    .description = "Water Level", \
+    .format = homekit_format_float, \
+    .unit = homekit_unit_percentage, \
+    .permissions = homekit_permissions_paired_read \
+                 | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {100}, \
+    .min_step = (float[]) {1}, \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_RELATIVE_HUMIDITY_DEHUMIDIFIER_THRESHOLD HOMEKIT_APPLE_UUID2("C9")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_RELATIVE_HUMIDITY_DEHUMIDIFIER_THRESHOLD(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_RELATIVE_HUMIDITY_DEHUMIDIFIER_THRESHOLD, \
+    .description = "Relative Humidity Dehumidifier Threshold", \
+    .format = homekit_format_float, \
+    .unit = homekit_unit_percentage, \
+    .permissions = homekit_permissions_paired_read \
+                 | homekit_permissions_paired_write \
+                 | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {100}, \
+    .min_step = (float[]) {1}, \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_RELATIVE_HUMIDITY_HUMIDIFIER_THRESHOLD HOMEKIT_APPLE_UUID2("CA")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_RELATIVE_HUMIDITY_HUMIDIFIER_THRESHOLD(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_RELATIVE_HUMIDITY_HUMIDIFIER_THRESHOLD, \
+    .description = "Relative Humidity Humidifier Threshold", \
+    .format = homekit_format_float, \
+    .unit = homekit_unit_percentage, \
+    .permissions = homekit_permissions_paired_read \
+                 | homekit_permissions_paired_write \
+                 | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {100}, \
+    .min_step = (float[]) {1}, \
     ##__VA_ARGS__
 
 #endif // __HOMEKIT_CHARACTERISTICS__

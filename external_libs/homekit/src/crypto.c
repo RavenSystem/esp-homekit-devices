@@ -10,8 +10,7 @@
 #include <wolfssl/wolfcrypt/srp.h>
 #include <wolfssl/wolfcrypt/error-crypt.h>
 
-#include <esp/hwrand.h>
-
+#include "port.h"
 #include "debug.h"
 
 
@@ -100,7 +99,7 @@ void crypto_srp_free(Srp *srp) {
 int crypto_srp_init(Srp *srp, const char *username, const char *password) {
     DEBUG("Generating salt");
     byte salt[16];
-    hwrand_fill(salt, sizeof(salt));
+    homekit_random_fill(salt, sizeof(salt));
 
     int r;
     DEBUG("Setting SRP username");
