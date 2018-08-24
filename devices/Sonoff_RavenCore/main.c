@@ -1,7 +1,7 @@
 /*
  * Sonoff RavenCore
  * 
- * v0.2.4
+ * v0.2.6
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -140,7 +140,7 @@ homekit_characteristic_t show_setup = HOMEKIT_CHARACTERISTIC_(CUSTOM_SHOW_SETUP,
 homekit_characteristic_t device_type = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE, 1, .id=102, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t reboot_device = HOMEKIT_CHARACTERISTIC_(CUSTOM_REBOOT_DEVICE, false, .id=103, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(ota_firmware_callback));
 homekit_characteristic_t ota_firmware = HOMEKIT_CHARACTERISTIC_(CUSTOM_OTA_UPDATE, false, .id=110, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(ota_firmware_callback));
-homekit_characteristic_t gpio14_toggle = HOMEKIT_CHARACTERISTIC_(CUSTOM_GPIO14_TOGGLE, true, .id=111, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(gpio14_toggle_callback));
+homekit_characteristic_t gpio14_toggle = HOMEKIT_CHARACTERISTIC_(CUSTOM_GPIO14_TOGGLE, false, .id=111, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(gpio14_toggle_callback));
 homekit_characteristic_t dht_sensor_type = HOMEKIT_CHARACTERISTIC_(CUSTOM_DHT_SENSOR_TYPE, 2, .id=112, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t custom_valve_type = HOMEKIT_CHARACTERISTIC_(CUSTOM_VALVE_TYPE, 0, .id=113, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 
@@ -559,6 +559,7 @@ void button_complex_intr_callback(uint8_t gpio) {
             if ((now - last_reset_event_time) > OUTLET_TIME) {
                 printf(">>> Button: Very Long press\n");
                 press_count = 0;
+                led_code(LED_GPIO, FUNCTION_D);
                 switch1_on.value.bool_value = !switch1_on.value.bool_value;
                 relay_write(switch1_on.value.bool_value, RELAY1_GPIO);
                 printf(">>> Relay 1 -> %i\n", switch1_on.value.bool_value);
@@ -867,10 +868,10 @@ void gpio_init() {
     }
 }
 
-homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "Sonoff RavenCore");
-homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, "iTEAD");
-homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, "Sonoff N/A");
-homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "Sonoff RavenCore");
+homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "RavenCore");
+homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, "iTEAD - Others");
+homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, "N/A");
+homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "Custom Firmware");
 homekit_characteristic_t identify_function = HOMEKIT_CHARACTERISTIC_(IDENTIFY, identify);
 
 homekit_characteristic_t switch1_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Switch 1");
@@ -878,7 +879,7 @@ homekit_characteristic_t switch2_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "S
 homekit_characteristic_t switch3_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Switch 3");
 homekit_characteristic_t switch4_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Switch 4");
 
-homekit_characteristic_t button_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Custom Button");
+homekit_characteristic_t button_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Button");
 homekit_characteristic_t outlet_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Outlet");
 homekit_characteristic_t th_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Thermostat");
 homekit_characteristic_t temp_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Temperature");
@@ -889,17 +890,19 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.2.4");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.2.6");
 
 void create_accessory_name() {
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     
-    char *name_value = malloc(14);
-    snprintf(name_value, 14, "Sonoff %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
-    
+    char *name_value = malloc(17);
+    snprintf(name_value, 17, "RavenCore %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
     name.value = HOMEKIT_STRING(name_value);
-    serial.value = name.value;
+    
+    char *serial_value = malloc(13);
+    snprintf(serial_value, 13, "%02X%02X%02X%02X%02X%02X", macaddr[0], macaddr[1], macaddr[2], macaddr[3], macaddr[4], macaddr[5]);
+    serial.value = HOMEKIT_STRING(serial_value);
 }
 
 homekit_server_config_t config;
@@ -924,7 +927,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = homekit_accessory_category_switch;
-        sonoff->config_number = 000204;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
+        sonoff->config_number = 000206;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
@@ -1195,7 +1198,7 @@ void on_wifi_ready() {
 void user_init(void) {
     uart_set_baud(0, 115200);
     
-    wifi_config_init("Sonoff", NULL, on_wifi_ready);
+    wifi_config_init("RavenCore", NULL, on_wifi_ready);
     
     gpio_init();
 }
