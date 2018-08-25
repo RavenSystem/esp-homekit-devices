@@ -1,7 +1,7 @@
 /*
  * Sonoff RavenCore
  * 
- * v0.2.5
+ * v0.2.6
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -115,7 +115,7 @@ homekit_characteristic_t switch2_on = HOMEKIT_CHARACTERISTIC_(ON, false, .getter
 homekit_characteristic_t switch3_on = HOMEKIT_CHARACTERISTIC_(ON, false, .getter=read_switch3_on_callback, .setter=switch3_on_callback);
 homekit_characteristic_t switch4_on = HOMEKIT_CHARACTERISTIC_(ON, false, .getter=read_switch4_on_callback, .setter=switch4_on_callback);
 
-homekit_characteristic_t switch_outlet_in_use = HOMEKIT_CHARACTERISTIC_(OUTLET_IN_USE, false);
+homekit_characteristic_t switch_outlet_in_use = HOMEKIT_CHARACTERISTIC_(OUTLET_IN_USE, true);   // It has not a real use, but it is a mandatory characteristic
 homekit_characteristic_t button_event = HOMEKIT_CHARACTERISTIC_(PROGRAMMABLE_SWITCH_EVENT, 0);
 
 homekit_characteristic_t current_temperature = HOMEKIT_CHARACTERISTIC_(CURRENT_TEMPERATURE, 0);
@@ -325,14 +325,25 @@ void switch_evaluate() {        // Based on https://github.com/pcsaito/esp-homek
     switch_state = (switch_value > (maxvalue_unsigned(switch_value) >> 1));
 }
 
+void gpio14_toggle_init_task() {
+    for (uint8_t i = 0; i < 33; i++) {
+        vTaskDelay(30 / portTICK_PERIOD_MS);
+        switch_evaluate();
+    }
+    
+    switch_old_state = switch_state;
+    printf(">>> GPIO14 Initial state -> %i\n", switch_state);
+    sdk_os_timer_arm(&extra_func_timer, 30, 1);
+    
+    vTaskDelete(NULL);
+}
+
 void gpio14_toggle_callback() {
     if (gpio14_toggle.value.bool_value) {
         gpio_enable(SWITCH_GPIO, GPIO_INPUT);
         gpio_set_pullup(SWITCH_GPIO, true, true);
-        sdk_os_timer_arm(&extra_func_timer, 30, 1);
         
-        switch_evaluate();
-        switch_old_state = switch_state;
+        xTaskCreate(gpio14_toggle_init_task, "gpio14_toggle_init_task", 128, NULL, 3, NULL);
     } else {
         sdk_os_timer_disarm(&extra_func_timer);
         gpio_disable(SWITCH_GPIO);
@@ -343,16 +354,10 @@ void gpio14_toggle_callback() {
 
 void switch1_on_callback(homekit_value_t value) {
     printf(">>> Toggle Switch 1\n");
+    led_code(LED_GPIO, FUNCTION_A);
     switch1_on.value = value;
     relay_write(switch1_on.value.bool_value, RELAY1_GPIO);
     printf(">>> Relay 1 -> %i\n", switch1_on.value.bool_value);
-    
-    if (device_type_static == 3) {
-        led_code(LED_GPIO, FUNCTION_D);
-        homekit_characteristic_notify(&switch_outlet_in_use, switch1_on.value);
-    } else {
-        led_code(LED_GPIO, FUNCTION_A);
-    }
 }
 
 homekit_value_t read_switch1_on_callback() {
@@ -564,7 +569,6 @@ void button_complex_intr_callback(uint8_t gpio) {
                 relay_write(switch1_on.value.bool_value, RELAY1_GPIO);
                 printf(">>> Relay 1 -> %i\n", switch1_on.value.bool_value);
                 homekit_characteristic_notify(&switch1_on, switch1_on.value);
-                homekit_characteristic_notify(&switch_outlet_in_use, switch1_on.value);
             } else if ((now - last_reset_event_time) > LONGPRESS_TIME) {
                 printf(">>> Button: Long press\n");
                 press_count = 0;
@@ -871,7 +875,7 @@ void gpio_init() {
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "RavenCore");
 homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, "iTEAD - Others");
 homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, "N/A");
-homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "Custom Firmware");
+homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "RavenCore");
 homekit_characteristic_t identify_function = HOMEKIT_CHARACTERISTIC_(IDENTIFY, identify);
 
 homekit_characteristic_t switch1_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Switch 1");
@@ -890,7 +894,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.2.5");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.2.6");
 
 void create_accessory_name() {
     uint8_t macaddr[6];
@@ -927,7 +931,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = homekit_accessory_category_switch;
-        sonoff->config_number = 000205;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
+        sonoff->config_number = 000206;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
