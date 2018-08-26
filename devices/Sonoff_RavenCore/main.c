@@ -1,7 +1,7 @@
 /*
- * Sonoff RavenCore
+ * RavenCore
  * 
- * v0.2.6
+ * v0.2.7
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -872,9 +872,9 @@ void gpio_init() {
     }
 }
 
-homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, "RavenCore");
+homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, NULL);
 homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, "iTEAD - Others");
-homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, "N/A");
+homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, NULL);
 homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "RavenCore");
 homekit_characteristic_t identify_function = HOMEKIT_CHARACTERISTIC_(IDENTIFY, identify);
 
@@ -883,8 +883,8 @@ homekit_characteristic_t switch2_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "S
 homekit_characteristic_t switch3_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Switch 3");
 homekit_characteristic_t switch4_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Switch 4");
 
-homekit_characteristic_t button_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Button");
 homekit_characteristic_t outlet_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Outlet");
+homekit_characteristic_t button_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Action Button");
 homekit_characteristic_t th_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Thermostat");
 homekit_characteristic_t temp_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Temperature");
 homekit_characteristic_t hum_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Humidity");
@@ -894,7 +894,9 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.2.6");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.2.7");
+
+homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
 void create_accessory_name() {
     uint8_t macaddr[6];
@@ -914,6 +916,7 @@ homekit_server_config_t config;
 void create_accessory() {
     uint8_t service_count = 3, service_number = 2;
     
+    // Total service count
     if (show_setup.value.bool_value) {
         service_count++;
     }
@@ -926,12 +929,25 @@ void create_accessory() {
         service_count += 3;
     }
     
+    
+    // Accessory Category selection
+    if (device_type_static == 3) {
+        accessory_category = homekit_accessory_category_outlet;
+    } else if (device_type_static == 5) {
+        accessory_category = homekit_accessory_category_thermostat;
+    } else if (device_type_static == 7) {
+        accessory_category = homekit_accessory_category_sprinkler;
+    } else if (device_type_static == 8) {
+        accessory_category = homekit_accessory_category_garage;
+    }
+    
+    
     homekit_accessory_t **accessories = calloc(2, sizeof(homekit_accessory_t*));
 
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
-        sonoff->category = homekit_accessory_category_switch;
-        sonoff->config_number = 000206;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
+        sonoff->category = accessory_category;
+        sonoff->config_number = 000207;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
@@ -977,23 +993,23 @@ void create_accessory() {
                 snprintf(device_type_name_value, 14, "Button Socket");
                 device_type_name.value = HOMEKIT_STRING(device_type_name_value);
                 
+                homekit_service_t *sonoff_outlet = sonoff->services[2] = calloc(1, sizeof(homekit_service_t));
+                sonoff_outlet->id = 21;
+                sonoff_outlet->type = HOMEKIT_SERVICE_OUTLET;
+                sonoff_outlet->primary = true;
+                sonoff_outlet->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
+                sonoff_outlet->characteristics[0] = &outlet_service_name;
+                sonoff_outlet->characteristics[1] = &switch1_on;
+                sonoff_outlet->characteristics[2] = &switch_outlet_in_use;
+                
                 homekit_service_t *sonoff_button = sonoff->services[1] = calloc(1, sizeof(homekit_service_t));
-                sonoff_button->id = 21;
+                sonoff_button->id = 25;
                 sonoff_button->type = HOMEKIT_SERVICE_STATELESS_PROGRAMMABLE_SWITCH;
-                sonoff_button->primary = true;
+                sonoff_button->primary = false;
                 sonoff_button->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
                     sonoff_button->characteristics[0] = &button_service_name;
                     sonoff_button->characteristics[1] = &button_event;
                     sonoff_button->characteristics[2] = &show_setup;
-                
-                homekit_service_t *sonoff_outlet = sonoff->services[2] = calloc(1, sizeof(homekit_service_t));
-                sonoff_outlet->id = 25;
-                sonoff_outlet->type = HOMEKIT_SERVICE_OUTLET;
-                sonoff_outlet->primary = false;
-                sonoff_outlet->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
-                    sonoff_outlet->characteristics[0] = &outlet_service_name;
-                    sonoff_outlet->characteristics[1] = &switch1_on;
-                    sonoff_outlet->characteristics[2] = &switch_outlet_in_use;
                 
                 service_number = 3;
             } else if (device_type_static == 4) {
