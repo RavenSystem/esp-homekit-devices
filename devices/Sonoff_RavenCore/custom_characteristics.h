@@ -66,7 +66,7 @@
  7. Water Valve
  8. Garage Door
  9. Socket + Button + TH Sensor
- 10. ESP12 Switch + Button
+ 10. ESP01 Switch + Button
  */
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_DEVICE_TYPE HOMEKIT_CUSTOM_UUID("F0000102")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_DEVICE_TYPE(_value, ...) \

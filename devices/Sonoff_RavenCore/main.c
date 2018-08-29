@@ -28,7 +28,7 @@
  7. Water Valve
  8. Garage Door
  9. Socket + Button + TH Sensor
- 10. ESP12 Switch + Button
+ 10. ESP01 Switch + Button
  */
 
 #include <stdio.h>
@@ -1281,7 +1281,7 @@ void create_accessory() {
                 printf(">>> Creating accessory for type 10\n");
                 
                 char *device_type_name_value = malloc(17);
-                snprintf(device_type_name_value, 17, "ESP12 Switch Btn");
+                snprintf(device_type_name_value, 17, "ESP01 Switch Btn");
                 device_type_name.value = HOMEKIT_STRING(device_type_name_value);
                 
                 homekit_service_t *sonoff_switch1 = sonoff->services[1] = calloc(1, sizeof(homekit_service_t));
