@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.2.7
+ * v0.3.0
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -21,12 +21,14 @@
 /* Device Types
  1. Switch Basic
  2. Switch Dual
- 3. Button + Socket
+ 3. Socket + Button
  4. Switch 4ch
  5. Thermostat
  6. Switch Basic + TH Sensor
  7. Water Valve
  8. Garage Door
+ 9. Socket + Button + TH Sensor
+ 10. ESP12 Switch + Button
  */
 
 #include <stdio.h>
@@ -62,7 +64,7 @@
 #define BUTTON3_GPIO        10
 #define BUTTON4_GPIO        14
 
-#define RELAY1_GPIO         12
+
 #define RELAY2_GPIO         5
 #define RELAY3_GPIO         4
 #define RELAY4_GPIO         15
@@ -75,7 +77,7 @@
 
 #define POLL_PERIOD         30000
 
-uint8_t switch_old_state, switch_state, press_count = 0, device_type_static = 1;
+uint8_t switch_old_state, switch_state, press_count = 0, device_type_static = 1, relay1_gpio = 12;
 uint16_t switch_value = 65535;
 uint32_t last_button_event_time, last_reset_event_time;
 float old_humidity_value = 0.0, old_temperature_value = 0.0;
@@ -191,20 +193,20 @@ void update_state() {
             current_state.value = HOMEKIT_UINT8(1);
             homekit_characteristic_notify(&current_state, current_state.value);
             
-            relay_write(true, RELAY1_GPIO);
+            relay_write(true, relay1_gpio);
         }
     } else if (state == 2 && current_temperature.value.float_value > target_temperature.value.float_value) {
         if (current_state.value.int_value != 2) {
             current_state.value = HOMEKIT_UINT8(2);
             homekit_characteristic_notify(&current_state, current_state.value);
             
-            relay_write(true, RELAY1_GPIO);
+            relay_write(true, relay1_gpio);
         }
     } else if (current_state.value.int_value != 0) {
         current_state.value = HOMEKIT_UINT8(0);
         homekit_characteristic_notify(&current_state, current_state.value);
         
-        relay_write(false, RELAY1_GPIO);
+        relay_write(false, relay1_gpio);
     }
 }
 
@@ -356,7 +358,7 @@ void switch1_on_callback(homekit_value_t value) {
     printf(">>> Toggle Switch 1\n");
     led_code(LED_GPIO, FUNCTION_A);
     switch1_on.value = value;
-    relay_write(switch1_on.value.bool_value, RELAY1_GPIO);
+    relay_write(switch1_on.value.bool_value, relay1_gpio);
     printf(">>> Relay 1 -> %i\n", switch1_on.value.bool_value);
 }
 
@@ -404,7 +406,7 @@ void toggle_switch() {
     printf(">>> Toggle Switch manual\n");
     led_code(LED_GPIO, FUNCTION_A);
     switch1_on.value.bool_value = !switch1_on.value.bool_value;
-    relay_write(switch1_on.value.bool_value, RELAY1_GPIO);
+    relay_write(switch1_on.value.bool_value, relay1_gpio);
     printf(">>> Relay 1 -> %i\n", switch1_on.value.bool_value);
     homekit_characteristic_notify(&switch1_on, switch1_on.value);
 }
@@ -427,7 +429,7 @@ void valve_control() {
         led_code(LED_GPIO, FUNCTION_D);
         
         sdk_os_timer_disarm(&extra_func_timer);
-        relay_write(false, RELAY1_GPIO);
+        relay_write(false, relay1_gpio);
         
         active.value.int_value = 0;
         in_use.value.int_value = 0;
@@ -445,13 +447,13 @@ void valve_on_callback(homekit_value_t value) {
     
     if (active.value.int_value == 1) {
         printf(">>> Valve ON\n");
-        relay_write(true, RELAY1_GPIO);
+        relay_write(true, relay1_gpio);
         remaining_duration.value = set_duration.value;
         sdk_os_timer_arm(&extra_func_timer, 1000, 1);
     } else {
         printf(">>> Valve manual OFF\n");
         sdk_os_timer_disarm(&extra_func_timer);
-        relay_write(false, RELAY1_GPIO);
+        relay_write(false, relay1_gpio);
         remaining_duration.value.int_value = 0;
     }
     
@@ -475,12 +477,12 @@ void garage_on_callback(homekit_value_t value) {
     printf(">>> Garage Door activated\n");
     led_code(LED_GPIO, FUNCTION_A);
     target_door_state.value = value;
-    relay_write(true, RELAY1_GPIO);
+    relay_write(true, relay1_gpio);
     sdk_os_timer_arm(&extra_func_timer, 400, 0);
 }
 
 void relay_off() {
-    relay_write(false, RELAY1_GPIO);
+    relay_write(false, relay1_gpio);
 }
 
 homekit_value_t read_garage_on_callback() {
@@ -511,6 +513,64 @@ void button_intr_callback(uint8_t gpio) {
             } else {
                 toggle_switch();
             }
+        }
+    }
+}
+
+void button_simple1_intr_callback(uint8_t gpio) {
+    uint32_t now = xTaskGetTickCountFromISR();
+    
+    if (gpio_read(BUTTON1_GPIO) == 1) {
+        if ((now - last_button_event_time) > DEBOUNCE_TIME) {
+            last_button_event_time = now;
+            
+            led_code(LED_GPIO, FUNCTION_A);
+            toggle_switch();
+        }
+    }
+}
+
+void button_simple2_intr_callback(uint8_t gpio) {
+    uint32_t now = xTaskGetTickCountFromISR();
+    
+    if (gpio_read(BUTTON2_GPIO) == 1) {
+        if ((now - last_button_event_time) > DEBOUNCE_TIME) {
+            last_button_event_time = now;
+            
+            led_code(LED_GPIO, FUNCTION_B);
+            switch2_on.value.bool_value = !switch2_on.value.bool_value;
+            relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
+            homekit_characteristic_notify(&switch2_on, switch2_on.value);
+        }
+    }
+}
+
+void button_simple3_intr_callback(uint8_t gpio) {
+    uint32_t now = xTaskGetTickCountFromISR();
+    
+    if (gpio_read(BUTTON3_GPIO) == 1) {
+        if ((now - last_button_event_time) > DEBOUNCE_TIME) {
+            last_button_event_time = now;
+            
+            led_code(LED_GPIO, FUNCTION_C);
+            switch3_on.value.bool_value = !switch3_on.value.bool_value;
+            relay_write(switch3_on.value.bool_value, RELAY3_GPIO);
+            homekit_characteristic_notify(&switch3_on, switch3_on.value);
+        }
+    }
+}
+
+void button_simple4_intr_callback(uint8_t gpio) {
+    uint32_t now = xTaskGetTickCountFromISR();
+    
+    if (gpio_read(BUTTON4_GPIO) == 1) {
+        if ((now - last_button_event_time) > DEBOUNCE_TIME) {
+            last_button_event_time = now;
+            
+            led_code(LED_GPIO, FUNCTION_D);
+            switch4_on.value.bool_value = !switch4_on.value.bool_value;
+            relay_write(switch4_on.value.bool_value, RELAY4_GPIO);
+            homekit_characteristic_notify(&switch4_on, switch4_on.value);
         }
     }
 }
@@ -564,9 +624,9 @@ void button_complex_intr_callback(uint8_t gpio) {
             if ((now - last_reset_event_time) > OUTLET_TIME) {
                 printf(">>> Button: Very Long press\n");
                 press_count = 0;
-                led_code(LED_GPIO, FUNCTION_D);
+                led_code(LED_GPIO, FUNCTION_A);
                 switch1_on.value.bool_value = !switch1_on.value.bool_value;
-                relay_write(switch1_on.value.bool_value, RELAY1_GPIO);
+                relay_write(switch1_on.value.bool_value, relay1_gpio);
                 printf(">>> Relay 1 -> %i\n", switch1_on.value.bool_value);
                 homekit_characteristic_notify(&switch1_on, switch1_on.value);
             } else if ((now - last_reset_event_time) > LONGPRESS_TIME) {
@@ -689,7 +749,7 @@ void temperature_sensor_worker() {
             current_state.value = HOMEKIT_UINT8(0);
             homekit_characteristic_notify(&current_state, current_state.value);
             
-            relay_write(false, RELAY1_GPIO);
+            relay_write(false, relay1_gpio);
         }
     }
 }
@@ -703,14 +763,6 @@ void gpio_init() {
     led_write(false);
     
     gpio_set_pullup(BUTTON1_GPIO, true, true);
-    
-    gpio_enable(RELAY1_GPIO, GPIO_OUTPUT);
-    relay_write(switch1_on.value.bool_value, RELAY1_GPIO);
-    
-    sdk_os_timer_setfn(&reset_timer, reset_call, NULL);
-    sdk_os_timer_setfn(&change_settings_timer, save_settings, NULL);
-    
-    last_button_event_time = xTaskGetTickCountFromISR();
     
     sysparam_status_t status;
     bool bool_value;
@@ -756,6 +808,14 @@ void gpio_init() {
             gpio_enable(RELAY2_GPIO, GPIO_OUTPUT);
             relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
             
+            gpio_enable(BUTTON1_GPIO, GPIO_INPUT);
+            gpio_set_pullup(BUTTON1_GPIO, true, true);
+            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_simple1_intr_callback);
+            
+            gpio_enable(BUTTON2_GPIO, GPIO_INPUT);
+            gpio_set_pullup(BUTTON2_GPIO, true, true);
+            gpio_set_interrupt(BUTTON2_GPIO, GPIO_INTTYPE_EDGE_ANY, button_simple2_intr_callback);
+            
             gpio_enable(BUTTON3_GPIO, GPIO_INPUT);
             gpio_set_pullup(BUTTON3_GPIO, true, true);
             gpio_set_interrupt(BUTTON3_GPIO, GPIO_INTTYPE_EDGE_ANY, button_dual_intr_callback);
@@ -775,15 +835,15 @@ void gpio_init() {
             
             gpio_enable(BUTTON2_GPIO, GPIO_INPUT);
             gpio_set_pullup(BUTTON2_GPIO, true, true);
-            gpio_set_interrupt(BUTTON2_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
+            gpio_set_interrupt(BUTTON2_GPIO, GPIO_INTTYPE_EDGE_ANY, button_simple2_intr_callback);
             
             gpio_enable(BUTTON3_GPIO, GPIO_INPUT);
             gpio_set_pullup(BUTTON3_GPIO, true, true);
-            gpio_set_interrupt(BUTTON3_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
+            gpio_set_interrupt(BUTTON3_GPIO, GPIO_INTTYPE_EDGE_ANY, button_simple3_intr_callback);
             
             gpio_enable(BUTTON4_GPIO, GPIO_INPUT);
             gpio_set_pullup(BUTTON4_GPIO, true, true);
-            gpio_set_interrupt(BUTTON4_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
+            gpio_set_interrupt(BUTTON4_GPIO, GPIO_INTTYPE_EDGE_ANY, button_simple4_intr_callback);
             
             gpio_enable(RELAY2_GPIO, GPIO_OUTPUT);
             relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
@@ -866,10 +926,43 @@ void gpio_init() {
             sdk_os_timer_setfn(&extra_func_timer, relay_off, NULL);
             break;
             
+        case 9:
+            printf(">>> Loading device gpio settings for 9\n");
+            status = sysparam_get_int8("dht_sensor_type", &int8_value);
+            if (status == SYSPARAM_OK) {
+                dht_sensor_type.value.int_value = int8_value;
+            } else {
+                status = sysparam_set_int8("dht_sensor_type", 2);
+            }
+            
+            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_complex_intr_callback);
+            
+            gpio_set_pullup(SENSOR_GPIO, false, false);
+            
+            sdk_os_timer_setfn(&press_timer, button_timer_callback, NULL);
+            
+            sdk_os_timer_setfn(&extra_func_timer, temperature_sensor_worker, NULL);
+            sdk_os_timer_arm(&extra_func_timer, POLL_PERIOD, 1);
+            break;
+            
+        case 10:
+            printf(">>> Loading device gpio settings for 10\n");
+            relay1_gpio = 2;
+            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_complex_intr_callback);
+            break;
+            
         default:
             // A wish from compiler
             break;
     }
+    
+    gpio_enable(relay1_gpio, GPIO_OUTPUT);
+    relay_write(switch1_on.value.bool_value, relay1_gpio);
+    
+    sdk_os_timer_setfn(&reset_timer, reset_call, NULL);
+    sdk_os_timer_setfn(&change_settings_timer, save_settings, NULL);
+    
+    last_button_event_time = xTaskGetTickCountFromISR();
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, NULL);
@@ -894,7 +987,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.2.7");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.3.0");
 
 homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
@@ -921,17 +1014,17 @@ void create_accessory() {
         service_count++;
     }
     
-    if (device_type_static == 2 || device_type_static == 3) {
+    if (device_type_static == 2 || device_type_static == 3 || device_type_static == 10) {
         service_count++;
     } else if (device_type_static == 6) {
         service_count += 2;
-    } else if (device_type_static == 4) {
+    } else if (device_type_static == 4 || device_type_static == 9) {
         service_count += 3;
     }
     
     
     // Accessory Category selection
-    if (device_type_static == 3) {
+    if (device_type_static == 3 || device_type_static == 9) {
         accessory_category = homekit_accessory_category_outlet;
     } else if (device_type_static == 5) {
         accessory_category = homekit_accessory_category_thermostat;
@@ -947,7 +1040,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000207;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
+        sonoff->config_number = 000300;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
@@ -990,26 +1083,26 @@ void create_accessory() {
                 printf(">>> Creating accessory for type 3\n");
                 
                 char *device_type_name_value = malloc(14);
-                snprintf(device_type_name_value, 14, "Button Socket");
+                snprintf(device_type_name_value, 14, "Socket Button");
                 device_type_name.value = HOMEKIT_STRING(device_type_name_value);
                 
-                homekit_service_t *sonoff_outlet = sonoff->services[2] = calloc(1, sizeof(homekit_service_t));
+                homekit_service_t *sonoff_outlet = sonoff->services[1] = calloc(1, sizeof(homekit_service_t));
                 sonoff_outlet->id = 21;
                 sonoff_outlet->type = HOMEKIT_SERVICE_OUTLET;
                 sonoff_outlet->primary = true;
-                sonoff_outlet->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
-                sonoff_outlet->characteristics[0] = &outlet_service_name;
-                sonoff_outlet->characteristics[1] = &switch1_on;
-                sonoff_outlet->characteristics[2] = &switch_outlet_in_use;
+                sonoff_outlet->characteristics = calloc(5, sizeof(homekit_characteristic_t*));
+                    sonoff_outlet->characteristics[0] = &outlet_service_name;
+                    sonoff_outlet->characteristics[1] = &switch1_on;
+                    sonoff_outlet->characteristics[2] = &switch_outlet_in_use;
+                    sonoff_outlet->characteristics[3] = &show_setup;
                 
-                homekit_service_t *sonoff_button = sonoff->services[1] = calloc(1, sizeof(homekit_service_t));
-                sonoff_button->id = 25;
+                homekit_service_t *sonoff_button = sonoff->services[2] = calloc(1, sizeof(homekit_service_t));
+                sonoff_button->id = 26;
                 sonoff_button->type = HOMEKIT_SERVICE_STATELESS_PROGRAMMABLE_SWITCH;
                 sonoff_button->primary = false;
-                sonoff_button->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
+                sonoff_button->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
                     sonoff_button->characteristics[0] = &button_service_name;
                     sonoff_button->characteristics[1] = &button_event;
-                    sonoff_button->characteristics[2] = &show_setup;
                 
                 service_number = 3;
             } else if (device_type_static == 4) {
@@ -1142,6 +1235,73 @@ void create_accessory() {
                     sonoff_garage->characteristics[2] = &target_door_state;
                     sonoff_garage->characteristics[3] = &obstruction_detected;
                     sonoff_garage->characteristics[4] = &show_setup;
+            } else if (device_type_static == 9) {
+                printf(">>> Creating accessory for type 9\n");
+                
+                char *device_type_name_value = malloc(17);
+                snprintf(device_type_name_value, 17, "Socket Button TH");
+                device_type_name.value = HOMEKIT_STRING(device_type_name_value);
+                
+                homekit_service_t *sonoff_outlet = sonoff->services[1] = calloc(1, sizeof(homekit_service_t));
+                sonoff_outlet->id = 21;
+                sonoff_outlet->type = HOMEKIT_SERVICE_OUTLET;
+                sonoff_outlet->primary = true;
+                sonoff_outlet->characteristics = calloc(5, sizeof(homekit_characteristic_t*));
+                    sonoff_outlet->characteristics[0] = &outlet_service_name;
+                    sonoff_outlet->characteristics[1] = &switch1_on;
+                    sonoff_outlet->characteristics[2] = &switch_outlet_in_use;
+                    sonoff_outlet->characteristics[3] = &show_setup;
+                
+                homekit_service_t *sonoff_button = sonoff->services[2] = calloc(1, sizeof(homekit_service_t));
+                sonoff_button->id = 26;
+                sonoff_button->type = HOMEKIT_SERVICE_STATELESS_PROGRAMMABLE_SWITCH;
+                sonoff_button->primary = false;
+                sonoff_button->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+                    sonoff_button->characteristics[0] = &button_service_name;
+                    sonoff_button->characteristics[1] = &button_event;
+                
+                homekit_service_t *sonoff_temp = sonoff->services[3] = calloc(1, sizeof(homekit_service_t));
+                sonoff_temp->id = 38;
+                sonoff_temp->type = HOMEKIT_SERVICE_TEMPERATURE_SENSOR;
+                sonoff_temp->primary = false;
+                sonoff_temp->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+                    sonoff_temp->characteristics[0] = &temp_service_name;
+                    sonoff_temp->characteristics[1] = &current_temperature;
+                
+                homekit_service_t *sonoff_hum = sonoff->services[4] = calloc(1, sizeof(homekit_service_t));
+                sonoff_hum->id = 41;
+                sonoff_hum->type = HOMEKIT_SERVICE_HUMIDITY_SENSOR;
+                sonoff_hum->primary = false;
+                sonoff_hum->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+                    sonoff_hum->characteristics[0] = &hum_service_name;
+                    sonoff_hum->characteristics[1] = &current_humidity;
+                
+                service_number = 5;
+            } else if (device_type_static == 10) {
+                printf(">>> Creating accessory for type 10\n");
+                
+                char *device_type_name_value = malloc(17);
+                snprintf(device_type_name_value, 17, "ESP12 Switch Btn");
+                device_type_name.value = HOMEKIT_STRING(device_type_name_value);
+                
+                homekit_service_t *sonoff_switch1 = sonoff->services[1] = calloc(1, sizeof(homekit_service_t));
+                sonoff_switch1->id = 8;
+                sonoff_switch1->type = HOMEKIT_SERVICE_SWITCH;
+                sonoff_switch1->primary = true;
+                sonoff_switch1->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
+                    sonoff_switch1->characteristics[0] = &switch1_service_name;
+                    sonoff_switch1->characteristics[1] = &switch1_on;
+                    sonoff_switch1->characteristics[2] = &show_setup;
+                
+                homekit_service_t *sonoff_button = sonoff->services[2] = calloc(1, sizeof(homekit_service_t));
+                sonoff_button->id = 26;
+                sonoff_button->type = HOMEKIT_SERVICE_STATELESS_PROGRAMMABLE_SWITCH;
+                sonoff_button->primary = false;
+                sonoff_button->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+                    sonoff_button->characteristics[0] = &button_service_name;
+                    sonoff_button->characteristics[1] = &button_event;
+                
+                service_number = 3;
             } else { // device_type_static == 1
                 printf(">>> Creating accessory for type 1\n");
                 
@@ -1176,7 +1336,7 @@ void create_accessory() {
                     setting_count++;
                 }
                 
-                if (device_type_static == 1 || device_type_static == 5 || device_type_static == 6 || device_type_static == 7) {
+                if (device_type_static == 1 || device_type_static == 5 || device_type_static == 6 || device_type_static == 7 || device_type_static == 9) {
                     setting_count++;
                 }
         
@@ -1192,7 +1352,7 @@ void create_accessory() {
                     if (device_type_static == 1) {
                         sonoff_setup->characteristics[setting_number] = &gpio14_toggle;
                         setting_number++;
-                    } else if (device_type_static == 5 || device_type_static == 6) {
+                    } else if (device_type_static == 5 || device_type_static == 6 || device_type_static == 9) {
                         sonoff_setup->characteristics[setting_number] = &dht_sensor_type;
                         setting_number++;
                     } else if (device_type_static == 7) {

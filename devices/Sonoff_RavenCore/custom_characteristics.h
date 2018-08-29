@@ -59,12 +59,14 @@
 /* Device Types
  1. Switch Basic
  2. Switch Dual
- 3. Button + Socket
+ 3. Socket + Button
  4. Switch 4ch
  5. Thermostat
  6. Switch Basic + TH Sensor
  7. Water Valve
  8. Garage Door
+ 9. Socket + Button + TH Sensor
+ 10. ESP12 Switch + Button
  */
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_DEVICE_TYPE HOMEKIT_CUSTOM_UUID("F0000102")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_DEVICE_TYPE(_value, ...) \
@@ -75,11 +77,11 @@
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
     .min_value = (float[]) {1}, \
-    .max_value = (float[]) {8}, \
+    .max_value = (float[]) {10}, \
     .min_step = (float[]) {1}, \
     .valid_values = { \
-    .count = 8, \
-    .values = (uint8_t[]) {1, 2, 3, 4, 5, 6, 7, 8}, \
+    .count = 10, \
+    .values = (uint8_t[]) {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
