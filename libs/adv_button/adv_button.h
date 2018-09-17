@@ -17,7 +17,7 @@
  */
 
 /*
- * Based on Buton library by Maxin Kulkin (@MaximKulkin), licensed under the MIT License.
+ * Based on Button library by Maxin Kulkin (@MaximKulkin), licensed under the MIT License.
  * https://github.com/maximkulkin/esp-homekit-demo/blob/master/examples/button/button.c
  */
 
