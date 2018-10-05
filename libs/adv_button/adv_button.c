@@ -26,7 +26,7 @@
 #include <esplibs/libmain.h>
 #include "adv_button.h"
 
-#define DEBOUNCE_TIME       60
+#define DEBOUNCE_TIME       50
 #define DOUBLEPRESS_TIME    400
 #define LONGPRESS_TIME      450
 #define VERYLONGPRESS_TIME  1200
@@ -46,6 +46,7 @@ typedef struct _adv_button {
     ETSTimer hold_timer;
     uint32_t last_press_time;
     uint32_t last_event_time;
+    bool ready;
 
     struct _adv_button *next;
 } adv_button_t;
@@ -85,13 +86,13 @@ void adv_button_intr_callback(const uint8_t gpio) {
     
     uint32_t now = xTaskGetTickCountFromISR();
     
-    if (gpio_read(gpio) == 1) {
+    if (gpio_read(gpio) == 1 && !button->ready) {
         sdk_os_timer_disarm(&button->hold_timer);
         
-        if ((now - button->last_press_time) * portTICK_PERIOD_MS > DEBOUNCE_TIME) {
+        if (now - button->last_press_time > DEBOUNCE_TIME / portTICK_PERIOD_MS) {
             button->last_press_time = now;
             
-            if ((now - button->last_event_time) * portTICK_PERIOD_MS > VERYLONGPRESS_TIME) {
+            if (now - button->last_event_time > VERYLONGPRESS_TIME / portTICK_PERIOD_MS) {
                 printf(">>> AdvButton: Very Long button pressed\n");
                 button->press_count = 0;
                 if (button->verylongpress_callback_fn) {
@@ -101,7 +102,7 @@ void adv_button_intr_callback(const uint8_t gpio) {
                 } else {
                     button->singlepress_callback_fn(gpio);
                 }
-            } else if ((now - button->last_event_time) * portTICK_PERIOD_MS > LONGPRESS_TIME) {
+            } else if (now - button->last_event_time > LONGPRESS_TIME / portTICK_PERIOD_MS) {
                 printf(">>> AdvButton: Long button pressed\n");
                 button->press_count = 0;
                 if (button->longpress_callback_fn) {
@@ -123,7 +124,10 @@ void adv_button_intr_callback(const uint8_t gpio) {
                 button->singlepress_callback_fn(gpio);
             }
         }
-    } else {
+        
+        button->ready = true;
+    } else if (button->ready) {
+        button->ready = false;
         sdk_os_timer_arm(&button->hold_timer, HOLDPRESS_TIME, 0);
         button->last_event_time = now;
     }
@@ -177,6 +181,8 @@ int adv_button_create(const uint8_t gpio) {
     sdk_os_timer_setfn(&button->press_timer, adv_button_single_callback, button);
     
     button->singlepress_callback_fn = no_function_callback;
+    
+    button->ready = true;
     
     return 0;
 }
