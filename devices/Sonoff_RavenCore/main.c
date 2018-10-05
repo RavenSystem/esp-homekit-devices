@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.3.1
+ * v0.3.2
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -71,8 +71,8 @@
 
 #define POLL_PERIOD         30000
 
-uint8_t switch_state, switch_old_state, press_count = 0, device_type_static = 1, relay1_gpio = 12;
-uint16_t switch_value = 65535;
+static uint8_t switch_state, switch_old_state, device_type_static = 1, relay1_gpio = 12;
+static uint16_t switch_value = 65535;
 float old_humidity_value = 0.0, old_temperature_value = 0.0;
 static ETSTimer device_restart_timer, change_settings_timer, extra_func_timer;
 
@@ -85,7 +85,6 @@ homekit_value_t read_switch3_on_callback();
 void switch4_on_callback(homekit_value_t value);
 homekit_value_t read_switch4_on_callback();
 
-void button_intr_callback(uint8_t gpio);
 void switch_worker();
 
 void on_target(homekit_value_t value);
@@ -821,6 +820,7 @@ void gpio_init() {
             break;
     }
     
+    gpio_enable(relay1_gpio, GPIO_OUTPUT);
     relay_write(switch1_on.value.bool_value, relay1_gpio);
     
     sdk_os_timer_setfn(&change_settings_timer, save_settings, NULL);
@@ -848,7 +848,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.3.1");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.3.2");
 
 homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
@@ -901,7 +901,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000301;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
+        sonoff->config_number = 000302;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
