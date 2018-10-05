@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.3.0
+ * v0.3.1
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -48,6 +48,7 @@
 #include <homekit/characteristics.h>
 #include <wifi_config.h>
 #include <led_codes.h>
+#include <adv_button.h>
 
 #include <dht/dht.h>
 
@@ -64,24 +65,16 @@
 #define BUTTON3_GPIO        10
 #define BUTTON4_GPIO        14
 
-
 #define RELAY2_GPIO         5
 #define RELAY3_GPIO         4
 #define RELAY4_GPIO         15
 
-#define DEBOUNCE_TIME       70      / portTICK_PERIOD_MS
-#define DOUBLE_PRESS_TIME   400
-#define LONGPRESS_TIME      450     / portTICK_PERIOD_MS
-#define OUTLET_TIME         1200    / portTICK_PERIOD_MS
-#define RESET_TIME          10000
-
 #define POLL_PERIOD         30000
 
-uint8_t switch_old_state, switch_state, press_count = 0, device_type_static = 1, relay1_gpio = 12;
+uint8_t switch_state, switch_old_state, press_count = 0, device_type_static = 1, relay1_gpio = 12;
 uint16_t switch_value = 65535;
-uint32_t last_button_event_time, last_reset_event_time;
 float old_humidity_value = 0.0, old_temperature_value = 0.0;
-static ETSTimer extra_func_timer, reset_timer, device_restart_timer, change_settings_timer, press_timer;
+static ETSTimer device_restart_timer, change_settings_timer, extra_func_timer;
 
 void switch1_on_callback(homekit_value_t value);
 homekit_value_t read_switch1_on_callback();
@@ -147,7 +140,7 @@ homekit_characteristic_t dht_sensor_type = HOMEKIT_CHARACTERISTIC_(CUSTOM_DHT_SE
 homekit_characteristic_t custom_valve_type = HOMEKIT_CHARACTERISTIC_(CUSTOM_VALVE_TYPE, 0, .id=113, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 
 void relay_write(bool on, int gpio) {
-    last_button_event_time = xTaskGetTickCountFromISR();
+    adv_button_timing_reset();
     gpio_write(gpio, on ? 1 : 0);
 }
 
@@ -297,7 +290,7 @@ void ravencore_config_reset() {
     sysparam_set_int32("set_duration", 900);
 }
 
-void reset_call() {
+void reset_call(const uint8_t gpio) {
     printf(">>> Resetting device to factory defaults\n");
     
     ravencore_config_reset();
@@ -489,179 +482,56 @@ homekit_value_t read_garage_on_callback() {
     return target_door_state.value;
 }
 
-void door_opened_intr_callback(uint8_t gpio) {
+void door_opened_intr_callback(const uint8_t gpio) {
     
 }
 
-void door_closed_intr_callback(uint8_t gpio) {
+void door_closed_intr_callback(const uint8_t gpio) {
     
 }
 
-void button_intr_callback(uint8_t gpio) {
-    uint32_t now = xTaskGetTickCountFromISR();
-    
-    if (gpio_read(BUTTON1_GPIO) == 0) {
-        sdk_os_timer_arm(&reset_timer, RESET_TIME, 0);
+void button_simple1_intr_callback(const uint8_t gpio) {
+    if (device_type_static == 7) {
+        toggle_valve();
     } else {
-        sdk_os_timer_disarm(&reset_timer);
-        
-        if ((now - last_button_event_time) > DEBOUNCE_TIME) {
-            printf(">>> Button pressed\n");
-            
-            if (device_type_static == 7) {
-                toggle_valve();
-            } else {
-                toggle_switch();
-            }
-        }
+        toggle_switch();
     }
 }
 
-void button_simple1_intr_callback(uint8_t gpio) {
-    uint32_t now = xTaskGetTickCountFromISR();
-    
-    if (gpio_read(BUTTON1_GPIO) == 1) {
-        if ((now - last_button_event_time) > DEBOUNCE_TIME) {
-            last_button_event_time = now;
-            
-            led_code(LED_GPIO, FUNCTION_A);
-            toggle_switch();
-        }
-    }
+void button_simple2_intr_callback(const uint8_t gpio) {
+    led_code(LED_GPIO, FUNCTION_B);
+    switch2_on.value.bool_value = !switch2_on.value.bool_value;
+    relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
+    homekit_characteristic_notify(&switch2_on, switch2_on.value);
 }
 
-void button_simple2_intr_callback(uint8_t gpio) {
-    uint32_t now = xTaskGetTickCountFromISR();
-    
-    if (gpio_read(BUTTON2_GPIO) == 1) {
-        if ((now - last_button_event_time) > DEBOUNCE_TIME) {
-            last_button_event_time = now;
-            
-            led_code(LED_GPIO, FUNCTION_B);
-            switch2_on.value.bool_value = !switch2_on.value.bool_value;
-            relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
-            homekit_characteristic_notify(&switch2_on, switch2_on.value);
-        }
-    }
+void button_simple3_intr_callback(const uint8_t gpio) {
+    led_code(LED_GPIO, FUNCTION_C);
+    switch3_on.value.bool_value = !switch3_on.value.bool_value;
+    relay_write(switch3_on.value.bool_value, RELAY3_GPIO);
+    homekit_characteristic_notify(&switch3_on, switch3_on.value);
 }
 
-void button_simple3_intr_callback(uint8_t gpio) {
-    uint32_t now = xTaskGetTickCountFromISR();
-    
-    if (gpio_read(BUTTON3_GPIO) == 1) {
-        if ((now - last_button_event_time) > DEBOUNCE_TIME) {
-            last_button_event_time = now;
-            
-            led_code(LED_GPIO, FUNCTION_C);
-            switch3_on.value.bool_value = !switch3_on.value.bool_value;
-            relay_write(switch3_on.value.bool_value, RELAY3_GPIO);
-            homekit_characteristic_notify(&switch3_on, switch3_on.value);
-        }
-    }
+void button_simple4_intr_callback(const uint8_t gpio) {
+    led_code(LED_GPIO, FUNCTION_D);
+    switch4_on.value.bool_value = !switch4_on.value.bool_value;
+    relay_write(switch4_on.value.bool_value, RELAY4_GPIO);
+    homekit_characteristic_notify(&switch4_on, switch4_on.value);
 }
 
-void button_simple4_intr_callback(uint8_t gpio) {
-    uint32_t now = xTaskGetTickCountFromISR();
-    
-    if (gpio_read(BUTTON4_GPIO) == 1) {
-        if ((now - last_button_event_time) > DEBOUNCE_TIME) {
-            last_button_event_time = now;
-            
-            led_code(LED_GPIO, FUNCTION_D);
-            switch4_on.value.bool_value = !switch4_on.value.bool_value;
-            relay_write(switch4_on.value.bool_value, RELAY4_GPIO);
-            homekit_characteristic_notify(&switch4_on, switch4_on.value);
-        }
-    }
-}
-
-void button_dual_intr_callback(uint8_t gpio) {
-    uint32_t now = xTaskGetTickCountFromISR();
-    
-    if (gpio_read(BUTTON3_GPIO) == 1) {
-        sdk_os_timer_disarm(&reset_timer);
-        
-        if ((now - last_button_event_time) > DEBOUNCE_TIME) {
-            last_button_event_time = now;
-
-            press_count++;
-            if (press_count > 1) {
-                printf(">>> Button: Double press\n");
-                press_count = 0;
-                sdk_os_timer_disarm(&press_timer);
-                led_code(LED_GPIO, FUNCTION_B);
-                switch2_on.value.bool_value = !switch2_on.value.bool_value;
-                relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
-                homekit_characteristic_notify(&switch2_on, switch2_on.value);
-            } else {
-                sdk_os_timer_arm(&press_timer, DOUBLE_PRESS_TIME, 0);
-            }
-        }
-    } else {
-        sdk_os_timer_arm(&reset_timer, RESET_TIME, 0);
-    }
-}
-
-void button_dual_timer_callback() {
-    // Single press
-    printf(">>> Button: Single press\n");
-    press_count = 0;
-    
+void button_event1_intr_callback(const uint8_t gpio) {
     led_code(LED_GPIO, FUNCTION_A);
-    
-    toggle_switch();
-}
-
-void button_complex_intr_callback(uint8_t gpio) {
-    uint32_t now = xTaskGetTickCountFromISR();
-    
-    if (gpio_read(BUTTON1_GPIO) == 1) {
-        sdk_os_timer_disarm(&reset_timer);
-        
-        if ((now - last_button_event_time) > DEBOUNCE_TIME) {
-            last_button_event_time = now;
-        
-            if ((now - last_reset_event_time) > OUTLET_TIME) {
-                printf(">>> Button: Very Long press\n");
-                press_count = 0;
-                led_code(LED_GPIO, FUNCTION_A);
-                switch1_on.value.bool_value = !switch1_on.value.bool_value;
-                relay_write(switch1_on.value.bool_value, relay1_gpio);
-                printf(">>> Relay 1 -> %i\n", switch1_on.value.bool_value);
-                homekit_characteristic_notify(&switch1_on, switch1_on.value);
-            } else if ((now - last_reset_event_time) > LONGPRESS_TIME) {
-                printf(">>> Button: Long press\n");
-                press_count = 0;
-                led_code(LED_GPIO, FUNCTION_C);
-                homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(2));
-            } else {
-                press_count++;
-                if (press_count > 1) {
-                    printf(">>> Button: Double press\n");
-                    press_count = 0;
-                    sdk_os_timer_disarm(&press_timer);
-                    led_code(LED_GPIO, FUNCTION_B);
-                    homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(1));
-                } else {
-                    sdk_os_timer_arm(&press_timer, DOUBLE_PRESS_TIME, 0);
-                }
-            }
-        }
-    } else {
-        sdk_os_timer_arm(&reset_timer, RESET_TIME, 0);
-        
-        last_reset_event_time = now;
-    }
-}
-
-void button_timer_callback() {
-    // Single press
-    printf(">>> Button: Single press\n");
-    press_count = 0;
-    
-    led_code(LED_GPIO, FUNCTION_A);
-    
     homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(0));
+}
+
+void button_event2_intr_callback(const uint8_t gpio) {
+    led_code(LED_GPIO, FUNCTION_B);
+    homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(1));
+}
+
+void button_event3_intr_callback(const uint8_t gpio) {
+    led_code(LED_GPIO, FUNCTION_C);
+    homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(2));
 }
 
 void switch_worker() {
@@ -674,43 +544,30 @@ void switch_worker() {
     }
 }
 
-void th_button_intr_callback(uint8_t gpio) {
-    uint32_t now = xTaskGetTickCountFromISR();
-    
-    if (gpio_read(BUTTON1_GPIO) == 0) {
-        sdk_os_timer_arm(&reset_timer, RESET_TIME, 0);
-    } else {
-        sdk_os_timer_disarm(&reset_timer);
-        
-        if ((now - last_button_event_time) > DEBOUNCE_TIME) {
-            printf(">>> Thermostat Button pressed\n");
-            last_button_event_time = now;
+void th_button_intr_callback(const uint8_t gpio) {
+    uint8_t state = target_state.value.int_value + 1;
+    switch (state) {
+        case 1:
+            printf(">>> Thermostat set to HEAT\n");
+            led_code(LED_GPIO, FUNCTION_B);
+            break;
             
-            uint8_t state = target_state.value.int_value + 1;
-            switch (state) {
-                case 1:
-                    printf(">>> Set to HEAT\n");
-                    led_code(LED_GPIO, FUNCTION_B);
-                    break;
-                    
-                case 2:
-                    printf(">>> Set to COOL\n");
-                    led_code(LED_GPIO, FUNCTION_C);
-                    break;
-                    
-                default:
-                    state = 0;
-                    printf(">>> Set to OFF\n");
-                    led_code(LED_GPIO, FUNCTION_A);
-                    break;
-            }
+        case 2:
+            printf(">>> Thermostat set to COOL\n");
+            led_code(LED_GPIO, FUNCTION_C);
+            break;
             
-            target_state.value = HOMEKIT_UINT8(state);
-            homekit_characteristic_notify(&target_state, target_state.value);
-            
-            update_state();
-        }
+        default:
+            state = 0;
+            printf(">>> Thermostat set to OFF\n");
+            led_code(LED_GPIO, FUNCTION_A);
+            break;
     }
+    
+    target_state.value = HOMEKIT_UINT8(state);
+    homekit_characteristic_notify(&target_state, target_state.value);
+    
+    update_state();
 }
 
 void temperature_sensor_worker() {
@@ -762,7 +619,7 @@ void gpio_init() {
     gpio_enable(LED_GPIO, GPIO_OUTPUT);
     led_write(false);
     
-    gpio_set_pullup(BUTTON1_GPIO, true, true);
+    adv_button_create(BUTTON1_GPIO);
     
     sysparam_status_t status;
     bool bool_value;
@@ -798,52 +655,50 @@ void gpio_init() {
                 status = sysparam_set_bool("gpio14_toggle", false);
             }
             
-            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_simple1_intr_callback, 1);
+            adv_button_register_callback_fn(BUTTON1_GPIO, reset_call, 5);
+            
             sdk_os_timer_setfn(&extra_func_timer, switch_worker, NULL);
             gpio14_toggle_callback();
             break;
             
         case 2:
             printf(">>> Loading device gpio settings for 2\n");
+            adv_button_create(BUTTON2_GPIO);
+            adv_button_create(BUTTON3_GPIO);
+            
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_simple1_intr_callback, 1);
+            adv_button_register_callback_fn(BUTTON2_GPIO, button_simple2_intr_callback, 1);
+            
+            adv_button_register_callback_fn(BUTTON3_GPIO, button_simple1_intr_callback, 1);
+            adv_button_register_callback_fn(BUTTON3_GPIO, button_simple2_intr_callback, 2);
+            adv_button_register_callback_fn(BUTTON3_GPIO, reset_call, 5);
+            
             gpio_enable(RELAY2_GPIO, GPIO_OUTPUT);
             relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
-            
-            gpio_enable(BUTTON1_GPIO, GPIO_INPUT);
-            gpio_set_pullup(BUTTON1_GPIO, true, true);
-            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_simple1_intr_callback);
-            
-            gpio_enable(BUTTON2_GPIO, GPIO_INPUT);
-            gpio_set_pullup(BUTTON2_GPIO, true, true);
-            gpio_set_interrupt(BUTTON2_GPIO, GPIO_INTTYPE_EDGE_ANY, button_simple2_intr_callback);
-            
-            gpio_enable(BUTTON3_GPIO, GPIO_INPUT);
-            gpio_set_pullup(BUTTON3_GPIO, true, true);
-            gpio_set_interrupt(BUTTON3_GPIO, GPIO_INTTYPE_EDGE_ANY, button_dual_intr_callback);
-            
-            sdk_os_timer_setfn(&press_timer, button_dual_timer_callback, NULL);
             break;
             
         case 3:
             printf(">>> Loading device gpio settings for 3\n");
-            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_complex_intr_callback);
-            sdk_os_timer_setfn(&press_timer, button_timer_callback, NULL);
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_event1_intr_callback, 1);
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_event2_intr_callback, 2);
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_event3_intr_callback, 3);
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_simple1_intr_callback, 4);
+            adv_button_register_callback_fn(BUTTON1_GPIO, reset_call, 5);
             break;
             
         case 4:
             printf(">>> Loading device gpio settings for 4\n");
-            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
+            adv_button_create(BUTTON2_GPIO);
+            adv_button_create(BUTTON3_GPIO);
+            adv_button_create(BUTTON4_GPIO);
+
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_simple1_intr_callback, 1);
+            adv_button_register_callback_fn(BUTTON1_GPIO, reset_call, 5);
             
-            gpio_enable(BUTTON2_GPIO, GPIO_INPUT);
-            gpio_set_pullup(BUTTON2_GPIO, true, true);
-            gpio_set_interrupt(BUTTON2_GPIO, GPIO_INTTYPE_EDGE_ANY, button_simple2_intr_callback);
-            
-            gpio_enable(BUTTON3_GPIO, GPIO_INPUT);
-            gpio_set_pullup(BUTTON3_GPIO, true, true);
-            gpio_set_interrupt(BUTTON3_GPIO, GPIO_INTTYPE_EDGE_ANY, button_simple3_intr_callback);
-            
-            gpio_enable(BUTTON4_GPIO, GPIO_INPUT);
-            gpio_set_pullup(BUTTON4_GPIO, true, true);
-            gpio_set_interrupt(BUTTON4_GPIO, GPIO_INTTYPE_EDGE_ANY, button_simple4_intr_callback);
+            adv_button_register_callback_fn(BUTTON2_GPIO, button_simple2_intr_callback, 1);
+            adv_button_register_callback_fn(BUTTON3_GPIO, button_simple3_intr_callback, 1);
+            adv_button_register_callback_fn(BUTTON4_GPIO, button_simple4_intr_callback, 1);
             
             gpio_enable(RELAY2_GPIO, GPIO_OUTPUT);
             relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
@@ -864,7 +719,8 @@ void gpio_init() {
                 status = sysparam_set_int8("dht_sensor_type", 2);
             }
             
-            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, th_button_intr_callback);
+            adv_button_register_callback_fn(BUTTON1_GPIO, th_button_intr_callback, 1);
+            adv_button_register_callback_fn(BUTTON1_GPIO, reset_call, 5);
             
             gpio_set_pullup(SENSOR_GPIO, false, false);
             
@@ -881,7 +737,8 @@ void gpio_init() {
                 status = sysparam_set_int8("dht_sensor_type", 2);
             }
             
-            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_simple1_intr_callback, 1);
+            adv_button_register_callback_fn(BUTTON1_GPIO, reset_call, 5);
             
             gpio_set_pullup(SENSOR_GPIO, false, false);
             
@@ -906,14 +763,15 @@ void gpio_init() {
                 status = sysparam_set_int32("set_duration", 900);
             }
 
-            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_simple1_intr_callback, 1);
+            adv_button_register_callback_fn(BUTTON1_GPIO, reset_call, 5);
             
             sdk_os_timer_setfn(&extra_func_timer, valve_control, NULL);
             break;
             
         case 8:
             printf(">>> Loading device gpio settings for 8\n");
-            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_intr_callback);
+            adv_button_register_callback_fn(BUTTON1_GPIO, reset_call, 5);
             
             gpio_enable(DOOR_OPENED_GPIO, GPIO_INPUT);
             gpio_set_pullup(DOOR_OPENED_GPIO, true, true);
@@ -935,11 +793,13 @@ void gpio_init() {
                 status = sysparam_set_int8("dht_sensor_type", 2);
             }
             
-            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_complex_intr_callback);
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_event1_intr_callback, 1);
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_event2_intr_callback, 2);
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_event3_intr_callback, 3);
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_simple1_intr_callback, 4);
+            adv_button_register_callback_fn(BUTTON1_GPIO, reset_call, 5);
             
             gpio_set_pullup(SENSOR_GPIO, false, false);
-            
-            sdk_os_timer_setfn(&press_timer, button_timer_callback, NULL);
             
             sdk_os_timer_setfn(&extra_func_timer, temperature_sensor_worker, NULL);
             sdk_os_timer_arm(&extra_func_timer, POLL_PERIOD, 1);
@@ -948,7 +808,12 @@ void gpio_init() {
         case 10:
             printf(">>> Loading device gpio settings for 10\n");
             relay1_gpio = 2;
-            gpio_set_interrupt(BUTTON1_GPIO, GPIO_INTTYPE_EDGE_ANY, button_complex_intr_callback);
+            
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_event1_intr_callback, 1);
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_event2_intr_callback, 2);
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_event3_intr_callback, 3);
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_simple1_intr_callback, 4);
+            adv_button_register_callback_fn(BUTTON1_GPIO, reset_call, 5);
             break;
             
         default:
@@ -956,13 +821,9 @@ void gpio_init() {
             break;
     }
     
-    gpio_enable(relay1_gpio, GPIO_OUTPUT);
     relay_write(switch1_on.value.bool_value, relay1_gpio);
     
-    sdk_os_timer_setfn(&reset_timer, reset_call, NULL);
     sdk_os_timer_setfn(&change_settings_timer, save_settings, NULL);
-    
-    last_button_event_time = xTaskGetTickCountFromISR();
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, NULL);
@@ -987,7 +848,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.3.0");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.3.1");
 
 homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
@@ -1040,7 +901,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000300;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
+        sonoff->config_number = 000301;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
