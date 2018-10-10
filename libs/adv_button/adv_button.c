@@ -26,7 +26,7 @@
 #include <esplibs/libmain.h>
 #include "adv_button.h"
 
-#define DEBOUNCE_TIME       50
+#define DEBOUNCE_TIME       60
 #define DOUBLEPRESS_TIME    400
 #define LONGPRESS_TIME      450
 #define VERYLONGPRESS_TIME  1200
@@ -44,7 +44,6 @@ typedef struct _adv_button {
     uint8_t press_count;
     ETSTimer press_timer;
     ETSTimer hold_timer;
-    uint32_t last_press_time;
     uint32_t last_event_time;
     bool ready;
 
@@ -52,6 +51,7 @@ typedef struct _adv_button {
 } adv_button_t;
 
 adv_button_t *buttons = NULL;
+uint32_t last_press_time = 0;
 
 static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
     adv_button_t *button = buttons;
@@ -63,19 +63,7 @@ static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
 }
 
 void adv_button_timing_reset() {
-    adv_button_t *button = buttons;
-    
-    uint32_t now = xTaskGetTickCountFromISR() + (20 / portTICK_PERIOD_MS);
-    
-    while (button) {
-        button->press_count = 0;
-        button->last_press_time = now;
-        button->last_event_time = now;
-        sdk_os_timer_disarm(&button->press_timer);
-        sdk_os_timer_disarm(&button->hold_timer);
-        
-        button = button->next;
-    }
+    last_press_time = xTaskGetTickCountFromISR() + (DEBOUNCE_TIME / portTICK_PERIOD_MS);
 }
 
 void adv_button_intr_callback(const uint8_t gpio) {
@@ -89,11 +77,11 @@ void adv_button_intr_callback(const uint8_t gpio) {
     if (gpio_read(gpio) == 1 && !button->ready) {
         sdk_os_timer_disarm(&button->hold_timer);
         
-        if (now - button->last_press_time > DEBOUNCE_TIME / portTICK_PERIOD_MS) {
-            button->last_press_time = now;
+        if (now - last_press_time > DEBOUNCE_TIME / portTICK_PERIOD_MS) {
+            last_press_time = now;
             
             if (now - button->last_event_time > VERYLONGPRESS_TIME / portTICK_PERIOD_MS) {
-                printf(">>> AdvButton: Very Long button pressed\n");
+                // Very Long button pressed
                 button->press_count = 0;
                 if (button->verylongpress_callback_fn) {
                     button->verylongpress_callback_fn(gpio);
@@ -103,7 +91,7 @@ void adv_button_intr_callback(const uint8_t gpio) {
                     button->singlepress_callback_fn(gpio);
                 }
             } else if (now - button->last_event_time > LONGPRESS_TIME / portTICK_PERIOD_MS) {
-                printf(">>> AdvButton: Long button pressed\n");
+                // Long button pressed
                 button->press_count = 0;
                 if (button->longpress_callback_fn) {
                     button->longpress_callback_fn(gpio);
@@ -113,7 +101,7 @@ void adv_button_intr_callback(const uint8_t gpio) {
             } else if (button->doublepress_callback_fn) {
                 button->press_count++;
                 if (button->press_count > 1) {
-                    printf(">>> AdvButton: Double button pressed\n");
+                    // Double button pressed
                     sdk_os_timer_disarm(&button->press_timer);
                     button->press_count = 0;
                     button->doublepress_callback_fn(gpio);
@@ -139,19 +127,21 @@ void no_function_callback(uint8_t gpio) {
 
 void adv_button_single_callback(void *arg) {
     adv_button_t *button = arg;
-    printf(">>> AdvButton: Single button pressed\n");
+    // Single button pressed
     button->press_count = 0;
     button->singlepress_callback_fn(button->gpio);
 }
 
 void adv_button_hold_callback(void *arg) {
     adv_button_t *button = arg;
-    printf(">>> AdvButton: Hold button pressed\n");
-    button->press_count = 0;
-    if (button->holdpress_callback_fn) {
-        button->holdpress_callback_fn(button->gpio);
-    } else {
-        no_function_callback(button->gpio);
+    if (gpio_read(button->gpio) == 0) {
+        // Hold button pressed
+        button->press_count = 0;
+        if (button->holdpress_callback_fn) {
+            button->holdpress_callback_fn(button->gpio);
+        } else {
+            no_function_callback(button->gpio);
+        }
     }
 }
 
