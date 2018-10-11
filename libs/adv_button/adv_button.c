@@ -63,16 +63,16 @@ static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
 }
 
 void adv_button_timing_reset() {
-    last_press_time = xTaskGetTickCountFromISR() + (DEBOUNCE_TIME / portTICK_PERIOD_MS);
+    last_press_time = xTaskGetTickCountFromISR();
 }
 
 void adv_button_intr_callback(const uint8_t gpio) {
+    uint32_t now = xTaskGetTickCountFromISR();
+    
     adv_button_t *button = button_find_by_gpio(gpio);
     if (!button) {
         return;
     }
-    
-    uint32_t now = xTaskGetTickCountFromISR();
     
     if (gpio_read(gpio) == 1 && !button->ready) {
         sdk_os_timer_disarm(&button->hold_timer);
