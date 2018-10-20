@@ -142,6 +142,77 @@
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_STOP HOMEKIT_CUSTOM_UUID("F0000110")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_STOP(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_STOP, \
+    .description = "Has stop", \
+    .format = homekit_format_bool, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .value = HOMEKIT_BOOL_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_CLOSE_NC HOMEKIT_CUSTOM_UUID("F0000111")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_CLOSE_NC(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_CLOSE_NC, \
+    .description = "Sencor Close NC", \
+    .format = homekit_format_bool, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .value = HOMEKIT_BOOL_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_OPEN_NC HOMEKIT_CUSTOM_UUID("F0000112")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_OPEN_NC(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_OPEN_NC, \
+    .description = "Sensor Open NC", \
+    .format = homekit_format_bool, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .value = HOMEKIT_BOOL_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_SENSOR_OPEN HOMEKIT_CUSTOM_UUID("F0000113")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_SENSOR_OPEN(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_SENSOR_OPEN, \
+    .description = "Has Opened Sensor", \
+    .format = homekit_format_bool, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .value = HOMEKIT_BOOL_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_WORKINGTIME HOMEKIT_CUSTOM_UUID("F0000114")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_WORKINGTIME(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_WORKINGTIME, \
+    .description = "Working time", \
+    .format = homekit_format_uint8, \
+    .unit = homekit_unit_seconds, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {5}, \
+    .max_value = (float[]) {90}, \
+    .min_step = (float[]) {1}, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_CONTROL_WITH_BUTTON HOMEKIT_CUSTOM_UUID("F0000115")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_CONTROL_WITH_BUTTON(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_CONTROL_WITH_BUTTON, \
+    .description = "With Button-Control", \
+    .format = homekit_format_bool, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .value = HOMEKIT_BOOL_(_value), \
+    ##__VA_ARGS__
+
+
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_PING_CHECK HOMEKIT_CUSTOM_UUID("F0000201")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_PING_CHECK(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_PING_CHECK, \
