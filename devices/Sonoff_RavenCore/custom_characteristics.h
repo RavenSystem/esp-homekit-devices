@@ -195,7 +195,7 @@
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
-    .min_value = (float[]) {5}, \
+    .min_value = (float[]) {3}, \
     .max_value = (float[]) {90}, \
     .min_step = (float[]) {1}, \
     .value = HOMEKIT_UINT8_(_value), \
