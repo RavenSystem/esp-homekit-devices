@@ -26,7 +26,7 @@
 #include <esplibs/libmain.h>
 #include "adv_button.h"
 
-#define DEBOUNCE_TIME       60
+#define DEBOUNCE_FRECUENCY  50
 #define DOUBLEPRESS_TIME    400
 #define LONGPRESS_TIME      450
 #define VERYLONGPRESS_TIME  1200
@@ -45,13 +45,12 @@ typedef struct _adv_button {
     ETSTimer press_timer;
     ETSTimer hold_timer;
     uint32_t last_event_time;
-    bool ready;
 
     struct _adv_button *next;
 } adv_button_t;
 
 static adv_button_t *buttons = NULL;
-static uint32_t last_press_time = 0;
+static uint8_t used_gpio;
 
 static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
     adv_button_t *button = buttons;
@@ -62,62 +61,74 @@ static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
     return button;
 }
 
-void adv_button_timing_reset() {
-    last_press_time = xTaskGetTickCountFromISR() + (DEBOUNCE_TIME / portTICK_PERIOD_MS);
+static void push_down_timer_callback() {
+    timer_set_run(FRC1, false);
+    timer_set_interrupts(FRC1, false);
+    
+    if (gpio_read(used_gpio) == 0) {
+        adv_button_t *button = button_find_by_gpio(used_gpio);
+        sdk_os_timer_arm(&button->hold_timer, HOLDPRESS_TIME, 0);
+        button->last_event_time = xTaskGetTickCountFromISR();
+    }
+}
+
+static void push_up_timer_callback() {
+    timer_set_run(FRC2, false);
+    timer_set_interrupts(FRC2, false);
+    
+    if (gpio_read(used_gpio) == 1) {
+        adv_button_t *button = button_find_by_gpio(used_gpio);
+        sdk_os_timer_disarm(&button->hold_timer);
+        uint32_t now = xTaskGetTickCountFromISR();
+        
+        if (now - button->last_event_time > VERYLONGPRESS_TIME / portTICK_PERIOD_MS) {
+            // Very Long button pressed
+            button->press_count = 0;
+            if (button->verylongpress_callback_fn) {
+                button->verylongpress_callback_fn(used_gpio);
+            } else if (button->longpress_callback_fn) {
+                button->longpress_callback_fn(used_gpio);
+            } else {
+                button->singlepress_callback_fn(used_gpio);
+            }
+        } else if (now - button->last_event_time > LONGPRESS_TIME / portTICK_PERIOD_MS) {
+            // Long button pressed
+            button->press_count = 0;
+            if (button->longpress_callback_fn) {
+                button->longpress_callback_fn(used_gpio);
+            } else {
+                button->singlepress_callback_fn(used_gpio);
+            }
+        } else if (button->doublepress_callback_fn) {
+            button->press_count++;
+            if (button->press_count > 1) {
+                // Double button pressed
+                sdk_os_timer_disarm(&button->press_timer);
+                button->press_count = 0;
+                button->doublepress_callback_fn(used_gpio);
+            } else {
+                sdk_os_timer_arm(&button->press_timer, DOUBLEPRESS_TIME, 0);
+            }
+        } else {
+            button->singlepress_callback_fn(used_gpio);
+        }
+    }
 }
 
 static void adv_button_intr_callback(const uint8_t gpio) {
-    uint32_t now = xTaskGetTickCountFromISR();
-    
     adv_button_t *button = button_find_by_gpio(gpio);
     if (!button) {
         return;
     }
+    used_gpio = gpio;
     
-    if (gpio_read(gpio) == 1 && !button->ready) {
-        sdk_os_timer_disarm(&button->hold_timer);
-        
-        if (now - last_press_time > DEBOUNCE_TIME / portTICK_PERIOD_MS) {
-            adv_button_timing_reset();
-            
-            if (now - button->last_event_time > VERYLONGPRESS_TIME / portTICK_PERIOD_MS) {
-                // Very Long button pressed
-                button->press_count = 0;
-                if (button->verylongpress_callback_fn) {
-                    button->verylongpress_callback_fn(gpio);
-                } else if (button->longpress_callback_fn) {
-                    button->longpress_callback_fn(gpio);
-                } else {
-                    button->singlepress_callback_fn(gpio);
-                }
-            } else if (now - button->last_event_time > LONGPRESS_TIME / portTICK_PERIOD_MS) {
-                // Long button pressed
-                button->press_count = 0;
-                if (button->longpress_callback_fn) {
-                    button->longpress_callback_fn(gpio);
-                } else {
-                    button->singlepress_callback_fn(gpio);
-                }
-            } else if (button->doublepress_callback_fn) {
-                button->press_count++;
-                if (button->press_count > 1) {
-                    // Double button pressed
-                    sdk_os_timer_disarm(&button->press_timer);
-                    button->press_count = 0;
-                    button->doublepress_callback_fn(gpio);
-                } else {
-                    sdk_os_timer_arm(&button->press_timer, DOUBLEPRESS_TIME, 0);
-                }
-            } else {
-                button->singlepress_callback_fn(gpio);
-            }
-        }
-        
-        button->ready = true;
-    } else if (button->ready) {
-        button->ready = false;
-        sdk_os_timer_arm(&button->hold_timer, HOLDPRESS_TIME, 0);
-        button->last_event_time = now;
+    if (gpio_read(used_gpio) == 1) {
+        timer_set_frequency(FRC2, DEBOUNCE_FRECUENCY);
+        timer_set_interrupts(FRC2, true);
+        timer_set_run(FRC2, true);
+    } else {
+        timer_set_interrupts(FRC1, true);
+        timer_set_run(FRC1, true);
     }
 }
 
@@ -157,6 +168,18 @@ int adv_button_create(const uint8_t gpio) {
     button = malloc(sizeof(adv_button_t));
     memset(button, 0, sizeof(*button));
     button->gpio = gpio;
+    
+    if (buttons == NULL) {
+        timer_set_interrupts(FRC1, false);
+        timer_set_run(FRC1, false);
+        timer_set_interrupts(FRC2, false);
+        timer_set_run(FRC2, false);
+        
+        _xt_isr_attach(INUM_TIMER_FRC1, push_down_timer_callback, NULL);
+        _xt_isr_attach(INUM_TIMER_FRC2, push_up_timer_callback, NULL);
+        
+        timer_set_frequency(FRC1, DEBOUNCE_FRECUENCY);
+    }
 
     button->next = buttons;
     buttons = button;
@@ -174,8 +197,6 @@ int adv_button_create(const uint8_t gpio) {
     sdk_os_timer_setfn(&button->press_timer, adv_button_single_callback, button);
     
     button->singlepress_callback_fn = no_function_callback;
-    
-    button->ready = true;
     
     return 0;
 }
