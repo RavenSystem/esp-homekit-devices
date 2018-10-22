@@ -155,8 +155,6 @@ static void adv_button_hold_callback(void *arg) {
             no_function_callback(button->gpio);
         }
     }
-    
-    adv_button_timing_reset();
 }
 
 int adv_button_create(const uint8_t gpio) {
