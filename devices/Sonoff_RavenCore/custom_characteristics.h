@@ -145,7 +145,7 @@
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_STOP HOMEKIT_CUSTOM_UUID("F0000110")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_STOP(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_STOP, \
-    .description = "Has stop", \
+    .description = "Has stop step", \
     .format = homekit_format_bool, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
@@ -156,7 +156,7 @@
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_CLOSE_NC HOMEKIT_CUSTOM_UUID("F0000111")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_CLOSE_NC(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_CLOSE_NC, \
-    .description = "Sencor Close NC", \
+    .description = "Sensor Close NC", \
     .format = homekit_format_bool, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
