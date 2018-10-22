@@ -50,8 +50,8 @@ typedef struct _adv_button {
     struct _adv_button *next;
 } adv_button_t;
 
-adv_button_t *buttons = NULL;
-uint32_t last_press_time = 0;
+static adv_button_t *buttons = NULL;
+static uint32_t last_press_time = 0;
 
 static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
     adv_button_t *button = buttons;
@@ -63,10 +63,10 @@ static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
 }
 
 void adv_button_timing_reset() {
-    last_press_time = xTaskGetTickCountFromISR();
+    last_press_time = xTaskGetTickCountFromISR() + (DEBOUNCE_TIME / portTICK_PERIOD_MS);
 }
 
-void adv_button_intr_callback(const uint8_t gpio) {
+static void adv_button_intr_callback(const uint8_t gpio) {
     uint32_t now = xTaskGetTickCountFromISR();
     
     adv_button_t *button = button_find_by_gpio(gpio);
@@ -78,7 +78,7 @@ void adv_button_intr_callback(const uint8_t gpio) {
         sdk_os_timer_disarm(&button->hold_timer);
         
         if (now - last_press_time > DEBOUNCE_TIME / portTICK_PERIOD_MS) {
-            last_press_time = now;
+            adv_button_timing_reset();
             
             if (now - button->last_event_time > VERYLONGPRESS_TIME / portTICK_PERIOD_MS) {
                 // Very Long button pressed
@@ -121,19 +121,20 @@ void adv_button_intr_callback(const uint8_t gpio) {
     }
 }
 
-void no_function_callback(uint8_t gpio) {
+static void no_function_callback(uint8_t gpio) {
     printf("!!! AdvButton: No function defined\n");
 }
 
-void adv_button_single_callback(void *arg) {
+static void adv_button_single_callback(void *arg) {
     adv_button_t *button = arg;
     // Single button pressed
     button->press_count = 0;
     button->singlepress_callback_fn(button->gpio);
 }
 
-void adv_button_hold_callback(void *arg) {
+static void adv_button_hold_callback(void *arg) {
     adv_button_t *button = arg;
+    
     if (gpio_read(button->gpio) == 0) {
         // Hold button pressed
         button->press_count = 0;
@@ -143,6 +144,8 @@ void adv_button_hold_callback(void *arg) {
             no_function_callback(button->gpio);
         }
     }
+    
+    adv_button_timing_reset();
 }
 
 int adv_button_create(const uint8_t gpio) {
