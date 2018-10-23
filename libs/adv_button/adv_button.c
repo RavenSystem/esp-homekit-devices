@@ -26,7 +26,8 @@
 #include <esplibs/libmain.h>
 #include "adv_button.h"
 
-#define DEBOUNCE_FRECUENCY  50
+#define DEBOUNCE_FRECUENCY  50      // Frecuency in Hz (Delay time in secs = 1 / Frecuency)
+#define DISABLE_TIME        80
 #define DOUBLEPRESS_TIME    400
 #define LONGPRESS_TIME      450
 #define VERYLONGPRESS_TIME  1200
@@ -51,6 +52,7 @@ typedef struct _adv_button {
 
 static adv_button_t *buttons = NULL;
 static uint8_t used_gpio;
+static uint32_t disable_time = 0;
 
 static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
     adv_button_t *button = buttons;
@@ -61,14 +63,24 @@ static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
     return button;
 }
 
+void adv_button_set_disable_time() {
+    disable_time = xTaskGetTickCountFromISR();
+}
+
 static void push_down_timer_callback() {
     timer_set_run(FRC1, false);
     timer_set_interrupts(FRC1, false);
     
+    uint32_t now = xTaskGetTickCountFromISR();
+    
+    if (now - disable_time <= DISABLE_TIME / portTICK_PERIOD_MS) {
+        return;
+    }
+    
     if (gpio_read(used_gpio) == 0) {
         adv_button_t *button = button_find_by_gpio(used_gpio);
         sdk_os_timer_arm(&button->hold_timer, HOLDPRESS_TIME, 0);
-        button->last_event_time = xTaskGetTickCountFromISR();
+        button->last_event_time = now;
     }
 }
 
@@ -76,10 +88,15 @@ static void push_up_timer_callback() {
     timer_set_run(FRC2, false);
     timer_set_interrupts(FRC2, false);
     
+    uint32_t now = xTaskGetTickCountFromISR();
+    
+    if (now - disable_time <= DISABLE_TIME / portTICK_PERIOD_MS) {
+        return;
+    }
+    
     if (gpio_read(used_gpio) == 1) {
         adv_button_t *button = button_find_by_gpio(used_gpio);
         sdk_os_timer_disarm(&button->hold_timer);
-        uint32_t now = xTaskGetTickCountFromISR();
         
         if (now - button->last_event_time > VERYLONGPRESS_TIME / portTICK_PERIOD_MS) {
             // Very Long button pressed
@@ -154,6 +171,8 @@ static void adv_button_hold_callback(void *arg) {
         } else {
             no_function_callback(button->gpio);
         }
+        
+        adv_button_set_disable_time();
     }
 }
 

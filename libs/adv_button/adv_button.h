@@ -28,6 +28,7 @@ typedef void (*button_callback_fn)(uint8_t gpio);
 
 int adv_button_create(uint8_t gpio);
 void adv_button_destroy(uint8_t gpio);
+void adv_button_set_disable_time();
 
 /*
  * Button callback types:
