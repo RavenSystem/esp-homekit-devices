@@ -58,7 +58,7 @@
 #define LED_GPIO            13
 #define SWITCH_GPIO         14
 #define SENSOR_GPIO         14
-#define DOOR_OPENED_GPIO    5
+#define DOOR_OPENED_GPIO    4
 #define DOOR_CLOSED_GPIO    14
 
 #define BUTTON1_GPIO        0
