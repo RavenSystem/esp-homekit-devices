@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.4.1
+ * v0.4.2
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -150,6 +150,7 @@ homekit_characteristic_t custom_garagedoor_control_with_button = HOMEKIT_CHARACT
 
 void relay_write(bool on, int gpio) {
     gd_last_press_time = xTaskGetTickCountFromISR() + (GD_DEBOUNCE_TIME / portTICK_PERIOD_MS);
+    adv_button_set_disable_time();
     gpio_write(gpio, on ? 1 : 0);
 }
 
@@ -1076,7 +1077,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.4.1");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.4.2");
 
 homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
@@ -1129,7 +1130,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000401;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
+        sonoff->config_number = 000402;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
