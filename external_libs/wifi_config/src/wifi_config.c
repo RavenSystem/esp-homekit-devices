@@ -245,12 +245,18 @@ static void wifi_config_server_on_settings_update(client_t *client) {
     client_send(client, payload, sizeof(payload)-1);
 
     sysparam_set_string("wifi_ssid", ssid_param->value);
+    vTaskDelay(500 / portTICK_PERIOD_MS);
     sysparam_set_string("wifi_password", password_param->value);
+    vTaskDelay(500 / portTICK_PERIOD_MS);
     form_params_free(form);
 
-    vTaskDelay(500 / portTICK_PERIOD_MS);
+    //vTaskDelay(500 / portTICK_PERIOD_MS);
 
-    wifi_config_station_connect();
+    //wifi_config_station_connect();
+    
+    INFO("Restarting device");
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
+    sdk_system_restart();
 }
 
 
