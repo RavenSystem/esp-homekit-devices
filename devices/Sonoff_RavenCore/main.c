@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.4.2
+ * v0.4.3
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -107,6 +107,8 @@ void change_settings_callback();
 void show_setup_callback();
 void ota_firmware_callback();
 void gpio14_toggle_callback();
+
+void on_wifi_ready();
 
 homekit_characteristic_t switch1_on = HOMEKIT_CHARACTERISTIC_(ON, false, .getter=read_switch1_on_callback, .setter=switch1_on_callback);
 homekit_characteristic_t switch2_on = HOMEKIT_CHARACTERISTIC_(ON, false, .getter=read_switch2_on_callback, .setter=switch2_on_callback);
@@ -239,6 +241,7 @@ void save_settings() {
             
         case 5:
         case 6:
+        case 9:
             status = sysparam_get_int8("dht_sensor_type", &int8_value);
             if (status == SYSPARAM_OK && int8_value != dht_sensor_type.value.int_value) {
                 status = sysparam_set_int8("dht_sensor_type", dht_sensor_type.value.int_value);
@@ -326,7 +329,6 @@ void show_setup_callback() {
 }
 
 void ravencore_config_reset() {
-    printf(">>> Resetting RavenCore settings\n");
     sysparam_set_bool("show_setup", false);
     sysparam_set_int8("device_type", 1);
     sysparam_set_bool("gpio14_toggle", false);
@@ -335,14 +337,30 @@ void ravencore_config_reset() {
     sysparam_set_int32("set_duration", 900);
 }
 
-void reset_call(const uint8_t gpio) {
+void reset_call_task() {
     printf(">>> Resetting device to factory defaults\n");
     
+    vTaskDelay(500 / portTICK_PERIOD_MS);
     ravencore_config_reset();
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
     homekit_server_reset();
+    vTaskDelay(500 / portTICK_PERIOD_MS);
     wifi_config_reset();
+    vTaskDelay(500 / portTICK_PERIOD_MS);
+    
+    led_code(LED_GPIO, EXTRA_CONFIG_RESET);
+    vTaskDelay(2200 / portTICK_PERIOD_MS);
+    
+    sdk_system_restart();
+    
+    vTaskDelete(NULL);
+}
 
-    device_restart();
+void reset_call(const uint8_t gpio) {
+    led_code(LED_GPIO, WIFI_CONFIG_RESET);
+    relay_write(false, relay1_gpio);
+    gpio_disable(relay1_gpio);
+    xTaskCreate(reset_call_task, "reset_call_task", 256, NULL, 2, NULL);
 }
 
 void ota_firmware_callback() {
@@ -1053,6 +1071,8 @@ void gpio_init() {
     relay_write(switch1_on.value.bool_value, relay1_gpio);
     
     sdk_os_timer_setfn(&change_settings_timer, save_settings, NULL);
+    
+    wifi_config_init("RavenCore", NULL, on_wifi_ready);
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, NULL);
@@ -1077,7 +1097,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.4.2");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.4.3");
 
 homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
@@ -1130,7 +1150,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000402;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
+        sonoff->config_number = 000403;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
@@ -1483,7 +1503,9 @@ void on_wifi_ready() {
 void user_init(void) {
     uart_set_baud(0, 115200);
     
-    wifi_config_init("RavenCore", NULL, on_wifi_ready);
+    printf(">>> RavenCore firmware loaded\n");
+    printf(">>> Developed by RavenSystem - José Antonio Jiménez\n");
+    printf(">>> Firmware revision: %s\n\n", firmware.value.string_value);
     
     gpio_init();
 }
