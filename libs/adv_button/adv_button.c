@@ -26,7 +26,7 @@
 #include <esplibs/libmain.h>
 #include "adv_button.h"
 
-#define DEBOUNCE_FRECUENCY  50      // Frecuency in Hz (Delay time in secs = 1 / Frecuency)
+#define DEBOUNCE_TIME       20
 #define DISABLE_TIME        80
 #define DOUBLEPRESS_TIME    400
 #define LONGPRESS_TIME      450
@@ -53,6 +53,7 @@ typedef struct _adv_button {
 static adv_button_t *buttons = NULL;
 static uint8_t used_gpio;
 static uint32_t disable_time = 0;
+static ETSTimer push_down_timer, push_up_timer;
 
 static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
     adv_button_t *button = buttons;
@@ -68,8 +69,7 @@ void adv_button_set_disable_time() {
 }
 
 static void push_down_timer_callback() {
-    timer_set_run(FRC1, false);
-    timer_set_interrupts(FRC1, false);
+    sdk_os_timer_disarm(&push_down_timer);
     
     uint32_t now = xTaskGetTickCountFromISR();
     
@@ -85,10 +85,9 @@ static void push_down_timer_callback() {
 }
 
 static void push_up_timer_callback() {
-    timer_set_run(FRC2, false);
-    timer_set_interrupts(FRC2, false);
-    
     uint32_t now = xTaskGetTickCountFromISR();
+    
+    sdk_os_timer_disarm(&push_up_timer);
     
     if (now - disable_time <= DISABLE_TIME / portTICK_PERIOD_MS) {
         return;
@@ -140,12 +139,9 @@ static void adv_button_intr_callback(const uint8_t gpio) {
     used_gpio = gpio;
     
     if (gpio_read(used_gpio) == 1) {
-        timer_set_frequency(FRC2, DEBOUNCE_FRECUENCY);
-        timer_set_interrupts(FRC2, true);
-        timer_set_run(FRC2, true);
+        sdk_os_timer_arm(&push_up_timer, DEBOUNCE_TIME, 0);
     } else {
-        timer_set_interrupts(FRC1, true);
-        timer_set_run(FRC1, true);
+        sdk_os_timer_arm(&push_down_timer, DEBOUNCE_TIME, 0);
     }
 }
 
@@ -187,15 +183,10 @@ int adv_button_create(const uint8_t gpio) {
     button->gpio = gpio;
     
     if (buttons == NULL) {
-        timer_set_interrupts(FRC1, false);
-        timer_set_run(FRC1, false);
-        timer_set_interrupts(FRC2, false);
-        timer_set_run(FRC2, false);
-        
-        _xt_isr_attach(INUM_TIMER_FRC1, push_down_timer_callback, NULL);
-        _xt_isr_attach(INUM_TIMER_FRC2, push_up_timer_callback, NULL);
-        
-        timer_set_frequency(FRC1, DEBOUNCE_FRECUENCY);
+        sdk_os_timer_disarm(&push_down_timer);
+        sdk_os_timer_setfn(&push_down_timer, push_down_timer_callback, NULL);
+        sdk_os_timer_disarm(&push_up_timer);
+        sdk_os_timer_setfn(&push_up_timer, push_up_timer_callback, NULL);
     }
 
     button->next = buttons;
