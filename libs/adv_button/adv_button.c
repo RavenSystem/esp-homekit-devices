@@ -31,7 +31,7 @@
 #define DOUBLEPRESS_TIME    400
 #define LONGPRESS_TIME      450
 #define VERYLONGPRESS_TIME  1200
-#define HOLDPRESS_TIME      10000
+#define HOLDPRESS_COUNT     5       // HOLDPRESS_TIME = HOLDPRESS_COUNT * 2000
 
 typedef struct _adv_button {
     uint8_t gpio;
@@ -79,7 +79,8 @@ static void push_down_timer_callback() {
     
     if (gpio_read(used_gpio) == 0) {
         adv_button_t *button = button_find_by_gpio(used_gpio);
-        sdk_os_timer_arm(&button->hold_timer, HOLDPRESS_TIME, 0);
+        sdk_os_timer_arm(&button->hold_timer, 2000, 1);
+        button->hold_count = 0;
         button->last_event_time = now;
     }
 }
@@ -96,6 +97,7 @@ static void push_up_timer_callback() {
     if (gpio_read(used_gpio) == 1) {
         adv_button_t *button = button_find_by_gpio(used_gpio);
         sdk_os_timer_disarm(&button->hold_timer);
+        button->hold_count = 0;
         
         if (now - button->last_event_time > VERYLONGPRESS_TIME / portTICK_PERIOD_MS) {
             // Very Long button pressed
@@ -159,16 +161,25 @@ static void adv_button_single_callback(void *arg) {
 static void adv_button_hold_callback(void *arg) {
     adv_button_t *button = arg;
     
+    // Hold button pressed
     if (gpio_read(button->gpio) == 0) {
-        // Hold button pressed
-        button->press_count = 0;
-        if (button->holdpress_callback_fn) {
-            button->holdpress_callback_fn(button->gpio);
-        } else {
-            no_function_callback(button->gpio);
-        }
+        button->hold_count++;
         
-        adv_button_set_disable_time();
+        if (button->hold_count == HOLDPRESS_COUNT) {
+            sdk_os_timer_disarm(&button->hold_timer);
+            button->hold_count = 0;
+            button->press_count = 0;
+            if (button->holdpress_callback_fn) {
+                button->holdpress_callback_fn(button->gpio);
+            } else {
+                no_function_callback(button->gpio);
+            }
+            
+            adv_button_set_disable_time();
+        }
+    } else {
+        sdk_os_timer_disarm(&button->hold_timer);
+        button->hold_count = 0;
     }
 }
 
@@ -195,6 +206,9 @@ int adv_button_create(const uint8_t gpio) {
     if (button->gpio != 0) {
         gpio_enable(button->gpio, GPIO_INPUT);
     }
+    
+    button->hold_count = 0;
+    button->press_count = 0;
     
     gpio_set_pullup(button->gpio, true, true);
     gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_intr_callback);
