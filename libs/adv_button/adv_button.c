@@ -43,6 +43,7 @@ typedef struct _adv_button {
     button_callback_fn holdpress_callback_fn;
 
     uint8_t press_count;
+    uint8_t hold_count;
     ETSTimer press_timer;
     ETSTimer hold_timer;
     uint32_t last_event_time;
