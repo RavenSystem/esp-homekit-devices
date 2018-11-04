@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.4.3
+ * v0.4.4
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -71,12 +71,11 @@
 #define RELAY4_GPIO         15
 
 #define POLL_PERIOD         30000
-#define GD_DEBOUNCE_TIME    60
+#define DEBOUNCE_TIME       50
 
-static bool gd_is_moving = false;
-static uint8_t switch_state = 0, switch_old_state, device_type_static = 1, relay1_gpio = 12;
-static uint16_t switch_value = 65535;
-static uint32_t gd_last_press_time;
+static bool gd_is_moving = false, gpio_state;
+static uint8_t device_type_static = 1, gd_time_state = 0, relay1_gpio = 12;
+static uint32_t last_press_time;
 static float old_humidity_value = 0.0, old_temperature_value = 0.0;
 static ETSTimer device_restart_timer, change_settings_timer, extra_func_timer, door_opened_timer;
 
@@ -151,7 +150,7 @@ homekit_characteristic_t custom_garagedoor_working_time = HOMEKIT_CHARACTERISTIC
 homekit_characteristic_t custom_garagedoor_control_with_button = HOMEKIT_CHARACTERISTIC_(CUSTOM_GARAGEDOOR_CONTROL_WITH_BUTTON, false, .id=119, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 
 void relay_write(bool on, int gpio) {
-    gd_last_press_time = xTaskGetTickCountFromISR() + (GD_DEBOUNCE_TIME / portTICK_PERIOD_MS);
+    last_press_time = xTaskGetTickCountFromISR() + (DEBOUNCE_TIME / portTICK_PERIOD_MS);
     adv_button_set_disable_time();
     gpio_write(gpio, on ? 1 : 0);
 }
@@ -314,7 +313,7 @@ void device_restart_task() {
 void device_restart() {
     printf(">>> Restarting device\n");
     led_code(LED_GPIO, RESTART_DEVICE);
-    xTaskCreate(device_restart_task, "device_restart_task", 256, NULL, 2, NULL);
+    xTaskCreate(device_restart_task, "device_restart_task", 256, NULL, 1, NULL);
 }
 
 void show_setup_callback() {
@@ -360,7 +359,7 @@ void reset_call(const uint8_t gpio) {
     led_code(LED_GPIO, WIFI_CONFIG_RESET);
     relay_write(false, relay1_gpio);
     gpio_disable(relay1_gpio);
-    xTaskCreate(reset_call_task, "reset_call_task", 256, NULL, 2, NULL);
+    xTaskCreate(reset_call_task, "reset_call_task", 256, NULL, 1, NULL);
 }
 
 void ota_firmware_callback() {
@@ -375,39 +374,6 @@ void ota_firmware_callback() {
 void change_settings_callback() {
     sdk_os_timer_disarm(&change_settings_timer);
     sdk_os_timer_arm(&change_settings_timer, 3000, 0);
-}
-
-#define maxvalue_unsigned(x) ((1 << (8 * sizeof(x))) - 1)
-void switch_evaluate() {        // Based on https://github.com/pcsaito/esp-homekit-demo/tree/LPFToggle
-    switch_value += ((gpio_read(SWITCH_GPIO) * maxvalue_unsigned(switch_value)) - switch_value) >> 3;
-    switch_state = (switch_value > (maxvalue_unsigned(switch_value) >> 1));
-}
-
-void gpio14_toggle_init_task() {
-    for (uint8_t i = 0; i < 33; i++) {
-        vTaskDelay(30 / portTICK_PERIOD_MS);
-        switch_evaluate();
-    }
-    
-    switch_old_state = switch_state;
-    printf(">>> GPIO14 Initial state -> %i\n", switch_state);
-    sdk_os_timer_arm(&extra_func_timer, 30, 1);
-    
-    vTaskDelete(NULL);
-}
-
-void gpio14_toggle_callback() {
-    if (gpio14_toggle.value.bool_value) {
-        gpio_enable(SWITCH_GPIO, GPIO_INPUT);
-        gpio_set_pullup(SWITCH_GPIO, true, true);
-        
-        xTaskCreate(gpio14_toggle_init_task, "gpio14_toggle_init_task", 128, NULL, 3, NULL);
-    } else {
-        sdk_os_timer_disarm(&extra_func_timer);
-        gpio_disable(SWITCH_GPIO);
-    }
-    
-    change_settings_callback();
 }
 
 void switch1_on_callback(homekit_value_t value) {
@@ -465,6 +431,35 @@ void toggle_switch() {
     relay_write(switch1_on.value.bool_value, relay1_gpio);
     printf(">>> Relay 1 -> %i\n", switch1_on.value.bool_value);
     homekit_characteristic_notify(&switch1_on, switch1_on.value);
+}
+
+void gpio14_toggle_timer() {
+    if (gpio_read(SWITCH_GPIO) == gpio_state) {
+        printf(">>> GPIO 14: External switch toggled\n");
+        toggle_switch();
+    }
+}
+
+void gpio14_toggle_intr_callback(const uint8_t gpio) {
+    uint32_t now = xTaskGetTickCountFromISR();
+    
+    if (now - last_press_time > DEBOUNCE_TIME / portTICK_PERIOD_MS) {
+        last_press_time = now;
+        gpio_state = gpio_read(SWITCH_GPIO);
+        sdk_os_timer_arm(&extra_func_timer, DEBOUNCE_TIME, 0);
+    }
+}
+
+void gpio14_toggle_callback() {
+    if (gpio14_toggle.value.bool_value) {
+        gpio_enable(SWITCH_GPIO, GPIO_INPUT);
+        gpio_set_pullup(SWITCH_GPIO, true, true);
+        gpio_set_interrupt(SWITCH_GPIO, GPIO_INTTYPE_EDGE_ANY, gpio14_toggle_intr_callback);
+    } else {
+        gpio_disable(SWITCH_GPIO);
+    }
+    
+    change_settings_callback();
 }
 
 void toggle_valve() {
@@ -566,7 +561,7 @@ void garage_on_callback(homekit_value_t value) {
     printf(">>> Garage Door activated from iOS: Target door state -> %i\n", value.int_value);
     led_code(LED_GPIO, FUNCTION_A);
     target_door_state.value = value;
-    xTaskCreate(garage_button_task, "garage_button_task", 192, NULL, 2, NULL);
+    xTaskCreate(garage_button_task, "garage_button_task", 192, NULL, 1, NULL);
 }
 
 void garage_on_button(const uint8_t gpio) {
@@ -584,8 +579,8 @@ homekit_value_t read_garage_on_callback() {
 void door_opened_intr_callback(const uint8_t gpio) {
     uint32_t now = xTaskGetTickCountFromISR();
     
-    if (now - gd_last_press_time > GD_DEBOUNCE_TIME / portTICK_PERIOD_MS) {
-        gd_last_press_time = now;
+    if (now - last_press_time > DEBOUNCE_TIME / portTICK_PERIOD_MS) {
+        last_press_time = now;
         sdk_os_timer_arm(&door_opened_timer, 650, 0);
     }
 }
@@ -615,8 +610,8 @@ void door_opened_timer_callback() {
 void door_closed_intr_callback(const uint8_t gpio) {
     uint32_t now = xTaskGetTickCountFromISR();
     
-    if (now - gd_last_press_time > GD_DEBOUNCE_TIME / portTICK_PERIOD_MS) {
-        gd_last_press_time = now;
+    if (now - last_press_time > DEBOUNCE_TIME / portTICK_PERIOD_MS) {
+        last_press_time = now;
         sdk_os_timer_arm(&extra_func_timer, 650, 0);
     }
 }
@@ -629,7 +624,7 @@ void door_closed_timer_callback() {
     
     if (gpio_status == 1) {
         printf(">>> Garage Door -> CLOSED\n");
-        switch_state = 0;
+        gd_time_state = 0;
         gd_is_moving = false;
         target_door_state.value.int_value = 1;
         current_door_state.value.int_value = 1;
@@ -653,18 +648,18 @@ void door_closed_timer_callback() {
 }
 
 void door_opened_countdown_timer() {
-    if (switch_state > custom_garagedoor_working_time.value.int_value) {
-        switch_state = custom_garagedoor_working_time.value.int_value - 1;
+    if (gd_time_state > custom_garagedoor_working_time.value.int_value) {
+        gd_time_state = custom_garagedoor_working_time.value.int_value - 1;
     }
     
     if (current_door_state.value.int_value == 2) {
-        switch_state++;
+        gd_time_state++;
     
-        if (switch_state == custom_garagedoor_working_time.value.int_value) {
+        if (gd_time_state == custom_garagedoor_working_time.value.int_value) {
             printf(">>> Garage Door -> OPENED\n");
             sdk_os_timer_disarm(&door_opened_timer);
             gd_is_moving = false;
-            switch_state = custom_garagedoor_working_time.value.int_value;
+            gd_time_state = custom_garagedoor_working_time.value.int_value;
             target_door_state.value.int_value = 0;
             current_door_state.value.int_value = 0;
             
@@ -672,8 +667,8 @@ void door_opened_countdown_timer() {
             homekit_characteristic_notify(&current_door_state, current_door_state.value);
         }
     } else if (current_door_state.value.int_value == 3) {
-        switch_state--;
-         if (switch_state == 0) {
+        gd_time_state--;
+         if (gd_time_state == 0) {
              printf(">>> Garage Door -> CLOSED\n");
              sdk_os_timer_disarm(&door_opened_timer);
              gd_is_moving = false;
@@ -728,16 +723,6 @@ void button_event2_intr_callback(const uint8_t gpio) {
 void button_event3_intr_callback(const uint8_t gpio) {
     led_code(LED_GPIO, FUNCTION_C);
     homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(2));
-}
-
-void switch_worker() {
-    switch_evaluate();
-    
-    if (switch_state != switch_old_state) {
-        switch_old_state = switch_state;
-        printf(">>> GPIO 14: External switch toggled\n");
-        toggle_switch();
-    }
 }
 
 void th_button_intr_callback(const uint8_t gpio) {
@@ -854,7 +839,7 @@ void gpio_init() {
             adv_button_register_callback_fn(BUTTON1_GPIO, button_simple1_intr_callback, 1);
             adv_button_register_callback_fn(BUTTON1_GPIO, reset_call, 5);
             
-            sdk_os_timer_setfn(&extra_func_timer, switch_worker, NULL);
+            sdk_os_timer_setfn(&extra_func_timer, gpio14_toggle_timer, NULL);
             gpio14_toggle_callback();
             break;
             
@@ -1097,7 +1082,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.4.3");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.4.4");
 
 homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
@@ -1150,7 +1135,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000403;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
+        sonoff->config_number = 000404;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
