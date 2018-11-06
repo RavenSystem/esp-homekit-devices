@@ -690,23 +690,20 @@ void button_simple1_intr_callback(const uint8_t gpio) {
 }
 
 void button_simple2_intr_callback(const uint8_t gpio) {
-    led_code(LED_GPIO, FUNCTION_B);
     switch2_on.value.bool_value = !switch2_on.value.bool_value;
-    relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
+    switch2_on_callback(switch2_on.value);
     homekit_characteristic_notify(&switch2_on, switch2_on.value);
 }
 
 void button_simple3_intr_callback(const uint8_t gpio) {
-    led_code(LED_GPIO, FUNCTION_C);
     switch3_on.value.bool_value = !switch3_on.value.bool_value;
-    relay_write(switch3_on.value.bool_value, RELAY3_GPIO);
+    switch3_on_callback(switch3_on.value);
     homekit_characteristic_notify(&switch3_on, switch3_on.value);
 }
 
 void button_simple4_intr_callback(const uint8_t gpio) {
-    led_code(LED_GPIO, FUNCTION_D);
     switch4_on.value.bool_value = !switch4_on.value.bool_value;
-    relay_write(switch4_on.value.bool_value, RELAY4_GPIO);
+    switch4_on_callback(switch4_on.value);
     homekit_characteristic_notify(&switch4_on, switch4_on.value);
 }
 
