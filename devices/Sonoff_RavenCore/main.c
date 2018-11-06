@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.4.4
+ * v0.4.5
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -72,6 +72,7 @@
 
 #define POLL_PERIOD         30000
 #define DEBOUNCE_TIME       50
+#define INTR_DELAY          600
 
 static bool gd_is_moving = false, gpio_state;
 static uint8_t device_type_static = 1, gd_time_state = 0, relay1_gpio = 12;
@@ -446,7 +447,7 @@ void gpio14_toggle_intr_callback(const uint8_t gpio) {
     if (now - last_press_time > DEBOUNCE_TIME / portTICK_PERIOD_MS) {
         last_press_time = now;
         gpio_state = gpio_read(SWITCH_GPIO);
-        sdk_os_timer_arm(&extra_func_timer, DEBOUNCE_TIME, 0);
+        sdk_os_timer_arm(&extra_func_timer, INTR_DELAY, 0);
     }
 }
 
@@ -581,7 +582,7 @@ void door_opened_intr_callback(const uint8_t gpio) {
     
     if (now - last_press_time > DEBOUNCE_TIME / portTICK_PERIOD_MS) {
         last_press_time = now;
-        sdk_os_timer_arm(&door_opened_timer, 650, 0);
+        sdk_os_timer_arm(&door_opened_timer, INTR_DELAY, 0);
     }
 }
 
@@ -612,7 +613,7 @@ void door_closed_intr_callback(const uint8_t gpio) {
     
     if (now - last_press_time > DEBOUNCE_TIME / portTICK_PERIOD_MS) {
         last_press_time = now;
-        sdk_os_timer_arm(&extra_func_timer, 650, 0);
+        sdk_os_timer_arm(&extra_func_timer, INTR_DELAY, 0);
     }
 }
 
@@ -1058,7 +1059,7 @@ void gpio_init() {
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, NULL);
-homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, "iTEAD - Others");
+homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, "RavenSystem");
 homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, NULL);
 homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "RavenCore");
 homekit_characteristic_t identify_function = HOMEKIT_CHARACTERISTIC_(IDENTIFY, identify);
@@ -1079,7 +1080,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.4.4");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.4.5");
 
 homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
@@ -1132,7 +1133,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000404;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
+        sonoff->config_number = 000405;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
