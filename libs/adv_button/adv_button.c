@@ -26,13 +26,13 @@
 #include <esplibs/libmain.h>
 #include "adv_button.h"
 
-#define DEBOUNCE_TIME           20
-#define DISABLE_TIME            80
-#define DOUBLEPRESS_TIME        400
-#define LONGPRESS_TIME          450
-#define VERYLONGPRESS_TIME      1200
-#define HOLDPRESS_COUNT         5       // HOLDPRESS_TIME = HOLDPRESS_COUNT * 2000
-#define TOGGLE_EVALUATE_TIME    50
+#define DEBOUNCE_TIME               20
+#define DISABLE_TIME                80
+#define DOUBLEPRESS_TIME            400
+#define LONGPRESS_TIME              450
+#define VERYLONGPRESS_TIME          1200
+#define HOLDPRESS_COUNT             5       // HOLDPRESS_TIME = HOLDPRESS_COUNT * 2000
+#define TOGGLE_EVALUATE_INTERVAL    50
 
 typedef struct _adv_button {
     uint8_t gpio;
@@ -257,9 +257,6 @@ static void toggle_evaluate_fn() {        // Based on https://github.com/pcsaito
         toggle->value += ((gpio_read(toggle->gpio) * maxvalue_unsigned(toggle->value)) - toggle->value) >> 3;
         toggle->state = (toggle->value > (maxvalue_unsigned(toggle->value) >> 1));
         
-        //printf("toggle->value: %i\n", toggle->value);
-        //printf("toggle->state: %i\n", toggle->state);
-        
         if (toggle->state != toggle->old_state) {
             toggle->old_state = toggle->state;
 
@@ -297,7 +294,7 @@ int adv_toggle_create(const uint8_t gpio) {
     if (!toggles) {
         sdk_os_timer_disarm(&toggle_evaluate);
         sdk_os_timer_setfn(&toggle_evaluate, toggle_evaluate_fn, NULL);
-        sdk_os_timer_arm(&toggle_evaluate, TOGGLE_EVALUATE_TIME, 1);
+        sdk_os_timer_arm(&toggle_evaluate, TOGGLE_EVALUATE_INTERVAL, 1);
     }
     
     toggle->next = toggles;
@@ -412,7 +409,6 @@ void adv_button_destroy(const uint8_t gpio) {
         }
     }
 }
-
 
 void adv_toggle_destroy(const uint8_t gpio) {
     if (!toggles) {
