@@ -59,8 +59,8 @@ typedef struct _adv_toggle {
     button_callback_fn high_callback_fn;
     button_callback_fn both_callback_fn;
     
-    uint8_t state;
-    uint8_t old_state;
+    bool state;
+    bool old_state;
     uint16_t value;
     
     struct _adv_toggle *next;
