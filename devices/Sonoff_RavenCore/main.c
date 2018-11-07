@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.4.5
+ * v0.4.6
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -71,14 +71,14 @@
 #define RELAY4_GPIO         15
 
 #define POLL_PERIOD         30000
-#define DEBOUNCE_TIME       50
-#define INTR_DELAY          600
 
-static bool gd_is_moving = false, gpio_state;
+#define DISABLED_TIME       50
+
+static bool gd_is_moving = false;
 static uint8_t device_type_static = 1, gd_time_state = 0, relay1_gpio = 12;
 static uint32_t last_press_time;
 static float old_humidity_value = 0.0, old_temperature_value = 0.0;
-static ETSTimer device_restart_timer, change_settings_timer, extra_func_timer, door_opened_timer;
+static ETSTimer device_restart_timer, change_settings_timer, extra_func_timer;
 
 void switch1_on_callback(homekit_value_t value);
 homekit_value_t read_switch1_on_callback();
@@ -151,7 +151,7 @@ homekit_characteristic_t custom_garagedoor_working_time = HOMEKIT_CHARACTERISTIC
 homekit_characteristic_t custom_garagedoor_control_with_button = HOMEKIT_CHARACTERISTIC_(CUSTOM_GARAGEDOOR_CONTROL_WITH_BUTTON, false, .id=119, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 
 void relay_write(bool on, int gpio) {
-    last_press_time = xTaskGetTickCountFromISR() + (DEBOUNCE_TIME / portTICK_PERIOD_MS);
+    last_press_time = xTaskGetTickCountFromISR() + (DISABLED_TIME / portTICK_PERIOD_MS);
     adv_button_set_disable_time();
     gpio_write(gpio, on ? 1 : 0);
 }
@@ -425,7 +425,7 @@ homekit_value_t read_switch4_on_callback() {
     return switch4_on.value;
 }
 
-void toggle_switch() {
+void toggle_switch(const uint8_t gpio) {
     printf(">>> Toggle Switch manual\n");
     led_code(LED_GPIO, FUNCTION_A);
     switch1_on.value.bool_value = !switch1_on.value.bool_value;
@@ -434,30 +434,12 @@ void toggle_switch() {
     homekit_characteristic_notify(&switch1_on, switch1_on.value);
 }
 
-void gpio14_toggle_timer() {
-    if (gpio_read(SWITCH_GPIO) == gpio_state) {
-        printf(">>> GPIO 14: External switch toggled\n");
-        toggle_switch();
-    }
-}
-
-void gpio14_toggle_intr_callback(const uint8_t gpio) {
-    uint32_t now = xTaskGetTickCountFromISR();
-    
-    if (now - last_press_time > DEBOUNCE_TIME / portTICK_PERIOD_MS) {
-        last_press_time = now;
-        gpio_state = gpio_read(SWITCH_GPIO);
-        sdk_os_timer_arm(&extra_func_timer, INTR_DELAY, 0);
-    }
-}
-
 void gpio14_toggle_callback() {
     if (gpio14_toggle.value.bool_value) {
-        gpio_enable(SWITCH_GPIO, GPIO_INPUT);
-        gpio_set_pullup(SWITCH_GPIO, true, true);
-        gpio_set_interrupt(SWITCH_GPIO, GPIO_INTTYPE_EDGE_ANY, gpio14_toggle_intr_callback);
+        adv_toggle_create(SWITCH_GPIO);
+        adv_toggle_register_callback_fn(SWITCH_GPIO, toggle_switch, 2);
     } else {
-        gpio_disable(SWITCH_GPIO);
+        adv_toggle_destroy(SWITCH_GPIO);
     }
     
     change_settings_callback();
@@ -527,7 +509,7 @@ homekit_value_t read_remaining_duration_on_callback() {
 
 void garage_button_task() {
     if (!custom_garagedoor_has_sensor_open.value.bool_value) {
-        sdk_os_timer_disarm(&door_opened_timer);
+        sdk_os_timer_disarm(&extra_func_timer);
     }
     
     relay_write(true, relay1_gpio);
@@ -545,11 +527,11 @@ void garage_button_task() {
         if (current_door_state.value.int_value == 0 || current_door_state.value.int_value == 2) {
             printf(">>> Garage Door -> CLOSING\n");
             current_door_state.value.int_value = 3;
-            sdk_os_timer_arm(&door_opened_timer, 1000, 1);
+            sdk_os_timer_arm(&extra_func_timer, 1000, 1);
         } else if (current_door_state.value.int_value == 3) {
             printf(">>> Garage Door -> OPENING\n");
             current_door_state.value.int_value = 2;
-            sdk_os_timer_arm(&door_opened_timer, 1000, 1);
+            sdk_os_timer_arm(&extra_func_timer, 1000, 1);
         }
     }
 
@@ -577,75 +559,54 @@ homekit_value_t read_garage_on_callback() {
     return target_door_state.value;
 }
 
-void door_opened_intr_callback(const uint8_t gpio) {
-    uint32_t now = xTaskGetTickCountFromISR();
-    
-    if (now - last_press_time > DEBOUNCE_TIME / portTICK_PERIOD_MS) {
-        last_press_time = now;
-        sdk_os_timer_arm(&door_opened_timer, INTR_DELAY, 0);
-    }
-}
-
-void door_opened_timer_callback() {
-    bool gpio_status = gpio_read(DOOR_OPENED_GPIO);
-    if (custom_garagedoor_sensor_open_nc.value.bool_value) {
-        gpio_status = !gpio_status;
-    }
-    
-    if (gpio_status == 1) {
-        printf(">>> Garage Door -> OPENED\n");
-        gd_is_moving = false;
-        target_door_state.value.int_value = 0;
-        current_door_state.value.int_value = 0;
-    } else {
-        printf(">>> Garage Door -> CLOSING\n");
-        gd_is_moving = true;
-        target_door_state.value.int_value = 1;
-        current_door_state.value.int_value = 3;
-    }
-    
+static void homekit_gd_notify() {
     homekit_characteristic_notify(&target_door_state, target_door_state.value);
     homekit_characteristic_notify(&current_door_state, current_door_state.value);
 }
 
-void door_closed_intr_callback(const uint8_t gpio) {
-    uint32_t now = xTaskGetTickCountFromISR();
+void door_opened_0_fn_callback(const uint8_t gpio) {
+    printf(">>> Garage Door -> CLOSING\n");
+    gd_is_moving = true;
+    target_door_state.value.int_value = 1;
+    current_door_state.value.int_value = 3;
     
-    if (now - last_press_time > DEBOUNCE_TIME / portTICK_PERIOD_MS) {
-        last_press_time = now;
-        sdk_os_timer_arm(&extra_func_timer, INTR_DELAY, 0);
-    }
+    homekit_gd_notify();
 }
 
-void door_closed_timer_callback() {
-    bool gpio_status = gpio_read(DOOR_CLOSED_GPIO);
-    if (custom_garagedoor_sensor_close_nc.value.bool_value) {
-        gpio_status = !gpio_status;
+void door_opened_1_fn_callback(const uint8_t gpio) {
+    printf(">>> Garage Door -> OPENED\n");
+    gd_is_moving = false;
+    target_door_state.value.int_value = 0;
+    current_door_state.value.int_value = 0;
+    
+    homekit_gd_notify();
+}
+
+void door_closed_0_fn_callback(const uint8_t gpio) {
+    printf(">>> Garage Door -> OPENING\n");
+    gd_is_moving = true;
+    target_door_state.value.int_value = 0;
+    current_door_state.value.int_value = 2;
+    
+    if (!custom_garagedoor_has_sensor_open.value.bool_value) {
+        sdk_os_timer_arm(&extra_func_timer, 1000, 1);
     }
     
-    if (gpio_status == 1) {
-        printf(">>> Garage Door -> CLOSED\n");
-        gd_time_state = 0;
-        gd_is_moving = false;
-        target_door_state.value.int_value = 1;
-        current_door_state.value.int_value = 1;
-        
-        if (!custom_garagedoor_has_sensor_open.value.bool_value) {
-            sdk_os_timer_disarm(&door_opened_timer);
-        }
-    } else {
-        printf(">>> Garage Door -> OPENING\n");
-        gd_is_moving = true;
-        target_door_state.value.int_value = 0;
-        current_door_state.value.int_value = 2;
-        
-        if (!custom_garagedoor_has_sensor_open.value.bool_value) {
-            sdk_os_timer_arm(&door_opened_timer, 1000, 1);
-        }
+    homekit_gd_notify();
+}
+
+void door_closed_1_fn_callback(const uint8_t gpio) {
+    printf(">>> Garage Door -> CLOSED\n");
+    gd_time_state = 0;
+    gd_is_moving = false;
+    target_door_state.value.int_value = 1;
+    current_door_state.value.int_value = 1;
+    
+    if (!custom_garagedoor_has_sensor_open.value.bool_value) {
+        sdk_os_timer_disarm(&extra_func_timer);
     }
     
-    homekit_characteristic_notify(&target_door_state, target_door_state.value);
-    homekit_characteristic_notify(&current_door_state, current_door_state.value);
+    homekit_gd_notify();
 }
 
 void door_opened_countdown_timer() {
@@ -658,26 +619,24 @@ void door_opened_countdown_timer() {
     
         if (gd_time_state == custom_garagedoor_working_time.value.int_value) {
             printf(">>> Garage Door -> OPENED\n");
-            sdk_os_timer_disarm(&door_opened_timer);
+            sdk_os_timer_disarm(&extra_func_timer);
             gd_is_moving = false;
             gd_time_state = custom_garagedoor_working_time.value.int_value;
             target_door_state.value.int_value = 0;
             current_door_state.value.int_value = 0;
             
-            homekit_characteristic_notify(&target_door_state, target_door_state.value);
-            homekit_characteristic_notify(&current_door_state, current_door_state.value);
+            homekit_gd_notify();
         }
     } else if (current_door_state.value.int_value == 3) {
         gd_time_state--;
          if (gd_time_state == 0) {
              printf(">>> Garage Door -> CLOSED\n");
-             sdk_os_timer_disarm(&door_opened_timer);
+             sdk_os_timer_disarm(&extra_func_timer);
              gd_is_moving = false;
              target_door_state.value.int_value = 1;
              current_door_state.value.int_value = 1;
              
-             homekit_characteristic_notify(&target_door_state, target_door_state.value);
-             homekit_characteristic_notify(&current_door_state, current_door_state.value);
+             homekit_gd_notify();
          }
     }
 }
@@ -686,7 +645,7 @@ void button_simple1_intr_callback(const uint8_t gpio) {
     if (device_type_static == 7) {
         toggle_valve();
     } else {
-        toggle_switch();
+        toggle_switch(gpio);
     }
 }
 
@@ -735,7 +694,7 @@ void th_button_intr_callback(const uint8_t gpio) {
             printf(">>> Thermostat set to COOL\n");
             led_code(LED_GPIO, FUNCTION_C);
             break;
-            
+
         default:
             state = 0;
             printf(">>> Thermostat set to OFF\n");
@@ -837,7 +796,6 @@ void gpio_init() {
             adv_button_register_callback_fn(BUTTON1_GPIO, button_simple1_intr_callback, 1);
             adv_button_register_callback_fn(BUTTON1_GPIO, reset_call, 5);
             
-            sdk_os_timer_setfn(&extra_func_timer, gpio14_toggle_timer, NULL);
             gpio14_toggle_callback();
             break;
             
@@ -995,20 +953,29 @@ void gpio_init() {
             adv_button_register_callback_fn(BUTTON1_GPIO, garage_on_button, 1);
             adv_button_register_callback_fn(BUTTON1_GPIO, reset_call, 5);
             
-            gpio_enable(DOOR_CLOSED_GPIO, GPIO_INPUT);
-            gpio_set_pullup(DOOR_CLOSED_GPIO, true, true);
-            gpio_set_interrupt(DOOR_CLOSED_GPIO, GPIO_INTTYPE_EDGE_ANY, door_closed_intr_callback);
+            adv_toggle_create(DOOR_CLOSED_GPIO);
             
-            sdk_os_timer_setfn(&extra_func_timer, door_closed_timer_callback, NULL);
+            if (custom_garagedoor_sensor_close_nc.value.bool_value) {
+                adv_toggle_register_callback_fn(DOOR_CLOSED_GPIO, door_closed_1_fn_callback, 0);
+                adv_toggle_register_callback_fn(DOOR_CLOSED_GPIO, door_closed_0_fn_callback, 1);
+            } else {
+                adv_toggle_register_callback_fn(DOOR_CLOSED_GPIO, door_closed_0_fn_callback, 0);
+                adv_toggle_register_callback_fn(DOOR_CLOSED_GPIO, door_closed_1_fn_callback, 1);
+            }
             
             if (custom_garagedoor_has_sensor_open.value.bool_value) {
-                gpio_enable(DOOR_OPENED_GPIO, GPIO_INPUT);
-                gpio_set_pullup(DOOR_OPENED_GPIO, true, true);
-                gpio_set_interrupt(DOOR_OPENED_GPIO, GPIO_INTTYPE_EDGE_ANY, door_opened_intr_callback);
+                adv_toggle_create(DOOR_OPENED_GPIO);
                 
-                sdk_os_timer_setfn(&door_opened_timer, door_opened_timer_callback, NULL);
+                if (custom_garagedoor_sensor_open_nc.value.bool_value) {
+                    adv_toggle_register_callback_fn(DOOR_OPENED_GPIO, door_opened_1_fn_callback, 0);
+                    adv_toggle_register_callback_fn(DOOR_OPENED_GPIO, door_opened_0_fn_callback, 1);
+                } else {
+                    adv_toggle_register_callback_fn(DOOR_OPENED_GPIO, door_opened_0_fn_callback, 0);
+                    adv_toggle_register_callback_fn(DOOR_OPENED_GPIO, door_opened_1_fn_callback, 1);
+                }
+
             } else {
-                sdk_os_timer_setfn(&door_opened_timer, door_opened_countdown_timer, NULL);
+                sdk_os_timer_setfn(&extra_func_timer, door_opened_countdown_timer, NULL);
             }
             
             break;
@@ -1080,7 +1047,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.4.5");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.4.6");
 
 homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
@@ -1133,7 +1100,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000405;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
+        sonoff->config_number = 000406;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
