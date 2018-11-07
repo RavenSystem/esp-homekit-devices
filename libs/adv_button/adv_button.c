@@ -26,12 +26,13 @@
 #include <esplibs/libmain.h>
 #include "adv_button.h"
 
-#define DEBOUNCE_TIME       20
-#define DISABLE_TIME        80
-#define DOUBLEPRESS_TIME    400
-#define LONGPRESS_TIME      450
-#define VERYLONGPRESS_TIME  1200
-#define HOLDPRESS_COUNT     5       // HOLDPRESS_TIME = HOLDPRESS_COUNT * 2000
+#define DEBOUNCE_TIME           20
+#define DISABLE_TIME            80
+#define DOUBLEPRESS_TIME        400
+#define LONGPRESS_TIME          450
+#define VERYLONGPRESS_TIME      1200
+#define HOLDPRESS_COUNT         5       // HOLDPRESS_TIME = HOLDPRESS_COUNT * 2000
+#define TOGGLE_EVALUATE_TIME    50
 
 typedef struct _adv_button {
     uint8_t gpio;
@@ -51,10 +52,25 @@ typedef struct _adv_button {
     struct _adv_button *next;
 } adv_button_t;
 
+typedef struct _adv_toggle {
+    uint8_t gpio;
+    
+    button_callback_fn low_callback_fn;
+    button_callback_fn high_callback_fn;
+    button_callback_fn both_callback_fn;
+    
+    uint8_t state;
+    uint8_t old_state;
+    uint16_t value;
+    
+    struct _adv_toggle *next;
+} adv_toggle_t;
+
 static adv_button_t *buttons = NULL;
+static adv_toggle_t *toggles = NULL;
 static uint8_t used_gpio;
 static uint32_t disable_time = 0;
-static ETSTimer push_down_timer, push_up_timer;
+static ETSTimer push_down_timer, push_up_timer, toggle_evaluate;
 
 static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
     adv_button_t *button = buttons;
@@ -63,6 +79,15 @@ static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
     }
 
     return button;
+}
+
+static adv_toggle_t *toggle_find_by_gpio(const uint8_t gpio) {
+    adv_toggle_t *toggle = toggles;
+    while (toggle && toggle->gpio != gpio) {
+        toggle = toggle->next;
+    }
+    
+    return toggle;
 }
 
 void adv_button_set_disable_time() {
@@ -186,7 +211,8 @@ static void adv_button_hold_callback(void *arg) {
 
 int adv_button_create(const uint8_t gpio) {
     adv_button_t *button = button_find_by_gpio(gpio);
-    if (button) {
+    adv_toggle_t *toggle = toggle_find_by_gpio(gpio);
+    if (button || toggle) {
         return -1;
     }
 
@@ -194,7 +220,7 @@ int adv_button_create(const uint8_t gpio) {
     memset(button, 0, sizeof(*button));
     button->gpio = gpio;
     
-    if (buttons == NULL) {
+    if (!buttons) {
         sdk_os_timer_disarm(&push_down_timer);
         sdk_os_timer_setfn(&push_down_timer, push_down_timer_callback, NULL);
         sdk_os_timer_disarm(&push_up_timer);
@@ -204,12 +230,12 @@ int adv_button_create(const uint8_t gpio) {
     button->next = buttons;
     buttons = button;
 
+    button->hold_count = 0;
+    button->press_count = 0;
+    
     if (button->gpio != 0) {
         gpio_enable(button->gpio, GPIO_INPUT);
     }
-    
-    button->hold_count = 0;
-    button->press_count = 0;
     
     gpio_set_pullup(button->gpio, true, true);
     gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_intr_callback);
@@ -220,6 +246,74 @@ int adv_button_create(const uint8_t gpio) {
     sdk_os_timer_setfn(&button->press_timer, adv_button_single_callback, button);
     
     button->singlepress_callback_fn = no_function_callback;
+    
+    return 0;
+}
+
+#define maxvalue_unsigned(x) ((1 << (8 * sizeof(x))) - 1)
+static void toggle_evaluate_fn() {        // Based on https://github.com/pcsaito/esp-homekit-demo/tree/LPFToggle
+    adv_toggle_t *toggle = toggles;
+    while (toggle) {
+        toggle->value += ((gpio_read(toggle->gpio) * maxvalue_unsigned(toggle->value)) - toggle->value) >> 3;
+        toggle->state = (toggle->value > (maxvalue_unsigned(toggle->value) >> 1));
+        
+        //printf("toggle->value: %i\n", toggle->value);
+        //printf("toggle->state: %i\n", toggle->state);
+        
+        if (toggle->state != toggle->old_state) {
+            toggle->old_state = toggle->state;
+
+            if (toggle->both_callback_fn) {
+                toggle->both_callback_fn(toggle->gpio);
+            }
+            
+            if (gpio_read(toggle->gpio)) {
+                if (toggle->high_callback_fn) {
+                    toggle->high_callback_fn(toggle->gpio);
+                }
+            } else {
+                if (toggle->low_callback_fn) {
+                    toggle->low_callback_fn(toggle->gpio);
+                }
+            }
+            
+        }
+        
+        toggle = toggle->next;
+    }
+}
+
+int adv_toggle_create(const uint8_t gpio) {
+    adv_button_t *button = button_find_by_gpio(gpio);
+    adv_toggle_t *toggle = toggle_find_by_gpio(gpio);
+    if (button || toggle) {
+        return -1;
+    }
+    
+    toggle = malloc(sizeof(adv_toggle_t));
+    memset(toggle, 0, sizeof(*toggle));
+    toggle->gpio = gpio;
+    
+    if (!toggles) {
+        sdk_os_timer_disarm(&toggle_evaluate);
+        sdk_os_timer_setfn(&toggle_evaluate, toggle_evaluate_fn, NULL);
+        sdk_os_timer_arm(&toggle_evaluate, TOGGLE_EVALUATE_TIME, 1);
+    }
+    
+    toggle->next = toggles;
+    toggles = toggle;
+    
+    
+    if (toggle->gpio != 0) {
+        gpio_enable(toggle->gpio, GPIO_INPUT);
+    }
+    
+    gpio_set_pullup(toggle->gpio, true, true);
+    
+    toggle->state = gpio_read(toggle->gpio);
+    
+    toggle->old_state = toggle->state;
+    toggle->value = 32764;
     
     return 0;
 }
@@ -263,6 +357,33 @@ int adv_button_register_callback_fn(const uint8_t gpio, button_callback_fn callb
     return 0;
 }
 
+int adv_toggle_register_callback_fn(const uint8_t gpio, button_callback_fn callback, const uint8_t toggle_callback_type) {
+    adv_toggle_t *toggle = toggle_find_by_gpio(gpio);
+    if (!toggle) {
+        return -1;
+    }
+    
+    switch (toggle_callback_type) {
+        case 0:
+            toggle->low_callback_fn = callback;
+            break;
+            
+        case 1:
+            toggle->high_callback_fn = callback;
+            break;
+            
+        case 2:
+            toggle->both_callback_fn = callback;
+            break;
+            
+        default:
+            return -2;
+            break;
+    }
+    
+    return 0;
+}
+
 void adv_button_destroy(const uint8_t gpio) {
     if (!buttons)
         return;
@@ -289,5 +410,37 @@ void adv_button_destroy(const uint8_t gpio) {
         if (button->gpio != 0) {
             gpio_disable(button->gpio);
         }
+    }
+}
+
+
+void adv_toggle_destroy(const uint8_t gpio) {
+    if (!toggles) {
+        return;
+    }
+    
+    adv_toggle_t *toggle = NULL;
+    if (toggles->gpio == gpio) {
+        toggle = toggles;
+        toggles = toggles->next;
+    } else {
+        adv_toggle_t *b = toggles;
+        while (b->next) {
+            if (b->next->gpio == gpio) {
+                toggle = b->next;
+                b->next = b->next->next;
+                break;
+            }
+        }
+    }
+    
+    if (toggle) {
+        if (toggle->gpio != 0) {
+            gpio_disable(toggle->gpio);
+        }
+    }
+    
+    if (!toggles) {
+        sdk_os_timer_disarm(&toggle_evaluate);
     }
 }

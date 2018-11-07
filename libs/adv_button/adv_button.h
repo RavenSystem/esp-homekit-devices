@@ -30,6 +30,9 @@ int adv_button_create(uint8_t gpio);
 void adv_button_destroy(uint8_t gpio);
 void adv_button_set_disable_time();
 
+int adv_toggle_create(uint8_t gpio);
+void adv_toggle_destroy(uint8_t gpio);
+
 /*
  * Button callback types:
  * 1 Single press
@@ -39,5 +42,13 @@ void adv_button_set_disable_time();
  * 5 Hold press
  */
 int adv_button_register_callback_fn(uint8_t gpio, button_callback_fn callback, uint8_t button_callback_type);
+
+/*
+ * Toggle callback types:
+ * 0 Low
+ * 1 High
+ * 2 Both
+ */
+int adv_toggle_register_callback_fn(uint8_t gpio, button_callback_fn callback, uint8_t toggle_callback_type);
 
 #endif // __ADVANCED_BUTTON__
