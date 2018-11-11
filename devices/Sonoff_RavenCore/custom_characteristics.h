@@ -67,6 +67,8 @@
  8. Garage Door
  9. Socket + Button + TH Sensor
  10. ESP01 Switch + Button
+ 11. Shelly 1
+ 12. Switch 3ch
  */
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_DEVICE_TYPE HOMEKIT_CUSTOM_UUID("F0000102")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_DEVICE_TYPE(_value, ...) \
@@ -77,11 +79,11 @@
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
     .min_value = (float[]) {1}, \
-    .max_value = (float[]) {10}, \
+    .max_value = (float[]) {12}, \
     .min_step = (float[]) {1}, \
     .valid_values = { \
-    .count = 10, \
-    .values = (uint8_t[]) {1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, \
+    .count = 12, \
+    .values = (uint8_t[]) {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
