@@ -32,7 +32,7 @@
 #define LONGPRESS_TIME              450
 #define VERYLONGPRESS_TIME          1200
 #define HOLDPRESS_COUNT             5       // HOLDPRESS_TIME = HOLDPRESS_COUNT * 2000
-#define TOGGLE_EVALUATE_INTERVAL    50
+#define TOGGLE_EVALUATE_INTERVAL    35
 
 typedef struct _adv_button {
     uint8_t gpio;
