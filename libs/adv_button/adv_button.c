@@ -32,7 +32,7 @@
 #define LONGPRESS_TIME              450
 #define VERYLONGPRESS_TIME          1200
 #define HOLDPRESS_COUNT             5       // HOLDPRESS_TIME = HOLDPRESS_COUNT * 2000
-#define TOGGLE_EVALUATE_INTERVAL    35
+#define TOGGLE_EVALUATE_INTERVAL    25
 
 typedef struct _adv_button {
     uint8_t gpio;
@@ -251,7 +251,7 @@ int adv_button_create(const uint8_t gpio) {
 }
 
 #define maxvalue_unsigned(x) ((1 << (8 * sizeof(x))) - 1)
-static void toggle_evaluate_fn() {        // Based on https://github.com/pcsaito/esp-homekit-demo/tree/LPFToggle
+static void toggle_evaluate_fn() {        // Based on https://github.com/pcsaito/esp-homekit-demo/blob/LPFToggle/examples/sonoff_basic_toggle/toggle.c
     adv_toggle_t *toggle = toggles;
     while (toggle) {
         toggle->value += ((gpio_read(toggle->gpio) * maxvalue_unsigned(toggle->value)) - toggle->value) >> 3;
