@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.4.7
+ * v0.4.8
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -58,7 +58,6 @@
 #include "custom_characteristics.h"
 
 #define LED_GPIO            13
-#define SWITCH_GPIO         14
 #define SENSOR_GPIO         14
 #define DOOR_OPENED_GPIO    4
 #define DOOR_CLOSED_GPIO    14
@@ -77,9 +76,9 @@
 #define DISABLED_TIME       50
 
 static bool gd_is_moving = false;
-static uint8_t device_type_static = 1, gd_time_state = 0, relay1_gpio = 12;
-static uint32_t last_press_time;
-static float old_humidity_value = 0.0, old_temperature_value = 0.0;
+static uint8_t device_type_static = 1, gd_time_state = 0, relay1_gpio = 12, ext_sw_gpio = 14;
+static volatile uint32_t last_press_time;
+static volatile float old_humidity_value = 0.0, old_temperature_value = 0.0;
 static ETSTimer device_restart_timer, change_settings_timer, extra_func_timer;
 
 void switch1_on_callback(homekit_value_t value);
@@ -162,6 +161,10 @@ void led_write(bool on) {
     gpio_write(LED_GPIO, on ? 0 : 1);
 }
 
+void do_nothing(const uint8_t gpio) {
+    printf(">>> Doing nothing\n");
+}
+
 void on_target(homekit_value_t value) {
     target_state.value = value;
     switch (target_state.value.int_value) {
@@ -225,19 +228,20 @@ void save_settings() {
     
     status = sysparam_get_bool("show_setup", &bool_value);
     if (status == SYSPARAM_OK && bool_value != show_setup.value.bool_value) {
-        status = sysparam_set_bool("show_setup", show_setup.value.bool_value);
+        sysparam_set_bool("show_setup", show_setup.value.bool_value);
     }
     
     status = sysparam_get_int8("device_type", &int8_value);
     if (status == SYSPARAM_OK && int8_value != device_type.value.int_value) {
-        status = sysparam_set_int8("device_type", device_type.value.int_value);
+        sysparam_set_int8("device_type", device_type.value.int_value);
     }
     
     switch (device_type_static) {
         case 1:
+        case 11:
             status = sysparam_get_bool("gpio14_toggle", &bool_value);
             if (status == SYSPARAM_OK && bool_value != gpio14_toggle.value.bool_value) {
-                status = sysparam_set_bool("gpio14_toggle", gpio14_toggle.value.bool_value);
+                sysparam_set_bool("gpio14_toggle", gpio14_toggle.value.bool_value);
             }
             break;
             
@@ -246,53 +250,53 @@ void save_settings() {
         case 9:
             status = sysparam_get_int8("dht_sensor_type", &int8_value);
             if (status == SYSPARAM_OK && int8_value != dht_sensor_type.value.int_value) {
-                status = sysparam_set_int8("dht_sensor_type", dht_sensor_type.value.int_value);
+                sysparam_set_int8("dht_sensor_type", dht_sensor_type.value.int_value);
             }
             break;
             
         case 7:
             status = sysparam_get_int8("valve_type", &int8_value);
             if (status == SYSPARAM_OK && int8_value != custom_valve_type.value.int_value) {
-                status = sysparam_set_int8("valve_type", custom_valve_type.value.int_value);
+                sysparam_set_int8("valve_type", custom_valve_type.value.int_value);
                 valve_type.value.int_value = int8_value;
                 homekit_characteristic_notify(&valve_type, valve_type.value);
             }
             
             status = sysparam_get_int32("set_duration", &int32_value);
             if (status == SYSPARAM_OK && int32_value != set_duration.value.int_value) {
-                status = sysparam_set_int32("set_duration", set_duration.value.int_value);
+                sysparam_set_int32("set_duration", set_duration.value.int_value);
             }
             break;
             
         case 8:
             status = sysparam_get_int8("garagedoor_working_time", &int8_value);
             if (status == SYSPARAM_OK && int8_value != custom_garagedoor_working_time.value.int_value) {
-                status = sysparam_set_int8("garagedoor_working_time", custom_garagedoor_working_time.value.int_value);
+                sysparam_set_int8("garagedoor_working_time", custom_garagedoor_working_time.value.int_value);
             }
             
             status = sysparam_get_bool("garagedoor_has_stop", &bool_value);
             if (status == SYSPARAM_OK && bool_value != custom_garagedoor_has_stop.value.bool_value) {
-                status = sysparam_set_bool("garagedoor_has_stop", custom_garagedoor_has_stop.value.bool_value);
+                sysparam_set_bool("garagedoor_has_stop", custom_garagedoor_has_stop.value.bool_value);
             }
             
             status = sysparam_get_bool("garagedoor_sensor_close_nc", &bool_value);
             if (status == SYSPARAM_OK && bool_value != custom_garagedoor_sensor_close_nc.value.bool_value) {
-                status = sysparam_set_bool("garagedoor_sensor_close_nc", custom_garagedoor_sensor_close_nc.value.bool_value);
+                sysparam_set_bool("garagedoor_sensor_close_nc", custom_garagedoor_sensor_close_nc.value.bool_value);
             }
             
             status = sysparam_get_bool("garagedoor_sensor_open_nc", &bool_value);
             if (status == SYSPARAM_OK && bool_value != custom_garagedoor_sensor_open_nc.value.bool_value) {
-                status = sysparam_set_bool("garagedoor_sensor_open_nc", custom_garagedoor_sensor_open_nc.value.bool_value);
+                sysparam_set_bool("garagedoor_sensor_open_nc", custom_garagedoor_sensor_open_nc.value.bool_value);
             }
             
             status = sysparam_get_bool("garagedoor_has_sensor_open", &bool_value);
             if (status == SYSPARAM_OK && bool_value != custom_garagedoor_has_sensor_open.value.bool_value) {
-                status = sysparam_set_bool("garagedoor_has_sensor_open", custom_garagedoor_has_sensor_open.value.bool_value);
+                sysparam_set_bool("garagedoor_has_sensor_open", custom_garagedoor_has_sensor_open.value.bool_value);
             }
             
             status = sysparam_get_bool("garagedoor_control_with_button", &bool_value);
             if (status == SYSPARAM_OK && bool_value != custom_garagedoor_control_with_button.value.bool_value) {
-                status = sysparam_set_bool("garagedoor_control_with_button", custom_garagedoor_control_with_button.value.bool_value);
+                sysparam_set_bool("garagedoor_control_with_button", custom_garagedoor_control_with_button.value.bool_value);
             }
             break;
             
@@ -330,23 +334,38 @@ void show_setup_callback() {
     save_settings();
 }
 
-void ravencore_config_reset() {
-    sysparam_set_bool("show_setup", false);
-    sysparam_set_int8("device_type", 1);
-    sysparam_set_bool("gpio14_toggle", false);
-    sysparam_set_int8("dht_sensor_type", 2);
-    sysparam_set_int8("valve_type", 0);
-    sysparam_set_int32("set_duration", 900);
-}
-
 void reset_call_task() {
     printf(">>> Resetting device to factory defaults\n");
     
-    vTaskDelay(500 / portTICK_PERIOD_MS);
-    ravencore_config_reset();
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    sysparam_set_bool("show_setup", false);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    sysparam_set_int8("device_type", 1);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    sysparam_set_bool("gpio14_toggle", false);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    sysparam_set_int8("dht_sensor_type", 2);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    sysparam_set_int8("valve_type", 0);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    sysparam_set_int32("set_duration", 900);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    sysparam_set_int8("garagedoor_working_time", 20);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    sysparam_set_bool("garagedoor_has_stop", false);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    sysparam_set_bool("garagedoor_sensor_close_nc", false);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    sysparam_set_bool("garagedoor_sensor_open_nc", false);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    sysparam_set_bool("garagedoor_has_sensor_open", false);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    sysparam_set_bool("garagedoor_control_with_button", false);
+    vTaskDelay(100 / portTICK_PERIOD_MS);
+    
     homekit_server_reset();
     vTaskDelay(500 / portTICK_PERIOD_MS);
+    
     wifi_config_reset();
     vTaskDelay(500 / portTICK_PERIOD_MS);
     
@@ -438,13 +457,10 @@ void toggle_switch(const uint8_t gpio) {
 
 void gpio14_toggle_callback() {
     if (gpio14_toggle.value.bool_value) {
-        adv_button_destroy(SWITCH_GPIO);
-        adv_toggle_create(SWITCH_GPIO);
-        adv_toggle_register_callback_fn(SWITCH_GPIO, toggle_switch, 2);
+        adv_toggle_create(ext_sw_gpio);
+        adv_toggle_register_callback_fn(ext_sw_gpio, toggle_switch, 2);
     } else {
-        adv_toggle_destroy(SWITCH_GPIO);
-        adv_button_create(SWITCH_GPIO);
-        adv_button_register_callback_fn(SWITCH_GPIO, toggle_switch, 1);
+        adv_toggle_destroy(ext_sw_gpio);
     }
     
     change_settings_callback();
@@ -774,7 +790,7 @@ void gpio_init() {
         show_setup.value.bool_value = bool_value;
         printf(">>> Loading show_setup -> %i\n", show_setup.value.bool_value);
     } else {
-        status = sysparam_set_bool("show_setup", false);
+        sysparam_set_bool("show_setup", false);
         printf(">>> Setting show_setup to default -> false\n");
     }
     
@@ -784,7 +800,7 @@ void gpio_init() {
         device_type_static = int8_value;
         printf(">>> Loading device_type -> %i\n", device_type.value.int_value);
     } else {
-        status = sysparam_set_int8("device_type", 1);
+        sysparam_set_int8("device_type", 1);
         printf(">>> Setting device_type to default -> 1\n");
     }
     
@@ -795,7 +811,7 @@ void gpio_init() {
             if (status == SYSPARAM_OK) {
                 gpio14_toggle.value.bool_value = bool_value;
             } else {
-                status = sysparam_set_bool("gpio14_toggle", false);
+                sysparam_set_bool("gpio14_toggle", false);
             }
             
             adv_button_register_callback_fn(BUTTON1_GPIO, button_simple1_intr_callback, 1);
@@ -858,7 +874,7 @@ void gpio_init() {
             if (status == SYSPARAM_OK) {
                 dht_sensor_type.value.int_value = int8_value;
             } else {
-                status = sysparam_set_int8("dht_sensor_type", 2);
+                sysparam_set_int8("dht_sensor_type", 2);
             }
             
             adv_button_register_callback_fn(BUTTON1_GPIO, th_button_intr_callback, 1);
@@ -876,7 +892,7 @@ void gpio_init() {
             if (status == SYSPARAM_OK) {
                 dht_sensor_type.value.int_value = int8_value;
             } else {
-                status = sysparam_set_int8("dht_sensor_type", 2);
+                sysparam_set_int8("dht_sensor_type", 2);
             }
             
             adv_button_register_callback_fn(BUTTON1_GPIO, button_simple1_intr_callback, 1);
@@ -895,14 +911,14 @@ void gpio_init() {
                 valve_type.value.int_value = int8_value;
                 custom_valve_type.value.int_value = int8_value;
             } else {
-                status = sysparam_set_int8("valve_type", 0);
+                sysparam_set_int8("valve_type", 0);
             }
             
             status = sysparam_get_int32("set_duration", &int32_value);
             if (status == SYSPARAM_OK) {
                 set_duration.value.int_value = int32_value;
             } else {
-                status = sysparam_set_int32("set_duration", 900);
+                sysparam_set_int32("set_duration", 900);
             }
 
             adv_button_register_callback_fn(BUTTON1_GPIO, button_simple1_intr_callback, 1);
@@ -917,42 +933,42 @@ void gpio_init() {
             if (status == SYSPARAM_OK) {
                 custom_garagedoor_working_time.value.int_value = int8_value;
             } else {
-                status = sysparam_set_int8("garagedoor_working_time", 20);
+                sysparam_set_int8("garagedoor_working_time", 20);
             }
             
             status = sysparam_get_bool("garagedoor_has_stop", &bool_value);
             if (status == SYSPARAM_OK) {
                 custom_garagedoor_has_stop.value.bool_value = bool_value;
             } else {
-                status = sysparam_set_bool("garagedoor_has_stop", false);
+                sysparam_set_bool("garagedoor_has_stop", false);
             }
             
             status = sysparam_get_bool("garagedoor_sensor_close_nc", &bool_value);
             if (status == SYSPARAM_OK) {
                 custom_garagedoor_sensor_close_nc.value.bool_value = bool_value;
             } else {
-                status = sysparam_set_bool("garagedoor_sensor_close_nc", false);
+                sysparam_set_bool("garagedoor_sensor_close_nc", false);
             }
             
             status = sysparam_get_bool("garagedoor_sensor_open_nc", &bool_value);
             if (status == SYSPARAM_OK) {
                 custom_garagedoor_sensor_open_nc.value.bool_value = bool_value;
             } else {
-                status = sysparam_set_bool("garagedoor_sensor_open_nc", false);
+                sysparam_set_bool("garagedoor_sensor_open_nc", false);
             }
             
             status = sysparam_get_bool("garagedoor_has_sensor_open", &bool_value);
             if (status == SYSPARAM_OK) {
                 custom_garagedoor_has_sensor_open.value.bool_value = bool_value;
             } else {
-                status = sysparam_set_bool("garagedoor_has_sensor_open", false);
+                sysparam_set_bool("garagedoor_has_sensor_open", false);
             }
             
             status = sysparam_get_bool("garagedoor_control_with_button", &bool_value);
             if (status == SYSPARAM_OK) {
                 custom_garagedoor_control_with_button.value.bool_value = bool_value;
             } else {
-                status = sysparam_set_bool("garagedoor_control_with_button", false);
+                sysparam_set_bool("garagedoor_control_with_button", false);
             }
             
             adv_button_register_callback_fn(BUTTON1_GPIO, garage_on_button, 1);
@@ -991,7 +1007,7 @@ void gpio_init() {
             if (status == SYSPARAM_OK) {
                 dht_sensor_type.value.int_value = int8_value;
             } else {
-                status = sysparam_set_int8("dht_sensor_type", 2);
+                sysparam_set_int8("dht_sensor_type", 2);
             }
             
             adv_button_register_callback_fn(BUTTON1_GPIO, button_event1_intr_callback, 1);
@@ -1015,6 +1031,24 @@ void gpio_init() {
             adv_button_register_callback_fn(BUTTON1_GPIO, button_event3_intr_callback, 3);
             adv_button_register_callback_fn(BUTTON1_GPIO, button_simple1_intr_callback, 4);
             adv_button_register_callback_fn(BUTTON1_GPIO, reset_call, 5);
+            break;
+            
+        case 11:
+            printf(">>> Loading device gpio settings for 11\n");
+            relay1_gpio = 4;
+            ext_sw_gpio = 5;
+            
+            status = sysparam_get_bool("gpio14_toggle", &bool_value);
+            if (status == SYSPARAM_OK) {
+                gpio14_toggle.value.bool_value = bool_value;
+            } else {
+                sysparam_set_bool("gpio14_toggle", false);
+            }
+            
+            adv_button_register_callback_fn(BUTTON1_GPIO, do_nothing, 1);
+            adv_button_register_callback_fn(BUTTON1_GPIO, reset_call, 5);
+            
+            gpio14_toggle_callback();
             break;
             
         default:
@@ -1052,7 +1086,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.4.7");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.4.8");
 
 homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
@@ -1105,7 +1139,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000407;   // Matches as example: firmware_revision 2.3.7 = 02.03.07 = config_number 020307
+        sonoff->config_number = 000410;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
@@ -1367,6 +1401,21 @@ void create_accessory() {
                     sonoff_button->characteristics[1] = &button_event;
                 
                 service_number = 3;
+            } else if (device_type_static == 11) {
+                printf(">>> Creating accessory for type 11\n");
+                
+                char *device_type_name_value = malloc(9);
+                snprintf(device_type_name_value, 9, "Shelly 1");
+                device_type_name.value = HOMEKIT_STRING(device_type_name_value);
+                
+                homekit_service_t *sonoff_switch1 = sonoff->services[1] = calloc(1, sizeof(homekit_service_t));
+                sonoff_switch1->id = 8;
+                sonoff_switch1->type = HOMEKIT_SERVICE_SWITCH;
+                sonoff_switch1->primary = true;
+                sonoff_switch1->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
+                sonoff_switch1->characteristics[0] = &switch1_service_name;
+                sonoff_switch1->characteristics[1] = &switch1_on;
+                sonoff_switch1->characteristics[2] = &show_setup;
             } else { // device_type_static == 1
                 printf(">>> Creating accessory for type 1\n");
                 
@@ -1401,7 +1450,7 @@ void create_accessory() {
                     setting_count++;
                 }
                 
-                if (device_type_static == 1 || device_type_static == 5 || device_type_static == 6 || device_type_static == 7 || device_type_static == 9) {
+                if (device_type_static == 1 || device_type_static == 5 || device_type_static == 6 || device_type_static == 7 || device_type_static == 9 || device_type_static == 11) {
                     setting_count++;
                 } else if (device_type_static == 8) {
                     setting_count += 6;
@@ -1416,7 +1465,7 @@ void create_accessory() {
                         sonoff_setup->characteristics[setting_number] = &ota_firmware;
                         setting_number++;
                     }
-                    if (device_type_static == 1) {
+                    if (device_type_static == 1 || device_type_static == 11) {
                         sonoff_setup->characteristics[setting_number] = &gpio14_toggle;
                         setting_number++;
                     } else if (device_type_static == 5 || device_type_static == 6 || device_type_static == 9) {
