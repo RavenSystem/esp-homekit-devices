@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.4.8
+ * v0.4.9
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -54,6 +54,7 @@
 #include <adv_button.h>
 
 #include <dht/dht.h>
+#include <ds18b20/ds18b20.h>
 
 #include "custom_characteristics.h"
 
@@ -61,6 +62,8 @@
 #define SENSOR_GPIO         14
 #define DOOR_OPENED_GPIO    4
 #define DOOR_CLOSED_GPIO    14
+#define SONOFF_TOGGLE_GPIO  14
+#define SHELLY1_TOGGLE_GPIO 5
 
 #define BUTTON1_GPIO        0
 #define BUTTON2_GPIO        9
@@ -76,7 +79,7 @@
 #define DISABLED_TIME       50
 
 static bool gd_is_moving = false;
-static uint8_t device_type_static = 1, gd_time_state = 0, relay1_gpio = 12, ext_sw_gpio = 14;
+static uint8_t device_type_static = 1, gd_time_state = 0, relay1_gpio = 12;
 static volatile uint32_t last_press_time;
 static volatile float old_humidity_value = 0.0, old_temperature_value = 0.0;
 static ETSTimer device_restart_timer, change_settings_timer, extra_func_timer;
@@ -457,10 +460,10 @@ void toggle_switch(const uint8_t gpio) {
 
 void gpio14_toggle_callback() {
     if (gpio14_toggle.value.bool_value) {
-        adv_toggle_create(ext_sw_gpio);
-        adv_toggle_register_callback_fn(ext_sw_gpio, toggle_switch, 2);
+        adv_toggle_create(SONOFF_TOGGLE_GPIO);
+        adv_toggle_register_callback_fn(SONOFF_TOGGLE_GPIO, toggle_switch, 2);
     } else {
-        adv_toggle_destroy(ext_sw_gpio);
+        adv_toggle_destroy(SONOFF_TOGGLE_GPIO);
     }
     
     change_settings_callback();
@@ -1036,19 +1039,32 @@ void gpio_init() {
         case 11:
             printf(">>> Loading device gpio settings for 11\n");
             relay1_gpio = 4;
-            ext_sw_gpio = 5;
             
-            status = sysparam_get_bool("gpio14_toggle", &bool_value);
-            if (status == SYSPARAM_OK) {
-                gpio14_toggle.value.bool_value = bool_value;
-            } else {
-                sysparam_set_bool("gpio14_toggle", false);
-            }
+            gpio_disable(LED_GPIO);
             
             adv_button_register_callback_fn(BUTTON1_GPIO, do_nothing, 1);
             adv_button_register_callback_fn(BUTTON1_GPIO, reset_call, 5);
             
-            gpio14_toggle_callback();
+            adv_toggle_create(SHELLY1_TOGGLE_GPIO);
+            adv_toggle_register_callback_fn(SHELLY1_TOGGLE_GPIO, toggle_switch, 2);
+            break;
+            
+        case 12:
+            printf(">>> Loading device gpio settings for 12\n");
+            adv_button_create(BUTTON2_GPIO);
+            adv_button_create(BUTTON3_GPIO);
+            
+            adv_button_register_callback_fn(BUTTON1_GPIO, button_simple1_intr_callback, 1);
+            adv_button_register_callback_fn(BUTTON1_GPIO, reset_call, 5);
+            
+            adv_button_register_callback_fn(BUTTON2_GPIO, button_simple2_intr_callback, 1);
+            adv_button_register_callback_fn(BUTTON3_GPIO, button_simple3_intr_callback, 1);
+            
+            gpio_enable(RELAY2_GPIO, GPIO_OUTPUT);
+            relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
+            
+            gpio_enable(RELAY3_GPIO, GPIO_OUTPUT);
+            relay_write(switch3_on.value.bool_value, RELAY3_GPIO);
             break;
             
         default:
@@ -1086,7 +1102,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.4.8");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.4.9");
 
 homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
@@ -1139,7 +1155,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000410;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+        sonoff->config_number = 000411;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
@@ -1416,6 +1432,39 @@ void create_accessory() {
                 sonoff_switch1->characteristics[0] = &switch1_service_name;
                 sonoff_switch1->characteristics[1] = &switch1_on;
                 sonoff_switch1->characteristics[2] = &show_setup;
+            } else if (device_type_static == 12) {
+                printf(">>> Creating accessory for type 12\n");
+                
+                char *device_type_name_value = malloc(11);
+                snprintf(device_type_name_value, 11, "Switch 3ch");
+                device_type_name.value = HOMEKIT_STRING(device_type_name_value);
+                
+                homekit_service_t *sonoff_switch1 = sonoff->services[1] = calloc(1, sizeof(homekit_service_t));
+                sonoff_switch1->id = 8;
+                sonoff_switch1->type = HOMEKIT_SERVICE_SWITCH;
+                sonoff_switch1->primary = true;
+                sonoff_switch1->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
+                sonoff_switch1->characteristics[0] = &switch1_service_name;
+                sonoff_switch1->characteristics[1] = &switch1_on;
+                sonoff_switch1->characteristics[2] = &show_setup;
+                
+                homekit_service_t *sonoff_switch2 = sonoff->services[2] = calloc(1, sizeof(homekit_service_t));
+                sonoff_switch2->id = 12;
+                sonoff_switch2->type = HOMEKIT_SERVICE_SWITCH;
+                sonoff_switch2->primary = false;
+                sonoff_switch2->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+                sonoff_switch2->characteristics[0] = &switch2_service_name;
+                sonoff_switch2->characteristics[1] = &switch2_on;
+                
+                homekit_service_t *sonoff_switch3 = sonoff->services[3] = calloc(1, sizeof(homekit_service_t));
+                sonoff_switch3->id = 15;
+                sonoff_switch3->type = HOMEKIT_SERVICE_SWITCH;
+                sonoff_switch3->primary = false;
+                sonoff_switch3->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+                sonoff_switch3->characteristics[0] = &switch3_service_name;
+                sonoff_switch3->characteristics[1] = &switch3_on;
+                
+                service_number = 4;
             } else { // device_type_static == 1
                 printf(">>> Creating accessory for type 1\n");
                 
@@ -1450,7 +1499,7 @@ void create_accessory() {
                     setting_count++;
                 }
                 
-                if (device_type_static == 1 || device_type_static == 5 || device_type_static == 6 || device_type_static == 7 || device_type_static == 9 || device_type_static == 11) {
+                if (device_type_static == 1 || device_type_static == 5 || device_type_static == 6 || device_type_static == 7 || device_type_static == 9) {
                     setting_count++;
                 } else if (device_type_static == 8) {
                     setting_count += 6;
@@ -1465,7 +1514,7 @@ void create_accessory() {
                         sonoff_setup->characteristics[setting_number] = &ota_firmware;
                         setting_number++;
                     }
-                    if (device_type_static == 1 || device_type_static == 11) {
+                    if (device_type_static == 1) {
                         sonoff_setup->characteristics[setting_number] = &gpio14_toggle;
                         setting_number++;
                     } else if (device_type_static == 5 || device_type_static == 6 || device_type_static == 9) {
