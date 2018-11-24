@@ -213,6 +213,108 @@
     .value = HOMEKIT_BOOL_(_value), \
     ##__VA_ARGS__
 
+/* Switch Initial State
+ 0. OFF
+ 1. ON
+ 2. Last state
+ 3. Opposite to last state
+ */
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_INIT_STATE_SW1 HOMEKIT_CUSTOM_UUID("F0000501")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_INIT_STATE_SW1(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_INIT_STATE_SW1, \
+    .description = "Init State SW1", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {3}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+    .count = 4, \
+    .values = (uint8_t[]) {0, 1, 2, 3}, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_INIT_STATE_SW2 HOMEKIT_CUSTOM_UUID("F0000502")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_INIT_STATE_SW2(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_INIT_STATE_SW2, \
+    .description = "Init State SW2", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {3}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+    .count = 4, \
+    .values = (uint8_t[]) {0, 1, 2, 3}, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_INIT_STATE_SW3 HOMEKIT_CUSTOM_UUID("F0000503")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_INIT_STATE_SW3(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_INIT_STATE_SW3, \
+    .description = "Init State SW3", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {3}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+    .count = 4, \
+    .values = (uint8_t[]) {0, 1, 2, 3}, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_INIT_STATE_SW4 HOMEKIT_CUSTOM_UUID("F0000504")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_INIT_STATE_SW4(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_INIT_STATE_SW4, \
+    .description = "Init State SW4", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {3}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+    .count = 4, \
+    .values = (uint8_t[]) {0, 1, 2, 3}, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+/* Thermostat Initial State
+ 0. OFF
+ 1. Heat
+ 2. Cool
+ 3. Last State
+ */
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_INIT_STATE_TH HOMEKIT_CUSTOM_UUID("F0000510")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_INIT_STATE_TH(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_INIT_STATE_TH, \
+    .description = "Init State TH", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {3}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+    .count = 4, \
+    .values = (uint8_t[]) {0, 1, 2, 3}, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
 // ---------------------
 
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_PING_CHECK HOMEKIT_CUSTOM_UUID("F0000201")
