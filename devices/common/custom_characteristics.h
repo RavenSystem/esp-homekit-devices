@@ -214,6 +214,7 @@
     .value = HOMEKIT_BOOL_(_value), \
     ##__VA_ARGS__
 
+// ---------------------
 
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_PING_CHECK HOMEKIT_CUSTOM_UUID("F0000201")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_PING_CHECK(_value, ...) \
@@ -256,8 +257,6 @@
     | homekit_permissions_notify, \
     .value = HOMEKIT_BOOL_(_value), \
     ##__VA_ARGS__
-
-
 
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_FLOATTEST HOMEKIT_CUSTOM_UUID("A00000003")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_FLOATTEST(_value, ...) \

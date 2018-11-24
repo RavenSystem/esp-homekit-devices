@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.4.9
+ * v0.4.10
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -29,8 +29,7 @@
   8. Garage Door
   9. Socket + Button + TH Sensor
  10. ESP01 Switch + Button
- 11. Shelly 1
- 12. Switch 3ch
+ 11. Switch 3ch
  */
 
 #include <stdio.h>
@@ -56,14 +55,13 @@
 #include <dht/dht.h>
 #include <ds18b20/ds18b20.h>
 
-#include "custom_characteristics.h"
+#include "../common/custom_characteristics.h"
 
 #define LED_GPIO            13
 #define SENSOR_GPIO         14
 #define DOOR_OPENED_GPIO    4
 #define DOOR_CLOSED_GPIO    14
 #define SONOFF_TOGGLE_GPIO  14
-#define SHELLY1_TOGGLE_GPIO 5
 
 #define BUTTON1_GPIO        0
 #define BUTTON2_GPIO        9
@@ -92,8 +90,6 @@ void switch3_on_callback(homekit_value_t value);
 homekit_value_t read_switch3_on_callback();
 void switch4_on_callback(homekit_value_t value);
 homekit_value_t read_switch4_on_callback();
-
-void switch_worker();
 
 void on_target(homekit_value_t value);
 homekit_value_t read_on_target();
@@ -313,6 +309,11 @@ void device_restart_task() {
     
     if (ota_firmware.value.bool_value) {
         rboot_set_temp_rom(1);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+        sysparam_set_string("ota_repo", "RavenSystem/ravencore");
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+        sysparam_set_string("ota_file", "main.bin");
+        vTaskDelay(100 / portTICK_PERIOD_MS);
     }
     
     sdk_system_restart();
@@ -1038,19 +1039,6 @@ void gpio_init() {
             
         case 11:
             printf(">>> Loading device gpio settings for 11\n");
-            relay1_gpio = 4;
-            
-            gpio_disable(LED_GPIO);
-            
-            adv_button_register_callback_fn(BUTTON1_GPIO, do_nothing, 1);
-            adv_button_register_callback_fn(BUTTON1_GPIO, reset_call, 5);
-            
-            adv_toggle_create(SHELLY1_TOGGLE_GPIO);
-            adv_toggle_register_callback_fn(SHELLY1_TOGGLE_GPIO, toggle_switch, 2);
-            break;
-            
-        case 12:
-            printf(">>> Loading device gpio settings for 12\n");
             adv_button_create(BUTTON2_GPIO);
             adv_button_create(BUTTON3_GPIO);
             
@@ -1102,7 +1090,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.4.9");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.4.10");
 
 homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
@@ -1155,7 +1143,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000411;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+        sonoff->config_number = 000412;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
@@ -1420,21 +1408,6 @@ void create_accessory() {
             } else if (device_type_static == 11) {
                 printf(">>> Creating accessory for type 11\n");
                 
-                char *device_type_name_value = malloc(9);
-                snprintf(device_type_name_value, 9, "Shelly 1");
-                device_type_name.value = HOMEKIT_STRING(device_type_name_value);
-                
-                homekit_service_t *sonoff_switch1 = sonoff->services[1] = calloc(1, sizeof(homekit_service_t));
-                sonoff_switch1->id = 8;
-                sonoff_switch1->type = HOMEKIT_SERVICE_SWITCH;
-                sonoff_switch1->primary = true;
-                sonoff_switch1->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
-                sonoff_switch1->characteristics[0] = &switch1_service_name;
-                sonoff_switch1->characteristics[1] = &switch1_on;
-                sonoff_switch1->characteristics[2] = &show_setup;
-            } else if (device_type_static == 12) {
-                printf(">>> Creating accessory for type 12\n");
-                
                 char *device_type_name_value = malloc(11);
                 snprintf(device_type_name_value, 11, "Switch 3ch");
                 device_type_name.value = HOMEKIT_STRING(device_type_name_value);
@@ -1510,10 +1483,12 @@ void create_accessory() {
                     sonoff_setup->characteristics[1] = &device_type_name;
                     sonoff_setup->characteristics[2] = &device_type;
                     sonoff_setup->characteristics[3] = &reboot_device;
+                
                     if (status == SYSPARAM_OK) {
                         sonoff_setup->characteristics[setting_number] = &ota_firmware;
                         setting_number++;
                     }
+                
                     if (device_type_static == 1) {
                         sonoff_setup->characteristics[setting_number] = &gpio14_toggle;
                         setting_number++;
@@ -1536,7 +1511,6 @@ void create_accessory() {
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_garagedoor_control_with_button;
                         setting_number++;
-                        
                     }
             }
     

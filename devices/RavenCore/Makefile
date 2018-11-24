@@ -1,4 +1,4 @@
-PROGRAM = Sonoff_RavenCore
+PROGRAM = main
 
 EXTRA_COMPONENTS = \
 	extras/dht \
