@@ -76,11 +76,11 @@
 
 #define DISABLED_TIME       50
 
-static bool gd_is_moving = false;
-static uint8_t device_type_static = 1, gd_time_state = 0, relay1_gpio = 12;
-static volatile uint32_t last_press_time;
-static volatile float old_humidity_value = 0.0, old_temperature_value = 0.0;
-static ETSTimer device_restart_timer, change_settings_timer, extra_func_timer;
+bool gd_is_moving = false;
+uint8_t device_type_static = 1, gd_time_state = 0, relay1_gpio = 12;
+volatile uint32_t last_press_time;
+volatile float old_humidity_value = 0.0, old_temperature_value = 0.0;
+ETSTimer device_restart_timer, change_settings_timer, extra_func_timer;
 
 void switch1_on_callback(homekit_value_t value);
 homekit_value_t read_switch1_on_callback();
@@ -158,10 +158,6 @@ void relay_write(bool on, int gpio) {
 
 void led_write(bool on) {
     gpio_write(LED_GPIO, on ? 0 : 1);
-}
-
-void do_nothing(const uint8_t gpio) {
-    printf(">>> Doing nothing\n");
 }
 
 void on_target(homekit_value_t value) {
