@@ -38,25 +38,15 @@
 
 #include "../common/custom_characteristics.h"
 
-#define TOGGLE1_GPIO        5
-
-#define RELAY1_GPIO         5
-
-#define DISABLED_TIME       50
+#define TOGGLE_GPIO     5
+#define RELAY_GPIO      4
+#define DISABLED_TIME   50
 
 static volatile uint32_t last_press_time;
 static ETSTimer device_restart_timer, change_settings_timer, extra_func_timer;
 
 void switch1_on_callback(homekit_value_t value);
 homekit_value_t read_switch1_on_callback();
-void switch2_on_callback(homekit_value_t value);
-homekit_value_t read_switch2_on_callback();
-void switch3_on_callback(homekit_value_t value);
-homekit_value_t read_switch3_on_callback();
-void switch4_on_callback(homekit_value_t value);
-homekit_value_t read_switch4_on_callback();
-
-void switch_worker();
 
 void change_settings_callback();
 void show_setup_callback();
@@ -76,7 +66,6 @@ void relay_write(bool on, int gpio) {
     gpio_write(gpio, on ? 1 : 0);
 }
 
-
 void save_settings() {
     sysparam_status_t status;
     bool bool_value;
@@ -85,7 +74,6 @@ void save_settings() {
     if (status == SYSPARAM_OK && bool_value != show_setup.value.bool_value) {
         sysparam_set_bool("show_setup", show_setup.value.bool_value);
     }
-    
 }
 
 void device_restart_task() {
@@ -102,7 +90,6 @@ void device_restart_task() {
 
 void device_restart() {
     printf(">>> Restarting device\n");
-    led_code(LED_GPIO, RESTART_DEVICE);
     xTaskCreate(device_restart_task, "device_restart_task", 256, NULL, 1, NULL);
 }
 
@@ -157,9 +144,8 @@ void change_settings_callback() {
 
 void switch1_on_callback(homekit_value_t value) {
     printf(">>> Toggle Switch 1\n");
-    led_code(LED_GPIO, FUNCTION_A);
     switch1_on.value = value;
-    relay_write(switch1_on.value.bool_value, relay1_gpio);
+    relay_write(switch1_on.value.bool_value, RELAY_GPIO);
     printf(">>> Relay 1 -> %i\n", switch1_on.value.bool_value);
 }
 
@@ -170,17 +156,9 @@ homekit_value_t read_switch1_on_callback() {
 void toggle_switch(const uint8_t gpio) {
     printf(">>> Toggle Switch manual\n");
     switch1_on.value.bool_value = !switch1_on.value.bool_value;
-    relay_write(switch1_on.value.bool_value, relay1_gpio);
+    relay_write(switch1_on.value.bool_value, RELAY_GPIO);
     printf(">>> Relay 1 -> %i\n", switch1_on.value.bool_value);
     homekit_characteristic_notify(&switch1_on, switch1_on.value);
-}
-
-void button_simple1_intr_callback(const uint8_t gpio) {
-    if (device_type_static == 7) {
-        toggle_valve();
-    } else {
-        toggle_switch(gpio);
-    }
 }
 
 void identify(homekit_value_t _value) {
@@ -202,10 +180,11 @@ void gpio_init() {
     
     printf(">>> Loading device gpio settings\n");
     
+    gpio_enable(TOGGLE_GPIO, GPIO_INPUT);
+    gpio_set_pullup(TOGGLE_GPIO->gpio, false, false);
     
-    
-    gpio_enable(relay1_gpio, GPIO_OUTPUT);
-    relay_write(switch1_on.value.bool_value, relay1_gpio);
+    gpio_enable(RELAY_GPIO, GPIO_OUTPUT);
+    relay_write(switch1_on.value.bool_value, RELAY_GPIO);
     
     sdk_os_timer_setfn(&change_settings_timer, save_settings, NULL);
     
@@ -232,7 +211,7 @@ void create_accessory_name() {
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     
     char *name_value = malloc(17);
-    snprintf(name_value, 17, "RavenCore %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
+    snprintf(name_value, 17, "KellyTron %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
     name.value = HOMEKIT_STRING(name_value);
     
     char *serial_value = malloc(13);
@@ -249,27 +228,6 @@ void create_accessory() {
     if (show_setup.value.bool_value) {
         service_count++;
     }
-    
-    if (device_type_static == 2 || device_type_static == 3 || device_type_static == 10) {
-        service_count++;
-    } else if (device_type_static == 6) {
-        service_count += 2;
-    } else if (device_type_static == 4 || device_type_static == 9) {
-        service_count += 3;
-    }
-    
-    
-    // Accessory Category selection
-    if (device_type_static == 3 || device_type_static == 9) {
-        accessory_category = homekit_accessory_category_outlet;
-    } else if (device_type_static == 5) {
-        accessory_category = homekit_accessory_category_thermostat;
-    } else if (device_type_static == 7) {
-        accessory_category = homekit_accessory_category_sprinkler;
-    } else if (device_type_static == 8) {
-        accessory_category = homekit_accessory_category_garage;
-    }
-    
     
     homekit_accessory_t **accessories = calloc(2, sizeof(homekit_accessory_t*));
     
@@ -312,7 +270,7 @@ void create_accessory() {
         sonoff_setup->type = HOMEKIT_SERVICE_CUSTOM_SETUP;
         sonoff_setup->primary = false;
         
-        uint8_t setting_count = 5, setting_number = 4;
+        uint8_t setting_count = 4, setting_number = 3;
         
         sysparam_status_t status;
         char *char_value;
@@ -322,44 +280,13 @@ void create_accessory() {
             setting_count++;
         }
         
-        if (device_type_static == 1 || device_type_static == 5 || device_type_static == 6 || device_type_static == 7 || device_type_static == 9) {
-            setting_count++;
-        } else if (device_type_static == 8) {
-            setting_count += 6;
-        }
-        
         sonoff_setup->characteristics = calloc(setting_count, sizeof(homekit_characteristic_t*));
         sonoff_setup->characteristics[0] = &setup_service_name;
         sonoff_setup->characteristics[1] = &device_type_name;
-        sonoff_setup->characteristics[2] = &device_type;
-        sonoff_setup->characteristics[3] = &reboot_device;
+        sonoff_setup->characteristics[2] = &reboot_device;
         if (status == SYSPARAM_OK) {
             sonoff_setup->characteristics[setting_number] = &ota_firmware;
             setting_number++;
-        }
-        if (device_type_static == 1) {
-            sonoff_setup->characteristics[setting_number] = &gpio14_toggle;
-            setting_number++;
-        } else if (device_type_static == 5 || device_type_static == 6 || device_type_static == 9) {
-            sonoff_setup->characteristics[setting_number] = &dht_sensor_type;
-            setting_number++;
-        } else if (device_type_static == 7) {
-            sonoff_setup->characteristics[setting_number] = &custom_valve_type;
-            setting_number++;
-        } else if (device_type_static == 8) {
-            sonoff_setup->characteristics[setting_number] = &custom_garagedoor_has_stop;
-            setting_number++;
-            sonoff_setup->characteristics[setting_number] = &custom_garagedoor_sensor_close_nc;
-            setting_number++;
-            sonoff_setup->characteristics[setting_number] = &custom_garagedoor_sensor_open_nc;
-            setting_number++;
-            sonoff_setup->characteristics[setting_number] = &custom_garagedoor_has_sensor_open;
-            setting_number++;
-            sonoff_setup->characteristics[setting_number] = &custom_garagedoor_working_time;
-            setting_number++;
-            sonoff_setup->characteristics[setting_number] = &custom_garagedoor_control_with_button;
-            setting_number++;
-            
         }
     }
     
