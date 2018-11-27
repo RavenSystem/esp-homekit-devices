@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.5.0
+ * v0.5.1
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -342,29 +342,39 @@ void save_states() {
     int8_t int8_value;
     int32_t int32_value;
     
-    status = sysparam_get_bool("last_state_sw1", &bool_value);
-    if (status == SYSPARAM_OK && bool_value != switch1_on.value.bool_value) {
-        sysparam_set_bool("last_state_sw1", switch1_on.value.bool_value);
+    if (custom_init_state_sw1.value.int_value > 1) {
+        status = sysparam_get_bool("last_state_sw1", &bool_value);
+        if (status == SYSPARAM_OK && bool_value != switch1_on.value.bool_value) {
+            sysparam_set_bool("last_state_sw1", switch1_on.value.bool_value);
+        }
     }
     
-    status = sysparam_get_bool("last_state_sw2", &bool_value);
-    if (status == SYSPARAM_OK && bool_value != switch2_on.value.bool_value) {
-        sysparam_set_bool("last_state_sw2", switch2_on.value.bool_value);
+    if (custom_init_state_sw2.value.int_value > 1) {
+        status = sysparam_get_bool("last_state_sw2", &bool_value);
+        if (status == SYSPARAM_OK && bool_value != switch2_on.value.bool_value) {
+            sysparam_set_bool("last_state_sw2", switch2_on.value.bool_value);
+        }
     }
     
-    status = sysparam_get_bool("last_state_sw3", &bool_value);
-    if (status == SYSPARAM_OK && bool_value != switch3_on.value.bool_value) {
-        sysparam_set_bool("last_state_sw3", switch3_on.value.bool_value);
+    if (custom_init_state_sw3.value.int_value > 1) {
+        status = sysparam_get_bool("last_state_sw3", &bool_value);
+        if (status == SYSPARAM_OK && bool_value != switch3_on.value.bool_value) {
+            sysparam_set_bool("last_state_sw3", switch3_on.value.bool_value);
+        }
     }
     
-    status = sysparam_get_bool("last_state_sw4", &bool_value);
-    if (status == SYSPARAM_OK && bool_value != switch4_on.value.bool_value) {
-        sysparam_set_bool("last_state_sw4", switch4_on.value.bool_value);
+    if (custom_init_state_sw4.value.int_value > 1) {
+        status = sysparam_get_bool("last_state_sw4", &bool_value);
+        if (status == SYSPARAM_OK && bool_value != switch4_on.value.bool_value) {
+            sysparam_set_bool("last_state_sw4", switch4_on.value.bool_value);
+        }
     }
     
-    status = sysparam_get_int8("last_target_state_th", &int8_value);
-    if (status == SYSPARAM_OK && int8_value != target_state.value.int_value) {
-        sysparam_set_int8("last_target_state_th", target_state.value.int_value);
+    if (custom_init_state_th.value.int_value > 2) {
+        status = sysparam_get_int8("last_target_state_th", &int8_value);
+        if (status == SYSPARAM_OK && int8_value != target_state.value.int_value) {
+            sysparam_set_int8("last_target_state_th", target_state.value.int_value);
+        }
     }
     
     status = sysparam_get_int32("target_temp", &int32_value);
@@ -1337,7 +1347,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.0");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.1");
 
 homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
@@ -1394,7 +1404,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000500;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+        sonoff->config_number = 000501;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
