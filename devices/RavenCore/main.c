@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.5.1
+ * v0.5.2
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -71,8 +71,6 @@
 #define RELAY2_GPIO         5
 #define RELAY3_GPIO         4
 #define RELAY4_GPIO         15
-
-#define POLL_PERIOD         30000
 
 #define DISABLED_TIME       60
 
@@ -157,6 +155,7 @@ homekit_characteristic_t gpio14_toggle = HOMEKIT_CHARACTERISTIC_(CUSTOM_GPIO14_T
 
 // Thermostat Setup
 homekit_characteristic_t dht_sensor_type = HOMEKIT_CHARACTERISTIC_(CUSTOM_DHT_SENSOR_TYPE, 2, .id=112, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
+homekit_characteristic_t poll_period = HOMEKIT_CHARACTERISTIC_(CUSTOM_TH_PERIOD, 30, .id=125, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(save_states_callback));
 
 // Water Valve Setup
 homekit_characteristic_t custom_valve_type = HOMEKIT_CHARACTERISTIC_(CUSTOM_VALVE_TYPE, 0, .id=113, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
@@ -175,6 +174,8 @@ homekit_characteristic_t custom_init_state_sw2 = HOMEKIT_CHARACTERISTIC_(CUSTOM_
 homekit_characteristic_t custom_init_state_sw3 = HOMEKIT_CHARACTERISTIC_(CUSTOM_INIT_STATE_SW3, 0, .id=122, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t custom_init_state_sw4 = HOMEKIT_CHARACTERISTIC_(CUSTOM_INIT_STATE_SW4, 0, .id=123, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t custom_init_state_th = HOMEKIT_CHARACTERISTIC_(CUSTOM_INIT_STATE_TH, 0, .id=124, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
+
+// Last used ID = 125
 // ---------------------------
 
 void relay_write(bool on, int gpio) {
@@ -269,6 +270,11 @@ void save_settings() {
     status = sysparam_get_int8("dht_sensor_type", &int8_value);
     if (status == SYSPARAM_OK && int8_value != dht_sensor_type.value.int_value) {
         sysparam_set_int8("dht_sensor_type", dht_sensor_type.value.int_value);
+    }
+    
+    status = sysparam_get_int8("poll_period", &int8_value);
+    if (status == SYSPARAM_OK && int8_value != poll_period.value.int_value) {
+        sysparam_set_int8("poll_period", poll_period.value.int_value);
     }
 
     status = sysparam_get_int8("valve_type", &int8_value);
@@ -430,6 +436,8 @@ void reset_call_task() {
     sysparam_set_bool("gpio14_toggle", false);
     vTaskDelay(50 / portTICK_PERIOD_MS);
     sysparam_set_int8("dht_sensor_type", 2);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+    sysparam_set_int8("poll_period", 30);
     vTaskDelay(50 / portTICK_PERIOD_MS);
     sysparam_set_int8("valve_type", 0);
     vTaskDelay(50 / portTICK_PERIOD_MS);
@@ -679,10 +687,20 @@ void garage_button_task() {
 }
 
 void garage_on_callback(homekit_value_t value) {
-    printf(">>> Garage Door activated from iOS: Target door state -> %i\n", value.int_value);
-    led_code(LED_GPIO, FUNCTION_A);
-    target_door_state.value = value;
-    xTaskCreate(garage_button_task, "garage_button_task", 192, NULL, 1, NULL);
+    printf(">>> Garage Door activated from iOS: Current state -> %i, Target state -> %i\n", current_door_state.value.int_value, value.int_value);
+    
+    uint8_t current_door_state_simple = current_door_state.value.int_value;
+    if (current_door_state_simple > 1) {
+        current_door_state_simple -= 2;
+    }
+    
+    if (value.int_value != current_door_state_simple) {
+        led_code(LED_GPIO, FUNCTION_A);
+        target_door_state.value = value;
+        xTaskCreate(garage_button_task, "garage_button_task", 192, NULL, 1, NULL);
+    } else {
+        led_code(LED_GPIO, FUNCTION_D);
+    }
 }
 
 void garage_on_button(const uint8_t gpio) {
@@ -985,7 +1003,7 @@ void hardware_init() {
             relay_write(false, relay1_gpio);
             
             sdk_os_timer_setfn(&extra_func_timer, temperature_sensor_worker, NULL);
-            sdk_os_timer_arm(&extra_func_timer, POLL_PERIOD, 1);
+            sdk_os_timer_arm(&extra_func_timer, poll_period.value.int_value * 1000, 1);
             break;
             
         case 6:
@@ -998,7 +1016,7 @@ void hardware_init() {
             relay_write(switch1_on.value.bool_value, relay1_gpio);
             
             sdk_os_timer_setfn(&extra_func_timer, temperature_sensor_worker, NULL);
-            sdk_os_timer_arm(&extra_func_timer, POLL_PERIOD, 1);
+            sdk_os_timer_arm(&extra_func_timer, poll_period.value.int_value * 1000, 1);
             break;
             
         case 7:
@@ -1058,7 +1076,7 @@ void hardware_init() {
             relay_write(switch1_on.value.bool_value, relay1_gpio);
             
             sdk_os_timer_setfn(&extra_func_timer, temperature_sensor_worker, NULL);
-            sdk_os_timer_arm(&extra_func_timer, POLL_PERIOD, 1);
+            sdk_os_timer_arm(&extra_func_timer, poll_period.value.int_value * 1000, 1);
             break;
             
         case 10:
@@ -1146,6 +1164,13 @@ void gpio_init() {
         dht_sensor_type.value.int_value = int8_value;
     } else {
         sysparam_set_int8("dht_sensor_type", 2);
+    }
+    
+    status = sysparam_get_int8("poll_period", &int8_value);
+    if (status == SYSPARAM_OK) {
+        poll_period.value.int_value = int8_value;
+    } else {
+        sysparam_set_int8("poll_period", 30);
     }
     
     status = sysparam_get_int8("valve_type", &int8_value);
@@ -1347,7 +1372,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.1");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.2");
 
 homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
@@ -1404,7 +1429,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000501;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+        sonoff->config_number = 000502;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
@@ -1729,11 +1754,11 @@ void create_accessory() {
                         break;
                         
                     case 5:
-                        setting_count += 2;
+                        setting_count += 3;
                         break;
                         
                     case 6:
-                        setting_count += 2;
+                        setting_count += 3;
                         break;
                         
                     case 7:
@@ -1745,7 +1770,7 @@ void create_accessory() {
                         break;
                         
                     case 9:
-                        setting_count += 2;
+                        setting_count += 3;
                         break;
                         
                     case 10:
@@ -1784,17 +1809,14 @@ void create_accessory() {
                         sonoff_setup->characteristics[setting_number] = &gpio14_toggle;
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_init_state_sw1;
-                        setting_number++;
                         
                     } else if (device_type_static == 2) {
                         sonoff_setup->characteristics[setting_number] = &custom_init_state_sw1;
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_init_state_sw2;
-                        setting_number++;
                         
                     } else if (device_type_static == 3) {
                         sonoff_setup->characteristics[setting_number] = &custom_init_state_sw1;
-                        setting_number++;
                         
                     } else if (device_type_static == 4) {
                         sonoff_setup->characteristics[setting_number] = &custom_init_state_sw1;
@@ -1804,23 +1826,23 @@ void create_accessory() {
                         sonoff_setup->characteristics[setting_number] = &custom_init_state_sw3;
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_init_state_sw4;
-                        setting_number++;
                         
                     } else if (device_type_static == 5) {
                         sonoff_setup->characteristics[setting_number] = &dht_sensor_type;
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_init_state_th;
                         setting_number++;
+                        sonoff_setup->characteristics[setting_number] = &poll_period;
                         
                     } else if (device_type_static == 6) {
                         sonoff_setup->characteristics[setting_number] = &dht_sensor_type;
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_init_state_sw1;
                         setting_number++;
+                        sonoff_setup->characteristics[setting_number] = &poll_period;
                         
                     } else if (device_type_static == 7) {
                         sonoff_setup->characteristics[setting_number] = &custom_valve_type;
-                        setting_number++;
                     
                     } else if (device_type_static == 8) {
                         sonoff_setup->characteristics[setting_number] = &custom_garagedoor_has_stop;
@@ -1834,17 +1856,16 @@ void create_accessory() {
                         sonoff_setup->characteristics[setting_number] = &custom_garagedoor_working_time;
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_garagedoor_control_with_button;
-                        setting_number++;
                         
                     } else if (device_type_static == 9) {
                         sonoff_setup->characteristics[setting_number] = &dht_sensor_type;
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_init_state_sw1;
                         setting_number++;
+                        sonoff_setup->characteristics[setting_number] = &poll_period;
                         
                     } else if (device_type_static == 10) {
                         sonoff_setup->characteristics[setting_number] = &custom_init_state_sw1;
-                        setting_number++;
                         
                     } else if (device_type_static == 11) {
                         sonoff_setup->characteristics[setting_number] = &custom_init_state_sw1;
@@ -1852,7 +1873,6 @@ void create_accessory() {
                         sonoff_setup->characteristics[setting_number] = &custom_init_state_sw2;
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_init_state_sw3;
-                        setting_number++;
                     }
             }
     

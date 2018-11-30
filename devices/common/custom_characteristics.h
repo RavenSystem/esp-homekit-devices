@@ -143,6 +143,21 @@
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_TH_PERIOD HOMEKIT_CUSTOM_UUID("F0000107")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_TH_PERIOD(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_TH_PERIOD, \
+    .description = "TH Period", \
+    .format = homekit_format_uint8, \
+    .unit = homekit_unit_seconds, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {3}, \
+    .max_value = (float[]) {60}, \
+    .min_step = (float[]) {1}, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_STOP HOMEKIT_CUSTOM_UUID("F0000110")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_STOP(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_STOP, \
