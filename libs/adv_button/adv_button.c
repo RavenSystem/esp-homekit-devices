@@ -26,7 +26,7 @@
 #include <esplibs/libmain.h>
 #include "adv_button.h"
 
-#define DEBOUNCE_TIME               20
+#define DEBOUNCE_TIME               40
 #define DISABLE_TIME                80
 #define DOUBLEPRESS_TIME            400
 #define LONGPRESS_TIME              450
@@ -43,6 +43,7 @@ typedef struct _adv_button {
     button_callback_fn verylongpress_callback_fn;
     button_callback_fn holdpress_callback_fn;
 
+    bool is_down;
     uint8_t press_count;
     uint8_t hold_count;
     ETSTimer press_timer;
@@ -92,11 +93,11 @@ static adv_toggle_t *toggle_find_by_gpio(const uint8_t gpio) {
     return toggle;
 }
 
-void adv_button_set_disable_time() {
+IRAM void adv_button_set_disable_time() {
     disable_time = xTaskGetTickCountFromISR();
 }
 
-static void push_down_timer_callback() {
+IRAM static void push_down_timer_callback() {
     sdk_os_timer_disarm(&push_down_timer);
     
     const uint32_t now = xTaskGetTickCountFromISR();
@@ -107,19 +108,21 @@ static void push_down_timer_callback() {
             sdk_os_timer_arm(&button->hold_timer, 2000, 1);
             button->hold_count = 0;
             button->last_event_time = now;
+            button->is_down = true;
         }
     }
 }
 
-static void push_up_timer_callback() {
+IRAM static void push_up_timer_callback() {
     sdk_os_timer_disarm(&push_up_timer);
     
     const uint32_t now = xTaskGetTickCountFromISR();
 
     if (now - disable_time > DISABLE_TIME / portTICK_PERIOD_MS) {
-        if (gpio_read(used_gpio) == 1) {
-            adv_button_t *button = button_find_by_gpio(used_gpio);
+        adv_button_t *button = button_find_by_gpio(used_gpio);
+        if (gpio_read(used_gpio) == 1 && button->is_down) {
             sdk_os_timer_disarm(&button->hold_timer);
+            button->is_down = false;
             button->hold_count = 0;
             
             if (now - button->last_event_time > VERYLONGPRESS_TIME / portTICK_PERIOD_MS) {
@@ -157,7 +160,7 @@ static void push_up_timer_callback() {
     }
 }
 
-static void adv_button_intr_callback(const uint8_t gpio) {
+IRAM static void adv_button_intr_callback(const uint8_t gpio) {
     used_gpio = gpio;
     
     if (gpio_read(used_gpio) == 1) {
@@ -222,6 +225,7 @@ int adv_button_create(const uint8_t gpio) {
         button->next = buttons;
         buttons = button;
         
+        button->is_down = false;
         button->hold_count = 0;
         button->press_count = 0;
         
@@ -246,7 +250,7 @@ int adv_button_create(const uint8_t gpio) {
 }
 
 #define maxvalue_unsigned(x) ((1 << (8 * sizeof(x))) - 1)
-static void toggle_evaluate_fn() {        // Based on https://github.com/pcsaito/esp-homekit-demo/blob/LPFToggle/examples/sonoff_basic_toggle/toggle.c
+IRAM static void toggle_evaluate_fn() {        // Based on https://github.com/pcsaito/esp-homekit-demo/blob/LPFToggle/examples/sonoff_basic_toggle/toggle.c
     adv_toggle_t *toggle = toggles;
     
     while (toggle) {
