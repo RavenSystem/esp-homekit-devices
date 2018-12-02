@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.5.3
+ * v0.5.4
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -192,17 +192,17 @@ void on_target(homekit_value_t value) {
     target_state.value = value;
     switch (target_state.value.int_value) {
         case 1:
-            printf(">>> Set to HEAT\n");
+            printf("RC >>> Set to HEAT\n");
             led_code(LED_GPIO, FUNCTION_B);
             break;
             
         case 2:
-            printf(">>> Set to COOL\n");
+            printf("RC >>> Set to COOL\n");
             led_code(LED_GPIO, FUNCTION_C);
             break;
             
         default:
-            printf(">>> Set to OFF\n");
+            printf("RC >>> Set to OFF\n");
             led_code(LED_GPIO, FUNCTION_A);
             break;
     }
@@ -246,7 +246,7 @@ void update_state() {
 }
 
 void save_settings() {
-    printf(">>> Saving settings\n");
+    printf("RC >>> Saving settings\n");
     
     sysparam_status_t status;
     bool bool_value;
@@ -341,7 +341,7 @@ void save_settings() {
 }
 
 void save_states() {
-    printf(">>> Saving last states\n");
+    printf("RC >>> Saving last states\n");
     
     sysparam_status_t status;
     bool bool_value;
@@ -409,7 +409,7 @@ void device_restart_task() {
 }
 
 void device_restart() {
-    printf(">>> Restarting device\n");
+    printf("RC >>> Restarting device\n");
     led_code(LED_GPIO, RESTART_DEVICE);
     xTaskCreate(device_restart_task, "device_restart_task", 256, NULL, 1, NULL);
 }
@@ -426,7 +426,7 @@ void show_setup_callback() {
 }
 
 void reset_call_task() {
-    printf(">>> Resetting device to factory defaults\n");
+    printf("RC >>> Resetting device to factory defaults\n");
     
     vTaskDelay(50 / portTICK_PERIOD_MS);
     sysparam_set_bool("show_setup", false);
@@ -519,11 +519,11 @@ void save_states_callback() {
 }
 
 void switch1_on_callback(homekit_value_t value) {
-    printf(">>> Toggle Switch 1\n");
+    printf("RC >>> Toggle Switch 1\n");
     led_code(LED_GPIO, FUNCTION_A);
     switch1_on.value = value;
     relay_write(switch1_on.value.bool_value, relay1_gpio);
-    printf(">>> Relay 1 -> %i\n", switch1_on.value.bool_value);
+    printf("RC >>> Relay 1 -> %i\n", switch1_on.value.bool_value);
     save_states_callback();
 }
 
@@ -532,11 +532,11 @@ homekit_value_t read_switch1_on_callback() {
 }
 
 void switch2_on_callback(homekit_value_t value) {
-    printf(">>> Toggle Switch 2\n");
+    printf("RC >>> Toggle Switch 2\n");
     led_code(LED_GPIO, FUNCTION_A);
     switch2_on.value = value;
     relay_write(switch2_on.value.bool_value, RELAY2_GPIO);
-    printf(">>> Relay 2 -> %i\n", switch2_on.value.bool_value);
+    printf("RC >>> Relay 2 -> %i\n", switch2_on.value.bool_value);
     save_states_callback();
 }
 
@@ -545,11 +545,11 @@ homekit_value_t read_switch2_on_callback() {
 }
 
 void switch3_on_callback(homekit_value_t value) {
-    printf(">>> Toggle Switch 3\n");
+    printf("RC >>> Toggle Switch 3\n");
     led_code(LED_GPIO, FUNCTION_A);
     switch3_on.value = value;
     relay_write(switch3_on.value.bool_value, RELAY3_GPIO);
-    printf(">>> Relay 3 -> %i\n", switch3_on.value.bool_value);
+    printf("RC >>> Relay 3 -> %i\n", switch3_on.value.bool_value);
     save_states_callback();
 }
 
@@ -558,11 +558,11 @@ homekit_value_t read_switch3_on_callback() {
 }
 
 void switch4_on_callback(homekit_value_t value) {
-    printf(">>> Toggle Switch 4\n");
+    printf("RC >>> Toggle Switch 4\n");
     led_code(LED_GPIO, FUNCTION_A);
     switch4_on.value = value;
     relay_write(switch4_on.value.bool_value, RELAY4_GPIO);
-    printf(">>> Relay 4 -> %i\n", switch4_on.value.bool_value);
+    printf("RC >>> Relay 4 -> %i\n", switch4_on.value.bool_value);
     save_states_callback();
 }
 
@@ -571,11 +571,11 @@ homekit_value_t read_switch4_on_callback() {
 }
 
 void toggle_switch(const uint8_t gpio) {
-    printf(">>> Toggle Switch manual\n");
+    printf("RC >>> Toggle Switch manual\n");
     led_code(LED_GPIO, FUNCTION_A);
     switch1_on.value.bool_value = !switch1_on.value.bool_value;
     relay_write(switch1_on.value.bool_value, relay1_gpio);
-    printf(">>> Relay 1 -> %i\n", switch1_on.value.bool_value);
+    printf("RC >>> Relay 1 -> %i\n", switch1_on.value.bool_value);
     homekit_characteristic_notify(&switch1_on, switch1_on.value);
     save_states_callback();
 }
@@ -605,7 +605,7 @@ void toggle_valve() {
 void valve_control() {
     remaining_duration.value.int_value--;
     if (remaining_duration.value.int_value == 0) {
-        printf(">>> Valve OFF\n");
+        printf("RC >>> Valve OFF\n");
         led_code(LED_GPIO, FUNCTION_D);
         
         sdk_os_timer_disarm(&extra_func_timer);
@@ -626,12 +626,12 @@ void valve_on_callback(homekit_value_t value) {
     in_use.value.int_value = active.value.int_value;
     
     if (active.value.int_value == 1) {
-        printf(">>> Valve ON\n");
+        printf("RC >>> Valve ON\n");
         relay_write(true, relay1_gpio);
         remaining_duration.value = set_duration.value;
         sdk_os_timer_arm(&extra_func_timer, 1000, 1);
     } else {
-        printf(">>> Valve manual OFF\n");
+        printf("RC >>> Valve manual OFF\n");
         sdk_os_timer_disarm(&extra_func_timer);
         relay_write(false, relay1_gpio);
         remaining_duration.value.int_value = 0;
@@ -654,6 +654,7 @@ homekit_value_t read_remaining_duration_on_callback() {
 }
 
 void garage_button_task() {
+    printf("RC >>> Garage Door relay working\n");
     if (!custom_garagedoor_has_sensor_open.value.bool_value) {
         sdk_os_timer_disarm(&extra_func_timer);
     }
@@ -671,11 +672,11 @@ void garage_button_task() {
 
     if (!custom_garagedoor_has_sensor_open.value.bool_value) {
         if (current_door_state.value.int_value == 0 || current_door_state.value.int_value == 2) {
-            printf(">>> Garage Door -> CLOSING\n");
+            printf("RC >>> Garage Door -> CLOSING\n");
             current_door_state.value.int_value = 3;
             sdk_os_timer_arm(&extra_func_timer, 1000, 1);
         } else if (current_door_state.value.int_value == 3) {
-            printf(">>> Garage Door -> OPENING\n");
+            printf("RC >>> Garage Door -> OPENING\n");
             current_door_state.value.int_value = 2;
             sdk_os_timer_arm(&extra_func_timer, 1000, 1);
         }
@@ -687,7 +688,7 @@ void garage_button_task() {
 }
 
 void garage_on_callback(homekit_value_t value) {
-    printf(">>> Garage Door activated from iOS: Current state -> %i, Target state -> %i\n", current_door_state.value.int_value, value.int_value);
+    printf("RC >>> Garage Door activated: Current state -> %i, Target state -> %i\n", current_door_state.value.int_value, value.int_value);
     
     uint8_t current_door_state_simple = current_door_state.value.int_value;
     if (current_door_state_simple > 1) {
@@ -696,22 +697,31 @@ void garage_on_callback(homekit_value_t value) {
     
     if (value.int_value != current_door_state_simple) {
         led_code(LED_GPIO, FUNCTION_A);
-        target_door_state.value = value;
         xTaskCreate(garage_button_task, "garage_button_task", 192, NULL, 1, NULL);
     } else {
         led_code(LED_GPIO, FUNCTION_D);
     }
+    
+    target_door_state.value = value;
 }
 
 void garage_on_button(const uint8_t gpio) {
     if (custom_garagedoor_control_with_button.value.bool_value) {
-        garage_on_callback(target_door_state.value);
+        printf("RC >>> Garage Door: built-in button PRESSED\n");
+        
+        if (target_door_state.value.int_value == 0) {
+            garage_on_callback(HOMEKIT_UINT8(1));
+        } else {
+            garage_on_callback(HOMEKIT_UINT8(0));
+        }
     } else {
+        printf("RC >>> Garage Door: built-in button DISABLED\n");
         led_code(LED_GPIO, FUNCTION_D);
     }
 }
 
 homekit_value_t read_garage_on_callback() {
+    printf("RC >>> Garage Door: returning target_door_state -> %i\n", target_door_state.value.int_value);
     return target_door_state.value;
 }
 
@@ -721,7 +731,7 @@ static void homekit_gd_notify() {
 }
 
 void door_opened_0_fn_callback(const uint8_t gpio) {
-    printf(">>> Garage Door -> CLOSING\n");
+    printf("RC >>> Garage Door -> CLOSING\n");
     gd_is_moving = true;
     target_door_state.value.int_value = 1;
     current_door_state.value.int_value = 3;
@@ -730,7 +740,7 @@ void door_opened_0_fn_callback(const uint8_t gpio) {
 }
 
 void door_opened_1_fn_callback(const uint8_t gpio) {
-    printf(">>> Garage Door -> OPENED\n");
+    printf("RC >>> Garage Door -> OPENED\n");
     gd_is_moving = false;
     target_door_state.value.int_value = 0;
     current_door_state.value.int_value = 0;
@@ -739,7 +749,7 @@ void door_opened_1_fn_callback(const uint8_t gpio) {
 }
 
 void door_closed_0_fn_callback(const uint8_t gpio) {
-    printf(">>> Garage Door -> OPENING\n");
+    printf("RC >>> Garage Door -> OPENING\n");
     gd_is_moving = true;
     target_door_state.value.int_value = 0;
     current_door_state.value.int_value = 2;
@@ -752,7 +762,7 @@ void door_closed_0_fn_callback(const uint8_t gpio) {
 }
 
 void door_closed_1_fn_callback(const uint8_t gpio) {
-    printf(">>> Garage Door -> CLOSED\n");
+    printf("RC >>> Garage Door -> CLOSED\n");
     gd_time_state = 0;
     gd_is_moving = false;
     target_door_state.value.int_value = 1;
@@ -774,7 +784,7 @@ void door_opened_countdown_timer() {
         gd_time_state++;
     
         if (gd_time_state == custom_garagedoor_working_time.value.int_value) {
-            printf(">>> Garage Door -> OPENED\n");
+            printf("RC >>> Garage Door -> OPENED\n");
             sdk_os_timer_disarm(&extra_func_timer);
             gd_is_moving = false;
             gd_time_state = custom_garagedoor_working_time.value.int_value;
@@ -786,7 +796,7 @@ void door_opened_countdown_timer() {
     } else if (current_door_state.value.int_value == 3) {
         gd_time_state--;
          if (gd_time_state == 0) {
-             printf(">>> Garage Door -> CLOSED\n");
+             printf("RC >>> Garage Door -> CLOSED\n");
              sdk_os_timer_disarm(&extra_func_timer);
              gd_is_moving = false;
              target_door_state.value.int_value = 1;
@@ -842,18 +852,18 @@ void th_button_intr_callback(const uint8_t gpio) {
     uint8_t state = target_state.value.int_value + 1;
     switch (state) {
         case 1:
-            printf(">>> Thermostat set to HEAT\n");
+            printf("RC >>> Thermostat set to HEAT\n");
             led_code(LED_GPIO, FUNCTION_B);
             break;
             
         case 2:
-            printf(">>> Thermostat set to COOL\n");
+            printf("RC >>> Thermostat set to COOL\n");
             led_code(LED_GPIO, FUNCTION_C);
             break;
 
         default:
             state = 0;
-            printf(">>> Thermostat set to OFF\n");
+            printf("RC >>> Thermostat set to OFF\n");
             led_code(LED_GPIO, FUNCTION_A);
             break;
     }
@@ -887,7 +897,7 @@ void temperature_sensor_worker() {
     }
     
     if (get_temp) {
-        printf(">>> Sensor: temperature %g, humidity %g\n", temperature_value, humidity_value);
+        printf("RC >>> Sensor: temperature %g, humidity %g\n", temperature_value, humidity_value);
         
         if (temperature_value != old_temperature_value) {
             old_temperature_value = temperature_value;
@@ -905,7 +915,7 @@ void temperature_sensor_worker() {
             }
         }
     } else {
-        printf(">>> Sensor: ERROR\n");
+        printf("RC >>> Sensor: ERROR\n");
         led_code(LED_GPIO, SENSOR_ERROR);
         
         if (current_state.value.int_value != 0 && device_type_static == 5) {
@@ -922,7 +932,7 @@ void identify(homekit_value_t _value) {
 }
 
 void hardware_init() {
-    printf(">>> Initializing hardware...\n");
+    printf("RC >>> Initializing hardware...\n");
     
     gpio_enable(LED_GPIO, GPIO_OUTPUT);
     led_write(false);
@@ -1121,7 +1131,7 @@ void hardware_init() {
     sdk_os_timer_setfn(&change_settings_timer, save_settings, NULL);
     sdk_os_timer_setfn(&save_states_timer, save_states, NULL);
     
-    printf(">>> Hardware ready\n");
+    printf("RC >>> Hardware ready\n");
     
     wifi_config_init("RavenCore", NULL, on_wifi_ready);
 }
@@ -1134,7 +1144,7 @@ void gpio_init() {
     int32_t int32_value;
     
     // Load Saved Settings and set factory values for missing settings
-    printf(">>> Loading settings\n");
+    printf("RC >>> Loading settings\n");
     
     status = sysparam_get_bool("show_setup", &bool_value);
     if (status == SYSPARAM_OK) {
@@ -1147,10 +1157,10 @@ void gpio_init() {
     if (status == SYSPARAM_OK) {
         device_type.value.int_value = int8_value;
         device_type_static = int8_value;
-        printf(">>> Loading device_type -> %i\n", device_type.value.int_value);
+        printf("RC >>> Loading device_type -> %i\n", device_type.value.int_value);
     } else {
         sysparam_set_int8("device_type", 1);
-        printf(">>> Setting device_type to default -> 1\n");
+        printf("RC >>> Setting device_type to default -> 1\n");
     }
     
     status = sysparam_get_bool("gpio14_toggle", &bool_value);
@@ -1260,7 +1270,7 @@ void gpio_init() {
     }
     
     // Load Saved States
-    printf(">>> Loading saved states\n");
+    printf("RC >>> Loading saved states\n");
     
     if (custom_init_state_sw1.value.int_value > 1) {
         status = sysparam_get_bool("last_state_sw1", &bool_value);
@@ -1373,12 +1383,12 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.3");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.4");
 
 homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
 void create_accessory_name() {
-    printf(">>> Creating accessory name and serial\n");
+    printf("RC >>> Creating accessory name and serial\n");
     
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
@@ -1395,7 +1405,7 @@ void create_accessory_name() {
 homekit_server_config_t config;
 
 void create_accessory() {
-    printf(">>> Creating HomeKit accessory\n");
+    printf("RC >>> Creating HomeKit accessory\n");
     
     uint8_t service_count = 3, service_number = 2;
     
@@ -1430,7 +1440,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000503;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+        sonoff->config_number = 000504;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
@@ -1732,7 +1742,7 @@ void create_accessory() {
 
             // Setup Accessory, visible only in 3party Apps
             if (show_setup.value.bool_value) {
-                printf(">>> Creating Setup accessory\n");
+                printf("RC >>> Creating Setup accessory\n");
                 
                 homekit_service_t *sonoff_setup = sonoff->services[service_number] = calloc(1, sizeof(homekit_service_t));
                 sonoff_setup->id = 99;
@@ -1880,7 +1890,7 @@ void create_accessory() {
     config.accessories = accessories;
     config.password = "021-82-017";
     
-    printf(">>> Starting HomeKit Server\n");
+    printf("RC >>> Starting HomeKit Server\n");
     homekit_server_init(&config);
 }
 
@@ -1894,9 +1904,9 @@ void on_wifi_ready() {
 void user_init(void) {
     uart_set_baud(0, 115200);
     
-    printf(">>> RavenCore firmware loaded\n");
-    printf(">>> Developed by RavenSystem - José Antonio Jiménez\n");
-    printf(">>> Firmware revision: %s\n\n", firmware.value.string_value);
+    printf("RC >>> RavenCore firmware loaded\n");
+    printf("RC >>> Developed by RavenSystem - José Antonio Jiménez\n");
+    printf("RC >>> Firmware revision: %s\n\n", firmware.value.string_value);
     
     gpio_init();
 }
