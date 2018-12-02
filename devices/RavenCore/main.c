@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.5.2
+ * v0.5.3
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -881,6 +881,7 @@ void temperature_sensor_worker() {
         
         if (ds18b20_scan_devices(SENSOR_GPIO, ds18b20_addr, 1) == 1) {
             temperature_value = ds18b20_read_single(SENSOR_GPIO);
+            humidity_value = 0.0;
             get_temp = true;
         }
     }
@@ -1372,7 +1373,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.2");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.3");
 
 homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
@@ -1429,7 +1430,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000502;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+        sonoff->config_number = 000503;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
