@@ -4,30 +4,34 @@
 <head>
 <title>WiFi Configration</title>
 <style type="text/css">
-html, input {font-size: 40px;}
-h1 { font-size: 150%; text-align: center; }
-body .container {width: 15em; margin: 0 auto; padding: 1em;}
-label {display: block;}
-input[type=text], input[type=password] {width: 100%; box-sizing: border-box;}
-input[type=submit] {
-    width: 100%;
-    border: 1px solid black;
-    text-decoration: none;
-    padding: 0.25em 5em;
-    color: white;
-    background-color: #4caf50;
-    cursor: pointer;
-    -webkit-appearance: none;
-    -webkit-border-radius: 0;
+html, input {font-size: 40px; font-family: Helvetica Neue,Helvetica,Arial,sans-serif}
+h1 { font-size: 150%; margin-top: 5px;}
+body .container {width: 15em; margin: 0 auto; padding: 1em; background: #f0eff5;}
+label {display: block; font-weight: bold; padding-bottom: .4em;}
+input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.8em;
+  border: none;
+  text-decoration: none;
+  color: black;
+  background-color: white;
+  cursor: pointer;
+  font-weight: bold;
+  -webkit-appearance: none;
+  -webkit-border-radius: .6em;
+  text-align: center;
 }
-input[type=submit]#refresh {background-color: #44bbe3;}
-input[type=submit]#join {background-color: #4caf50;}
+input#password, input#ssid {
+  text-align: left;
+}
 input[type=submit][disabled] {
     color: #aaaaaa;
-    background-color: #eeeeee !important;
+    background-color: #e1e1e1 !important;
 }
 .networks {list-style: none; margin: 1em 0; padding: 0;}
 .networks li {
+  color: #f7941d;
     cursor: pointer;
     padding: 0.25em;
     margin-bottom: 0.25em;
@@ -35,19 +39,19 @@ input[type=submit][disabled] {
     overflow: hidden;
     text-overflow: ellipsis;
     position: relative;
-    padding-left: 1.1em;
+    padding-left: 1.2em;
 }
-.networks li.secure::before {content: "🔒"; position: absolute; left: 0;}
+.networks li.secure::before {content: "🔒"; position: absolute; left: .1em;}
 .networks li.selected {font-weight: bold; background-color: #ddd}
-.networks li:hover {background-color: #eee;}
-.nonetworks {text-align: center; margin-bottom: 1em;}
+.networks li:hover {background-color: #fff; -webkit-border-radius: .4em; }
+.nonetworks {margin-bottom: 1em; color: #f7941d; font-weight: bold;}
 .field {margin-bottom: 0.5em;}
-.field.required label::before {content: "*"; color: red;}
+.field.required label::after {content: "*"; color: red;}
 </style>
 </head>
 <body>
     <div class="container">
-        <h1>Join WiFi network</h1>
+        <h1>Join WiFi network</h1><br>
         <form action="/settings" method="get">
             <input type="submit" id="refresh" value="⟲ Refresh" />
         </form>
@@ -57,13 +61,11 @@ input[type=submit][disabled] {
                 {% for network in networks %}
                 <li class="{{ network.secure | ternary('secure', 'unsecure') }}">{{ network.ssid }}</li>
                 {% endfor %}
-                <!-- part HTML_SETTINGS_FOOTER -->
+               <!-- part HTML_SETTINGS_FOOTER -->
             </ul>
-
             <div class="nonetworks" style="display: none;">
                 No networks found
             </div>
-
             <div class="field required ssid" style="display: none;">
                 <label for="ssid">SSID:</label>
                 <input type="text" id="ssid" name="ssid" />
