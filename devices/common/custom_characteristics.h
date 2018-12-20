@@ -45,6 +45,24 @@
     .value = HOMEKIT_BOOL_(_value), \
     ##__VA_ARGS__
 
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_BOARD_TYPE HOMEKIT_CUSTOM_UUID("F0000100")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_BOARD_TYPE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_BOARD_TYPE, \
+    .description = "Board Type", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {1}, \
+    .max_value = (float[]) {3}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+    .count = 3, \
+    .values = (uint8_t[]) {1, 2, 3}, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_OTA_UPDATE HOMEKIT_CUSTOM_UUID("F0000101")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_OTA_UPDATE(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_OTA_UPDATE, \
@@ -99,7 +117,7 @@
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_GPIO14_TOGGLE HOMEKIT_CUSTOM_UUID("F0000104")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GPIO14_TOGGLE(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GPIO14_TOGGLE, \
-    .description = "GPIO14 Toggle", \
+    .description = "External Toggle", \
     .format = homekit_format_bool, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
@@ -110,7 +128,7 @@
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_DHT_SENSOR_TYPE HOMEKIT_CUSTOM_UUID("F0000105")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_DHT_SENSOR_TYPE(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_DHT_SENSOR_TYPE, \
-    .description = "Sensor Type", \
+    .description = "TH Sensor Type", \
     .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
@@ -226,6 +244,24 @@
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
     .value = HOMEKIT_BOOL_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_OBSTRUCTION_SENSOR HOMEKIT_CUSTOM_UUID("F0000116")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_OBSTRUCTION_SENSOR(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_OBSTRUCTION_SENSOR, \
+    .description = "Obstruction Sensor", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {2}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+    .count = 3, \
+    .values = (uint8_t[]) {0, 1, 2}, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
 /* Switch Initial State
