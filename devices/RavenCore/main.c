@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.5.5
+ * v0.5.6
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -1391,9 +1391,9 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.5");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.6");
 
-homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
+homekit_accessory_category_t accessory_category;
 
 void create_accessory_name() {
     printf("RC >>> Creating accessory name and serial\n");
@@ -1417,29 +1417,72 @@ void create_accessory() {
     
     uint8_t service_count = 3, service_number = 2;
     
-    // Total service count
+    // Total service count and Accessory Category selection
     if (show_setup.value.bool_value) {
         service_count++;
     }
     
-    if (device_type_static == 2 || device_type_static == 3 || device_type_static == 10) {
-        service_count++;
-    } else if (device_type_static == 6) {
-        service_count += 2;
-    } else if (device_type_static == 4 || device_type_static == 9) {
-        service_count += 3;
-    }
-    
-    
-    // Accessory Category selection
-    if (device_type_static == 3 || device_type_static == 9) {
-        accessory_category = homekit_accessory_category_outlet;
-    } else if (device_type_static == 5) {
-        accessory_category = homekit_accessory_category_thermostat;
-    } else if (device_type_static == 7) {
-        accessory_category = homekit_accessory_category_sprinkler;
-    } else if (device_type_static == 8) {
-        accessory_category = homekit_accessory_category_garage;
+    switch (device_type_static) {
+        case 2:
+            service_count += 1;
+            accessory_category = homekit_accessory_category_switch;
+            break;
+            
+        case 3:
+            service_count += 1;
+            accessory_category = homekit_accessory_category_outlet;
+            break;
+            
+        case 4:
+            service_count += 3;
+            accessory_category = homekit_accessory_category_switch;
+            break;
+            
+        case 5:
+            service_count += 0;
+            accessory_category = homekit_accessory_category_thermostat;
+            break;
+            
+        case 6:
+            service_count += 1;
+            if (dht_sensor_type.value.int_value != 3) {
+                service_count += 1;
+            }
+            accessory_category = homekit_accessory_category_switch;
+            break;
+            
+        case 7:
+            service_count += 0;
+            accessory_category = homekit_accessory_category_sprinkler;
+            break;
+            
+        case 8:
+            service_count += 0;
+            accessory_category = homekit_accessory_category_garage;
+            break;
+            
+        case 9:
+            service_count += 2;
+            if (dht_sensor_type.value.int_value != 3) {
+                service_count += 1;
+            }
+            accessory_category = homekit_accessory_category_outlet;
+            break;
+            
+        case 10:
+            service_count += 1;
+            accessory_category = homekit_accessory_category_switch;
+            break;
+            
+        case 11:
+            service_count += 2;
+            accessory_category = homekit_accessory_category_switch;
+            break;
+            
+        default:    // device_type_static == 1
+            service_count += 0;
+            accessory_category = homekit_accessory_category_switch;
+            break;
     }
     
     
@@ -1448,7 +1491,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000505;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+        sonoff->config_number = 000506;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
@@ -1592,15 +1635,19 @@ void create_accessory() {
                     sonoff_temp->characteristics[0] = &temp_service_name;
                     sonoff_temp->characteristics[1] = &current_temperature;
                 
-                homekit_service_t *sonoff_hum = sonoff->services[3] = calloc(1, sizeof(homekit_service_t));
-                sonoff_hum->id = 41;
-                sonoff_hum->type = HOMEKIT_SERVICE_HUMIDITY_SENSOR;
-                sonoff_hum->primary = false;
-                sonoff_hum->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
-                    sonoff_hum->characteristics[0] = &hum_service_name;
-                    sonoff_hum->characteristics[1] = &current_humidity;
+                service_number = 3;
                 
-                service_number = 4;
+                if (dht_sensor_type.value.int_value != 3) {
+                    homekit_service_t *sonoff_hum = sonoff->services[3] = calloc(1, sizeof(homekit_service_t));
+                    sonoff_hum->id = 41;
+                    sonoff_hum->type = HOMEKIT_SERVICE_HUMIDITY_SENSOR;
+                    sonoff_hum->primary = false;
+                    sonoff_hum->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+                        sonoff_hum->characteristics[0] = &hum_service_name;
+                        sonoff_hum->characteristics[1] = &current_humidity;
+                    
+                    service_number += 1;
+                }
                 
             } else if (device_type_static == 7) {
                 char *device_type_name_value = malloc(12);
@@ -1667,15 +1714,19 @@ void create_accessory() {
                     sonoff_temp->characteristics[0] = &temp_service_name;
                     sonoff_temp->characteristics[1] = &current_temperature;
                 
-                homekit_service_t *sonoff_hum = sonoff->services[4] = calloc(1, sizeof(homekit_service_t));
-                sonoff_hum->id = 41;
-                sonoff_hum->type = HOMEKIT_SERVICE_HUMIDITY_SENSOR;
-                sonoff_hum->primary = false;
-                sonoff_hum->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
-                    sonoff_hum->characteristics[0] = &hum_service_name;
-                    sonoff_hum->characteristics[1] = &current_humidity;
+                service_number = 4;
                 
-                service_number = 5;
+                if (dht_sensor_type.value.int_value != 3) {
+                    homekit_service_t *sonoff_hum = sonoff->services[4] = calloc(1, sizeof(homekit_service_t));
+                    sonoff_hum->id = 41;
+                    sonoff_hum->type = HOMEKIT_SERVICE_HUMIDITY_SENSOR;
+                    sonoff_hum->primary = false;
+                    sonoff_hum->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+                        sonoff_hum->characteristics[0] = &hum_service_name;
+                        sonoff_hum->characteristics[1] = &current_humidity;
+                    
+                        service_number += 1;
+                }
                 
             } else if (device_type_static == 10) {
                 char *device_type_name_value = malloc(17);
