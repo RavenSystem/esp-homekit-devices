@@ -1,7 +1,7 @@
 /*
  * KellyTron
  *
- * v0.0.1
+ * v0.0.2
  *
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *
@@ -18,18 +18,18 @@
  * limitations under the License.
  */
 
-#include <stdio.h>
-#include <string.h>
+//#include <stdio.h>
+//#include <string.h>
 #include <esp/uart.h>
-#include <esp8266.h>
-#include <FreeRTOS.h>
-#include <espressif/esp_wifi.h>
-#include <espressif/esp_common.h>
+//#include <esp8266.h>
+//#include <FreeRTOS.h>
+//#include <espressif/esp_wifi.h>
+//#include <espressif/esp_common.h>
 #include <rboot-api.h>
 #include <sysparam.h>
-#include <task.h>
+//#include <task.h>
 
-#include <etstimer.h>
+//#include <etstimer.h>
 #include <esplibs/libmain.h>
 
 #include <homekit/homekit.h>
@@ -38,10 +38,11 @@
 
 #include "../common/custom_characteristics.h"
 
-#define TOGGLE_GPIO     5
-#define RELAY_GPIO      4
-#define DEBOUNCE_TIME   40
-#define DISABLE_TIME    80
+#define TOGGLE_GPIO                 5
+#define RELAY_GPIO                  4
+#define DEBOUNCE_TIME               40
+#define DISABLE_TIME                80
+#define ALLOWED_FACTORY_RESET_TIME  120000
 
 bool gpio_state;
 uint8_t reset_toggle_counter = 0;
@@ -160,10 +161,14 @@ void save_states() {
 void factory_default() {
     printf("KT >>> Checking factory default call\n");
     
-    if (reset_toggle_counter > 12) {
-        gpio_disable(TOGGLE_GPIO);
-        xTaskCreate(identify_task, "identify_task", 256, NULL, 1, NULL);
-        xTaskCreate(reset_call_task, "reset_call_task", 256, NULL, 1, NULL);
+    if (reset_toggle_counter > 10) {
+        if (xTaskGetTickCountFromISR() < ALLOWED_FACTORY_RESET_TIME / portTICK_PERIOD_MS) {
+            gpio_disable(TOGGLE_GPIO);
+            xTaskCreate(identify_task, "identify_task", 256, NULL, 1, NULL);
+            xTaskCreate(reset_call_task, "reset_call_task", 256, NULL, 1, NULL);
+        } else {
+            printf("KT !!! Reset to factory defaults not allowed after %i msecs since boot. Repower device and try again\n", ALLOWED_FACTORY_RESET_TIME);
+        }
     }
     
     reset_toggle_counter = 0;
@@ -256,6 +261,8 @@ void hardware_init() {
     
     printf("KT >>> Loading device gpio settings\n");
     
+    gpio_disable(0);
+    
     gpio_enable(RELAY_GPIO, GPIO_OUTPUT);
     relay_write(switch1_on.value.bool_value, RELAY_GPIO);
     
@@ -329,7 +336,7 @@ homekit_characteristic_t switch1_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "S
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.0.1");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.0.2");
 
 homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
@@ -361,7 +368,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
     sonoff->id = 1;
     sonoff->category = accessory_category;
-    sonoff->config_number = 000001;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+    sonoff->config_number = 000002;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
     sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
     
     homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
