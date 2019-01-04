@@ -206,7 +206,7 @@ static void adv_button_hold_callback(void *arg) {
     }
 }
 
-int adv_button_create(const uint8_t gpio) {
+int adv_button_create(const uint8_t gpio, bool pullup_resistor) {
     adv_button_t *button = button_find_by_gpio(gpio);
     adv_toggle_t *toggle = toggle_find_by_gpio(gpio);
     
@@ -233,7 +233,7 @@ int adv_button_create(const uint8_t gpio) {
             gpio_enable(button->gpio, GPIO_INPUT);
         }
         
-        gpio_set_pullup(button->gpio, true, true);
+        gpio_set_pullup(button->gpio, pullup_resistor, pullup_resistor);
         gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_intr_callback);
         
         sdk_os_timer_disarm(&button->hold_timer);
@@ -280,7 +280,7 @@ IRAM static void toggle_evaluate_fn() {        // Based on https://github.com/pc
     }
 }
 
-int adv_toggle_create(const uint8_t gpio) {
+int adv_toggle_create(const uint8_t gpio, bool pullup_resistor) {
     adv_button_t *button = button_find_by_gpio(gpio);
     adv_toggle_t *toggle = toggle_find_by_gpio(gpio);
     
@@ -302,7 +302,7 @@ int adv_toggle_create(const uint8_t gpio) {
             gpio_enable(toggle->gpio, GPIO_INPUT);
         }
         
-        gpio_set_pullup(toggle->gpio, true, true);
+        gpio_set_pullup(toggle->gpio, pullup_resistor, pullup_resistor);
         
         toggle->state = gpio_read(toggle->gpio);
         
