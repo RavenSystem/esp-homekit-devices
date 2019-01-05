@@ -86,6 +86,8 @@
  9. Socket + Button + TH Sensor
  10. ESP01 Switch + Button
  11. Switch 3ch
+ 12. Shelly1 Switch
+ 13. Shelly2 Switch
  */
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_DEVICE_TYPE HOMEKIT_CUSTOM_UUID("F0000102")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_DEVICE_TYPE(_value, ...) \
@@ -96,11 +98,11 @@
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
     .min_value = (float[]) {1}, \
-    .max_value = (float[]) {12}, \
+    .max_value = (float[]) {13}, \
     .min_step = (float[]) {1}, \
     .valid_values = { \
-    .count = 12, \
-    .values = (uint8_t[]) {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}, \
+    .count = 13, \
+    .values = (uint8_t[]) {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
@@ -108,24 +110,49 @@
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_DEVICE_TYPE_NAME HOMEKIT_CUSTOM_UUID("F0000103")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_DEVICE_TYPE_NAME(revision, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_DEVICE_TYPE_NAME, \
-    .description = "Device Type", \
+    .description = "Actual Dev Type", \
     .format = homekit_format_string, \
     .permissions = homekit_permissions_paired_read, \
     .value = HOMEKIT_STRING_(revision), \
     ##__VA_ARGS__
 
-#define HOMEKIT_CHARACTERISTIC_CUSTOM_GPIO14_TOGGLE HOMEKIT_CUSTOM_UUID("F0000104")
-#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GPIO14_TOGGLE(_value, ...) \
-    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GPIO14_TOGGLE, \
-    .description = "External Toggle", \
-    .format = homekit_format_bool, \
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_EXTERNAL_TOGGLE1 HOMEKIT_CUSTOM_UUID("F0000104")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_EXTERNAL_TOGGLE1(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_EXTERNAL_TOGGLE1, \
+    .description = "External Toggle 1", \
+    .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
-    .value = HOMEKIT_BOOL_(_value), \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {2}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+    .count = 3, \
+    .values = (uint8_t[]) {0, 1, 2}, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
-#define HOMEKIT_CHARACTERISTIC_CUSTOM_DHT_SENSOR_TYPE HOMEKIT_CUSTOM_UUID("F0000105")
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_EXTERNAL_TOGGLE2 HOMEKIT_CUSTOM_UUID("F0000105")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_EXTERNAL_TOGGLE2(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_EXTERNAL_TOGGLE2, \
+    .description = "External Toggle 2", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {2}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+    .count = 3, \
+    .values = (uint8_t[]) {0, 1, 2}, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_DHT_SENSOR_TYPE HOMEKIT_CUSTOM_UUID("F0000106")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_DHT_SENSOR_TYPE(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_DHT_SENSOR_TYPE, \
     .description = "TH Sensor Type", \
@@ -143,7 +170,7 @@
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
-#define HOMEKIT_CHARACTERISTIC_CUSTOM_VALVE_TYPE HOMEKIT_CUSTOM_UUID("F0000106")
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_VALVE_TYPE HOMEKIT_CUSTOM_UUID("F0000107")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_VALVE_TYPE(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_VALVE_TYPE, \
     .description = "Valve Type", \
@@ -161,7 +188,7 @@
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
-#define HOMEKIT_CHARACTERISTIC_CUSTOM_TH_PERIOD HOMEKIT_CUSTOM_UUID("F0000107")
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_TH_PERIOD HOMEKIT_CUSTOM_UUID("F0000108")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_TH_PERIOD(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_TH_PERIOD, \
     .description = "TH Period", \
@@ -191,33 +218,51 @@
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_CLOSE_NC(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_CLOSE_NC, \
     .description = "Sensor Close NC", \
-    .format = homekit_format_bool, \
+    .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
-    .value = HOMEKIT_BOOL_(_value), \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {2}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+    .count = 3, \
+    .values = (uint8_t[]) {0, 1, 2}, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
-#define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_OPEN_NC HOMEKIT_CUSTOM_UUID("F0000112")
-#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_OPEN_NC(_value, ...) \
-    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_OPEN_NC, \
-    .description = "Sensor Open NC", \
-    .format = homekit_format_bool, \
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_OPEN HOMEKIT_CUSTOM_UUID("F0000112")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_OPEN(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_OPEN, \
+    .description = "Sensor Open", \
+    .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
-    .value = HOMEKIT_BOOL_(_value), \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {2}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+    .count = 3, \
+    .values = (uint8_t[]) {0, 1, 2}, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
-#define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_SENSOR_OPEN HOMEKIT_CUSTOM_UUID("F0000113")
-#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_SENSOR_OPEN(_value, ...) \
-    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_SENSOR_OPEN, \
-    .description = "Has Opened Sensor", \
-    .format = homekit_format_bool, \
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_BUTTON_TIME HOMEKIT_CUSTOM_UUID("F0000113")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_BUTTON_TIME(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_BUTTON_TIME, \
+    .description = "Button time", \
+    .format = homekit_format_float, \
+    .unit = homekit_unit_seconds, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
-    .value = HOMEKIT_BOOL_(_value), \
+    .min_value = (float[]) {0.1}, \
+    .max_value = (float[]) {2.5}, \
+    .min_step = (float[]) {0.1}, \
+    .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
 
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_WORKINGTIME HOMEKIT_CUSTOM_UUID("F0000114")
@@ -246,10 +291,10 @@
     .value = HOMEKIT_BOOL_(_value), \
     ##__VA_ARGS__
 
-#define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_OBSTRUCTION_SENSOR HOMEKIT_CUSTOM_UUID("F0000116")
-#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_OBSTRUCTION_SENSOR(_value, ...) \
-    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_OBSTRUCTION_SENSOR, \
-    .description = "Obstruction Sensor", \
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_OBSTRUCTION HOMEKIT_CUSTOM_UUID("F0000116")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_OBSTRUCTION(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_OBSTRUCTION, \
+    .description = "Sensor Obstruction", \
     .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
