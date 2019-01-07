@@ -1,7 +1,7 @@
 /*
  * KellyTron
  *
- * v0.0.2
+ * v0.0.3
  *
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *
@@ -287,12 +287,16 @@ void settings_init() {
     // Load Saved Settings and set factory values for missing settings
     printf("KT >>> Loading settings\n");
     
+    sysparam_set_string("ota_repo", "RavenSystem/ravencore");
+    status = sysparam_set_int8("device_type", 12);
+    
     status = sysparam_get_bool("show_setup", &bool_value);
     if (status == SYSPARAM_OK) {
         show_setup.value.bool_value = bool_value;
     } else {
         status = sysparam_set_bool("show_setup", false);
     }
+    
     status = sysparam_get_int8("init_state_sw1", &int8_value);
     if (status == SYSPARAM_OK) {
         custom_init_state_sw1.value.int_value = int8_value;
@@ -336,7 +340,7 @@ homekit_characteristic_t switch1_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "S
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.0.2");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.0.3");
 
 homekit_accessory_category_t accessory_category = homekit_accessory_category_switch;
 
@@ -368,7 +372,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
     sonoff->id = 1;
     sonoff->category = accessory_category;
-    sonoff->config_number = 000002;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+    sonoff->config_number = 000003;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
     sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
     
     homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
