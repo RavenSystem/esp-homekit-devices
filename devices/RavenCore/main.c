@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.5.10
+ * v0.5.11
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -19,8 +19,8 @@
  */
 
 /* Device Types
-  1. Switch Basic
-  2. Switch Dual
+  1. Switch 1ch
+  2. Switch 2ch
   3. Socket + Button
   4. Switch 4ch
   5. Thermostat
@@ -30,6 +30,8 @@
   9. Socket + Button + TH Sensor
  10. ESP01 Switch + Button
  11. Switch 3ch
+ 12. Shelly1 Switch
+ 13. Shelly2 Switch
  */
 
 //#include <stdio.h>
@@ -84,9 +86,6 @@
 #define RELAY2_GPIO                     5
 #define RELAY3_GPIO                     4
 #define RELAY4_GPIO                     15
-
-#define FLASH_SIZE_1MB                  1 * 1024 * 1024
-#define FLASH_SIZE_2MB                  2 * 1024 * 1024
 
 #define DISABLED_TIME                   60
 #define ALLOWED_FACTORY_RESET_TIME      120000
@@ -572,10 +571,15 @@ void factory_default_task() {
     
     sysparam_status_t status;
     
-    if (sdk_flashchip.chip_size > FLASH_SIZE_1MB) {
-        status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 12);
-    } else {
-        status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 1);
+    switch (device_type_static) {
+        case 12:
+        case 13:
+            status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 12);
+            break;
+            
+        default:
+            status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 1);
+            break;
     }
     
     status = sysparam_set_bool(SHOW_SETUP_SYSPARAM, true);
@@ -1546,14 +1550,7 @@ void settings_init() {
         device_type.value.int_value = int8_value;
         device_type_static = int8_value;
     } else {
-        if (sdk_flashchip.chip_size > FLASH_SIZE_1MB) {
-            status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 12);
-            device_type_static = 12;
-            device_type.value.int_value = 12;
-        } else {
-            status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 1);
-        }
-        
+        status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 1);
         if (status != SYSPARAM_OK) {
             flash_error = status;
         }
@@ -1929,7 +1926,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.10");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.11");
 
 homekit_accessory_category_t accessory_category;
 
@@ -2027,7 +2024,7 @@ void create_accessory() {
             accessory_category = homekit_accessory_category_switch;
             break;
             
-        default:    // device_type_static == 1
+        default:    // case 1
             service_count += 0;
             accessory_category = homekit_accessory_category_switch;
             break;
@@ -2039,7 +2036,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000512;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+        sonoff->config_number = 000513;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
