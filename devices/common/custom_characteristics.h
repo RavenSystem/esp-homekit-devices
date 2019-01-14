@@ -77,7 +77,7 @@
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_OTA_BETA HOMEKIT_CUSTOM_UUID("F0000005")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_OTA_BETA(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_OTA_BETA, \
-    .description = "Install BETA", \
+    .description = "Firmware BETA", \
     .format = homekit_format_bool, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \

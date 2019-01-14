@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.5.9
+ * v0.5.10
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -470,7 +470,7 @@ void save_settings() {
     }
     
     if (flash_error != SYSPARAM_OK) {
-        printf("RC !!! Saving settings error -> %i\n", flash_error);
+        printf("RC ! Saving settings error -> %i\n", flash_error);
     }
 }
 
@@ -525,7 +525,7 @@ void save_states() {
     }
     
     if (flash_error != SYSPARAM_OK) {
-        printf("RC !!! Saving last states error -> %i\n", flash_error);
+        printf("RC ! Saving last states error -> %i\n", flash_error);
     }
 }
 
@@ -572,9 +572,14 @@ void factory_default_task() {
     
     sysparam_status_t status;
     
+    if (sdk_flashchip.chip_size > FLASH_SIZE_1MB) {
+        status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 12);
+    } else {
+        status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 1);
+    }
+    
     status = sysparam_set_bool(SHOW_SETUP_SYSPARAM, true);
     status = sysparam_set_bool(OTA_BETA_SYSPARAM, false);
-    status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 1);
     status = sysparam_set_int8(BOARD_TYPE_SYSPARAM, 1);
     status = sysparam_set_int8(LOG_OUTPUT_SYSPARAM, 1);
     
@@ -616,7 +621,7 @@ void factory_default_task() {
     status = sysparam_set_int8(LAST_TARGET_STATE_TH_SYSPARAM, 0);
     
     if (status != SYSPARAM_OK) {
-        printf("RC !!! ERROR Flash problem\n");
+        printf("RC ! ERROR Flash problem\n");
     }
     
     vTaskDelay(500 / portTICK_PERIOD_MS);
@@ -642,7 +647,7 @@ void factory_default_call(const uint8_t gpio) {
         led_code(LED_GPIO, WIFI_CONFIG_RESET);
         xTaskCreate(factory_default_task, "factory_default_task", 256, NULL, 1, NULL);
     } else {
-        printf("RC !!! Reset to factory defaults not allowed after %i msecs since boot. Repower device and try again\n", ALLOWED_FACTORY_RESET_TIME);
+        printf("RC ! Reset to factory defaults not allowed after %i msecs since boot. Repower device and try again\n", ALLOWED_FACTORY_RESET_TIME);
     }
 }
 
@@ -818,7 +823,7 @@ void garage_button_task() {
             }
         }
     } else {
-        printf("RC !!! Garage Door -> OBSTRUCTION DETECTED - RELAY IS OFF\n");
+        printf("RC ! Garage Door -> OBSTRUCTION DETECTED - RELAY IS OFF\n");
     }
 
     homekit_characteristic_notify(&current_door_state, current_door_state.value);
@@ -1081,7 +1086,7 @@ void temperature_sensor_worker() {
         
         printf("RC > TEMP %g, HUM %g\n", temperature_value, humidity_value);
     } else {
-        printf("RC !!! ERROR Sensor\n");
+        printf("RC ! ERROR Sensor\n");
         led_code(LED_GPIO, SENSOR_ERROR);
         
         if (current_state.value.int_value != 0 && device_type_static == 5) {
@@ -1897,8 +1902,8 @@ void settings_init() {
     if (flash_error == SYSPARAM_OK) {
         hardware_init();
     } else {
-        printf("RC !!! ERROR loading settings -> %i\n", flash_error);
-        printf("RC !!! SYSTEM HALTED\n\n");
+        printf("RC ! ERROR loading settings -> %i\n", flash_error);
+        printf("RC ! SYSTEM HALTED\n\n");
     }
 }
 
@@ -1924,7 +1929,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.9");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.10");
 
 homekit_accessory_category_t accessory_category;
 
@@ -2034,7 +2039,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000511;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+        sonoff->config_number = 000512;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
@@ -2684,7 +2689,7 @@ void old_settings_init() {
     if (status == SYSPARAM_OK) {
         device_restart();
     } else {
-        printf("RC !!! ERROR in old_settings_init loading old settings. Flash problem\n");
+        printf("RC ! ERROR in old_settings_init loading old settings. Flash problem\n");
     }
 }
 
@@ -2708,10 +2713,7 @@ void user_init(void) {
             break;
     }
     
-    printf("RC > RavenCore firmware loaded\n");
-    printf("RC > Developed by RavenSystem - José Antonio Jiménez\n");
-    printf("RC > Flash chip size: %i\n", sdk_flashchip.chip_size);
-    printf("RC > Firmware revision: %s\n\n", firmware.value.string_value);
+    printf("\n\nRC > RavenCore firmware\nRC > Developed by RavenSystem - José Antonio Jiménez\nRC > Firmware: %s\n\n", firmware.value.string_value);
     
     // Old settings check
     status = sysparam_get_int8("device_type", &int8_value);
