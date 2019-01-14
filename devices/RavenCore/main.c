@@ -239,12 +239,12 @@ homekit_characteristic_t custom_init_state_sw4 = HOMEKIT_CHARACTERISTIC_(CUSTOM_
 homekit_characteristic_t custom_init_state_th = HOMEKIT_CHARACTERISTIC_(CUSTOM_INIT_STATE_TH, 0, .id=124, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 
 // Reverse relays
-homekit_characteristic_t custom_reverse_sw1 = HOMEKIT_CHARACTERISTIC_(CUSTOM_REVERSE_SW1, false, .id=134, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
-homekit_characteristic_t custom_reverse_sw2 = HOMEKIT_CHARACTERISTIC_(CUSTOM_REVERSE_SW2, false, .id=135, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
-homekit_characteristic_t custom_reverse_sw3 = HOMEKIT_CHARACTERISTIC_(CUSTOM_REVERSE_SW3, false, .id=136, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
-homekit_characteristic_t custom_reverse_sw4 = HOMEKIT_CHARACTERISTIC_(CUSTOM_REVERSE_SW4, false, .id=137, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
+homekit_characteristic_t custom_reverse_sw1 = HOMEKIT_CHARACTERISTIC_(CUSTOM_REVERSE_SW1, false, .id=135, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
+homekit_characteristic_t custom_reverse_sw2 = HOMEKIT_CHARACTERISTIC_(CUSTOM_REVERSE_SW2, false, .id=136, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
+homekit_characteristic_t custom_reverse_sw3 = HOMEKIT_CHARACTERISTIC_(CUSTOM_REVERSE_SW3, false, .id=137, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
+homekit_characteristic_t custom_reverse_sw4 = HOMEKIT_CHARACTERISTIC_(CUSTOM_REVERSE_SW4, false, .id=138, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 
-// Last used ID = 137
+// Last used ID = 138
 // ---------------------------
 
 void relay_write(bool on, const uint8_t gpio) {
