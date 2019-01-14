@@ -45,7 +45,7 @@
     .value = HOMEKIT_BOOL_(_value), \
     ##__VA_ARGS__
 
-#define HOMEKIT_CHARACTERISTIC_CUSTOM_BOARD_TYPE HOMEKIT_CUSTOM_UUID("F0000100")
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_BOARD_TYPE HOMEKIT_CUSTOM_UUID("F0000003")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_BOARD_TYPE(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_BOARD_TYPE, \
     .description = "Board Type", \
@@ -63,7 +63,7 @@
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
-#define HOMEKIT_CHARACTERISTIC_CUSTOM_OTA_UPDATE HOMEKIT_CUSTOM_UUID("F0000101")
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_OTA_UPDATE HOMEKIT_CUSTOM_UUID("F0000004")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_OTA_UPDATE(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_OTA_UPDATE, \
     .description = "Firmware Update", \
@@ -74,9 +74,20 @@
     .value = HOMEKIT_BOOL_(_value), \
     ##__VA_ARGS__
 
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_OTA_BETA HOMEKIT_CUSTOM_UUID("F0000005")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_OTA_BETA(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_OTA_BETA, \
+    .description = "Install BETA", \
+    .format = homekit_format_bool, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .value = HOMEKIT_BOOL_(_value), \
+    ##__VA_ARGS__
+
 /* Device Types
- 1. Switch Basic
- 2. Switch Dual
+ 1. Switch 1ch
+ 2. Switch 2ch
  3. Socket + Button
  4. Switch 4ch
  5. Thermostat
@@ -89,7 +100,7 @@
  12. Shelly1 Switch
  13. Shelly2 Switch
  */
-#define HOMEKIT_CHARACTERISTIC_CUSTOM_DEVICE_TYPE HOMEKIT_CUSTOM_UUID("F0000102")
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_DEVICE_TYPE HOMEKIT_CUSTOM_UUID("F0000100")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_DEVICE_TYPE(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_DEVICE_TYPE, \
     .description = "Device Type", \
@@ -203,6 +214,24 @@
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_LOG_OUTPUT HOMEKIT_CUSTOM_UUID("F0000109")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_LOG_OUTPUT(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_LOG_OUTPUT, \
+    .description = "Log output", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {2}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+    .count = 3, \
+    .values = (uint8_t[]) {0, 1, 2}, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_STOP HOMEKIT_CUSTOM_UUID("F0000110")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_STOP(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_HAS_STOP, \
@@ -309,6 +338,80 @@
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_HUMIDITY_OFFSET HOMEKIT_APPLE_UUID2("F0000117")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_HUMIDITY_OFFSET(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_HUMIDITY_OFFSET, \
+    .description = "Offset HUM", \
+    .format = homekit_format_float, \
+    .unit = homekit_unit_percentage, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {-15}, \
+    .max_value = (float[]) {15}, \
+    .min_step = (float[]) {1}, \
+    .value = HOMEKIT_FLOAT_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_TEMPERATURE_OFFSET HOMEKIT_APPLE_UUID2("F0000118")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_TEMPERATURE_OFFSET(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_TEMPERATURE_OFFSET, \
+    .description = "Offset TEMP", \
+    .format = homekit_format_float, \
+    .unit = homekit_unit_celsius, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {-15}, \
+    .max_value = (float[]) {15}, \
+    .min_step = (float[]) {0.1}, \
+    .value = HOMEKIT_FLOAT_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_REVERSE_SW1 HOMEKIT_CUSTOM_UUID("F0000119")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_REVERSE_SW1(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_REVERSE_SW1, \
+    .description = "Reverse SW1", \
+    .format = homekit_format_bool, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .value = HOMEKIT_BOOL_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_REVERSE_SW2 HOMEKIT_CUSTOM_UUID("F0000120")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_REVERSE_SW2(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_REVERSE_SW2, \
+    .description = "Reverse SW2", \
+    .format = homekit_format_bool, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .value = HOMEKIT_BOOL_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_REVERSE_SW3 HOMEKIT_CUSTOM_UUID("F0000121")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_REVERSE_SW3(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_REVERSE_SW3, \
+    .description = "Reverse SW3", \
+    .format = homekit_format_bool, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .value = HOMEKIT_BOOL_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_REVERSE_SW4 HOMEKIT_CUSTOM_UUID("F0000122")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_REVERSE_SW4(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_REVERSE_SW4, \
+    .description = "Reverse SW4", \
+    .format = homekit_format_bool, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .value = HOMEKIT_BOOL_(_value), \
+    ##__VA_ARGS__
+
 /* Switch Initial State
  0. OFF
  1. ON
@@ -411,9 +514,29 @@
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_IP_ADDR HOMEKIT_CUSTOM_UUID("F0000201")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_IP_ADDR(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_IP_ADDR, \
+    .description = "Wifi IP Addr", \
+    .format = homekit_format_string, \
+    .permissions = homekit_permissions_paired_read, \
+    .value = HOMEKIT_STRING_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_WIFI_RESET HOMEKIT_CUSTOM_UUID("F0000202")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_WIFI_RESET(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_WIFI_RESET, \
+    .description = "Wifi Reset", \
+    .format = homekit_format_bool, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .value = HOMEKIT_BOOL_(_value), \
+    ##__VA_ARGS__
+
 // ---------------------
 
-#define HOMEKIT_CHARACTERISTIC_CUSTOM_PING_CHECK HOMEKIT_CUSTOM_UUID("F0000201")
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_PING_CHECK HOMEKIT_CUSTOM_UUID("F0000202")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_PING_CHECK(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_PING_CHECK, \
     .description = "Ping check", \
@@ -422,15 +545,6 @@
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
     .value = HOMEKIT_BOOL_(_value), \
-    ##__VA_ARGS__
-
-#define HOMEKIT_CHARACTERISTIC_CUSTOM_PING_IP HOMEKIT_CUSTOM_UUID("F0000202")
-#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_PING_IP(text, ...) \
-    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_PING_IP, \
-    .description = "Ping IP Address", \
-    .format = homekit_format_string, \
-    .permissions = homekit_permissions_paired_read \
-    .value = HOMEKIT_STRING_(text), \
     ##__VA_ARGS__
 
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_PING_IP_SET HOMEKIT_CUSTOM_UUID("F0000203")

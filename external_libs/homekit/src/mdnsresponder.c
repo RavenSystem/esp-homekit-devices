@@ -427,18 +427,18 @@ static ETSTimer mdns_announce_timer;
 void mdns_clear() {
     sdk_os_timer_disarm(&mdns_announce_timer);
     
-    xSemaphoreTake(gDictMutex, portMAX_DELAY);
+    if (xSemaphoreTake(gDictMutex, portMAX_DELAY)) {
+        mdns_rsrc *rsrc = gDictP;
+        gDictP = NULL;
 
-    mdns_rsrc *rsrc = gDictP;
-    gDictP = NULL;
+        while (rsrc) {
+            mdns_rsrc *next = rsrc->rNext;
+            free(rsrc);
+            rsrc = next;
+        }
 
-    while (rsrc) {
-        mdns_rsrc *next = rsrc->rNext;
-        free(rsrc);
-        rsrc = next;
+        xSemaphoreGive(gDictMutex);
     }
-
-    xSemaphoreGive(gDictMutex);
 }
 
 
@@ -485,10 +485,11 @@ static void mdns_add_response(const char* vKey, u16_t vType, u32_t ttl, const vo
         memcpy(rsrcP->rData, vKey, keyLen);
         memcpy(&rsrcP->rData[keyLen], dataP, vDataSize);
 
-        xSemaphoreTake(gDictMutex, portMAX_DELAY);
-        rsrcP->rNext = gDictP;
-        gDictP = rsrcP;
-        xSemaphoreGive(gDictMutex);
+        if (xSemaphoreTake(gDictMutex, portMAX_DELAY)) {
+            rsrcP->rNext = gDictP;
+            gDictP = rsrcP;
+            xSemaphoreGive(gDictMutex);
+        }
 
 #ifdef qDebugLog
         printf("mDNS added RR '%s' %s, %d bytes\n", vKey, mdns_qrtype(vType), vDataSize);
@@ -954,7 +955,9 @@ void mdns_init()
     // Start IGMP on the netif for our interface: this isn't done for us
     if (!(netif->flags & NETIF_FLAG_IGMP)) {
         netif->flags |= NETIF_FLAG_IGMP;
+        LOCK_TCPIP_CORE();
         err = igmp_start(netif);
+        UNLOCK_TCPIP_CORE();
         if (err != ERR_OK) {
             printf(">>> mDNS_init: igmp_start on %c%c failed %d\n", netif->name[0], netif->name[1],err);
             return;
@@ -968,6 +971,8 @@ void mdns_init()
     }
     xSemaphoreGive(gDictMutex);
 
+    LOCK_TCPIP_CORE();
+    
     gMDNS_pcb = udp_new_ip_type(IPADDR_TYPE_ANY);
     if (!gMDNS_pcb) {
         printf(">>> mDNS_init: udp_new failed\n");
@@ -994,4 +999,6 @@ void mdns_init()
     udp_bind_netif(gMDNS_pcb, netif);
 
     udp_recv(gMDNS_pcb, mdns_recv, NULL);
+    
+    UNLOCK_TCPIP_CORE();
 }
