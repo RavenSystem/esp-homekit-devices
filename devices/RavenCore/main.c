@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.5.11
+ * v0.5.12
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -1193,6 +1193,8 @@ void hardware_init() {
         case 2:
             enable_sonoff_device();
             
+            adv_button_destroy(button1_gpio);
+            
             adv_button_create(BUTTON3_GPIO, true);
             
             adv_button_register_callback_fn(BUTTON3_GPIO, button_simple1_intr_callback, 1);
@@ -1924,9 +1926,9 @@ homekit_characteristic_t valve_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Wat
 homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Garage Door");
 
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
-homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch Basic", .id=101);
+homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch 1ch", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.11");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.12");
 
 homekit_accessory_category_t accessory_category;
 
@@ -2036,7 +2038,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000513;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+        sonoff->config_number = 000514;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
