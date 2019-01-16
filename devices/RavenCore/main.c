@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.5.12
+ * v0.5.13
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -260,10 +260,6 @@ void relay_write(bool on, const uint8_t gpio) {
     last_press_time = xTaskGetTickCountFromISR() + (DISABLED_TIME / portTICK_PERIOD_MS);
     adv_button_set_disable_time();
     gpio_write(gpio, on ? 1 : 0);
-}
-
-void led_write(const bool on) {
-    gpio_write(LED_GPIO, on ? 0 : 1);
 }
 
 void on_target(homekit_value_t value) {
@@ -1150,7 +1146,7 @@ void hardware_init() {
         }
         
         gpio_enable(LED_GPIO, GPIO_OUTPUT);
-        led_write(false);
+        gpio_write(LED_GPIO, false);
         
         adv_button_create(button1_gpio, true);
     }
@@ -1928,7 +1924,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch 1ch", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.12");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.13");
 
 homekit_accessory_category_t accessory_category;
 
@@ -2038,7 +2034,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000514;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+        sonoff->config_number = 000515;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
@@ -2303,6 +2299,8 @@ void create_accessory() {
                 
                 charac_switch_1(1);
                 charac_switch_2(2);
+                
+                service_number = 3;
                 
             } else { // device_type_static == 1
                 char *device_type_name_value = malloc(11);
@@ -2712,7 +2710,7 @@ void user_init(void) {
             break;
     }
     
-    printf("\n\nRC > RavenCore firmware\nRC > Developed by RavenSystem - José Antonio Jiménez\nRC > Firmware: %s\n\n", firmware.value.string_value);
+    printf("\n\nRC > RavenCore\nRC > Developed by RavenSystem - José Antonio Jiménez\nRC > Version: %s\n\n", firmware.value.string_value);
     
     // Old settings check
     status = sysparam_get_int8("device_type", &int8_value);
