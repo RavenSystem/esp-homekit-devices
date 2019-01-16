@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.5.13
+ * v0.5.14
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -30,8 +30,6 @@
   9. Socket + Button + TH Sensor
  10. ESP01 Switch + Button
  11. Switch 3ch
- 12. Shelly1 Switch
- 13. Shelly2 Switch
  */
 
 //#include <stdio.h>
@@ -66,7 +64,7 @@
 #define S2_TOGGLE1_GPIO                 14
 #define S2_TOGGLE2_GPIO                 12
 #define S2_RELAY1_GPIO                  4
-#define S2_RELAY2_GPIO                  5   // Same as RELAY2_GPIO
+//#define S2_RELAY2_GPIO                5   // Same as RELAY2_GPIO
 
 // Sonoff
 #define LED_GPIO                        13
@@ -78,7 +76,7 @@
 //#define TOGGLE_GPIO                   extra_gpio = 14
 
 //#define BUTTON1_GPIO                  button1_gpio = 0
-#define BUTTON2_GPIO                    9
+//#define BUTTON2_GPIO                  button2_gpio = 9
 #define BUTTON3_GPIO                    10
 //#define BUTTON4_GPIO                  extra_gpio = 14
 
@@ -129,7 +127,7 @@
 #define REVERSE_SW4_SYSPARAM                            "7"
 
 bool gd_is_moving = false;
-uint8_t device_type_static = 1, reset_toggle_counter = 0, gd_time_state = 0, button1_gpio = 0, relay1_gpio = 12, extra_gpio = 14;
+uint8_t device_type_static = 1, reset_toggle_counter = 0, gd_time_state = 0, button1_gpio = 0, button2_gpio = 9, relay1_gpio = 12, extra_gpio = 14;
 volatile uint32_t last_press_time;
 volatile float old_humidity_value = 0.0, old_temperature_value = 0.0;
 ETSTimer device_restart_timer, factory_default_toggle_timer, change_settings_timer, save_states_timer, extra_func_timer;
@@ -567,20 +565,10 @@ void factory_default_task() {
     
     sysparam_status_t status;
     
-    switch (device_type_static) {
-        case 12:
-        case 13:
-            status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 12);
-            break;
-            
-        default:
-            status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 1);
-            break;
-    }
-    
     status = sysparam_set_bool(SHOW_SETUP_SYSPARAM, true);
     status = sysparam_set_bool(OTA_BETA_SYSPARAM, false);
-    status = sysparam_set_int8(BOARD_TYPE_SYSPARAM, 1);
+    //status = sysparam_set_int8(BOARD_TYPE_SYSPARAM, 1);   // This value is not reseted
+    status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 1);
     status = sysparam_set_int8(LOG_OUTPUT_SYSPARAM, 1);
     
     status = sysparam_set_int8(EXTERNAL_TOGGLE1_SYSPARAM, 0);
@@ -969,7 +957,7 @@ void button_simple1_intr_callback(const uint8_t gpio) {
     homekit_characteristic_notify(&switch1_on, switch1_on.value);
     
     reset_toggle_counter++;
-    sdk_os_timer_arm(&factory_default_toggle_timer, 3200, 0);
+    sdk_os_timer_arm(&factory_default_toggle_timer, 3100, 0);
 }
 
 void button_simple2_intr_callback(const uint8_t gpio) {
@@ -1099,12 +1087,13 @@ void temperature_sensor_worker() {
 }
 
 void identify_task() {
-    relay_write(true, relay1_gpio);
+    relay_write(false, relay1_gpio);
+    
     for (uint8_t i = 0; i < 3; i++) {
-        vTaskDelay(500 / portTICK_PERIOD_MS);
         relay_write(true, relay1_gpio);
-        vTaskDelay(500 / portTICK_PERIOD_MS);
+        vTaskDelay(400 / portTICK_PERIOD_MS);
         relay_write(false, relay1_gpio);
+        vTaskDelay(400 / portTICK_PERIOD_MS);
     }
     
     vTaskDelete(NULL);
@@ -1161,10 +1150,16 @@ void hardware_init() {
 
     switch (device_type_static) {
         case 1:
-            enable_sonoff_device();
-            
-            adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1);
-            adv_button_register_callback_fn(button1_gpio, factory_default_call, 5);
+            if (board_type.value.int_value == 3) {  // It is a Shelly1
+                relay1_gpio = S1_RELAY_GPIO;
+                extra_gpio = S1_TOGGLE_GPIO;
+                
+            } else {                                // It is a Sonoff
+                enable_sonoff_device();
+                
+                adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1);
+                adv_button_register_callback_fn(button1_gpio, factory_default_call, 5);
+            }
             
             gpio_enable(relay1_gpio, GPIO_OUTPUT);
             relay_write(switch1_on.value.bool_value, relay1_gpio);
@@ -1187,15 +1182,22 @@ void hardware_init() {
             break;
             
         case 2:
-            enable_sonoff_device();
-            
-            adv_button_destroy(button1_gpio);
-            
-            adv_button_create(BUTTON3_GPIO, true);
-            
-            adv_button_register_callback_fn(BUTTON3_GPIO, button_simple1_intr_callback, 1);
-            adv_button_register_callback_fn(BUTTON3_GPIO, button_simple2_intr_callback, 2);
-            adv_button_register_callback_fn(BUTTON3_GPIO, factory_default_call, 5);
+            if (board_type.value.int_value == 3) {  // It is a Shelly2
+                relay1_gpio = S2_RELAY1_GPIO;
+                button1_gpio = S2_TOGGLE1_GPIO;
+                button2_gpio = S2_TOGGLE2_GPIO;
+                
+            } else {                                // It is a Sonoff
+                enable_sonoff_device();
+                
+                adv_button_destroy(button1_gpio);
+                
+                adv_button_create(BUTTON3_GPIO, true);
+                
+                adv_button_register_callback_fn(BUTTON3_GPIO, button_simple1_intr_callback, 1);
+                adv_button_register_callback_fn(BUTTON3_GPIO, button_simple2_intr_callback, 2);
+                adv_button_register_callback_fn(BUTTON3_GPIO, factory_default_call, 5);
+            }
             
             gpio_enable(relay1_gpio, GPIO_OUTPUT);
             relay_write(switch1_on.value.bool_value, relay1_gpio);
@@ -1220,13 +1222,13 @@ void hardware_init() {
             
             switch (external_toggle2.value.int_value) {
                 case 1:
-                    adv_toggle_create(BUTTON2_GPIO, true);
-                    adv_toggle_register_callback_fn(BUTTON2_GPIO, button_simple2_intr_callback, 0);
+                    adv_toggle_create(button2_gpio, true);
+                    adv_toggle_register_callback_fn(button2_gpio, button_simple2_intr_callback, 0);
                     break;
                     
                 case 2:
-                    adv_toggle_create(BUTTON2_GPIO, true);
-                    adv_toggle_register_callback_fn(BUTTON2_GPIO, button_simple2_intr_callback, 2);
+                    adv_toggle_create(button2_gpio, true);
+                    adv_toggle_register_callback_fn(button2_gpio, button_simple2_intr_callback, 2);
                     break;
                     
                 default:
@@ -1247,14 +1249,14 @@ void hardware_init() {
         case 4:
             enable_sonoff_device();
             
-            adv_button_create(BUTTON2_GPIO, true);
+            adv_button_create(button2_gpio, true);
             adv_button_create(BUTTON3_GPIO, true);
             adv_button_create(extra_gpio, true);
             
             adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1);
             adv_button_register_callback_fn(button1_gpio, factory_default_call, 5);
             
-            adv_button_register_callback_fn(BUTTON2_GPIO, button_simple2_intr_callback, 1);
+            adv_button_register_callback_fn(button2_gpio, button_simple2_intr_callback, 1);
             adv_button_register_callback_fn(BUTTON3_GPIO, button_simple3_intr_callback, 1);
             adv_button_register_callback_fn(extra_gpio, button_simple4_intr_callback, 1);
             
@@ -1406,13 +1408,13 @@ void hardware_init() {
         case 11:
             enable_sonoff_device();
             
-            adv_button_create(BUTTON2_GPIO, true);
+            adv_button_create(button2_gpio, true);
             adv_button_create(BUTTON3_GPIO, true);
             
             adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1);
             adv_button_register_callback_fn(button1_gpio, factory_default_call, 5);
             
-            adv_button_register_callback_fn(BUTTON2_GPIO, button_simple2_intr_callback, 1);
+            adv_button_register_callback_fn(button2_gpio, button_simple2_intr_callback, 1);
             adv_button_register_callback_fn(BUTTON3_GPIO, button_simple3_intr_callback, 1);
             
             gpio_enable(relay1_gpio, GPIO_OUTPUT);
@@ -1423,70 +1425,6 @@ void hardware_init() {
             
             gpio_enable(RELAY3_GPIO, GPIO_OUTPUT);
             relay_write(switch3_on.value.bool_value, RELAY3_GPIO);
-            break;
-            
-        case 12:
-            relay1_gpio = S1_RELAY_GPIO;
-            
-            gpio_enable(relay1_gpio, GPIO_OUTPUT);
-            relay_write(switch1_on.value.bool_value, relay1_gpio);
-            
-            switch (external_toggle1.value.int_value) {
-                case 1:
-                    adv_toggle_create(S1_TOGGLE_GPIO, false);
-                    adv_toggle_register_callback_fn(S1_TOGGLE_GPIO, button_simple1_intr_callback, 0);
-                    break;
-                    
-                case 2:
-                    adv_toggle_create(S1_TOGGLE_GPIO, false);
-                    adv_toggle_register_callback_fn(S1_TOGGLE_GPIO, button_simple1_intr_callback, 2);
-                    break;
-                    
-                default:
-                    break;
-            }
-            
-            break;
-            
-        case 13:
-            relay1_gpio = S2_RELAY1_GPIO;
-            
-            gpio_enable(relay1_gpio, GPIO_OUTPUT);
-            relay_write(switch1_on.value.bool_value, relay1_gpio);
-            
-            gpio_enable(S2_RELAY2_GPIO, GPIO_OUTPUT);
-            relay_write(switch2_on.value.bool_value, S2_RELAY2_GPIO);
-            
-            switch (external_toggle1.value.int_value) {
-                case 1:
-                    adv_toggle_create(S2_TOGGLE1_GPIO, false);
-                    adv_toggle_register_callback_fn(S2_TOGGLE1_GPIO, button_simple1_intr_callback, 0);
-                    break;
-                    
-                case 2:
-                    adv_toggle_create(S2_TOGGLE1_GPIO, false);
-                    adv_toggle_register_callback_fn(S2_TOGGLE1_GPIO, button_simple1_intr_callback, 2);
-                    break;
-                    
-                default:
-                    break;
-            }
-            
-            switch (external_toggle2.value.int_value) {
-                case 1:
-                    adv_toggle_create(S2_TOGGLE2_GPIO, false);
-                    adv_toggle_register_callback_fn(S2_TOGGLE2_GPIO, button_simple2_intr_callback, 0);
-                    break;
-                    
-                case 2:
-                    adv_toggle_create(S2_TOGGLE2_GPIO, false);
-                    adv_toggle_register_callback_fn(S2_TOGGLE2_GPIO, button_simple2_intr_callback, 2);
-                    break;
-                    
-                default:
-                    break;
-            }
-            
             break;
             
         default:
@@ -1545,6 +1483,18 @@ void settings_init() {
     
     status = sysparam_get_int8(DEVICE_TYPE_SYSPARAM, &int8_value);
     if (status == SYSPARAM_OK) {
+        // For old Shelly device types (device type 12 and 13)
+        if (int8_value == 12) {
+            int8_value = 1;
+            board_type.value.int_value = 3;
+        }
+        
+        if (int8_value == 13) {
+            int8_value = 2;
+            board_type.value.int_value = 3;
+        }
+        // END - For old Shelly device types (device type 12 and 13)
+        
         device_type.value.int_value = int8_value;
         device_type_static = int8_value;
     } else {
@@ -1914,7 +1864,7 @@ homekit_characteristic_t switch3_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "S
 homekit_characteristic_t switch4_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Switch 4");
 
 homekit_characteristic_t outlet_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Outlet");
-homekit_characteristic_t button_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Action Button");
+homekit_characteristic_t button_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Button");
 homekit_characteristic_t th_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Thermostat");
 homekit_characteristic_t temp_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Temperature");
 homekit_characteristic_t hum_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Humidity");
@@ -1922,14 +1872,14 @@ homekit_characteristic_t valve_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Wat
 homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Garage Door");
 
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
-homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "Switch 1ch", .id=101);
+homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.13");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.14");
 
 homekit_accessory_category_t accessory_category;
 
 void create_accessory_name() {
-    printf("RC > Creating accessory name and serial\n");
+    printf("RC > Creating accessory name\n");
     
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
@@ -2012,16 +1962,6 @@ void create_accessory() {
             accessory_category = homekit_accessory_category_switch;
             break;
             
-        case 12:
-            service_count += 0;
-            accessory_category = homekit_accessory_category_switch;
-            break;
-            
-        case 13:
-            service_count += 1;
-            accessory_category = homekit_accessory_category_switch;
-            break;
-            
         default:    // case 1
             service_count += 0;
             accessory_category = homekit_accessory_category_switch;
@@ -2034,7 +1974,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000515;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+        sonoff->config_number = 000516;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
@@ -2285,23 +2225,6 @@ void create_accessory() {
                 
                 service_number = 4;
                 
-            } else if (device_type_static == 12) {
-                char *device_type_name_value = malloc(15);
-                snprintf(device_type_name_value, 15, "Shelly1 Switch");
-                device_type_name.value = HOMEKIT_STRING(device_type_name_value);
-                
-                charac_switch_1(1);
-                
-            } else if (device_type_static == 13) {
-                char *device_type_name_value = malloc(15);
-                snprintf(device_type_name_value, 15, "Shelly2 Switch");
-                device_type_name.value = HOMEKIT_STRING(device_type_name_value);
-                
-                charac_switch_1(1);
-                charac_switch_2(2);
-                
-                service_number = 3;
-                
             } else { // device_type_static == 1
                 char *device_type_name_value = malloc(11);
                 snprintf(device_type_name_value, 11, "Switch 1ch");
@@ -2359,14 +2282,6 @@ void create_accessory() {
                         break;
                         
                     case 11:
-                        setting_count += 5;
-                        break;
-                        
-                    case 12:
-                        setting_count += 2;
-                        break;
-                        
-                    case 13:
                         setting_count += 5;
                         break;
                         
@@ -2500,21 +2415,6 @@ void create_accessory() {
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_reverse_sw3;
                         
-                    } else if (device_type_static == 12) {
-                        sonoff_setup->characteristics[setting_number] = &external_toggle1;
-                        setting_number++;
-                        sonoff_setup->characteristics[setting_number] = &custom_init_state_sw1;
-                        
-                    } else if (device_type_static == 13) {
-                        sonoff_setup->characteristics[setting_number] = &external_toggle1;
-                        setting_number++;
-                        sonoff_setup->characteristics[setting_number] = &external_toggle2;
-                        setting_number++;
-                        sonoff_setup->characteristics[setting_number] = &custom_init_state_sw1;
-                        setting_number++;
-                        sonoff_setup->characteristics[setting_number] = &custom_init_state_sw2;
-                        setting_number++;
-                        sonoff_setup->characteristics[setting_number] = &custom_reverse_sw2;
                     }
             }
     
