@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.5.14
+ * v0.5.15
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -1147,13 +1147,14 @@ void hardware_init() {
         adv_button_register_callback_fn(gpio, button_simple1_intr_callback, 4);
         adv_button_register_callback_fn(gpio, factory_default_call, 5);
     }
-
+    
+    bool pullup = true;
     switch (device_type_static) {
         case 1:
             if (board_type.value.int_value == 3) {  // It is a Shelly1
                 relay1_gpio = S1_RELAY_GPIO;
                 extra_gpio = S1_TOGGLE_GPIO;
-                
+                pullup = false;
             } else {                                // It is a Sonoff
                 enable_sonoff_device();
                 
@@ -1166,12 +1167,12 @@ void hardware_init() {
             
             switch (external_toggle1.value.int_value) {
                 case 1:
-                    adv_toggle_create(extra_gpio, true);
+                    adv_toggle_create(extra_gpio, pullup);
                     adv_toggle_register_callback_fn(extra_gpio, button_simple1_intr_callback, 0);
                     break;
                     
                 case 2:
-                    adv_toggle_create(extra_gpio, true);
+                    adv_toggle_create(extra_gpio, pullup);
                     adv_toggle_register_callback_fn(extra_gpio, button_simple1_intr_callback, 2);
                     break;
                     
@@ -1186,7 +1187,7 @@ void hardware_init() {
                 relay1_gpio = S2_RELAY1_GPIO;
                 button1_gpio = S2_TOGGLE1_GPIO;
                 button2_gpio = S2_TOGGLE2_GPIO;
-                
+                pullup = false;
             } else {                                // It is a Sonoff
                 enable_sonoff_device();
                 
@@ -1207,12 +1208,12 @@ void hardware_init() {
             
             switch (external_toggle1.value.int_value) {
                 case 1:
-                    adv_toggle_create(button1_gpio, true);
+                    adv_toggle_create(button1_gpio, pullup);
                     adv_toggle_register_callback_fn(button1_gpio, button_simple1_intr_callback, 0);
                     break;
                     
                 case 2:
-                    adv_toggle_create(button1_gpio, true);
+                    adv_toggle_create(button1_gpio, pullup);
                     adv_toggle_register_callback_fn(button1_gpio, button_simple1_intr_callback, 2);
                     break;
                     
@@ -1222,12 +1223,12 @@ void hardware_init() {
             
             switch (external_toggle2.value.int_value) {
                 case 1:
-                    adv_toggle_create(button2_gpio, true);
+                    adv_toggle_create(button2_gpio, false);
                     adv_toggle_register_callback_fn(button2_gpio, button_simple2_intr_callback, 0);
                     break;
                     
                 case 2:
-                    adv_toggle_create(button2_gpio, true);
+                    adv_toggle_create(button2_gpio, false);
                     adv_toggle_register_callback_fn(button2_gpio, button_simple2_intr_callback, 2);
                     break;
                     
@@ -1874,7 +1875,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.14");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.15");
 
 homekit_accessory_category_t accessory_category;
 
@@ -1974,7 +1975,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000516;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+        sonoff->config_number = 000517;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
