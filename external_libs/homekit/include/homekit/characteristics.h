@@ -1663,7 +1663,8 @@
     .type = HOMEKIT_CHARACTERISTIC_SELECTED_RTP_STREAM_CONFIGURATION, \
     .description = "Selected RTP Stream Configuration", \
     .format = homekit_format_tlv, \
-    .permissions = homekit_permissions_paired_write, \
+    .permissions = homekit_permissions_paired_read \
+                 | homekit_permissions_paired_write, \
     ##__VA_ARGS__
 
 #define HOMEKIT_CHARACTERISTIC_VOLUME HOMEKIT_APPLE_UUID3("119")

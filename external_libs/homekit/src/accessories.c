@@ -22,7 +22,23 @@ bool homekit_value_equal(homekit_value_t *a, homekit_value_t *b) {
             return a->float_value == b->float_value;
         case homekit_format_string:
             return !strcmp(a->string_value, b->string_value);
-        case homekit_format_tlv:
+        case homekit_format_tlv: {
+            if (!a->tlv_values && !b->tlv_values)
+                return true;
+            if (!a->tlv_values || !b->tlv_values)
+                return false;
+
+            // TODO: implement order independent comparison?
+            tlv_t *ta = a->tlv_values->head, *tb = b->tlv_values->head;
+            for (; ta && tb; ta=ta->next, tb=tb->next) {
+                if (ta->type != tb->type || ta->size != tb->size)
+                    return false;
+                if (strncmp((char *)ta->value, (char *)tb->value, ta->size))
+                    return false;
+            }
+
+            return (!ta && !tb);
+        }
         case homekit_format_data:
             // TODO: implement comparison
             return false;
@@ -60,7 +76,18 @@ void homekit_value_copy(homekit_value_t *dst, homekit_value_t *src) {
                     dst->string_value = strdup(src->string_value);
                 }
                 break;
-            case homekit_format_tlv:
+            case homekit_format_tlv: {
+                if (src->is_static) {
+                    dst->tlv_values = src->tlv_values;
+                    dst->is_static = true;
+                } else {
+                    dst->tlv_values = tlv_new();
+                    for (tlv_t *v=src->tlv_values->head; v; v=v->next) {
+                      tlv_add_value(dst->tlv_values, v->type, v->value, v->size);
+                    }
+                }
+                break;
+            }
             case homekit_format_data:
                 // TODO:
                 break;
@@ -86,6 +113,9 @@ void homekit_value_destruct(homekit_value_t *value) {
                     free(value->string_value);
                 break;
             case homekit_format_tlv:
+                if (!value->is_static && value->tlv_values)
+                    tlv_free(value->tlv_values);
+                break;
             case homekit_format_data:
                 // TODO:
                 break;

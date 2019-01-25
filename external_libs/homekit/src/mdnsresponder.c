@@ -608,11 +608,10 @@ void mdns_add_facility( const char* instanceName,   // Friendly name, need not b
 
     sdk_os_timer_disarm(&mdns_announce_timer);
 
-    // Delay until wifi gets IP Address
     while (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
-        vTaskDelayMs(200);
+        vTaskDelayMs(500);
     }
-    
+
     mdns_announce();
 
     sdk_os_timer_setfn(&mdns_announce_timer, mdns_announce, NULL);

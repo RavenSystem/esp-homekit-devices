@@ -24,8 +24,8 @@
 #include <http-parser/http_parser.h>
 #include <cJSON.h>
 
+#include "base64.h"
 #include "crypto.h"
-#include "tlv.h"
 #include "pairing.h"
 #include "storage.h"
 #include "query_params.h"
@@ -33,8 +33,9 @@
 #include "debug.h"
 #include "port.h"
 
-#include "homekit/homekit.h"
-#include "homekit/characteristics.h"
+#include <homekit/homekit.h>
+#include <homekit/characteristics.h>
+#include <homekit/tlv.h>
 
 
 #define PORT 5556
@@ -42,10 +43,6 @@
 #ifndef HOMEKIT_MAX_CLIENTS
 #define HOMEKIT_MAX_CLIENTS 16
 #endif
-
-
-struct _client_context_t;
-typedef struct _client_context_t client_context_t;
 
 
 typedef enum {
@@ -58,6 +55,7 @@ typedef enum {
     HOMEKIT_ENDPOINT_UPDATE_CHARACTERISTICS,
     HOMEKIT_ENDPOINT_PAIRINGS,
     HOMEKIT_ENDPOINT_RESET,
+    HOMEKIT_ENDPOINT_RESOURCE,
 } homekit_endpoint_t;
 
 
@@ -100,6 +98,14 @@ typedef struct {
 } homekit_server_t;
 
 
+typedef struct _client_context_user_data_t {
+    unsigned int id;
+    void *data;
+
+    struct _client_context_user_data_t *next;
+} client_context_user_data_t;
+
+
 struct _client_context_t {
     homekit_server_t *server;
     int socket;
@@ -130,6 +136,8 @@ struct _client_context_t {
 
     QueueHandle_t event_queue;
     pair_verify_context_t *verify_context;
+
+    client_context_user_data_t *user_data;
 
     struct _client_context_t *next;
 };
@@ -339,6 +347,8 @@ client_context_t *client_context_new() {
     c->event_queue = xQueueCreate(20, sizeof(characteristic_event_t*));
     c->verify_context = NULL;
 
+    c->user_data = NULL;
+
     c->next = NULL;
 
     return c;
@@ -369,6 +379,19 @@ void client_context_free(client_context_t *c) {
 
     if (c->body)
         free(c->body);
+
+    if (c->user_data) {
+        client_context_user_data_t *t = c->user_data;
+        while (t) {
+            client_context_user_data_t *next = t->next;
+
+            if (t->data)
+                free(t->data);
+            free(t);
+
+            t = next;
+        }
+    }
 
     free(c);
 }
@@ -452,7 +475,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
             case homekit_format_int: format_str = "int"; break;
             case homekit_format_float: format_str = "float"; break;
             case homekit_format_string: format_str = "string"; break;
-            case homekit_format_tlv: format_str = "tlv"; break;
+            case homekit_format_tlv: format_str = "tlv8"; break;
             case homekit_format_data: format_str = "data"; break;
         }
         if (format_str) {
@@ -547,7 +570,32 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
                     json_string(json, "value"); json_string(json, v.string_value);
                     break;
                 }
-                case homekit_format_tlv:
+                case homekit_format_tlv: {
+                    json_string(json, "value");
+                    if (!v.tlv_values) {
+                        json_string(json, "");
+                    } else {
+                        size_t tlv_size = 0;
+                        tlv_format(v.tlv_values, NULL, &tlv_size);
+                        if (tlv_size == 0) {
+                            json_string(json, "");
+                        } else {
+                            byte *tlv_data = malloc(tlv_size);
+                            tlv_format(v.tlv_values, tlv_data, &tlv_size);
+
+                            size_t encoded_tlv_size = base64_encoded_size(tlv_data, tlv_size);
+                            byte *encoded_tlv_data = malloc(encoded_tlv_size + 1);
+                            base64_encode(tlv_data, tlv_size, encoded_tlv_data);
+                            encoded_tlv_data[encoded_tlv_size] = 0;
+
+                            json_string(json, (char*) encoded_tlv_data);
+
+                            free(encoded_tlv_data);
+                            free(tlv_data);
+                        }
+                    }
+                    break;
+                }
                 case homekit_format_data:
                     // TODO:
                     break;
@@ -697,9 +745,11 @@ void client_notify_characteristic(homekit_characteristic_t *ch, homekit_value_t 
 
 void client_send(client_context_t *context, byte *data, size_t data_size) {
 #if HOMEKIT_DEBUG
-    char *payload = binary_to_string(data, data_size);
-    CLIENT_DEBUG(context, "Sending payload: %s", payload);
-    free(payload);
+    if (data_size < 4096) {
+        char *payload = binary_to_string(data, data_size);
+        CLIENT_DEBUG(context, "Sending payload: %s", payload);
+        free(payload);
+    }
 #endif
 
     if (context->encrypted) {
@@ -790,8 +840,8 @@ void send_tlv_response(client_context_t *context, tlv_values_t *values);
 
 void send_tlv_error_response(client_context_t *context, int state, TLVError error) {
     tlv_values_t *response = tlv_new();
-    tlv_add_integer_value(response, TLVType_State, state);
-    tlv_add_integer_value(response, TLVType_Error, error);
+    tlv_add_integer_value(response, TLVType_State, 1, state);
+    tlv_add_integer_value(response, TLVType_Error, 1, error);
 
     send_tlv_response(context, response);
 }
@@ -908,6 +958,106 @@ void send_json_error_response(client_context_t *context, int status_code, HAPSta
     int size = snprintf((char *)buffer, sizeof(buffer), "{\"status\": %d}", status);
 
     send_json_response(context, status_code, buffer, size);
+}
+
+
+static client_context_t *current_client_context = NULL;
+
+client_context_t *homekit_client_get() {
+    return current_client_context;
+}
+
+void homekit_client_data_set(client_context_t *context, unsigned int data_id, void *data) {
+    if (!context)
+        return;
+
+    client_context_user_data_t *t = context->user_data;
+    if (!t) {
+        t = malloc(sizeof(client_context_user_data_t));
+        t->id = data_id;
+        t->data = NULL;
+        t->next = NULL;
+
+        context->user_data = t;
+    } else if (t->id != data_id) {
+        while (t->next) {
+            if (t->next->id == data_id) {
+                break;
+            }
+
+            t = t->next;
+        }
+
+        if (!t->next) {
+            t->next = malloc(sizeof(client_context_user_data_t));
+            t->next->id = data_id;
+            t->next->data = NULL;
+            t->next->next = NULL;
+        }
+
+        t = t->next;
+    }
+
+    if (t->data)
+        free(t->data);
+    t->data = data;
+
+    return;
+}
+
+void *homekit_client_data_get(client_context_t *context, unsigned int data_id) {
+    if (!context)
+        return NULL;
+
+    client_context_user_data_t *t = context->user_data;
+    while (t) {
+        if (t->id == data_id)
+            return t->data;
+
+        t = t->next;
+    }
+
+    return NULL;
+}
+
+void homekit_client_data_delete(client_context_t *context, unsigned int data_id) {
+    if (!context || context->user_data)
+        return;
+
+    client_context_user_data_t *t = context->user_data;
+    if (t->id == data_id) {
+        context->user_data = t->next;
+
+        if (t->data)
+            free(t->data);
+        free(t);
+    } else {
+        while (t->next) {
+            if (t->next->id == data_id) {
+                t->next = t->next->next;
+
+                if (t->data)
+                    free(t->data);
+                free(t);
+                break;
+            }
+
+            t = t->next;
+        }
+    }
+}
+
+
+unsigned char *homekit_client_get_request_body(client_context_t *context) {
+    return (unsigned char*) context->body;
+}
+
+size_t homekit_client_get_request_body_size(client_context_t *context) {
+    return context->body_length;
+}
+
+void homekit_client_send(client_context_t *context, unsigned char *data, size_t size) {
+    client_send(context, data, size);
 }
 
 
@@ -1043,7 +1193,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             tlv_values_t *response = tlv_new();
             tlv_add_value(response, TLVType_PublicKey, context->server->pairing_context->public_key, context->server->pairing_context->public_key_size);
             tlv_add_value(response, TLVType_Salt, salt, salt_size);
-            tlv_add_integer_value(response, TLVType_State, 2);
+            tlv_add_integer_value(response, TLVType_State, 1, 2);
 
             free(salt);
 
@@ -1102,8 +1252,8 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             r = crypto_srp_get_proof(context->server->pairing_context->srp, server_proof, &server_proof_size);
 
             tlv_values_t *response = tlv_new();
+            tlv_add_integer_value(response, TLVType_State, 1, 4);
             tlv_add_value(response, TLVType_Proof, server_proof, server_proof_size);
-            tlv_add_integer_value(response, TLVType_State, 4);
 
             free(server_proof);
 
@@ -1427,7 +1577,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             }
 
             tlv_values_t *response = tlv_new();
-            tlv_add_integer_value(response, TLVType_State, 6);
+            tlv_add_integer_value(response, TLVType_State, 1, 6);
             tlv_add_value(response, TLVType_EncryptedData,
                           encrypted_response_data, encrypted_response_data_size);
 
@@ -1651,7 +1801,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             }
 
             tlv_values_t *response = tlv_new();
-            tlv_add_integer_value(response, TLVType_State, 2);
+            tlv_add_integer_value(response, TLVType_State, 1, 2);
             tlv_add_value(response, TLVType_PublicKey,
                           my_key_public, my_key_public_size);
             tlv_add_value(response, TLVType_EncryptedData,
@@ -1869,13 +2019,16 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             }
 
             tlv_values_t *response = tlv_new();
-            tlv_add_integer_value(response, TLVType_State, 4);
+            tlv_add_integer_value(response, TLVType_State, 1, 4);
 
             send_tlv_response(context, response);
 
             context->pairing_id = pairing_id;
             context->permissions = permissions;
             context->encrypted = true;
+
+            if (context->server->config->on_client_connect)
+                context->server->config->on_client_connect(context);
 
             CLIENT_INFO(context, "Verification successful, secure session established");
 
@@ -2169,6 +2322,8 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         return HAPStatus_InvalidValue;
                     }
 
+                    CLIENT_DEBUG(context, "Updating characteristic %d.%d with boolean %s", aid, iid, value ? "true" : "false");
+
                     h_value = HOMEKIT_BOOL(value);
                     if (ch->setter) {
                         ch->setter(h_value);
@@ -2265,6 +2420,8 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         }
                     }
 
+                    CLIENT_DEBUG(context, "Updating characteristic %d.%d with integer %d", aid, iid, value);
+
                     h_value = HOMEKIT_INT(value);
                     h_value.format = ch->format;
                     if (ch->setter) {
@@ -2286,6 +2443,8 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         CLIENT_ERROR(context, "Failed to update %d.%d: value is not in range", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
+
+                    CLIENT_DEBUG(context, "Updating characteristic %d.%d with %g", aid, iid, value);
 
                     h_value = HOMEKIT_FLOAT(value);
                     if (ch->setter) {
@@ -2309,18 +2468,66 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         return HAPStatus_InvalidValue;
                     }
 
+                    CLIENT_DEBUG(context, "Updating characteristic %d.%d with \"%s\"", aid, iid, value);
+
+                    h_value = HOMEKIT_STRING(value);
                     if (ch->setter) {
-                        h_value = HOMEKIT_STRING(value);
                         ch->setter(h_value);
                     } else {
                         homekit_value_destruct(&ch->value);
-                        h_value = HOMEKIT_STRING(strdup(value));
-                        ch->value = h_value;
+                        homekit_value_copy(&ch->value, &h_value);
                     }
                     break;
                 }
                 case homekit_format_tlv: {
-                    // TODO:
+                    if (j_value->type != cJSON_String) {
+                        CLIENT_ERROR(context, "Failed to update %d.%d: value is not a string", aid, iid);
+                        return HAPStatus_InvalidValue;
+                    }
+
+                    int max_len = (ch->max_len) ? *ch->max_len : 256;
+
+                    char *value = j_value->valuestring;
+                    size_t value_len = strlen(value);
+                    if (value_len > max_len) {
+                        CLIENT_ERROR(context, "Failed to update %d.%d: value is too long", aid, iid);
+                        return HAPStatus_InvalidValue;
+                    }
+
+                    size_t tlv_size = base64_decoded_size((unsigned char*)value, value_len);
+                    byte *tlv_data = malloc(tlv_size);
+                    if (base64_decode((byte*) value, value_len, tlv_data) < 0) {
+                        free(tlv_data);
+                        CLIENT_ERROR(context, "Failed to update %d.%d: error Base64 decoding", aid, iid);
+                        return HAPStatus_InvalidValue;
+                    }
+
+                    tlv_values_t *tlv_values = tlv_new();
+                    int r = tlv_parse(tlv_data, tlv_size, tlv_values);
+                    free(tlv_data);
+
+                    if (r) {
+                        CLIENT_ERROR(context, "Failed to update %d.%d: error parsing TLV", aid, iid);
+                        return HAPStatus_InvalidValue;
+                    }
+
+                    CLIENT_DEBUG(context, "Updating characteristic %d.%d with TLV:", aid, iid);
+                    for (tlv_t *t=tlv_values->head; t; t=t->next) {
+                        char *escaped_payload = binary_to_string(t->value, t->size);
+                        CLIENT_DEBUG(context, "  Type %d value (%d bytes): %s", t->type, t->size, escaped_payload);
+                        free(escaped_payload);
+                    }
+
+                    h_value = HOMEKIT_TLV(tlv_values);
+
+                    if (ch->setter) {
+                        ch->setter(h_value);
+                    } else {
+                        homekit_value_destruct(&ch->value);
+                        homekit_value_copy(&ch->value, &h_value);
+                    }
+
+                    tlv_free(tlv_values);
                     break;
                 }
                 case homekit_format_data: {
@@ -2541,7 +2748,7 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
             crypto_ed25519_free(device_key);
 
             tlv_values_t *response = tlv_new();
-            tlv_add_integer_value(response, TLVType_State, 2);
+            tlv_add_integer_value(response, TLVType_State, 1, 2);
 
             send_tlv_response(context, response);
 
@@ -2620,7 +2827,7 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
             free(device_identifier);
 
             tlv_values_t *response = tlv_new();
-            tlv_add_integer_value(response, TLVType_State, 2);
+            tlv_add_integer_value(response, TLVType_State, 1, 2);
 
             send_tlv_response(context, response);
             break;
@@ -2635,7 +2842,7 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
             }
 
             tlv_values_t *response = tlv_new();
-            tlv_add_integer_value(response, TLVType_State, 2);
+            tlv_add_integer_value(response, TLVType_State, 1, 2);
 
             bool first = true;
 
@@ -2651,9 +2858,9 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
                 }
                 r = crypto_ed25519_export_public_key(pairing->device_key, public_key, &public_key_size);
 
-                tlv_add_integer_value(response, TLVType_Permissions, pairing->permissions);
-                tlv_add_value(response, TLVType_PublicKey, public_key, public_key_size);
                 tlv_add_string_value(response, TLVType_Identifier, pairing->device_id);
+                tlv_add_value(response, TLVType_PublicKey, public_key, public_key_size);
+                tlv_add_integer_value(response, TLVType_Permissions, 1, pairing->permissions);
 
                 first = false;
 
@@ -2684,6 +2891,18 @@ void homekit_server_on_reset(client_context_t *context) {
     vTaskDelay(3000 / portTICK_PERIOD_MS);
 
     homekit_system_restart();
+}
+
+void homekit_server_on_resource(client_context_t *context) {
+    CLIENT_INFO(context, "Resource");
+    DEBUG_HEAP();
+
+    if (!context->server->config->on_resource) {
+        send_404_response(context);
+        return;
+    }
+
+    context->server->config->on_resource(context);
 }
 
 
@@ -2720,6 +2939,8 @@ int homekit_server_on_url(http_parser *parser, const char *data, size_t length) 
             context->endpoint = HOMEKIT_ENDPOINT_PAIRINGS;
         } else if (!strncmp(data, "/reset", length)) {
             context->endpoint = HOMEKIT_ENDPOINT_RESET;
+        } else if (!strncmp(data, "/resource", length)) {
+            context->endpoint = HOMEKIT_ENDPOINT_RESOURCE;
         }
     } else if (parser->method == HTTP_PUT) {
         if (!strncmp(data, "/characteristics", length)) {
@@ -2738,9 +2959,10 @@ int homekit_server_on_url(http_parser *parser, const char *data, size_t length) 
 
 int homekit_server_on_body(http_parser *parser, const char *data, size_t length) {
     client_context_t *context = parser->data;
-    context->body = realloc(context->body, context->body_length + length);
+    context->body = realloc(context->body, context->body_length + length + 1);
     memcpy(context->body + context->body_length, data, length);
     context->body_length += length;
+    context->body[context->body_length] = 0;
 
     return 0;
 }
@@ -2779,6 +3001,10 @@ int homekit_server_on_message_complete(http_parser *parser) {
         }
         case HOMEKIT_ENDPOINT_RESET: {
             homekit_server_on_reset(context);
+            break;
+        }
+        case HOMEKIT_ENDPOINT_RESOURCE: {
+            homekit_server_on_resource(context);
             break;
         }
         case HOMEKIT_ENDPOINT_UNKNOWN: {
@@ -2862,10 +3088,14 @@ static void homekit_client_process(client_context_t *context) {
         context->data_available = 0;
     }
 
+    current_client_context = context;
+
     http_parser_execute(
         context->parser, &homekit_http_parser_settings,
         (char *)payload, payload_size
     );
+
+    current_client_context = NULL;
 
     CLIENT_DEBUG(context, "Finished processing");
 
@@ -2904,6 +3134,9 @@ void homekit_server_close_client(homekit_server_t *server, client_context_t *con
         client_notify_characteristic,
         context
     );
+
+    if (server->config->on_client_disconnect)
+        server->config->on_client_disconnect(context);
 
     client_context_free(context);
 }
@@ -3114,6 +3347,17 @@ void homekit_setup_mdns(homekit_server_t *server) {
         return;
     }
 
+    /*
+    char unique_name[65]={0};
+    strncpy(unique_name, name->value.string_value, sizeof(unique_name)-6);
+    unique_name[strlen(unique_name)]='-';
+    unique_name[strlen(unique_name)]=server->accessory_id[0];
+    unique_name[strlen(unique_name)]=server->accessory_id[1];
+    unique_name[strlen(unique_name)]=server->accessory_id[3];
+    unique_name[strlen(unique_name)]=server->accessory_id[4];
+    homekit_mdns_configure_init(unique_name, PORT);
+    */
+    
     homekit_mdns_configure_init(name->value.string_value, PORT);
 
     // accessory model name (required)

@@ -4,6 +4,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <homekit/tlv.h>
+
+
 typedef enum {
     homekit_format_bool,
     homekit_format_uint8,
@@ -82,7 +85,7 @@ typedef struct {
         int int_value;
         float float_value;
         char *string_value;
-        // tlv
+        tlv_values_t *tlv_values;
         // data
     };
 } homekit_value_t;
@@ -129,11 +132,11 @@ void homekit_value_free(homekit_value_t *value);
 #define HOMEKIT_STRING_(value, ...) \
     {.format=homekit_format_string, .string_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_STRING(value, ...) (homekit_value_t) HOMEKIT_STRING_(value, ##__VA_ARGS__)
-/*
-#define HOMEKIT_TLV_(value, ...) \
-    {.format=homekit_format_tlv, .tlv_value=(value), ##__VA_ARGS__}
-#define HOMEKIT_TLV(value, ...) (homekit_value_t) HOMEKIT_TLV_(value, ##__VA_ARGS__)
 
+#define HOMEKIT_TLV_(value, ...) \
+    {.format=homekit_format_tlv, .tlv_values=(value), ##__VA_ARGS__}
+#define HOMEKIT_TLV(value, ...) (homekit_value_t) HOMEKIT_TLV_(value, ##__VA_ARGS__)
+/*
 #define HOMEKIT_DATA_(value, ...) \
     {.format=homekit_format_data, .data_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_DATA(value, ...) (homekit_value_t) HOMEKIT_DATA_(value, ##__VA_ARGS__)
