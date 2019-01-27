@@ -554,13 +554,13 @@ void mdns_announce() {
 #endif
 }
 
-void mdns_add_facility( const char* instanceName,   // Friendly name, need not be unique
-                        const char* serviceName,    // Must be "_name", e.g. "_hap" or "_http"
-                        const char* addText,        // Must be <key>=<value>
-                        mdns_flags flags,           // TCP or UDP
-                        u16_t onPort,               // port number
-                        u32_t ttl                   // seconds
-                      )
+void mdns_add_facility_work(const char* instanceName,   // Friendly name, need not be unique
+                            const char* serviceName,    // Must be "_name", e.g. "_hap" or "_http"
+                            const char* addText,        // Must be <key>=<value>
+                            mdns_flags flags,           // TCP or UDP
+                            u16_t onPort,               // port number
+                            u32_t ttl                   // seconds
+                           )
 {
     size_t key_len = strlen(serviceName) + 12;
     char *key = malloc(key_len + 1);
@@ -607,15 +607,36 @@ void mdns_add_facility( const char* instanceName,   // Friendly name, need not b
     free(devName);
 
     sdk_os_timer_disarm(&mdns_announce_timer);
-
-    while (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
-        vTaskDelayMs(500);
-    }
-
+    
     mdns_announce();
+    
+    if (ttl > 0) {
+        sdk_os_timer_setfn(&mdns_announce_timer, mdns_announce, NULL);
+        sdk_os_timer_arm(&mdns_announce_timer, ttl * 1000, 1);
+    }
+}
 
-    sdk_os_timer_setfn(&mdns_announce_timer, mdns_announce, NULL);
-    sdk_os_timer_arm(&mdns_announce_timer, ttl * 1000, 1);
+void mdns_add_facility(const char* instanceName,   // Friendly name, need not be unique
+                       const char* serviceName,    // Must be "_name", e.g. "_hap" or "_http"
+                       const char* addText,        // Must be <key>=<value>
+                       mdns_flags flags,           // TCP or UDP
+                       u16_t onPort,               // port number
+                       u32_t ttl                   // seconds
+                      )
+{
+    while (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
+        vTaskDelayMs(200);
+    }
+    
+    vTaskDelayMs(800);
+    
+    if (strstr(addText, "sf=1") != NULL) {
+        mdns_add_facility_work(instanceName, serviceName, addText, flags, onPort, 0);
+        vTaskDelayMs(1200);
+        mdns_clear();
+    }
+    
+    mdns_add_facility_work(instanceName, serviceName, addText, flags, onPort, ttl);
 }
 
 static mdns_rsrc* mdns_match(const char* qstr, u16_t qType)
