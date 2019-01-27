@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.5.15
+ * v0.6.0
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -213,7 +213,7 @@ homekit_characteristic_t external_toggle2 = HOMEKIT_CHARACTERISTIC_(CUSTOM_EXTER
 // Thermostat Setup
 homekit_characteristic_t dht_sensor_type = HOMEKIT_CHARACTERISTIC_(CUSTOM_DHT_SENSOR_TYPE, 2, .id=112, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t hum_offset = HOMEKIT_CHARACTERISTIC_(CUSTOM_HUMIDITY_OFFSET, 0, .id=132, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
-homekit_characteristic_t temp_offset = HOMEKIT_CHARACTERISTIC_(CUSTOM_TEMPERATURE_OFFSET, 0, .id=133, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
+homekit_characteristic_t temp_offset = HOMEKIT_CHARACTERISTIC_(CUSTOM_TEMPERATURE_OFFSET, 0.0, .id=133, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t poll_period = HOMEKIT_CHARACTERISTIC_(CUSTOM_TH_PERIOD, 30, .id=125, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 
 // Water Valve Setup
@@ -342,6 +342,10 @@ void save_settings() {
         flash_error = status;
     }
     
+    if (board_type.value.int_value == 4) {
+        log_output.value.int_value = 0;
+    }
+    
     status = sysparam_set_int8(LOG_OUTPUT_SYSPARAM, log_output.value.int_value);
     if (status != SYSPARAM_OK) {
         flash_error = status;
@@ -367,7 +371,7 @@ void save_settings() {
         flash_error = status;
     }
     
-    status = sysparam_set_int32(TEMP_OFFSET_SYSPARAM, temp_offset.value.int_value * 100);
+    status = sysparam_set_int32(TEMP_OFFSET_SYSPARAM, temp_offset.value.float_value * 100);
     if (status != SYSPARAM_OK) {
         flash_error = status;
     }
@@ -568,7 +572,13 @@ void factory_default_task() {
     status = sysparam_set_bool(SHOW_SETUP_SYSPARAM, true);
     status = sysparam_set_bool(OTA_BETA_SYSPARAM, false);
     //status = sysparam_set_int8(BOARD_TYPE_SYSPARAM, 1);   // This value is not reseted
-    status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 1);
+    
+    if (board_type.value.int_value == 4) {
+        status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 0);
+    } else {
+        status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 1);
+    }
+    
     status = sysparam_set_int8(LOG_OUTPUT_SYSPARAM, 1);
     
     status = sysparam_set_int8(EXTERNAL_TOGGLE1_SYSPARAM, 0);
@@ -1132,6 +1142,9 @@ void hardware_init() {
     void enable_sonoff_device() {
         if (board_type.value.int_value == 2) {
             extra_gpio = 2;
+        } else if (board_type.value.int_value == 4) {
+            extra_gpio = 3;
+            log_output.value.int_value = 0;
         }
         
         gpio_enable(LED_GPIO, GPIO_OUTPUT);
@@ -1875,7 +1888,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.5.15");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.6.0");
 
 homekit_accessory_category_t accessory_category;
 
@@ -1975,7 +1988,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000517;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+        sonoff->config_number = 000600;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));

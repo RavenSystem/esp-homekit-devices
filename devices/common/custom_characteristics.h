@@ -54,11 +54,11 @@
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
     .min_value = (float[]) {1}, \
-    .max_value = (float[]) {3}, \
+    .max_value = (float[]) {4}, \
     .min_step = (float[]) {1}, \
     .valid_values = { \
-    .count = 3, \
-    .values = (uint8_t[]) {1, 2, 3}, \
+    .count = 4, \
+    .values = (uint8_t[]) {1, 2, 3, 4}, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
