@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.6.0
+ * v0.6.1
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -1211,6 +1211,10 @@ void hardware_init() {
                 adv_button_register_callback_fn(BUTTON3_GPIO, button_simple1_intr_callback, 1);
                 adv_button_register_callback_fn(BUTTON3_GPIO, button_simple2_intr_callback, 2);
                 adv_button_register_callback_fn(BUTTON3_GPIO, factory_default_call, 5);
+                
+                if (board_type.value.int_value == 4) {
+                    button1_gpio = 3;
+                }
             }
             
             gpio_enable(relay1_gpio, GPIO_OUTPUT);
@@ -1888,7 +1892,7 @@ homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Ga
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.6.0");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.6.1");
 
 homekit_accessory_category_t accessory_category;
 
@@ -1899,7 +1903,7 @@ void create_accessory_name() {
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     
     char *name_value = malloc(17);
-    snprintf(name_value, 17, "RavenCore %02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
+    snprintf(name_value, 17, "RavenCore-%02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
     name.value = HOMEKIT_STRING(name_value);
     
     char *serial_value = malloc(13);
@@ -1988,7 +1992,7 @@ void create_accessory() {
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
         sonoff->category = accessory_category;
-        sonoff->config_number = 000600;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+        sonoff->config_number = 000601;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
