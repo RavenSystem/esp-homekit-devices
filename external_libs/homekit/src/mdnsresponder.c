@@ -628,11 +628,11 @@ void mdns_add_facility(const char* instanceName,   // Friendly name, need not be
         vTaskDelayMs(200);
     }
     
-    vTaskDelayMs(800);
+    vTaskDelayMs(500);
     
     if (strstr(addText, "sf=1") != NULL) {
         mdns_add_facility_work(instanceName, serviceName, addText, flags, onPort, 0);
-        vTaskDelayMs(1200);
+        vTaskDelayMs(2000);
         mdns_clear();
     }
     
