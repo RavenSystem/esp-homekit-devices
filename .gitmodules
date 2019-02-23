@@ -1,6 +1,3 @@
 [submodule "sdk/esp-open-rtos"]
 	path = sdk/esp-open-rtos
 	url = https://github.com/SuperHouse/esp-open-rtos.git
-[submodule "external_libs/wifi_config"]
-	path = external_libs/wifi_config
-	url = https://github.com/maximkulkin/esp-wifi-config.git
