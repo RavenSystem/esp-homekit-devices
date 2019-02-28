@@ -2726,10 +2726,8 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
 
                     if (!pairing) {
                         // No admins left, enable pairing again
-                        INFO("Last admin pairing was removed, enabling pair setup");
-
-                        context->server->paired = false;
-                        homekit_setup_mdns(context->server);
+                        INFO("Last admin pairing was removed, resetting accessory");
+                        homekit_server_on_reset(context);
                     } else {
                         pairing_free(pairing);
                     }
@@ -3260,15 +3258,8 @@ void homekit_setup_mdns(homekit_server_t *server) {
         return;
     }
 
-    char unique_name[65]={0};
-    strncpy(unique_name, name->value.string_value, sizeof(unique_name)-6);
-    unique_name[strlen(unique_name)]='-';
-    unique_name[strlen(unique_name)]=server->accessory_id[0];
-    unique_name[strlen(unique_name)]=server->accessory_id[1];
-    unique_name[strlen(unique_name)]=server->accessory_id[3];
-    unique_name[strlen(unique_name)]=server->accessory_id[4];
-    homekit_mdns_configure_init(unique_name, PORT);
-
+    homekit_mdns_configure_init(name->value.string_value, PORT);
+    
     // accessory model name (required)
     homekit_mdns_add_txt("md", "%s", model->value.string_value);
     // protocol version (required)
