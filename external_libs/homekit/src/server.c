@@ -23,6 +23,8 @@
 
 #include <http-parser/http_parser.h>
 #include <cJSON.h>
+#include <wolfssl/wolfcrypt/hash.h>
+#include <wolfssl/wolfcrypt/coding.h>
 
 #include "base64.h"
 #include "crypto.h"
@@ -43,6 +45,14 @@
 #ifndef HOMEKIT_MAX_CLIENTS
 #define HOMEKIT_MAX_CLIENTS 16
 #endif
+
+struct _client_context_t;
+typedef struct _client_context_t client_context_t;
+
+
+#define HOMEKIT_NOTIFY_EVENT(server, event) \
+  if ((server)->config->on_event) \
+      (server)->config->on_event(event);
 
 
 typedef enum {
@@ -98,14 +108,6 @@ typedef struct {
 } homekit_server_t;
 
 
-typedef struct _client_context_user_data_t {
-    unsigned int id;
-    void *data;
-
-    struct _client_context_user_data_t *next;
-} client_context_user_data_t;
-
-
 struct _client_context_t {
     homekit_server_t *server;
     int socket;
@@ -137,8 +139,6 @@ struct _client_context_t {
     QueueHandle_t event_queue;
     pair_verify_context_t *verify_context;
 
-    client_context_user_data_t *user_data;
-
     struct _client_context_t *next;
 };
 
@@ -151,7 +151,7 @@ typedef struct {
 
 void client_context_free(client_context_t *c);
 void pairing_context_free(pairing_context_t *context);
-void homekit_server_on_reset(client_context_t *context);
+
 
 homekit_server_t *server_new() {
     homekit_server_t *server = malloc(sizeof(homekit_server_t));
@@ -347,8 +347,6 @@ client_context_t *client_context_new() {
     c->event_queue = xQueueCreate(20, sizeof(characteristic_event_t*));
     c->verify_context = NULL;
 
-    c->user_data = NULL;
-
     c->next = NULL;
 
     return c;
@@ -379,19 +377,6 @@ void client_context_free(client_context_t *c) {
 
     if (c->body)
         free(c->body);
-
-    if (c->user_data) {
-        client_context_user_data_t *t = c->user_data;
-        while (t) {
-            client_context_user_data_t *next = t->next;
-
-            if (t->data)
-                free(t->data);
-            free(t);
-
-            t = next;
-        }
-    }
 
     free(c);
 }
@@ -542,7 +527,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
     }
 
     if (ch->permissions & homekit_permissions_paired_read) {
-        homekit_value_t v = value ? *value : (ch->getter ? ch->getter() : ch->value);
+        homekit_value_t v = value ? *value : ch->getter_ex ? ch->getter_ex(ch) : ch->value;
 
         if (v.is_null) {
             // json_string(json, "value"); json_null(json);
@@ -602,7 +587,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
             }
         }
 
-        if (!value && ch->getter) {
+        if (!value && ch->getter_ex) {
             // called getter to get value, need to free it
             homekit_value_destruct(&v);
         }
@@ -963,101 +948,24 @@ void send_json_error_response(client_context_t *context, int status_code, HAPSta
 
 static client_context_t *current_client_context = NULL;
 
-client_context_t *homekit_client_get() {
-    return current_client_context;
+homekit_client_id_t homekit_get_client_id() {
+    return (homekit_client_id_t)current_client_context;
 }
 
-void homekit_client_data_set(client_context_t *context, unsigned int data_id, void *data) {
-    if (!context)
-        return;
+bool homekit_client_is_admin() {
+    if (!current_client_context)
+        return false;
 
-    client_context_user_data_t *t = context->user_data;
-    if (!t) {
-        t = malloc(sizeof(client_context_user_data_t));
-        t->id = data_id;
-        t->data = NULL;
-        t->next = NULL;
-
-        context->user_data = t;
-    } else if (t->id != data_id) {
-        while (t->next) {
-            if (t->next->id == data_id) {
-                break;
-            }
-
-            t = t->next;
-        }
-
-        if (!t->next) {
-            t->next = malloc(sizeof(client_context_user_data_t));
-            t->next->id = data_id;
-            t->next->data = NULL;
-            t->next->next = NULL;
-        }
-
-        t = t->next;
-    }
-
-    if (t->data)
-        free(t->data);
-    t->data = data;
-
-    return;
+    return current_client_context->permissions & pairing_permissions_admin;
 }
 
-void *homekit_client_data_get(client_context_t *context, unsigned int data_id) {
-    if (!context)
-        return NULL;
+int homekit_client_send(unsigned char *data, size_t size) {
+    if (!current_client_context)
+        return -1;
 
-    client_context_user_data_t *t = context->user_data;
-    while (t) {
-        if (t->id == data_id)
-            return t->data;
+    client_send(current_client_context, data, size);
 
-        t = t->next;
-    }
-
-    return NULL;
-}
-
-void homekit_client_data_delete(client_context_t *context, unsigned int data_id) {
-    if (!context || context->user_data)
-        return;
-
-    client_context_user_data_t *t = context->user_data;
-    if (t->id == data_id) {
-        context->user_data = t->next;
-
-        if (t->data)
-            free(t->data);
-        free(t);
-    } else {
-        while (t->next) {
-            if (t->next->id == data_id) {
-                t->next = t->next->next;
-
-                if (t->data)
-                    free(t->data);
-                free(t);
-                break;
-            }
-
-            t = t->next;
-        }
-    }
-}
-
-
-unsigned char *homekit_client_get_request_body(client_context_t *context) {
-    return (unsigned char*) context->body;
-}
-
-size_t homekit_client_get_request_body_size(client_context_t *context) {
-    return context->body_length;
-}
-
-void homekit_client_send(client_context_t *context, unsigned char *data, size_t size) {
-    client_send(context, data, size);
+    return 0;
 }
 
 
@@ -1091,8 +999,8 @@ void homekit_server_on_identify(client_context_t *context) {
         return;
     }
 
-    if (ch_identify->setter) {
-        ch_identify->setter(HOMEKIT_BOOL(true));
+    if (ch_identify->setter_ex) {
+        ch_identify->setter_ex(ch_identify, HOMEKIT_BOOL(true));
     }
 }
 
@@ -1442,6 +1350,8 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             }
 
             INFO("Added pairing with %s", device_id);
+
+            HOMEKIT_NOTIFY_EVENT(context->server, HOMEKIT_EVENT_PAIRING_ADDED);
 
             free(device_id);
 
@@ -2027,8 +1937,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             context->permissions = permissions;
             context->encrypted = true;
 
-            if (context->server->config->on_client_connect)
-                context->server->config->on_client_connect(context);
+            HOMEKIT_NOTIFY_EVENT(context->server, HOMEKIT_EVENT_CLIENT_VERIFIED);
 
             CLIENT_INFO(context, "Verification successful, secure session established");
 
@@ -2325,8 +2234,8 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     CLIENT_DEBUG(context, "Updating characteristic %d.%d with boolean %s", aid, iid, value ? "true" : "false");
 
                     h_value = HOMEKIT_BOOL(value);
-                    if (ch->setter) {
-                        ch->setter(h_value);
+                    if (ch->setter_ex) {
+                        ch->setter_ex(ch, h_value);
                     } else {
                         ch->value = h_value;
                     }
@@ -2424,8 +2333,8 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 
                     h_value = HOMEKIT_INT(value);
                     h_value.format = ch->format;
-                    if (ch->setter) {
-                        ch->setter(h_value);
+                    if (ch->setter_ex) {
+                        ch->setter_ex(ch, h_value);
                     } else {
                         ch->value = h_value;
                     }
@@ -2447,8 +2356,8 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     CLIENT_DEBUG(context, "Updating characteristic %d.%d with %g", aid, iid, value);
 
                     h_value = HOMEKIT_FLOAT(value);
-                    if (ch->setter) {
-                        ch->setter(h_value);
+                    if (ch->setter_ex) {
+                        ch->setter_ex(ch, h_value);
                     } else {
                         ch->value = h_value;
                     }
@@ -2471,8 +2380,8 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     CLIENT_DEBUG(context, "Updating characteristic %d.%d with \"%s\"", aid, iid, value);
 
                     h_value = HOMEKIT_STRING(value);
-                    if (ch->setter) {
-                        ch->setter(h_value);
+                    if (ch->setter_ex) {
+                        ch->setter_ex(ch, h_value);
                     } else {
                         homekit_value_destruct(&ch->value);
                         homekit_value_copy(&ch->value, &h_value);
@@ -2519,9 +2428,8 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     }
 
                     h_value = HOMEKIT_TLV(tlv_values);
-
-                    if (ch->setter) {
-                        ch->setter(h_value);
+                    if (ch->setter_ex) {
+                        ch->setter_ex(ch, h_value);
                     } else {
                         homekit_value_destruct(&ch->value);
                         homekit_value_copy(&ch->value, &h_value);
@@ -2742,6 +2650,8 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
                 }
 
                 INFO("Added pairing with %s", device_identifier);
+
+                HOMEKIT_NOTIFY_EVENT(context->server, HOMEKIT_EVENT_PAIRING_ADDED);
             }
 
             free(device_identifier);
@@ -2791,6 +2701,8 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
 
                 INFO("Removed pairing with %s", device_identifier);
 
+                HOMEKIT_NOTIFY_EVENT(context->server, HOMEKIT_EVENT_PAIRING_REMOVED);
+
                 client_context_t *c = context->server->clients;
                 while (c) {
                     if (c->pairing_id == pairing->id)
@@ -2814,13 +2726,10 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
 
                     if (!pairing) {
                         // No admins left, enable pairing again
-                        INFO("Last admin pairing was removed, resetting accessory");
-                        homekit_server_on_reset(context);
-                        /*
                         INFO("Last admin pairing was removed, enabling pair setup");
+
                         context->server->paired = false;
                         homekit_setup_mdns(context->server);
-                        */
                     } else {
                         pairing_free(pairing);
                     }
@@ -2905,7 +2814,7 @@ void homekit_server_on_resource(client_context_t *context) {
         return;
     }
 
-    context->server->config->on_resource(context);
+    context->server->config->on_resource(context->body, context->body_length);
 }
 
 
@@ -3138,8 +3047,7 @@ void homekit_server_close_client(homekit_server_t *server, client_context_t *con
         context
     );
 
-    if (server->config->on_client_disconnect)
-        server->config->on_client_disconnect(context);
+    HOMEKIT_NOTIFY_EVENT(server, HOMEKIT_EVENT_CLIENT_DISCONNECTED);
 
     client_context_free(context);
 }
@@ -3184,6 +3092,8 @@ client_context_t *homekit_server_accept_client(homekit_server_t *server) {
     server->nfds++;
     if (s > server->max_fd)
         server->max_fd = s;
+
+    HOMEKIT_NOTIFY_EVENT(server, HOMEKIT_EVENT_CLIENT_CONNECTED);
 
     return context;
 }
@@ -3350,7 +3260,6 @@ void homekit_setup_mdns(homekit_server_t *server) {
         return;
     }
 
-    /*
     char unique_name[65]={0};
     strncpy(unique_name, name->value.string_value, sizeof(unique_name)-6);
     unique_name[strlen(unique_name)]='-';
@@ -3359,9 +3268,6 @@ void homekit_setup_mdns(homekit_server_t *server) {
     unique_name[strlen(unique_name)]=server->accessory_id[3];
     unique_name[strlen(unique_name)]=server->accessory_id[4];
     homekit_mdns_configure_init(unique_name, PORT);
-    */
-    
-    homekit_mdns_configure_init(name->value.string_value, PORT);
 
     // accessory model name (required)
     homekit_mdns_add_txt("md", "%s", model->value.string_value);
@@ -3371,7 +3277,7 @@ void homekit_setup_mdns(homekit_server_t *server) {
     // should be in format XX:XX:XX:XX:XX:XX, otherwise devices will ignore it
     homekit_mdns_add_txt("id", "%s", server->accessory_id);
     // current configuration number (required)
-    homekit_mdns_add_txt("c#", "%d", accessory->config_number);
+    homekit_mdns_add_txt("c#", "%d", server->config->config_number);
     // current state number (required)
     homekit_mdns_add_txt("s#", "1");
     // feature flags (required if non-zero)
@@ -3385,7 +3291,29 @@ void homekit_setup_mdns(homekit_server_t *server) {
     //   bits 3-7 - reserved
     homekit_mdns_add_txt("sf", "%d", (server->paired) ? 0 : 1);
     // accessory category identifier
-    homekit_mdns_add_txt("ci", "%d", accessory->category);
+    homekit_mdns_add_txt("ci", "%d", server->config->category);
+
+    if (server->config->setupId) {
+        DEBUG("Accessory Setup ID = %s", server->config->setupId);
+
+        size_t data_size = strlen(server->config->setupId) + strlen(server->accessory_id) + 1;
+        char *data = malloc(data_size);
+        snprintf(data, data_size, "%s%s", server->config->setupId, server->accessory_id);
+        data[data_size-1] = 0;
+
+        unsigned char shaHash[SHA512_DIGEST_SIZE];
+        wc_Sha512Hash((const unsigned char *)data, data_size-1, shaHash);
+
+        free(data);
+
+        unsigned char encodedHash[9];
+        memset(encodedHash, 0, sizeof(encodedHash));
+
+        word32 len = sizeof(encodedHash);
+        Base64_Encode_NoNl((const unsigned char *)shaHash, 4, encodedHash, &len);
+
+        homekit_mdns_add_txt("sh", "%s", encodedHash);
+    }
 
     homekit_mdns_configure_finalize();
 }
@@ -3454,12 +3382,15 @@ void homekit_server_task(void *args) {
     homekit_mdns_init();
     homekit_setup_mdns(server);
 
+    HOMEKIT_NOTIFY_EVENT(server, HOMEKIT_EVENT_SERVER_INITIALIZED);
+
     homekit_run_server(server);
 
     vTaskDelete(NULL);
 }
 
 #define ISDIGIT(x) isdigit((unsigned char)(x))
+#define ISBASE36(x) (isdigit((unsigned char)(x)) || (x >= 'A' && x <= 'Z'))
 
 void homekit_server_init(homekit_server_config_t *config) {
     if (!config->accessories) {
@@ -3486,7 +3417,28 @@ void homekit_server_init(homekit_server_config_t *config) {
         }
     }
 
+    if (config->setupId) {
+        const char *p = config->setupId;
+        if (strlen(p) != 4 ||
+                !(ISBASE36(p[0]) && ISBASE36(p[1]) && ISBASE36(p[2]) && ISBASE36(p[3]))) {
+            ERROR("Error initializing HomeKit accessory server: "
+                  "invalid setup ID format");
+            return;
+        }
+    }
+
     homekit_accessories_init(config->accessories);
+
+    if (!config->config_number) {
+        config->config_number = config->accessories[0]->config_number;
+        if (!config->config_number) {
+            config->config_number = 1;
+        }
+    }
+
+    if (!config->category) {
+        config->category = config->accessories[0]->category;
+    }
 
     homekit_server_t *server = server_new();
     server->config = config;
@@ -3496,4 +3448,39 @@ void homekit_server_init(homekit_server_config_t *config) {
 
 void homekit_server_reset() {
     homekit_storage_reset();
+}
+
+bool homekit_is_paired() {
+    pairing_iterator_t *pairing_it = homekit_storage_pairing_iterator();
+    pairing_t *pairing;
+    while ((pairing = homekit_storage_next_pairing(pairing_it))) {
+        if (pairing->permissions & pairing_permissions_admin) {
+            break;
+        }
+        pairing_free(pairing);
+    };
+    homekit_storage_pairing_iterator_free(pairing_it);
+
+    bool paired = false;
+    if (pairing) {
+        paired = true;
+        pairing_free(pairing);
+    }
+
+    return paired;
+}
+
+int homekit_get_accessory_id(char *buffer, size_t size) {
+    char *accessory_id = homekit_storage_load_accessory_id();
+    if (!accessory_id)
+        return -2;
+
+    if (size < strlen(accessory_id) + 1)
+        return -1;
+
+    strncpy(buffer, accessory_id, size);
+
+    free(accessory_id);
+
+    return 0;
 }

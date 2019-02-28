@@ -3,14 +3,29 @@
 
 #include <homekit/types.h>
 
-struct _client_context_t;
-typedef struct _client_context_t client_context_t;
+typedef void *homekit_client_id_t;
+
+
+typedef enum {
+    HOMEKIT_EVENT_SERVER_INITIALIZED,
+    // Just accepted client connection
+    HOMEKIT_EVENT_CLIENT_CONNECTED,
+    // Pairing verification completed and secure session is established
+    HOMEKIT_EVENT_CLIENT_VERIFIED,
+    HOMEKIT_EVENT_CLIENT_DISCONNECTED,
+    HOMEKIT_EVENT_PAIRING_ADDED,
+    HOMEKIT_EVENT_PAIRING_REMOVED,
+} homekit_event_t;
 
 
 typedef struct {
     // Pointer to an array of homekit_accessory_t pointers.
     // Array should be terminated by a NULL pointer.
     homekit_accessory_t **accessories;
+
+    homekit_accessory_category_t category;
+
+    int config_number;
 
     // Password in format "111-23-456".
     // If password is not specified, a random password
@@ -21,11 +36,14 @@ typedef struct {
     char *password;
     void (*password_callback)(const char *password);
 
-    // Callback for "POST /resource" to get snapshot image from camera
-    void (*on_resource)(client_context_t *context);
+    // Setup ID in format "XXXX" (where X is digit or latin capital letter)
+    // Used for pairing using QR code
+    char *setupId;
 
-    void (*on_client_connect)(client_context_t *context);
-    void (*on_client_disconnect)(client_context_t *context);
+    // Callback for "POST /resource" to get snapshot image from camera
+    void (*on_resource)(const char *body, size_t body_size);
+
+    void (*on_event)(homekit_event_t event);
 } homekit_server_config_t;
 
 // Initialize HomeKit accessory server
@@ -34,15 +52,13 @@ void homekit_server_init(homekit_server_config_t *config);
 // Reset HomeKit accessory server, removing all pairings
 void homekit_server_reset();
 
-client_context_t *homekit_client_get();
+int  homekit_get_accessory_id(char *buffer, size_t size);
+bool homekit_is_paired();
 
-void homekit_client_data_set(client_context_t *context, unsigned int data_id, void *data);
-void *homekit_client_data_get(client_context_t *context, unsigned int data_id);
-void homekit_client_data_delete(client_context_t *context, unsigned int data_id);
+// Client related stuff
+homekit_client_id_t homekit_get_client_id();
 
-unsigned char *homekit_client_get_request_body(client_context_t *context);
-size_t homekit_client_get_request_body_size(client_context_t *context);
-
-void homekit_client_send(client_context_t *context, unsigned char *data, size_t size);
+bool homekit_client_is_admin();
+int  homekit_client_send(unsigned char *data, size_t size);
 
 #endif // __HOMEKIT_H__

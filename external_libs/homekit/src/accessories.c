@@ -131,6 +131,17 @@ void homekit_value_free(homekit_value_t *value) {
     free(value);
 }
 
+
+homekit_value_t homekit_characteristic_ex_old_getter(homekit_characteristic_t *ch) {
+    return ch->getter();
+}
+
+
+void homekit_characteristic_ex_old_setter(homekit_characteristic_t *ch, homekit_value_t value) {
+    ch->setter(value);
+}
+
+
 void homekit_accessories_init(homekit_accessory_t **accessories) {
     int aid = 1;
     for (homekit_accessory_t **accessory_it = accessories; *accessory_it; accessory_it++) {
@@ -140,10 +151,6 @@ void homekit_accessories_init(homekit_accessory_t **accessories) {
                 aid = accessory->id+1;
         } else {
             accessory->id = aid++;
-        }
-
-        if (accessory->config_number < 1) {
-            accessory->config_number = 1;
         }
 
         int iid = 1;
@@ -165,6 +172,14 @@ void homekit_accessories_init(homekit_accessory_t **accessories) {
                         iid = ch->id+1;
                 } else {
                     ch->id = iid++;
+                }
+
+                if (!ch->getter_ex && ch->getter) {
+                    ch->getter_ex = homekit_characteristic_ex_old_getter;
+                }
+
+                if (!ch->setter_ex && ch->setter) {
+                    ch->setter_ex = homekit_characteristic_ex_old_setter;
                 }
 
                 ch->value.format = ch->format;

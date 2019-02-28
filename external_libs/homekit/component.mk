@@ -39,6 +39,7 @@ ifdef component_compile_rules
     EXTRA_WOLFSSL_CFLAGS = \
         -DWOLFCRYPT_HAVE_SRP \
         -DWOLFSSL_SHA512 \
+        -DWOLFSSL_BASE64_ENCODE \
         -DNO_MD5 \
         -DNO_SHA \
         -DHAVE_HKDF \
