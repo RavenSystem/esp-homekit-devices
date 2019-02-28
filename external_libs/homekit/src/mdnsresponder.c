@@ -427,18 +427,18 @@ static ETSTimer mdns_announce_timer;
 void mdns_clear() {
     sdk_os_timer_disarm(&mdns_announce_timer);
     
-    xSemaphoreTake(gDictMutex, portMAX_DELAY);
+    if (xSemaphoreTake(gDictMutex, portMAX_DELAY)) {
+        mdns_rsrc *rsrc = gDictP;
+        gDictP = NULL;
 
-    mdns_rsrc *rsrc = gDictP;
-    gDictP = NULL;
+        while (rsrc) {
+            mdns_rsrc *next = rsrc->rNext;
+            free(rsrc);
+            rsrc = next;
+        }
 
-    while (rsrc) {
-        mdns_rsrc *next = rsrc->rNext;
-        free(rsrc);
-        rsrc = next;
+        xSemaphoreGive(gDictMutex);
     }
-
-    xSemaphoreGive(gDictMutex);
 }
 
 
@@ -485,10 +485,11 @@ static void mdns_add_response(const char* vKey, u16_t vType, u32_t ttl, const vo
         memcpy(rsrcP->rData, vKey, keyLen);
         memcpy(&rsrcP->rData[keyLen], dataP, vDataSize);
 
-        xSemaphoreTake(gDictMutex, portMAX_DELAY);
-        rsrcP->rNext = gDictP;
-        gDictP = rsrcP;
-        xSemaphoreGive(gDictMutex);
+        if (xSemaphoreTake(gDictMutex, portMAX_DELAY)) {
+            rsrcP->rNext = gDictP;
+            gDictP = rsrcP;
+            xSemaphoreGive(gDictMutex);
+        }
 
 #ifdef qDebugLog
         printf("mDNS added RR '%s' %s, %d bytes\n", vKey, mdns_qrtype(vType), vDataSize);
@@ -553,13 +554,13 @@ void mdns_announce() {
 #endif
 }
 
-void mdns_add_facility( const char* instanceName,   // Friendly name, need not be unique
-                        const char* serviceName,    // Must be "_name", e.g. "_hap" or "_http"
-                        const char* addText,        // Must be <key>=<value>
-                        mdns_flags flags,           // TCP or UDP
-                        u16_t onPort,               // port number
-                        u32_t ttl                   // seconds
-                      )
+void mdns_add_facility_work(const char* instanceName,   // Friendly name, need not be unique
+                            const char* serviceName,    // Must be "_name", e.g. "_hap" or "_http"
+                            const char* addText,        // Must be <key>=<value>
+                            mdns_flags flags,           // TCP or UDP
+                            u16_t onPort,               // port number
+                            u32_t ttl                   // seconds
+                           )
 {
     size_t key_len = strlen(serviceName) + 12;
     char *key = malloc(key_len + 1);
@@ -606,16 +607,36 @@ void mdns_add_facility( const char* instanceName,   // Friendly name, need not b
     free(devName);
 
     sdk_os_timer_disarm(&mdns_announce_timer);
+    
+    mdns_announce();
+    
+    if (ttl > 0) {
+        sdk_os_timer_setfn(&mdns_announce_timer, mdns_announce, NULL);
+        sdk_os_timer_arm(&mdns_announce_timer, ttl * 1000, 1);
+    }
+}
 
-    while (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) vTaskDelayMs(100);
-    mdns_announce();
-    vTaskDelayMs(1000);
-    mdns_announce();
-    vTaskDelayMs(2000);
-    mdns_announce();
-
-    sdk_os_timer_setfn(&mdns_announce_timer, mdns_announce, NULL);
-    sdk_os_timer_arm(&mdns_announce_timer, ttl * 1000, 1);
+void mdns_add_facility(const char* instanceName,   // Friendly name, need not be unique
+                       const char* serviceName,    // Must be "_name", e.g. "_hap" or "_http"
+                       const char* addText,        // Must be <key>=<value>
+                       mdns_flags flags,           // TCP or UDP
+                       u16_t onPort,               // port number
+                       u32_t ttl                   // seconds
+                      )
+{
+    while (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
+        vTaskDelayMs(200);
+    }
+    
+    vTaskDelayMs(600);
+    
+    if (strstr(addText, "sf=1") != NULL) {
+        mdns_add_facility_work(instanceName, serviceName, addText, flags, onPort, 0);
+        vTaskDelayMs(2000);
+        mdns_clear();
+    }
+    
+    mdns_add_facility_work(instanceName, serviceName, addText, flags, onPort, ttl);
 }
 
 static mdns_rsrc* mdns_match(const char* qstr, u16_t qType)
@@ -954,7 +975,9 @@ void mdns_init()
     // Start IGMP on the netif for our interface: this isn't done for us
     if (!(netif->flags & NETIF_FLAG_IGMP)) {
         netif->flags |= NETIF_FLAG_IGMP;
+        LOCK_TCPIP_CORE();
         err = igmp_start(netif);
+        UNLOCK_TCPIP_CORE();
         if (err != ERR_OK) {
             printf(">>> mDNS_init: igmp_start on %c%c failed %d\n", netif->name[0], netif->name[1],err);
             return;
@@ -968,6 +991,8 @@ void mdns_init()
     }
     xSemaphoreGive(gDictMutex);
 
+    LOCK_TCPIP_CORE();
+    
     gMDNS_pcb = udp_new_ip_type(IPADDR_TYPE_ANY);
     if (!gMDNS_pcb) {
         printf(">>> mDNS_init: udp_new failed\n");
@@ -994,4 +1019,6 @@ void mdns_init()
     udp_bind_netif(gMDNS_pcb, netif);
 
     udp_recv(gMDNS_pcb, mdns_recv, NULL);
+    
+    UNLOCK_TCPIP_CORE();
 }
