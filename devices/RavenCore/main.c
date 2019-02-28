@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.6.1
+ * v0.6.2
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -30,6 +30,7 @@
   9. Socket + Button + TH Sensor
  10. ESP01 Switch + Button
  11. Switch 3ch
+ 12. Window
  */
 
 //#include <stdio.h>
@@ -193,6 +194,11 @@ homekit_characteristic_t remaining_duration = HOMEKIT_CHARACTERISTIC_(REMAINING_
 homekit_characteristic_t current_door_state = HOMEKIT_CHARACTERISTIC_(CURRENT_DOOR_STATE, 1);
 homekit_characteristic_t target_door_state = HOMEKIT_CHARACTERISTIC_(TARGET_DOOR_STATE, 1, .getter=read_garage_on_callback, .setter=garage_on_callback);
 homekit_characteristic_t obstruction_detected = HOMEKIT_CHARACTERISTIC_(OBSTRUCTION_DETECTED, false);
+
+// Window Covering
+homekit_characteristic_t covering_current_position = HOMEKIT_CHARACTERISTIC_(CURRENT_POSITION, 0);
+homekit_characteristic_t covering_target_position = HOMEKIT_CHARACTERISTIC_(TARGET_POSITION, 0);
+homekit_characteristic_t covering_position_state = HOMEKIT_CHARACTERISTIC_(POSITION_STATE, 0);
 
 // ---------- SETUP ----------
 // General Setup
@@ -598,7 +604,7 @@ void factory_default_task() {
     status = sysparam_set_int8(GARAGEDOOR_SENSOR_OPEN_SYSPARAM, 0);
     status = sysparam_set_int8(GARAGEDOOR_SENSOR_OBSTRUCTION_SYSPARAM, 0);
     status = sysparam_set_bool(GARAGEDOOR_CONTROL_WITH_BUTTON_SYSPARAM, false);
-    status = sysparam_set_int32(GARAGEDOOR_BUTTON_TIME_SYSPARAM, 0.3 * 100);
+    status = sysparam_set_int32(GARAGEDOOR_BUTTON_TIME_SYSPARAM, 0.30 * 100);
     
     status = sysparam_set_int32(TARGET_TEMPERATURE_SYSPARAM, 23 * 100);
     status = sysparam_set_int8(INIT_STATE_SW1_SYSPARAM, 0);
@@ -937,15 +943,16 @@ void door_opened_countdown_timer() {
         }
     } else if (current_door_state.value.int_value == 3) {
         gd_time_state--;
-         if (gd_time_state == 0) {
-             printf("RC > Garage Door -> CLOSED\n");
-             sdk_os_timer_disarm(&extra_func_timer);
-             gd_is_moving = false;
-             target_door_state.value.int_value = 1;
-             current_door_state.value.int_value = 1;
-             
-             homekit_gd_notify();
-         }
+        
+        if (gd_time_state == 0) {
+            printf("RC > Garage Door -> CLOSED\n");
+            sdk_os_timer_disarm(&extra_func_timer);
+            gd_is_moving = false;
+            target_door_state.value.int_value = 1;
+            current_door_state.value.int_value = 1;
+            
+            homekit_gd_notify();
+        }
     }
 }
 
@@ -1240,12 +1247,12 @@ void hardware_init() {
             
             switch (external_toggle2.value.int_value) {
                 case 1:
-                    adv_toggle_create(button2_gpio, false);
+                    adv_toggle_create(button2_gpio, pullup);
                     adv_toggle_register_callback_fn(button2_gpio, button_simple2_intr_callback, 0);
                     break;
                     
                 case 2:
-                    adv_toggle_create(button2_gpio, false);
+                    adv_toggle_create(button2_gpio, pullup);
                     adv_toggle_register_callback_fn(button2_gpio, button_simple2_intr_callback, 2);
                     break;
                     
@@ -1443,6 +1450,10 @@ void hardware_init() {
             
             gpio_enable(RELAY3_GPIO, GPIO_OUTPUT);
             relay_write(switch3_on.value.bool_value, RELAY3_GPIO);
+            break;
+            
+        case 12:
+            
             break;
             
         default:
@@ -1888,11 +1899,12 @@ homekit_characteristic_t temp_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Temp
 homekit_characteristic_t hum_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Humidity");
 homekit_characteristic_t valve_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Water Valve");
 homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Garage Door");
+homekit_characteristic_t covering_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Window");
 
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.6.1");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.6.2");
 
 homekit_accessory_category_t accessory_category;
 
@@ -1980,6 +1992,11 @@ void create_accessory() {
             accessory_category = homekit_accessory_category_switch;
             break;
             
+        case 12:
+            service_count += 0;
+            accessory_category = homekit_accessory_category_window_covering;
+            break;
+            
         default:    // case 1
             service_count += 0;
             accessory_category = homekit_accessory_category_switch;
@@ -1991,8 +2008,6 @@ void create_accessory() {
 
     homekit_accessory_t *sonoff = accessories[0] = calloc(1, sizeof(homekit_accessory_t));
         sonoff->id = 1;
-        sonoff->category = accessory_category;
-        sonoff->config_number = 000601;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
         sonoff->services = calloc(service_count, sizeof(homekit_service_t*));
 
             homekit_service_t *sonoff_info = sonoff->services[0] = calloc(1, sizeof(homekit_service_t));
@@ -2133,6 +2148,19 @@ void create_accessory() {
                     sonoff_garage->characteristics[3] = &obstruction_detected;
                     sonoff_garage->characteristics[4] = &show_setup;
             }
+    
+            void charac_window_covering(const uint8_t service) {
+                homekit_service_t *sonoff_covering = sonoff->services[service] = calloc(1, sizeof(homekit_service_t));
+                sonoff_covering->id = 58;
+                sonoff_covering->type = HOMEKIT_SERVICE_WINDOW_COVERING;
+                sonoff_covering->primary = true;
+                sonoff_covering->characteristics = calloc(6, sizeof(homekit_characteristic_t*));
+                    sonoff_covering->characteristics[0] = &covering_service_name;
+                    sonoff_covering->characteristics[1] = &covering_current_position;
+                    sonoff_covering->characteristics[2] = &covering_target_position;
+                    sonoff_covering->characteristics[3] = &covering_position_state;
+                    sonoff_covering->characteristics[4] = &show_setup;
+            }
             // --------
     
             // Create accessory for selected device type
@@ -2243,6 +2271,13 @@ void create_accessory() {
                 
                 service_number = 4;
                 
+            } else if (device_type_static == 12) {
+                char *device_type_name_value = malloc(7);
+                snprintf(device_type_name_value, 7, "Window");
+                device_type_name.value = HOMEKIT_STRING(device_type_name_value);
+                
+                charac_window_covering(1);
+                
             } else { // device_type_static == 1
                 char *device_type_name_value = malloc(11);
                 snprintf(device_type_name_value, 11, "Switch 1ch");
@@ -2301,6 +2336,10 @@ void create_accessory() {
                         
                     case 11:
                         setting_count += 5;
+                        break;
+                        
+                    case 12:
+                        setting_count += 2;
                         break;
                         
                     default:    // device_type_static == 1
@@ -2433,11 +2472,18 @@ void create_accessory() {
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_reverse_sw3;
                         
+                    } else if (device_type_static == 12) {
+                        sonoff_setup->characteristics[setting_number] = &external_toggle1;
+                        setting_number++;
+                        sonoff_setup->characteristics[setting_number] = &custom_reverse_sw2;
+                        
                     }
             }
     
     config.accessories = accessories;
     config.password = "021-82-017";
+    config.category = accessory_category;
+    config.config_number = 000602;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
     
     printf("RC > Starting HomeKit Server\n");
     homekit_server_init(&config);

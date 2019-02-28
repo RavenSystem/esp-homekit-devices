@@ -86,17 +86,18 @@
     ##__VA_ARGS__
 
 /* Device Types
- 1. Switch 1ch
- 2. Switch 2ch
- 3. Socket + Button
- 4. Switch 4ch
- 5. Thermostat
- 6. Switch Basic + TH Sensor
- 7. Water Valve
- 8. Garage Door
- 9. Socket + Button + TH Sensor
+  1. Switch 1ch
+  2. Switch 2ch
+  3. Socket + Button
+  4. Switch 4ch
+  5. Thermostat
+  6. Switch Basic + TH Sensor
+  7. Water Valve
+  8. Garage Door
+  9. Socket + Button + TH Sensor
  10. ESP01 Switch + Button
  11. Switch 3ch
+ 12. Window
  */
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_DEVICE_TYPE HOMEKIT_CUSTOM_UUID("F0000100")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_DEVICE_TYPE(_value, ...) \
@@ -107,11 +108,11 @@
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
     .min_value = (float[]) {1}, \
-    .max_value = (float[]) {11}, \
+    .max_value = (float[]) {12}, \
     .min_step = (float[]) {1}, \
     .valid_values = { \
-    .count = 11, \
-    .values = (uint8_t[]) {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, \
+    .count = 12, \
+    .values = (uint8_t[]) {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
@@ -245,18 +246,11 @@
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_CLOSE_NC(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_CLOSE_NC, \
     .description = "Sensor Close NC", \
-    .format = homekit_format_uint8, \
+    .format = homekit_format_bool, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
-    .min_value = (float[]) {0}, \
-    .max_value = (float[]) {2}, \
-    .min_step = (float[]) {1}, \
-    .valid_values = { \
-    .count = 3, \
-    .values = (uint8_t[]) {0, 1, 2}, \
-    }, \
-    .value = HOMEKIT_UINT8_(_value), \
+    .value = HOMEKIT_BOOL_(_value), \
     ##__VA_ARGS__
 
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_SENSOR_OPEN HOMEKIT_CUSTOM_UUID("F0000112")
