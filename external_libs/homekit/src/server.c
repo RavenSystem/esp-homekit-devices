@@ -151,6 +151,7 @@ typedef struct {
 
 void client_context_free(client_context_t *c);
 void pairing_context_free(pairing_context_t *context);
+void homekit_server_on_reset(client_context_t *context);
 
 
 homekit_server_t *server_new() {
