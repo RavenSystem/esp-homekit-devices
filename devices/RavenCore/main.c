@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.7.0
+ * v0.7.1
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -1055,17 +1055,17 @@ void covering_on_callback(homekit_value_t value) {
     }
     
     if (value.int_value < covering_current_position.value.int_value) {
-        relay_write(false, relay1_gpio);
+        relay_write(false, RELAY2_GPIO);
         covering_position_state.value.int_value = 0;
         
         sdk_os_timer_arm(&extra_func_timer, COVERING_POLL_PERIOD_MS, 1);
-        relay_write(true, RELAY2_GPIO);
+        relay_write(true, relay1_gpio);
     } else if (value.int_value > covering_current_position.value.int_value){
-        relay_write(false, RELAY2_GPIO);
+        relay_write(false, relay1_gpio);
         covering_position_state.value.int_value = 1;
         
         sdk_os_timer_arm(&extra_func_timer, COVERING_POLL_PERIOD_MS, 1);
-        relay_write(true, relay1_gpio);
+        relay_write(true, RELAY2_GPIO);
     } else {
         covering_stop();
     }
@@ -2172,7 +2172,7 @@ homekit_characteristic_t covering_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.7.0");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.7.1");
 
 homekit_accessory_category_t accessory_category;
 
@@ -2773,7 +2773,7 @@ void create_accessory() {
     config.accessories = accessories;
     config.password = "021-82-017";
     config.category = accessory_category;
-    config.config_number = 000700;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+    config.config_number = 000701;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
     
     printf("RC > Starting HomeKit Server\n");
     homekit_server_init(&config);
