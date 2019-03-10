@@ -404,6 +404,54 @@
     .value = HOMEKIT_BOOL_(_value), \
     ##__VA_ARGS__
 
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_COVERING_UP_TIME HOMEKIT_CUSTOM_UUID("F0000123")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_COVERING_UP_TIME(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_COVERING_UP_TIME, \
+    .description = "Time Open", \
+    .format = homekit_format_float, \
+    .unit = homekit_unit_seconds, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {3}, \
+    .max_value = (float[]) {60}, \
+    .min_step = (float[]) {0.2}, \
+    .value = HOMEKIT_FLOAT_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_COVERING_DOWN_TIME HOMEKIT_CUSTOM_UUID("F0000124")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_COVERING_DOWN_TIME(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_COVERING_DOWN_TIME, \
+    .description = "Time Close", \
+    .format = homekit_format_float, \
+    .unit = homekit_unit_seconds, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {3}, \
+    .max_value = (float[]) {60}, \
+    .min_step = (float[]) {0.2}, \
+    .value = HOMEKIT_FLOAT_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_COVERING_TYPE HOMEKIT_CUSTOM_UUID("F0000125")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_COVERING_TYPE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_COVERING_TYPE, \
+    .description = "Cover Type", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {2}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+    .count = 3, \
+    .values = (uint8_t[]) {0, 1, 2}, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
 /* Switch Initial State
  0. OFF
  1. ON
