@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.7.1
+ * v0.7.2
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -31,6 +31,7 @@
  10. ESP01 Switch + Button
  11. Switch 3ch
  12. Window
+ 13. Lock
  */
 
 //#include <stdio.h>
@@ -74,7 +75,7 @@
 #define DOOR_OBSTRUCTION_GPIO           5
 //#define DOOR_CLOSED_GPIO              extra_gpio = 14
 
-#define COVERING_POLL_PERIOD_MS         200
+#define COVERING_POLL_PERIOD_MS         250
 
 //#define TOGGLE_GPIO                   extra_gpio = 14
 
@@ -163,6 +164,9 @@ homekit_value_t read_garage_on_callback();
 void covering_on_callback(homekit_value_t value);
 homekit_value_t read_covering_on_callback();
 
+void lock_on_callback(homekit_value_t value);
+homekit_value_t read_lock_on_callback();
+
 void show_setup_callback();
 void ota_firmware_callback();
 void change_settings_callback();
@@ -208,6 +212,10 @@ homekit_characteristic_t obstruction_detected = HOMEKIT_CHARACTERISTIC_(OBSTRUCT
 homekit_characteristic_t covering_current_position = HOMEKIT_CHARACTERISTIC_(CURRENT_POSITION, 0);
 homekit_characteristic_t covering_target_position = HOMEKIT_CHARACTERISTIC_(TARGET_POSITION, 0, .getter=read_covering_on_callback, .setter=covering_on_callback);
 homekit_characteristic_t covering_position_state = HOMEKIT_CHARACTERISTIC_(POSITION_STATE, 2);
+
+// Lock Mechanism
+homekit_characteristic_t lock_current_state = HOMEKIT_CHARACTERISTIC_(LOCK_CURRENT_STATE, 1);
+homekit_characteristic_t lock_target_state = HOMEKIT_CHARACTERISTIC_(LOCK_TARGET_STATE, 1, .getter=read_lock_on_callback, .setter=lock_on_callback);
 
 // ---------- SETUP ----------
 // General Setup
@@ -694,6 +702,11 @@ void factory_default_call(const uint8_t gpio) {
     }
 }
 
+void factory_default_toggle_upcount() {
+    reset_toggle_counter++;
+    sdk_os_timer_arm(&factory_default_toggle_timer, 3100, 0);
+}
+
 void factory_default_toggle() {
     if (reset_toggle_counter > 10) {
         factory_default_call(0);
@@ -1032,19 +1045,24 @@ void covering_stop() {
     normalize_actual_pos();
     
     covering_current_position.value.int_value = covering_actual_pos;
-    covering_target_position.value.int_value = covering_actual_pos;
-    covering_position_state.value.int_value = 2;
-    
-    homekit_characteristic_notify(&covering_position_state, covering_position_state.value);
     homekit_characteristic_notify(&covering_current_position, covering_current_position.value);
+    
+    covering_target_position.value = covering_current_position.value;
     homekit_characteristic_notify(&covering_target_position, covering_target_position.value);
+    
+    covering_position_state.value.int_value = 2;
+    homekit_characteristic_notify(&covering_position_state, covering_position_state.value);
+    
     printf("RC > Covering stoped at %f\n", covering_actual_pos);
+    led_code(LED_GPIO, FUNCTION_A);
     
     save_states_callback();
 }
 
 void covering_on_callback(homekit_value_t value) {
     printf("RC > Covering activated: Current pos -> %i, Target pos -> %i\n", covering_current_position.value.int_value, value.int_value);
+    led_code(LED_GPIO, FUNCTION_A);
+    
     covering_target_position.value = value;
     
     normalize_actual_pos();
@@ -1074,7 +1092,6 @@ void covering_on_callback(homekit_value_t value) {
 }
 
 void covering_worker() {
-    
     void normalize_covering_current_position() {
         if (covering_actual_pos < 0) {
             covering_current_position.value.int_value = 0;
@@ -1126,6 +1143,8 @@ void covering_toggle_up(const uint8_t gpio) {
 
 void covering_toggle_down(const uint8_t gpio) {
     covering_on_callback(HOMEKIT_UINT8(0));
+    
+    factory_default_toggle_upcount();
 }
 
 void covering_toggle_stop(const uint8_t gpio) {
@@ -1146,6 +1165,47 @@ void covering_button_down(const uint8_t gpio) {
     } else {
         covering_on_callback(HOMEKIT_UINT8(0));
     }
+    
+    factory_default_toggle_upcount();
+}
+
+// ***** Lock Mechanism
+void lock_on_callback(homekit_value_t value) {
+    lock_target_state.value = value;
+    
+    lock_current_state.value = value;
+    homekit_characteristic_notify(&lock_current_state, lock_current_state.value);
+    
+    if (value.int_value == 0) {
+        sdk_os_timer_disarm(&extra_func_timer);
+        
+        printf("RC > Lock opened\n");
+        led_code(LED_GPIO, FUNCTION_A);
+        relay_write(true, relay1_gpio);
+        
+        sdk_os_timer_arm(&extra_func_timer, 1000, 0);
+    }
+}
+
+void lock_timer() {
+    relay_write(false, relay1_gpio);
+    
+    lock_target_state.value.int_value = 1;
+    homekit_characteristic_notify(&lock_target_state, lock_target_state.value);
+    
+    lock_current_state.value.int_value = 1;
+    homekit_characteristic_notify(&lock_current_state, lock_current_state.value);
+}
+
+void lock_intr_callback(const uint8_t gpio) {
+    lock_on_callback(HOMEKIT_UINT8(0));
+    
+    factory_default_toggle_upcount();
+}
+
+homekit_value_t read_lock_on_callback() {
+    printf("RC > Returning lock_target_state -> %i\n", lock_target_state.value.int_value);
+    return lock_target_state.value;
 }
 
 // ***** Buttons
@@ -1155,8 +1215,7 @@ void button_simple1_intr_callback(const uint8_t gpio) {
     switch1_on_callback(switch1_on.value);
     homekit_characteristic_notify(&switch1_on, switch1_on.value);
     
-    reset_toggle_counter++;
-    sdk_os_timer_arm(&factory_default_toggle_timer, 3100, 0);
+    factory_default_toggle_upcount();
 }
 
 void button_simple2_intr_callback(const uint8_t gpio) {
@@ -1352,38 +1411,6 @@ void hardware_init() {
     
     bool pullup = true;
     switch (device_type_static) {
-        case 1:
-            if (board_type.value.int_value == 3) {  // It is a Shelly1
-                relay1_gpio = S1_RELAY_GPIO;
-                extra_gpio = S1_TOGGLE_GPIO;
-                pullup = false;
-            } else {                                // It is a Sonoff
-                enable_sonoff_device();
-                
-                adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1);
-                adv_button_register_callback_fn(button1_gpio, factory_default_call, 5);
-            }
-            
-            gpio_enable(relay1_gpio, GPIO_OUTPUT);
-            relay_write(switch1_on.value.bool_value, relay1_gpio);
-            
-            switch (external_toggle1.value.int_value) {
-                case 1:
-                    adv_toggle_create(extra_gpio, pullup);
-                    adv_toggle_register_callback_fn(extra_gpio, button_simple1_intr_callback, 0);
-                    break;
-                    
-                case 2:
-                    adv_toggle_create(extra_gpio, pullup);
-                    adv_toggle_register_callback_fn(extra_gpio, button_simple1_intr_callback, 2);
-                    break;
-                    
-                default:
-                    break;
-            }
-
-            break;
-            
         case 2:
             if (board_type.value.int_value == 3) {  // It is a Shelly2
                 relay1_gpio = S2_RELAY1_GPIO;
@@ -1687,15 +1714,75 @@ void hardware_init() {
             covering_step_time_up = STEP_TIME(custom_covering_up_time.value.float_value);
             covering_step_time_down = STEP_TIME(custom_covering_down_time.value.float_value);
             
-            printf("RC -> covering_step_time_up = %f\n", covering_step_time_up);
-            printf("RC -> covering_step_time_down = %f\n", covering_step_time_down);
+            printf("RC > covering_step_time_up = %f\n", covering_step_time_up);
+            printf("RC > covering_step_time_down = %f\n", covering_step_time_down);
             
             sdk_os_timer_setfn(&extra_func_timer, covering_worker, NULL);
             
             break;
             
-        default:
-            // A wish from compiler
+        case 13:
+            if (board_type.value.int_value == 3) {  // It is a Shelly1
+                relay1_gpio = S1_RELAY_GPIO;
+                extra_gpio = S1_TOGGLE_GPIO;
+                pullup = false;
+            } else {                                // It is a Sonoff
+                enable_sonoff_device();
+                
+                adv_button_register_callback_fn(button1_gpio, lock_intr_callback, 1);
+                adv_button_register_callback_fn(button1_gpio, factory_default_call, 5);
+            }
+            
+            gpio_enable(relay1_gpio, GPIO_OUTPUT);
+            relay_write(false, relay1_gpio);
+            
+            switch (external_toggle1.value.int_value) {
+                case 1:
+                    adv_toggle_create(extra_gpio, pullup);
+                    adv_toggle_register_callback_fn(extra_gpio, lock_intr_callback, 0);
+                case 2:
+                    adv_toggle_create(extra_gpio, pullup);
+                    adv_toggle_register_callback_fn(extra_gpio, lock_intr_callback, 2);
+                    break;
+                    
+                default:
+                    break;
+            }
+            
+            sdk_os_timer_setfn(&extra_func_timer, lock_timer, NULL);
+            
+            break;
+            
+        default:    // case 1:
+            if (board_type.value.int_value == 3) {  // It is a Shelly1
+                relay1_gpio = S1_RELAY_GPIO;
+                extra_gpio = S1_TOGGLE_GPIO;
+                pullup = false;
+            } else {                                // It is a Sonoff
+                enable_sonoff_device();
+                
+                adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1);
+                adv_button_register_callback_fn(button1_gpio, factory_default_call, 5);
+            }
+            
+            gpio_enable(relay1_gpio, GPIO_OUTPUT);
+            relay_write(switch1_on.value.bool_value, relay1_gpio);
+            
+            switch (external_toggle1.value.int_value) {
+                case 1:
+                    adv_toggle_create(extra_gpio, pullup);
+                    adv_toggle_register_callback_fn(extra_gpio, button_simple1_intr_callback, 0);
+                    break;
+                    
+                case 2:
+                    adv_toggle_create(extra_gpio, pullup);
+                    adv_toggle_register_callback_fn(extra_gpio, button_simple1_intr_callback, 2);
+                    break;
+                    
+                default:
+                    break;
+            }
+            
             break;
     }
     
@@ -2168,11 +2255,12 @@ homekit_characteristic_t hum_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Humid
 homekit_characteristic_t valve_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Water Valve");
 homekit_characteristic_t garage_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Garage Door");
 homekit_characteristic_t covering_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Window");
+homekit_characteristic_t lock_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Lock");
 
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.7.1");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.7.2");
 
 homekit_accessory_category_t accessory_category;
 
@@ -2263,6 +2351,11 @@ void create_accessory() {
         case 12:
             service_count += 0;
             accessory_category = homekit_accessory_category_window_covering;
+            break;
+            
+        case 13:
+            service_count += 0;
+            accessory_category = homekit_accessory_category_door_lock;
             break;
             
         default:    // case 1
@@ -2445,6 +2538,18 @@ void create_accessory() {
                     sonoff_covering->characteristics[3] = &covering_position_state;
                     sonoff_covering->characteristics[4] = &show_setup;
             }
+    
+            void charac_lock(const uint8_t service) {
+                homekit_service_t *sonoff_lock = sonoff->services[service] = calloc(1, sizeof(homekit_service_t));
+                sonoff_lock->id = 76;
+                sonoff_lock->type = HOMEKIT_SERVICE_LOCK_MECHANISM;
+                sonoff_lock->primary = true;
+                sonoff_lock->characteristics = calloc(5, sizeof(homekit_characteristic_t*));
+                    sonoff_lock->characteristics[0] = &lock_service_name;
+                    sonoff_lock->characteristics[1] = &lock_current_state;
+                    sonoff_lock->characteristics[2] = &lock_target_state;
+                    sonoff_lock->characteristics[3] = &show_setup;
+            }
             // --------
     
             // Create accessory for selected device type
@@ -2562,6 +2667,13 @@ void create_accessory() {
                 
                 charac_covering(1, custom_covering_type.value.int_value);
                 
+            } else if (device_type_static == 13) {
+                char *device_type_name_value = malloc(5);
+                snprintf(device_type_name_value, 5, "Lock");
+                device_type_name.value = HOMEKIT_STRING(device_type_name_value);
+                
+                charac_lock(1);
+                
             } else { // device_type_static == 1
                 char *device_type_name_value = malloc(11);
                 snprintf(device_type_name_value, 11, "Switch 1ch");
@@ -2624,6 +2736,10 @@ void create_accessory() {
                         
                     case 12:
                         setting_count += 5;
+                        break;
+                        
+                    case 13:
+                        setting_count += 1;
                         break;
                         
                     default:    // case 1:
@@ -2767,13 +2883,15 @@ void create_accessory() {
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_covering_type;
                         
+                    } else if (device_type_static == 13) {
+                        sonoff_setup->characteristics[setting_number] = &external_toggle1;
                     }
             }
     
     config.accessories = accessories;
     config.password = "021-82-017";
     config.category = accessory_category;
-    config.config_number = 000701;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+    config.config_number = 000702;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
     
     printf("RC > Starting HomeKit Server\n");
     homekit_server_init(&config);
