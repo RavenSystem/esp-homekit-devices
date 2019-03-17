@@ -422,23 +422,25 @@ static u8_t* mdns_get_question(u8_t* hdrP, u8_t* qp, char* qStr, uint16_t* qClas
 //---------------------------------------------------------------------------
 static void mdns_announce_netif(struct netif *netif, const ip_addr_t *addr);
 
-static ETSTimer mdns_announce_timer;
+static ETSTimer mdns_announce_timer, mdns_wifi_watchdog_timer;
 
 void mdns_clear() {
     sdk_os_timer_disarm(&mdns_announce_timer);
+    sdk_os_timer_disarm(&mdns_wifi_watchdog_timer);
     
-    if (xSemaphoreTake(gDictMutex, portMAX_DELAY)) {
-        mdns_rsrc *rsrc = gDictP;
-        gDictP = NULL;
+    if (!xSemaphoreTake(gDictMutex, portMAX_DELAY))
+        return;
+    
+    mdns_rsrc *rsrc = gDictP;
+    gDictP = NULL;
 
-        while (rsrc) {
-            mdns_rsrc *next = rsrc->rNext;
-            free(rsrc);
-            rsrc = next;
-        }
-
-        xSemaphoreGive(gDictMutex);
+    while (rsrc) {
+        mdns_rsrc *next = rsrc->rNext;
+        free(rsrc);
+        rsrc = next;
     }
+
+    xSemaphoreGive(gDictMutex);
 }
 
 
@@ -554,6 +556,19 @@ void mdns_announce() {
 #endif
 }
 
+static bool mdns_network_down = false;
+void mdns_wifi_watchdog() {
+    if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+        if (mdns_network_down == true) {
+            mdns_network_down = false;
+            printf(">>> mdns_wifi_watchdog reannouncing...\n");
+            mdns_announce();
+        }
+    } else {
+        mdns_network_down = true;
+    }
+}
+
 void mdns_add_facility_work(const char* instanceName,   // Friendly name, need not be unique
                             const char* serviceName,    // Must be "_name", e.g. "_hap" or "_http"
                             const char* addText,        // Must be <key>=<value>
@@ -607,12 +622,16 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
     free(devName);
 
     sdk_os_timer_disarm(&mdns_announce_timer);
+    sdk_os_timer_disarm(&mdns_wifi_watchdog_timer);
     
     mdns_announce();
     
     if (ttl > 0) {
         sdk_os_timer_setfn(&mdns_announce_timer, mdns_announce, NULL);
         sdk_os_timer_arm(&mdns_announce_timer, ttl * 1000, 1);
+        
+        sdk_os_timer_setfn(&mdns_wifi_watchdog_timer, mdns_wifi_watchdog, NULL);
+        sdk_os_timer_arm(&mdns_wifi_watchdog_timer, 15000, 1);
     }
 }
 
@@ -972,14 +991,15 @@ void mdns_init()
         return;
     }
 
+    LOCK_TCPIP_CORE();
+    
     // Start IGMP on the netif for our interface: this isn't done for us
     if (!(netif->flags & NETIF_FLAG_IGMP)) {
         netif->flags |= NETIF_FLAG_IGMP;
-        LOCK_TCPIP_CORE();
         err = igmp_start(netif);
-        UNLOCK_TCPIP_CORE();
         if (err != ERR_OK) {
             printf(">>> mDNS_init: igmp_start on %c%c failed %d\n", netif->name[0], netif->name[1],err);
+            UNLOCK_TCPIP_CORE();
             return;
         }
     }
@@ -987,32 +1007,35 @@ void mdns_init()
     gDictMutex = xSemaphoreCreateBinary();
     if (!gDictMutex) {
         printf(">>> mDNS_init: failed to initialize mutex\n");
+        UNLOCK_TCPIP_CORE();
         return;
     }
     xSemaphoreGive(gDictMutex);
-
-    LOCK_TCPIP_CORE();
     
     gMDNS_pcb = udp_new_ip_type(IPADDR_TYPE_ANY);
     if (!gMDNS_pcb) {
         printf(">>> mDNS_init: udp_new failed\n");
+        UNLOCK_TCPIP_CORE();
         return;
     }
 
     if ((err = igmp_joingroup_netif(netif, ip_2_ip4(&gMulticastV4Addr))) != ERR_OK) {
         printf(">>> mDNS_init: igmp_join failed %d\n",err);
+        UNLOCK_TCPIP_CORE();
         return;
     }
 
 #if LWIP_IPV6
     if ((err = mld6_joingroup_netif(netif, ip_2_ip6(&gMulticastV6Addr))) != ERR_OK) {
         printf(">>> mDNS_init: igmp_join failed %d\n",err);
+        UNLOCK_TCPIP_CORE();
         return;
     }
 #endif
 
     if ((err = udp_bind(gMDNS_pcb, IP_ANY_TYPE, LWIP_IANA_PORT_MDNS)) != ERR_OK) {
         printf(">>> mDNS_init: udp_bind failed %d\n",err);
+        UNLOCK_TCPIP_CORE();
         return;
     }
 
