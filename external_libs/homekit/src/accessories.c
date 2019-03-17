@@ -132,7 +132,7 @@ void homekit_value_free(homekit_value_t *value) {
 }
 
 
-homekit_value_t homekit_characteristic_ex_old_getter(homekit_characteristic_t *ch) {
+homekit_value_t homekit_characteristic_ex_old_getter(const homekit_characteristic_t *ch) {
     return ch->getter();
 }
 

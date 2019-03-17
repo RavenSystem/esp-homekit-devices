@@ -197,7 +197,7 @@ struct _homekit_characteristic {
     void (*setter)(const homekit_value_t);
     homekit_characteristic_change_callback_t *callback;
 
-    homekit_value_t (*getter_ex)(homekit_characteristic_t *ch);
+    homekit_value_t (*getter_ex)(const homekit_characteristic_t *ch);
     void (*setter_ex)(homekit_characteristic_t *ch, const homekit_value_t value);
 
     void *context;
