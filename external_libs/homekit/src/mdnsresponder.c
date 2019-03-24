@@ -556,15 +556,17 @@ void mdns_announce() {
 #endif
 }
 
+#define MDNS_WATCHDOG_PERIOD    10000   // ms
 static bool mdns_network_down = false;
-void mdns_wifi_watchdog() {
+static void mdns_wifi_watchdog() {
     if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         if (mdns_network_down == true) {
             mdns_network_down = false;
-            printf(">>> mdns_wifi_watchdog reannouncing...\n");
+            printf(">>> mdns_wifi_watchdog -> reannouncing...\n");
             mdns_announce();
         }
     } else {
+        printf(">>> mdns_wifi_watchdog -> wifi disconnected\n");
         mdns_network_down = true;
     }
 }
@@ -631,7 +633,7 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
         sdk_os_timer_arm(&mdns_announce_timer, ttl * 1000, 1);
         
         sdk_os_timer_setfn(&mdns_wifi_watchdog_timer, mdns_wifi_watchdog, NULL);
-        sdk_os_timer_arm(&mdns_wifi_watchdog_timer, 15000, 1);
+        sdk_os_timer_arm(&mdns_wifi_watchdog_timer, MDNS_WATCHDOG_PERIOD, 1);
     }
 }
 
