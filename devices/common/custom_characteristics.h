@@ -272,18 +272,18 @@
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
-#define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_BUTTON_TIME HOMEKIT_CUSTOM_UUID("F0000113")
-#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_BUTTON_TIME(_value, ...) \
-    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_BUTTON_TIME, \
-    .description = "Button time", \
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_INCHING_TIME HOMEKIT_CUSTOM_UUID("F0000113")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_INCHING_TIME(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_INCHING_TIME, \
+    .description = "Inching time", \
     .format = homekit_format_float, \
     .unit = homekit_unit_seconds, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
-    .min_value = (float[]) {0.1}, \
-    .max_value = (float[]) {2.5}, \
-    .min_step = (float[]) {0.1}, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {5.1}, \
+    .min_step = (float[]) {0.3}, \
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
 

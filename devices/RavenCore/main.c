@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.7.2
+ * v0.7.3
  * 
  * Copyright 2018 José A. Jiménez (@RavenSystem)
  *  
@@ -110,7 +110,7 @@
 #define GARAGEDOOR_SENSOR_OPEN_SYSPARAM                 "m"
 #define GARAGEDOOR_SENSOR_OBSTRUCTION_SYSPARAM          "n"
 #define GARAGEDOOR_CONTROL_WITH_BUTTON_SYSPARAM         "o"
-#define GARAGEDOOR_BUTTON_TIME_SYSPARAM                 "p"
+#define INCHING_TIME_SYSPARAM                           "p"
 #define TARGET_TEMPERATURE_SYSPARAM                     "q"
 #define INIT_STATE_SW1_SYSPARAM                         "r"
 #define INIT_STATE_SW2_SYSPARAM                         "s"
@@ -229,6 +229,8 @@ homekit_characteristic_t log_output = HOMEKIT_CHARACTERISTIC_(CUSTOM_LOG_OUTPUT,
 homekit_characteristic_t ip_addr = HOMEKIT_CHARACTERISTIC_(CUSTOM_IP_ADDR, "", .id=130, .getter=read_ip_addr);
 homekit_characteristic_t wifi_reset = HOMEKIT_CHARACTERISTIC_(CUSTOM_WIFI_RESET, false, .id=131, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 
+homekit_characteristic_t custom_inching_time = HOMEKIT_CHARACTERISTIC_(CUSTOM_INCHING_TIME, 0, .id=117, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
+
 // Switch Setup
 homekit_characteristic_t external_toggle1 = HOMEKIT_CHARACTERISTIC_(CUSTOM_EXTERNAL_TOGGLE1, 0, .id=111, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t external_toggle2 = HOMEKIT_CHARACTERISTIC_(CUSTOM_EXTERNAL_TOGGLE2, 0, .id=128, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
@@ -246,7 +248,6 @@ homekit_characteristic_t custom_valve_type = HOMEKIT_CHARACTERISTIC_(CUSTOM_VALV
 homekit_characteristic_t custom_garagedoor_has_stop = HOMEKIT_CHARACTERISTIC_(CUSTOM_GARAGEDOOR_HAS_STOP, false, .id=114, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t custom_garagedoor_sensor_close_nc = HOMEKIT_CHARACTERISTIC_(CUSTOM_GARAGEDOOR_SENSOR_CLOSE_NC, false, .id=115, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t custom_garagedoor_sensor_open = HOMEKIT_CHARACTERISTIC_(CUSTOM_GARAGEDOOR_SENSOR_OPEN, 0, .id=116, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
-homekit_characteristic_t custom_garagedoor_button_time = HOMEKIT_CHARACTERISTIC_(CUSTOM_GARAGEDOOR_BUTTON_TIME, 0.3, .id=117, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t custom_garagedoor_working_time = HOMEKIT_CHARACTERISTIC_(CUSTOM_GARAGEDOOR_WORKINGTIME, 20, .id=118, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t custom_garagedoor_control_with_button = HOMEKIT_CHARACTERISTIC_(CUSTOM_GARAGEDOOR_CONTROL_WITH_BUTTON, false, .id=119, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t custom_garagedoor_sensor_obstruction = HOMEKIT_CHARACTERISTIC_(CUSTOM_GARAGEDOOR_SENSOR_OBSTRUCTION, 0, .id=127, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
@@ -444,7 +445,7 @@ void save_settings() {
         flash_error = status;
     }
     
-    status = sysparam_set_int32(GARAGEDOOR_BUTTON_TIME_SYSPARAM, custom_garagedoor_button_time.value.float_value * 100);
+    status = sysparam_set_int32(INCHING_TIME_SYSPARAM, custom_inching_time.value.float_value * 100);
     if (status != SYSPARAM_OK) {
         flash_error = status;
     }
@@ -646,7 +647,7 @@ void factory_default_task() {
     status = sysparam_set_int8(GARAGEDOOR_SENSOR_OPEN_SYSPARAM, 0);
     status = sysparam_set_int8(GARAGEDOOR_SENSOR_OBSTRUCTION_SYSPARAM, 0);
     status = sysparam_set_bool(GARAGEDOOR_CONTROL_WITH_BUTTON_SYSPARAM, false);
-    status = sysparam_set_int32(GARAGEDOOR_BUTTON_TIME_SYSPARAM, 0.30 * 100);
+    status = sysparam_set_int32(INCHING_TIME_SYSPARAM, 0);
     
     status = sysparam_set_int32(COVERING_UP_TIME_SYSPARAM, 30 * 100);
     status = sysparam_set_int32(COVERING_DOWN_TIME_SYSPARAM, 30 * 100);
@@ -863,13 +864,13 @@ void garage_button_task() {
     
     if (obstruction_detected.value.bool_value == false) {
         relay_write(true, relay1_gpio);
-        vTaskDelay(custom_garagedoor_button_time.value.float_value * 1000 / portTICK_PERIOD_MS);
+        vTaskDelay((custom_inching_time.value.float_value + 0.05) * 1000 / portTICK_PERIOD_MS);
         relay_write(false, relay1_gpio);
 
         if (custom_garagedoor_has_stop.value.bool_value && is_moving) {
             vTaskDelay(2500 / portTICK_PERIOD_MS);
             relay_write(true, relay1_gpio);
-            vTaskDelay(custom_garagedoor_button_time.value.float_value * 1000 / portTICK_PERIOD_MS);
+            vTaskDelay((custom_inching_time.value.float_value + 0.05) * 1000 / portTICK_PERIOD_MS);
             relay_write(false, relay1_gpio);
         }
 
@@ -1064,6 +1065,7 @@ void covering_on_callback(homekit_value_t value) {
     led_code(LED_GPIO, FUNCTION_A);
     
     covering_target_position.value = value;
+    homekit_characteristic_notify(&covering_target_position, covering_target_position.value);
     
     normalize_actual_pos();
     
@@ -1183,7 +1185,7 @@ void lock_on_callback(homekit_value_t value) {
         led_code(LED_GPIO, FUNCTION_A);
         relay_write(true, relay1_gpio);
         
-        sdk_os_timer_arm(&extra_func_timer, 1000, 0);
+        sdk_os_timer_arm(&extra_func_timer, (custom_inching_time.value.float_value + 0.05) * 1000, 0);
     }
 }
 
@@ -1977,11 +1979,11 @@ void settings_init() {
         }
     }
     
-    status = sysparam_get_int32(GARAGEDOOR_BUTTON_TIME_SYSPARAM, &int32_value);
+    status = sysparam_get_int32(INCHING_TIME_SYSPARAM, &int32_value);
     if (status == SYSPARAM_OK) {
-        custom_garagedoor_button_time.value.float_value = int32_value / 100.00f;
+        custom_inching_time.value.float_value = int32_value / 100.00f;
     } else {
-        status = sysparam_set_int32(GARAGEDOOR_BUTTON_TIME_SYSPARAM, 0.30 * 100);
+        status = sysparam_set_int32(INCHING_TIME_SYSPARAM, 0);
         if (status != SYSPARAM_OK) {
             flash_error = status;
         }
@@ -2260,7 +2262,7 @@ homekit_characteristic_t lock_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Lock
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.7.2");
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, "0.7.3");
 
 homekit_accessory_category_t accessory_category;
 
@@ -2282,7 +2284,7 @@ void create_accessory_name() {
 homekit_server_config_t config;
 
 void create_accessory() {
-    printf("RC > Creating HomeKit accessory\n");
+    printf("RC > Creating HK accessory\n");
     
     uint8_t service_count = 3, service_number = 2;
     
@@ -2739,7 +2741,7 @@ void create_accessory() {
                         break;
                         
                     case 13:
-                        setting_count += 1;
+                        setting_count += 2;
                         break;
                         
                     default:    // case 1:
@@ -2845,7 +2847,7 @@ void create_accessory() {
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_garagedoor_control_with_button;
                         setting_number++;
-                        sonoff_setup->characteristics[setting_number] = &custom_garagedoor_button_time;
+                        sonoff_setup->characteristics[setting_number] = &custom_inching_time;
                         
                     } else if (device_type_static == 9) {
                         sonoff_setup->characteristics[setting_number] = &dht_sensor_type;
@@ -2885,13 +2887,15 @@ void create_accessory() {
                         
                     } else if (device_type_static == 13) {
                         sonoff_setup->characteristics[setting_number] = &external_toggle1;
+                        setting_number++;
+                        sonoff_setup->characteristics[setting_number] = &custom_inching_time;
                     }
             }
     
     config.accessories = accessories;
     config.password = "021-82-017";
     config.category = accessory_category;
-    config.config_number = 000702;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+    config.config_number = 000703;   // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
     
     printf("RC > Starting HomeKit Server\n");
     homekit_server_init(&config);
