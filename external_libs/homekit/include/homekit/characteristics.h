@@ -648,6 +648,59 @@
  */
 #define HOMEKIT_SERVICE_HUMIDIFIER_DEHUMIDIFIER HOMEKIT_APPLE_UUID2("BD")
 
+/**
+ Defines that the accessory has control over television
+ 
+ Required Characteristics:
+ - ACTIVE
+ - ACTIVE_IDENTIFIER
+ - CONFIGURED_NAME
+ - SLEEP_DISCOVERY_MODE
+ 
+ Optional Characteristics:
+ - BRIGHTNESS
+ - CLOSED_CAPTIONS
+ - DISPLAY_ORDER
+ - CURRENT_MEDIA_STATE
+ - TARGET_MEDIA_STATE
+ - PICTURE_MODE
+ - POWER_MODE_SELECTION
+ - REMOTE_KEY
+ */
+#define HOMEKIT_SERVICE_TELEVISION HOMEKIT_APPLE_UUID2("D8")
+
+/**
+ Defines that the accessory has control over television input source
+ 
+ Required Characteristics:
+ - NAME
+ - CONFIGURED_NAME
+ - INPUT_SOURCE_TYPE
+ - IS_CONFIGURED
+ - CURRENT_VISIBILITY_STATE
+ 
+ Optional Characteristics:
+ - IDENTIFIER
+ - INPUT_DEVICE_TYPE
+ - TARGET_VISIBILITY_STATE
+ */
+#define HOMEKIT_SERVICE_INPUT_SOURCE HOMEKIT_APPLE_UUID2("D9")
+
+/**
+ Defines that the accessory has control over television speaker
+ 
+ Required Characteristics:
+ - MUTE
+ 
+ Optional Characteristics:
+ - ACTIVE
+ - VOLUME
+ - VOLUME_CONTROL_TYPE
+ - VOLUME_SELECTOR
+ - NAME
+ */
+#define HOMEKIT_SERVICE_TELEVISION_SPEAKER HOMEKIT_APPLE_UUID3("113")
+
 // MARK: - Characteristics
 
 #define HOMEKIT_CHARACTERISTIC_ADMINISTRATOR_ONLY_ACCESS HOMEKIT_APPLE_UUID1("1")
@@ -1936,7 +1989,6 @@
                  | homekit_permissions_notify, \
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {1}, \
-    .min_step = (float[]) {1}, \
     .valid_values = { \
         .count = 2, \
         .values = (uint8_t[]) { 0, 1 }, \
@@ -2131,7 +2183,6 @@
                  | homekit_permissions_notify, \
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {1}, \
-    .min_step = (float[]) {1}, \
     .valid_values = { \
         .count = 2, \
         .values = (uint8_t[]) { 0, 1 }, \
@@ -2281,6 +2332,7 @@
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {100}, \
     .min_step = (float[]) {1}, \
+    .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
 
 #define HOMEKIT_CHARACTERISTIC_RELATIVE_HUMIDITY_DEHUMIDIFIER_THRESHOLD HOMEKIT_APPLE_UUID2("C9")
@@ -2295,6 +2347,7 @@
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {100}, \
     .min_step = (float[]) {1}, \
+    .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
 
 #define HOMEKIT_CHARACTERISTIC_RELATIVE_HUMIDITY_HUMIDIFIER_THRESHOLD HOMEKIT_APPLE_UUID2("CA")
@@ -2309,6 +2362,326 @@
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {100}, \
     .min_step = (float[]) {1}, \
+    .value = HOMEKIT_FLOAT_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_ACTIVE_IDENTIFIER HOMEKIT_APPLE_UUID2("E7")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_ACTIVE_IDENTIFIER(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_ACTIVE_IDENTIFIER, \
+    .description = "Active Identifier", \
+    .format = homekit_format_uint32, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .value = HOMEKIT_UINT32_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CONFIGURED_NAME HOMEKIT_APPLE_UUID2("E3")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CONFIGURED_NAME(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CONFIGURED_NAME, \
+    .description = "Configured Name", \
+    .format = homekit_format_string, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .value = HOMEKIT_STRING_(_value, .is_static=true), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_SLEEP_DISCOVERY_MODE_NOT_DISCOVERABLE 0
+#define HOMEKIT_SLEEP_DISCOVERY_MODE_ALWAYS_DISCOVERABLE 1
+
+#define HOMEKIT_CHARACTERISTIC_SLEEP_DISCOVERY_MODE HOMEKIT_APPLE_UUID2("E8")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_SLEEP_DISCOVERY_MODE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_SLEEP_DISCOVERY_MODE, \
+    .description = "Sleep Discovery Mode", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {1}, \
+    .valid_values = { \
+    .count = 2, \
+    .values = (uint8_t[]) { 0, 1 }, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CLOSED_CAPTIONS_DISABLED 0
+#define HOMEKIT_CLOSED_CAPTIONS_ENABLED 1
+
+#define HOMEKIT_CHARACTERISTIC_CLOSED_CAPTIONS HOMEKIT_APPLE_UUID2("DD")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CLOSED_CAPTIONS(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CLOSED_CAPTIONS, \
+    .description = "Closed Captions", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {1}, \
+    .valid_values = { \
+    .count = 2, \
+    .values = (uint8_t[]) { 0, 1 }, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_DISPLAY_ORDER HOMEKIT_APPLE_UUID3("136")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_DISPLAY_ORDER(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_DISPLAY_ORDER, \
+    .description = "Display Order", \
+    .format = homekit_format_tlv, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CURRENT_MEDIA_STATE HOMEKIT_APPLE_UUID2("E0")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CURRENT_MEDIA_STATE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CURRENT_MEDIA_STATE, \
+    .description = "Current Media State", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {3}, \
+    .valid_values = { \
+    .count = 4, \
+    .values = (uint8_t[]) { 0, 1, 2, 3 }, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_TARGET_MEDIA_STATE_PLAY 0
+#define HOMEKIT_TARGET_MEDIA_STATE_PAUSE 1
+#define HOMEKIT_TARGET_MEDIA_STATE_STOP 2
+
+#define HOMEKIT_CHARACTERISTIC_TARGET_MEDIA_STATE HOMEKIT_APPLE_UUID3("137")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_TARGET_MEDIA_STATE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_TARGET_MEDIA_STATE, \
+    .description = "Target Media State", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {2}, \
+    .valid_values = { \
+    .count = 3, \
+    .values = (uint8_t[]) { 0, 1, 2 }, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_PICTURE_MODE_OTHER 0
+#define HOMEKIT_PICTURE_MODE_STANDARD 1
+#define HOMEKIT_PICTURE_MODE_CALIBRATED 2
+#define HOMEKIT_PICTURE_MODE_CALIBRATED_DARK 3
+#define HOMEKIT_PICTURE_MODE_VIVID 4
+#define HOMEKIT_PICTURE_MODE_GAME 5
+#define HOMEKIT_PICTURE_MODE_COMPUTER 6
+#define HOMEKIT_PICTURE_MODE_CUSTOM 7
+
+#define HOMEKIT_CHARACTERISTIC_PICTURE_MODE HOMEKIT_APPLE_UUID2("E2")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_PICTURE_MODE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_PICTURE_MODE, \
+    .description = "Picture Mode", \
+    .format = homekit_format_uint16, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {13}, \
+    .valid_values = { \
+    .count = 14, \
+    .values = (uint8_t[]) { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 }, \
+    }, \
+    .value = HOMEKIT_UINT16_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_POWER_MODE_SELECTION_SHOW 0
+#define HOMEKIT_POWER_MODE_SELECTION_HIDE 1
+
+#define HOMEKIT_CHARACTERISTIC_POWER_MODE_SELECTION HOMEKIT_APPLE_UUID2("DF")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_POWER_MODE_SELECTION(...) \
+    .type = HOMEKIT_CHARACTERISTIC_POWER_MODE_SELECTION, \
+    .description = "Power Mode Selection", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_write, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {1}, \
+    .valid_values = { \
+    .count = 2, \
+    .values = (uint8_t[]) { 0, 1 }, \
+    }, \
+    ##__VA_ARGS__
+
+#define HOMEKIT_REMOTE_KEY_REWIND 0
+#define HOMEKIT_REMOTE_KEY_FAST_FORWARD 1
+#define HOMEKIT_REMOTE_KEY_NEXT_TRACK 2
+#define HOMEKIT_REMOTE_KEY_PREVIOUS_TRACK 3
+#define HOMEKIT_REMOTE_KEY_ARROW_UP 4
+#define HOMEKIT_REMOTE_KEY_ARROW_DOWN 5
+#define HOMEKIT_REMOTE_KEY_ARROW_LEFT 6
+#define HOMEKIT_REMOTE_KEY_ARROW_RIGHT 7
+#define HOMEKIT_REMOTE_KEY_SELECT 8
+#define HOMEKIT_REMOTE_KEY_BACK 9
+#define HOMEKIT_REMOTE_KEY_EXIT 10
+#define HOMEKIT_REMOTE_KEY_PLAY_PAUSE 11
+#define HOMEKIT_REMOTE_KEY_INFORMATION 15
+
+#define HOMEKIT_CHARACTERISTIC_REMOTE_KEY HOMEKIT_APPLE_UUID2("E1")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_REMOTE_KEY(...) \
+    .type = HOMEKIT_CHARACTERISTIC_REMOTE_KEY, \
+    .description = "Remote Key", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_write, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {16}, \
+    .valid_values = { \
+    .count = 17, \
+    .values = (uint8_t[]) { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 }, \
+    }, \
+    ##__VA_ARGS__
+
+#define HOMEKIT_INPUT_SOURCE_TYPE_OTHER 0
+#define HOMEKIT_INPUT_SOURCE_TYPE_HOME_SCREEN 1
+#define HOMEKIT_INPUT_SOURCE_TYPE_TUNER 2
+#define HOMEKIT_INPUT_SOURCE_TYPE_HDMI 3
+#define HOMEKIT_INPUT_SOURCE_TYPE_COMPOSITE_VIDEO 4
+#define HOMEKIT_INPUT_SOURCE_TYPE_S_VIDEO 5
+#define HOMEKIT_INPUT_SOURCE_TYPE_COMPONENT_VIDEO 6
+#define HOMEKIT_INPUT_SOURCE_TYPE_DVI 7
+#define HOMEKIT_INPUT_SOURCE_TYPE_AIRPLAY 8
+#define HOMEKIT_INPUT_SOURCE_TYPE_USB 9
+#define HOMEKIT_INPUT_SOURCE_TYPE_APPLICATION 10
+
+#define HOMEKIT_CHARACTERISTIC_INPUT_SOURCE_TYPE HOMEKIT_APPLE_UUID2("DB")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_INPUT_SOURCE_TYPE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_INPUT_SOURCE_TYPE, \
+    .description = "Input Source Type", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {10}, \
+    .valid_values = { \
+    .count = 11, \
+    .values = (uint8_t[]) { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_INPUT_DEVICE_TYPE_OTHER 0
+#define HOMEKIT_INPUT_DEVICE_TYPE_TV 1
+#define HOMEKIT_INPUT_DEVICE_TYPE_RECORDING 2
+#define HOMEKIT_INPUT_DEVICE_TYPE_TUNER 3
+#define HOMEKIT_INPUT_DEVICE_TYPE_PLAYBACK 4
+#define HOMEKIT_INPUT_DEVICE_TYPE_AUDIO_SYSTEM 5
+
+#define HOMEKIT_CHARACTERISTIC_INPUT_DEVICE_TYPE HOMEKIT_APPLE_UUID2("DC")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_INPUT_DEVICE_TYPE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_INPUT_DEVICE_TYPE, \
+    .description = "Input Device Type", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {5}, \
+    .valid_values = { \
+    .count = 6, \
+    .values = (uint8_t[]) { 0, 1, 2, 3, 4, 5 }, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_IDENTIFIER HOMEKIT_APPLE_UUID2("E6")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_IDENTIFIER(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_IDENTIFIER, \
+    .description = "Identifier", \
+    .format = homekit_format_uint32, \
+    .permissions = homekit_permissions_paired_read, \
+    .min_value = (float[]) {0}, \
+    .min_step = (float[]) {1}, \
+    .value = HOMEKIT_UINT32_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CURRENT_VISIBILITY_STATE_SHOWN 0
+#define HOMEKIT_CURRENT_VISIBILITY_STATE_HIDDEN 1
+
+#define HOMEKIT_CHARACTERISTIC_CURRENT_VISIBILITY_STATE HOMEKIT_APPLE_UUID3("135")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CURRENT_VISIBILITY_STATE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CURRENT_VISIBILITY_STATE, \
+    .description = "Current Visibility State", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {3}, \
+    .valid_values = { \
+    .count = 4, \
+    .values = (uint8_t[]) { 0, 1, 2, 3 }, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_TARGET_VISIBILITY_STATE_SHOWN 0
+#define HOMEKIT_TARGET_VISIBILITY_STATE_HIDDEN 1
+
+#define HOMEKIT_CHARACTERISTIC_TARGET_VISIBILITY_STATE HOMEKIT_APPLE_UUID3("134")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_TARGET_VISIBILITY_STATE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_TARGET_VISIBILITY_STATE, \
+    .description = "Target Visibility State", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {1}, \
+    .valid_values = { \
+    .count = 2, \
+    .values = (uint8_t[]) { 0, 1 }, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_VOLUME_CONTROL_TYPE_NONE 0
+#define HOMEKIT_VOLUME_CONTROL_TYPE_RELATIVE 1
+#define HOMEKIT_VOLUME_CONTROL_TYPE_RELATIVE_WITH_CURRENT 2
+#define HOMEKIT_VOLUME_CONTROL_TYPE_ABSOLUTE 3
+
+#define HOMEKIT_CHARACTERISTIC_VOLUME_CONTROL_TYPE HOMEKIT_APPLE_UUID3("E9")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_VOLUME_CONTROL_TYPE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_VOLUME_CONTROL_TYPE, \
+    .description = "Volume Control Type", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {3}, \
+    .valid_values = { \
+    .count = 4, \
+    .values = (uint8_t[]) { 0, 1, 2, 3 }, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_VOLUME_SELECTOR_INCREMENT 0
+#define HOMEKIT_VOLUME_SELECTOR_DECREMENT 1
+
+#define HOMEKIT_CHARACTERISTIC_VOLUME_SELECTOR HOMEKIT_APPLE_UUID3("EA")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_VOLUME_SELECTOR(...) \
+    .type = HOMEKIT_CHARACTERISTIC_VOLUME_SELECTOR, \
+    .description = "Volume Selector", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_write, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {1}, \
+    .valid_values = { \
+    .count = 2, \
+    .values = (uint8_t[]) { 0, 1 }, \
+    }, \
     ##__VA_ARGS__
 
 #endif // __HOMEKIT_CHARACTERISTICS__
