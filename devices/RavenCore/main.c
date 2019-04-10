@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.8.0
+ * v0.8.1
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -64,8 +64,8 @@
 #include "../common/custom_characteristics.h"
 
 // Version
-#define RAVENCORE_VERSION               "0.8.0"
-#define CONFIG_NUMBER                   001000      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define RAVENCORE_VERSION               "0.8.1"
+#define CONFIG_NUMBER                   001001      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -1387,7 +1387,7 @@ void update_th_state() {
             
         case 1:
             if (current_state.value.int_value == 0) {
-                if (current_temperature.value.float_value < (target_temperature.value.float_value + temp_deadband.value.float_value)) {
+                if (current_temperature.value.float_value < (target_temperature.value.float_value - temp_deadband.value.float_value)) {
                     current_state.value.int_value = 1;
                     relay_write(true, relay1_gpio);
                     homekit_characteristic_notify(&current_state, current_state.value);
@@ -1399,7 +1399,7 @@ void update_th_state() {
             
         case 2:
             if (current_state.value.int_value == 0) {
-                if (current_temperature.value.float_value > (target_temperature.value.float_value - temp_deadband.value.float_value)) {
+                if (current_temperature.value.float_value > (target_temperature.value.float_value + temp_deadband.value.float_value)) {
                     current_state.value.int_value = 2;
                     relay_write(true, relay1_gpio);
                     homekit_characteristic_notify(&current_state, current_state.value);
@@ -3113,7 +3113,7 @@ void create_accessory() {
 
             // Setup Accessory, visible only in 3party Apps
             if (show_setup.value.bool_value) {
-                printf("RC > Creating Setup accessory\n");
+                printf("RC > Creating Setup\n");
                 
                 homekit_service_t *sonoff_setup = sonoff->services[service_number] = calloc(1, sizeof(homekit_service_t));
                 sonoff_setup->id = 99;
