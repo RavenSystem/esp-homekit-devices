@@ -650,13 +650,13 @@
 
 /**
  Defines that the accessory has control over television
- 
+
  Required Characteristics:
  - ACTIVE
  - ACTIVE_IDENTIFIER
  - CONFIGURED_NAME
  - SLEEP_DISCOVERY_MODE
- 
+
  Optional Characteristics:
  - BRIGHTNESS
  - CLOSED_CAPTIONS
@@ -671,14 +671,14 @@
 
 /**
  Defines that the accessory has control over television input source
- 
+
  Required Characteristics:
  - NAME
  - CONFIGURED_NAME
  - INPUT_SOURCE_TYPE
  - IS_CONFIGURED
  - CURRENT_VISIBILITY_STATE
- 
+
  Optional Characteristics:
  - IDENTIFIER
  - INPUT_DEVICE_TYPE
@@ -688,10 +688,10 @@
 
 /**
  Defines that the accessory has control over television speaker
- 
+
  Required Characteristics:
  - MUTE
- 
+
  Optional Characteristics:
  - ACTIVE
  - VOLUME
@@ -811,8 +811,8 @@
     .unit = homekit_unit_celsius, \
     .permissions = homekit_permissions_paired_read \
                  | homekit_permissions_notify, \
-    .min_value = (float[]) {-100}, \
-    .max_value = (float[]) {200}, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {100}, \
     .min_step = (float[]) {0.1}, \
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
@@ -2215,7 +2215,7 @@
     .permissions = homekit_permissions_paired_read \
                  | homekit_permissions_notify, \
     .min_value = (float[]) {0}, \
-    .max_value = (float[]) {14400}, \
+    .max_value = (float[]) {3600}, \
     .min_step = (float[]) {1}, \
     .value = HOMEKIT_UINT32_(_value), \
     ##__VA_ARGS__
@@ -2229,7 +2229,7 @@
                  | homekit_permissions_paired_write \
                  | homekit_permissions_notify, \
     .min_value = (float[]) {0}, \
-    .max_value = (float[]) {14400}, \
+    .max_value = (float[]) {3600}, \
     .min_step = (float[]) {1}, \
     .value = HOMEKIT_UINT32_(_value), \
     ##__VA_ARGS__
@@ -2371,8 +2371,8 @@
     .description = "Active Identifier", \
     .format = homekit_format_uint32, \
     .permissions = homekit_permissions_paired_read \
-    | homekit_permissions_paired_write \
-    | homekit_permissions_notify, \
+                 | homekit_permissions_paired_write \
+                 | homekit_permissions_notify, \
     .value = HOMEKIT_UINT32_(_value), \
     ##__VA_ARGS__
 
@@ -2382,8 +2382,8 @@
     .description = "Configured Name", \
     .format = homekit_format_string, \
     .permissions = homekit_permissions_paired_read \
-    | homekit_permissions_paired_write \
-    | homekit_permissions_notify, \
+                 | homekit_permissions_paired_write \
+                 | homekit_permissions_notify, \
     .value = HOMEKIT_STRING_(_value, .is_static=true), \
     ##__VA_ARGS__
 
@@ -2396,12 +2396,12 @@
     .description = "Sleep Discovery Mode", \
     .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
-    | homekit_permissions_notify, \
+                 | homekit_permissions_notify, \
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {1}, \
     .valid_values = { \
-    .count = 2, \
-    .values = (uint8_t[]) { 0, 1 }, \
+        .count = 2, \
+        .values = (uint8_t[]) { 0, 1 }, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
@@ -2415,13 +2415,13 @@
     .description = "Closed Captions", \
     .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
-    | homekit_permissions_paired_write \
-    | homekit_permissions_notify, \
+                 | homekit_permissions_paired_write \
+                 | homekit_permissions_notify, \
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {1}, \
     .valid_values = { \
-    .count = 2, \
-    .values = (uint8_t[]) { 0, 1 }, \
+        .count = 2, \
+        .values = (uint8_t[]) { 0, 1 }, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
@@ -2432,8 +2432,8 @@
     .description = "Display Order", \
     .format = homekit_format_tlv, \
     .permissions = homekit_permissions_paired_read \
-    | homekit_permissions_paired_write \
-    | homekit_permissions_notify, \
+                 | homekit_permissions_paired_write \
+                 | homekit_permissions_notify, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
@@ -2443,12 +2443,12 @@
     .description = "Current Media State", \
     .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
-    | homekit_permissions_notify, \
+                 | homekit_permissions_notify, \
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {3}, \
     .valid_values = { \
-    .count = 4, \
-    .values = (uint8_t[]) { 0, 1, 2, 3 }, \
+        .count = 4, \
+        .values = (uint8_t[]) { 0, 1, 2, 3 }, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
@@ -2463,13 +2463,13 @@
     .description = "Target Media State", \
     .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
-    | homekit_permissions_paired_write \
-    | homekit_permissions_notify, \
+                 | homekit_permissions_paired_write \
+                 | homekit_permissions_notify, \
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {2}, \
     .valid_values = { \
-    .count = 3, \
-    .values = (uint8_t[]) { 0, 1, 2 }, \
+        .count = 3, \
+        .values = (uint8_t[]) { 0, 1, 2 }, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
@@ -2489,13 +2489,13 @@
     .description = "Picture Mode", \
     .format = homekit_format_uint16, \
     .permissions = homekit_permissions_paired_read \
-    | homekit_permissions_paired_write \
-    | homekit_permissions_notify, \
+                 | homekit_permissions_paired_write \
+                 | homekit_permissions_notify, \
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {13}, \
     .valid_values = { \
-    .count = 14, \
-    .values = (uint8_t[]) { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 }, \
+        .count = 14, \
+        .values = (uint8_t[]) { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13 }, \
     }, \
     .value = HOMEKIT_UINT16_(_value), \
     ##__VA_ARGS__
@@ -2512,8 +2512,8 @@
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {1}, \
     .valid_values = { \
-    .count = 2, \
-    .values = (uint8_t[]) { 0, 1 }, \
+        .count = 2, \
+        .values = (uint8_t[]) { 0, 1 }, \
     }, \
     ##__VA_ARGS__
 
@@ -2540,8 +2540,8 @@
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {16}, \
     .valid_values = { \
-    .count = 17, \
-    .values = (uint8_t[]) { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 }, \
+        .count = 17, \
+        .values = (uint8_t[]) { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 }, \
     }, \
     ##__VA_ARGS__
 
@@ -2563,12 +2563,12 @@
     .description = "Input Source Type", \
     .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
-    | homekit_permissions_notify, \
+                 | homekit_permissions_notify, \
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {10}, \
     .valid_values = { \
-    .count = 11, \
-    .values = (uint8_t[]) { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, \
+        .count = 11, \
+        .values = (uint8_t[]) { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 }, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
@@ -2586,12 +2586,12 @@
     .description = "Input Device Type", \
     .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
-    | homekit_permissions_notify, \
+                 | homekit_permissions_notify, \
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {5}, \
     .valid_values = { \
-    .count = 6, \
-    .values = (uint8_t[]) { 0, 1, 2, 3, 4, 5 }, \
+        .count = 6, \
+        .values = (uint8_t[]) { 0, 1, 2, 3, 4, 5 }, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
@@ -2616,12 +2616,12 @@
     .description = "Current Visibility State", \
     .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
-    | homekit_permissions_notify, \
+                 | homekit_permissions_notify, \
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {3}, \
     .valid_values = { \
-    .count = 4, \
-    .values = (uint8_t[]) { 0, 1, 2, 3 }, \
+        .count = 4, \
+        .values = (uint8_t[]) { 0, 1, 2, 3 }, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
@@ -2635,13 +2635,13 @@
     .description = "Target Visibility State", \
     .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
-    | homekit_permissions_paired_write \
-    | homekit_permissions_notify, \
+                 | homekit_permissions_paired_write \
+                 | homekit_permissions_notify, \
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {1}, \
     .valid_values = { \
-    .count = 2, \
-    .values = (uint8_t[]) { 0, 1 }, \
+        .count = 2, \
+        .values = (uint8_t[]) { 0, 1 }, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
@@ -2657,12 +2657,12 @@
     .description = "Volume Control Type", \
     .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
-    | homekit_permissions_notify, \
+                 | homekit_permissions_notify, \
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {3}, \
     .valid_values = { \
-    .count = 4, \
-    .values = (uint8_t[]) { 0, 1, 2, 3 }, \
+        .count = 4, \
+        .values = (uint8_t[]) { 0, 1, 2, 3 }, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
@@ -2679,8 +2679,8 @@
     .min_value = (float[]) {0}, \
     .max_value = (float[]) {1}, \
     .valid_values = { \
-    .count = 2, \
-    .values = (uint8_t[]) { 0, 1 }, \
+        .count = 2, \
+        .values = (uint8_t[]) { 0, 1 }, \
     }, \
     ##__VA_ARGS__
 
