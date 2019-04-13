@@ -283,7 +283,7 @@
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
     .min_value = (float[]) {0}, \
-    .max_value = (float[]) {5.1}, \
+    .max_value = (float[]) {12}, \
     .min_step = (float[]) {0.3}, \
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
@@ -530,16 +530,13 @@
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_COLOR_BOOST, \
     .description = "Color Boost", \
     .format = homekit_format_uint8, \
+    .unit = homekit_unit_percentage, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
-    .min_value = (float[]) {1}, \
-    .max_value = (float[]) {3}, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {100}, \
     .min_step = (float[]) {1}, \
-    .valid_values = { \
-    .count = 3, \
-    .values = (uint8_t[]) {1, 2, 3}, \
-    }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
