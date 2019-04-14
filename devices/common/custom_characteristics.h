@@ -54,11 +54,11 @@
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
     .min_value = (float[]) {1}, \
-    .max_value = (float[]) {4}, \
+    .max_value = (float[]) {5}, \
     .min_step = (float[]) {1}, \
     .valid_values = { \
-    .count = 4, \
-    .values = (uint8_t[]) {1, 2, 3, 4}, \
+    .count = 5, \
+    .values = (uint8_t[]) {1, 2, 3, 4, 5}, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
@@ -273,10 +273,55 @@
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
-#define HOMEKIT_CHARACTERISTIC_CUSTOM_INCHING_TIME HOMEKIT_CUSTOM_UUID("F0000113")
-#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_INCHING_TIME(_value, ...) \
-    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_INCHING_TIME, \
-    .description = "Inching time", \
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_INCHING_TIME1 HOMEKIT_CUSTOM_UUID("F0000113")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_INCHING_TIME1(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_INCHING_TIME1, \
+    .description = "Inching time 1", \
+    .format = homekit_format_float, \
+    .unit = homekit_unit_seconds, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {12}, \
+    .min_step = (float[]) {0.3}, \
+    .value = HOMEKIT_FLOAT_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_INCHING_TIME2 HOMEKIT_CUSTOM_UUID("F0001113")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_INCHING_TIME2(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_INCHING_TIME2, \
+    .description = "Inching time 2", \
+    .format = homekit_format_float, \
+    .unit = homekit_unit_seconds, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {12}, \
+    .min_step = (float[]) {0.3}, \
+    .value = HOMEKIT_FLOAT_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_INCHING_TIME3 HOMEKIT_CUSTOM_UUID("F0002113")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_INCHING_TIME3(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_INCHING_TIME3, \
+    .description = "Inching time 3", \
+    .format = homekit_format_float, \
+    .unit = homekit_unit_seconds, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {12}, \
+    .min_step = (float[]) {0.3}, \
+    .value = HOMEKIT_FLOAT_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_INCHING_TIME4 HOMEKIT_CUSTOM_UUID("F0003113")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_INCHING_TIME4(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_INCHING_TIME4, \
+    .description = "Inching time 4", \
     .format = homekit_format_float, \
     .unit = homekit_unit_seconds, \
     .permissions = homekit_permissions_paired_read \
