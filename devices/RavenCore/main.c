@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.8.3
+ * v0.8.4
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -63,8 +63,8 @@
 #include "../common/custom_characteristics.h"
 
 // Version
-#define RAVENCORE_VERSION               "0.8.3"
-#define RAVENCORE_VERSION_OCTAL         001003      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define RAVENCORE_VERSION               "0.8.4"
+#define RAVENCORE_VERSION_OCTAL         001004      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -835,14 +835,14 @@ void switch_autooff_task(void *pvParameters) {
             
         case 3:
             vTaskDelay(custom_inching_time3.value.float_value * 1000 / portTICK_PERIOD_MS);
-            switch2_on.value.bool_value = false;
+            switch3_on.value.bool_value = false;
             relay_write(switch3_on.value.bool_value, RELAY3_GPIO);
             homekit_characteristic_notify(&switch3_on, switch3_on.value);
             break;
             
         case 4:
             vTaskDelay(custom_inching_time4.value.float_value * 1000 / portTICK_PERIOD_MS);
-            switch2_on.value.bool_value = false;
+            switch4_on.value.bool_value = false;
             relay_write(switch4_on.value.bool_value, RELAY4_GPIO);
             homekit_characteristic_notify(&switch4_on, switch4_on.value);
             break;
@@ -909,7 +909,7 @@ void switch3_on_callback(homekit_value_t value) {
     xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
     printf("RC > Relay 3 -> %i\n", switch3_on.value.bool_value);
     
-    if (custom_inching_time2.value.float_value > 0 && switch2_on.value.bool_value) {
+    if (custom_inching_time3.value.float_value > 0 && switch3_on.value.bool_value) {
         xTaskCreate(switch_autooff_task, "switch_autooff_task", configMINIMAL_STACK_SIZE, (void *) 3, 1, NULL);
     }
     
@@ -927,7 +927,7 @@ void switch4_on_callback(homekit_value_t value) {
     xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
     printf("RC > Relay 4 -> %i\n", switch4_on.value.bool_value);
     
-    if (custom_inching_time2.value.float_value > 0 && switch2_on.value.bool_value) {
+    if (custom_inching_time4.value.float_value > 0 && switch4_on.value.bool_value) {
         xTaskCreate(switch_autooff_task, "switch_autooff_task", configMINIMAL_STACK_SIZE, (void *) 4, 1, NULL);
     }
     
@@ -1891,15 +1891,16 @@ void hardware_init() {
         case 4:
             enable_sonoff_device();
             
-            adv_button_create(button2_gpio, true);
-            adv_button_create(BUTTON3_GPIO, true);
-            adv_button_create(extra_gpio, true);
-            
             adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1);
             adv_button_register_callback_fn(button1_gpio, factory_default_call, 5);
             
+            adv_button_create(button2_gpio, true);
             adv_button_register_callback_fn(button2_gpio, button_simple2_intr_callback, 1);
+            
+            adv_button_create(BUTTON3_GPIO, true);
             adv_button_register_callback_fn(BUTTON3_GPIO, button_simple3_intr_callback, 1);
+            
+            adv_button_create(extra_gpio, true);
             adv_button_register_callback_fn(extra_gpio, button_simple4_intr_callback, 1);
             
             gpio_enable(relay1_gpio, GPIO_OUTPUT);
@@ -2055,13 +2056,13 @@ void hardware_init() {
         case 11:
             enable_sonoff_device();
             
-            adv_button_create(button2_gpio, true);
-            adv_button_create(BUTTON3_GPIO, true);
-            
             adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1);
             adv_button_register_callback_fn(button1_gpio, factory_default_call, 5);
             
+            adv_button_create(button2_gpio, true);
             adv_button_register_callback_fn(button2_gpio, button_simple2_intr_callback, 1);
+            
+            adv_button_create(BUTTON3_GPIO, true);
             adv_button_register_callback_fn(BUTTON3_GPIO, button_simple3_intr_callback, 1);
             
             gpio_enable(relay1_gpio, GPIO_OUTPUT);
@@ -2101,7 +2102,6 @@ void hardware_init() {
                 adv_button_destroy(button1_gpio);
                 
                 adv_button_create(BUTTON3_GPIO, true);
-                
                 adv_button_register_callback_fn(BUTTON3_GPIO, factory_default_call, 5);
                 
                 if (board_type.value.int_value == 4) {
