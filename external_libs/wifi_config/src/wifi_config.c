@@ -254,7 +254,7 @@ static void wifi_config_server_on_settings_update(client_t *client) {
 
     vTaskDelay(500 / portTICK_PERIOD_MS);
 
-    wifi_config_station_connect();
+    sdk_system_restart();
 }
 
 

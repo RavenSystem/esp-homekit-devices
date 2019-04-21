@@ -333,6 +333,21 @@
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
 
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_INCHING_TIMEDM HOMEKIT_CUSTOM_UUID("F0004113")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_INCHING_TIMEDM(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_INCHING_TIMEDM, \
+    .description = "Inching time DM", \
+    .format = homekit_format_float, \
+    .unit = homekit_unit_seconds, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {12}, \
+    .min_step = (float[]) {0.3}, \
+    .value = HOMEKIT_FLOAT_(_value), \
+    ##__VA_ARGS__
+
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_WORKINGTIME HOMEKIT_CUSTOM_UUID("F0000114")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_GARAGEDOOR_WORKINGTIME(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_GARAGEDOOR_WORKINGTIME, \
@@ -585,6 +600,17 @@
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_SWITCH_DM HOMEKIT_CUSTOM_UUID("F0000150")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_SWITCH_DM(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_SWITCH_DM, \
+    .description = "Dummy Switch", \
+    .format = homekit_format_bool, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .value = HOMEKIT_BOOL_(_value), \
+    ##__VA_ARGS__
+
 /* Switch Initial State
  0. OFF
  1. ON
@@ -649,6 +675,24 @@
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_INIT_STATE_SW4(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_INIT_STATE_SW4, \
     .description = "Init State SW4", \
+    .format = homekit_format_uint8, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {3}, \
+    .min_step = (float[]) {1}, \
+    .valid_values = { \
+    .count = 4, \
+    .values = (uint8_t[]) {0, 1, 2, 3}, \
+    }, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_INIT_STATE_SWDM HOMEKIT_CUSTOM_UUID("F0000505")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_INIT_STATE_SWDM(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_INIT_STATE_SWDM, \
+    .description = "Init State DM", \
     .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \

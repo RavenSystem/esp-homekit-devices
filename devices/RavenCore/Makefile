@@ -12,7 +12,6 @@ EXTRA_COMPONENTS = \
     $(abspath ../../external_libs/cJSON) \
     $(abspath ../../external_libs/homekit) \
     $(abspath ../../external_libs/wifi_config) \
-    $(abspath ../../libs/led_codes) \
     $(abspath ../../libs/adv_button)
 
 FLASH_SIZE = 8
