@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.8.5
+ * v0.8.6
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -63,8 +63,8 @@
 #include "../common/custom_characteristics.h"
 
 // Version
-#define RAVENCORE_VERSION               "0.8.5"
-#define RAVENCORE_VERSION_OCTAL         001005      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.8.6"
+#define FIRMWARE_VERSION_OCTAL          001006      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -182,42 +182,30 @@ volatile float old_humidity_value = 0.0, old_temperature_value = 0.0, covering_a
 ETSTimer device_restart_timer, factory_default_toggle_timer, change_settings_timer, save_states_timer, extra_func_timer;
 pwm_info_t pwm_info;
 
+homekit_value_t hkc_general_getter(const homekit_characteristic_t *ch);
+
 void switch1_on_callback(homekit_value_t value);
-homekit_value_t read_switch1_on_callback();
 void switch2_on_callback(homekit_value_t value);
-homekit_value_t read_switch2_on_callback();
 void switch3_on_callback(homekit_value_t value);
-homekit_value_t read_switch3_on_callback();
 void switch4_on_callback(homekit_value_t value);
-homekit_value_t read_switch4_on_callback();
 void switchdm_on_callback(homekit_value_t value);
-homekit_value_t read_switchdm_on_callback();
 
 void th_target(homekit_value_t value);
-homekit_value_t read_th_target();
 void update_th_state();
 
 void valve_on_callback(homekit_value_t value);
-homekit_value_t read_valve_on_callback();
-homekit_value_t read_in_use_on_callback();
-homekit_value_t read_remaining_duration_on_callback();
 
 void garage_on_callback(homekit_value_t value);
-homekit_value_t read_garage_on_callback();
 
 void covering_on_callback(homekit_value_t value);
-homekit_value_t read_covering_on_callback();
 
 void lock_on_callback(homekit_value_t value);
-homekit_value_t read_lock_on_callback();
 
 void rgbw_set();
 void brightness_callback(homekit_value_t value);
-homekit_value_t read_brightness_callback();
 void hue_callback(homekit_value_t value);
-homekit_value_t read_hue_callback();
 void saturation_callback(homekit_value_t value);
-homekit_value_t read_saturation_callback();
+void color_boost_callback();
 
 void show_setup_callback();
 void ota_firmware_callback();
@@ -225,15 +213,15 @@ void change_settings_callback();
 void save_states_callback();
 homekit_value_t read_ip_addr();
 
-void on_wifi_ready();
+void create_accessory();
 
 // ---------- CHARACTERISTICS ----------
 // Switches
-homekit_characteristic_t switch1_on = HOMEKIT_CHARACTERISTIC_(ON, false, .getter=read_switch1_on_callback, .setter=switch1_on_callback);
-homekit_characteristic_t switch2_on = HOMEKIT_CHARACTERISTIC_(ON, false, .getter=read_switch2_on_callback, .setter=switch2_on_callback);
-homekit_characteristic_t switch3_on = HOMEKIT_CHARACTERISTIC_(ON, false, .getter=read_switch3_on_callback, .setter=switch3_on_callback);
-homekit_characteristic_t switch4_on = HOMEKIT_CHARACTERISTIC_(ON, false, .getter=read_switch4_on_callback, .setter=switch4_on_callback);
-homekit_characteristic_t switchdm_on = HOMEKIT_CHARACTERISTIC_(ON, false, .getter=read_switchdm_on_callback, .setter=switchdm_on_callback);
+homekit_characteristic_t switch1_on = HOMEKIT_CHARACTERISTIC_(ON, false, .getter_ex=hkc_general_getter, .setter=switch1_on_callback);
+homekit_characteristic_t switch2_on = HOMEKIT_CHARACTERISTIC_(ON, false, .getter_ex=hkc_general_getter, .setter=switch2_on_callback);
+homekit_characteristic_t switch3_on = HOMEKIT_CHARACTERISTIC_(ON, false, .getter_ex=hkc_general_getter, .setter=switch3_on_callback);
+homekit_characteristic_t switch4_on = HOMEKIT_CHARACTERISTIC_(ON, false, .getter_ex=hkc_general_getter, .setter=switch4_on_callback);
+homekit_characteristic_t switchdm_on = HOMEKIT_CHARACTERISTIC_(ON, false, .getter_ex=hkc_general_getter, .setter=switchdm_on_callback);
 
 // For Outlets
 homekit_characteristic_t switch_outlet_in_use = HOMEKIT_CHARACTERISTIC_(OUTLET_IN_USE, true);   // It has not a real use, but it is a mandatory characteristic
@@ -246,34 +234,34 @@ homekit_characteristic_t current_temperature = HOMEKIT_CHARACTERISTIC_(CURRENT_T
 homekit_characteristic_t target_temperature  = HOMEKIT_CHARACTERISTIC_(TARGET_TEMPERATURE, 23, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(update_th_state));
 homekit_characteristic_t units = HOMEKIT_CHARACTERISTIC_(TEMPERATURE_DISPLAY_UNITS, 0);
 homekit_characteristic_t current_state = HOMEKIT_CHARACTERISTIC_(CURRENT_HEATING_COOLING_STATE, 0);
-homekit_characteristic_t target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_COOLING_STATE, 0, .getter=read_th_target, .setter=th_target);
+homekit_characteristic_t target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_COOLING_STATE, 0, .getter_ex=hkc_general_getter, .setter=th_target);
 homekit_characteristic_t current_humidity = HOMEKIT_CHARACTERISTIC_(CURRENT_RELATIVE_HUMIDITY, 0);
 
 // Water Valve
-homekit_characteristic_t active = HOMEKIT_CHARACTERISTIC_(ACTIVE, 0, .getter=read_valve_on_callback, .setter=valve_on_callback);
-homekit_characteristic_t in_use = HOMEKIT_CHARACTERISTIC_(IN_USE, 0, .getter=read_in_use_on_callback);
+homekit_characteristic_t active = HOMEKIT_CHARACTERISTIC_(ACTIVE, 0, .getter_ex=hkc_general_getter, .setter=valve_on_callback);
+homekit_characteristic_t in_use = HOMEKIT_CHARACTERISTIC_(IN_USE, 0, .getter_ex=hkc_general_getter);
 homekit_characteristic_t valve_type = HOMEKIT_CHARACTERISTIC_(VALVE_TYPE, 0);
 homekit_characteristic_t set_duration = HOMEKIT_CHARACTERISTIC_(SET_DURATION, 900, .max_value=(float[]) {14400}, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(save_states_callback));
-homekit_characteristic_t remaining_duration = HOMEKIT_CHARACTERISTIC_(REMAINING_DURATION, 0, .max_value=(float[]) {14400}, .getter=read_remaining_duration_on_callback);
+homekit_characteristic_t remaining_duration = HOMEKIT_CHARACTERISTIC_(REMAINING_DURATION, 0, .max_value=(float[]) {14400}, .getter_ex=hkc_general_getter);
 
 // Garage Door
 homekit_characteristic_t current_door_state = HOMEKIT_CHARACTERISTIC_(CURRENT_DOOR_STATE, 1);
-homekit_characteristic_t target_door_state = HOMEKIT_CHARACTERISTIC_(TARGET_DOOR_STATE, 1, .getter=read_garage_on_callback, .setter=garage_on_callback);
+homekit_characteristic_t target_door_state = HOMEKIT_CHARACTERISTIC_(TARGET_DOOR_STATE, 1, .getter_ex=hkc_general_getter, .setter=garage_on_callback);
 homekit_characteristic_t obstruction_detected = HOMEKIT_CHARACTERISTIC_(OBSTRUCTION_DETECTED, false);
 
 // Window Covering
 homekit_characteristic_t covering_current_position = HOMEKIT_CHARACTERISTIC_(CURRENT_POSITION, 0);
-homekit_characteristic_t covering_target_position = HOMEKIT_CHARACTERISTIC_(TARGET_POSITION, 0, .getter=read_covering_on_callback, .setter=covering_on_callback);
+homekit_characteristic_t covering_target_position = HOMEKIT_CHARACTERISTIC_(TARGET_POSITION, 0, .getter_ex=hkc_general_getter, .setter=covering_on_callback);
 homekit_characteristic_t covering_position_state = HOMEKIT_CHARACTERISTIC_(POSITION_STATE, 2);
 
 // Lock Mechanism
 homekit_characteristic_t lock_current_state = HOMEKIT_CHARACTERISTIC_(LOCK_CURRENT_STATE, 1);
-homekit_characteristic_t lock_target_state = HOMEKIT_CHARACTERISTIC_(LOCK_TARGET_STATE, 1, .getter=read_lock_on_callback, .setter=lock_on_callback);
+homekit_characteristic_t lock_target_state = HOMEKIT_CHARACTERISTIC_(LOCK_TARGET_STATE, 1, .getter_ex=hkc_general_getter, .setter=lock_on_callback);
 
 // RGBW
-homekit_characteristic_t brightness = HOMEKIT_CHARACTERISTIC_(BRIGHTNESS, 100, .getter=read_brightness_callback, .setter=brightness_callback);
-homekit_characteristic_t hue = HOMEKIT_CHARACTERISTIC_(HUE, 0, .getter=read_hue_callback, .setter=hue_callback);
-homekit_characteristic_t saturation = HOMEKIT_CHARACTERISTIC_(SATURATION, 0, .getter=read_saturation_callback, .setter=saturation_callback);
+homekit_characteristic_t brightness = HOMEKIT_CHARACTERISTIC_(BRIGHTNESS, 100, .getter_ex=hkc_general_getter, .setter=brightness_callback);
+homekit_characteristic_t hue = HOMEKIT_CHARACTERISTIC_(HUE, 0, .getter_ex=hkc_general_getter, .setter=hue_callback);
+homekit_characteristic_t saturation = HOMEKIT_CHARACTERISTIC_(SATURATION, 0, .getter_ex=hkc_general_getter, .setter=saturation_callback);
 
 // ---------- SETUP ----------
 // General Setup
@@ -325,7 +313,7 @@ homekit_characteristic_t custom_r_gpio = HOMEKIT_CHARACTERISTIC_(CUSTOM_R_GPIO, 
 homekit_characteristic_t custom_g_gpio = HOMEKIT_CHARACTERISTIC_(CUSTOM_G_GPIO, INITIAL_G_GPIO, .id=144, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t custom_b_gpio = HOMEKIT_CHARACTERISTIC_(CUSTOM_B_GPIO, INITIAL_B_GPIO, .id=145, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t custom_w_gpio = HOMEKIT_CHARACTERISTIC_(CUSTOM_W_GPIO, INITIAL_W_GPIO, .id=146, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
-homekit_characteristic_t custom_color_boost = HOMEKIT_CHARACTERISTIC_(CUSTOM_COLOR_BOOST, 0, .id=147, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
+homekit_characteristic_t custom_color_boost = HOMEKIT_CHARACTERISTIC_(CUSTOM_COLOR_BOOST, 0, .id=147, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(color_boost_callback));
 
 // Initial State Setup
 homekit_characteristic_t custom_init_state_sw1 = HOMEKIT_CHARACTERISTIC_(CUSTOM_INIT_STATE_SW1, 0, .id=120, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
@@ -858,6 +846,12 @@ void save_states_callback() {
     sdk_os_timer_arm(&save_states_timer, 3000, 0);
 }
 
+// ***** General Getter
+
+homekit_value_t hkc_general_getter(const homekit_characteristic_t *ch) {
+    return ch->value;
+}
+
 // ***** Switches
 
 void switch_autooff_task(void *pvParameters) {
@@ -920,11 +914,9 @@ void switch1_on_callback(homekit_value_t value) {
         rgbw_set();
     }
     
+    factory_default_toggle_upcount();
+    
     save_states_callback();
-}
-
-homekit_value_t read_switch1_on_callback() {
-    return switch1_on.value;
 }
 
 void switch2_on_callback(homekit_value_t value) {
@@ -941,10 +933,6 @@ void switch2_on_callback(homekit_value_t value) {
     save_states_callback();
 }
 
-homekit_value_t read_switch2_on_callback() {
-    return switch2_on.value;
-}
-
 void switch3_on_callback(homekit_value_t value) {
     printf("RC > Toggle SW 3\n");
     switch3_on.value = value;
@@ -957,10 +945,6 @@ void switch3_on_callback(homekit_value_t value) {
     }
     
     save_states_callback();
-}
-
-homekit_value_t read_switch3_on_callback() {
-    return switch3_on.value;
 }
 
 void switch4_on_callback(homekit_value_t value) {
@@ -977,10 +961,6 @@ void switch4_on_callback(homekit_value_t value) {
     save_states_callback();
 }
 
-homekit_value_t read_switch4_on_callback() {
-    return switch4_on.value;
-}
-
 void switchdm_on_callback(homekit_value_t value) {
     printf("RC > Toggle SW DM\n");
     switchdm_on.value = value;
@@ -991,10 +971,6 @@ void switchdm_on_callback(homekit_value_t value) {
     }
     
     save_states_callback();
-}
-
-homekit_value_t read_switchdm_on_callback() {
-    return switchdm_on.value;
 }
 
 // ***** Water Valve
@@ -1057,18 +1033,6 @@ void valve_on_callback(homekit_value_t value) {
     }
     
     xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
-}
-
-homekit_value_t read_valve_on_callback() {
-    return active.value;
-}
-
-homekit_value_t read_in_use_on_callback() {
-    return in_use.value;
-}
-
-homekit_value_t read_remaining_duration_on_callback() {
-    return remaining_duration.value;
 }
 
 // ***** Garage Door
@@ -1142,11 +1106,6 @@ void garage_on_button(const uint8_t gpio) {
         printf("RC > GD: built-in button DISABLED\n");
         xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 4, 1, NULL);
     }
-}
-
-homekit_value_t read_garage_on_callback() {
-    printf("RC > Returning target_door_state -> %i\n", target_door_state.value.int_value);
-    return target_door_state.value;
 }
 
 static void homekit_gd_notify() {
@@ -1345,11 +1304,6 @@ void covering_worker() {
     }
 }
 
-homekit_value_t read_covering_on_callback() {
-    printf("RC > Returning covering_target_position -> %i\n", covering_target_position.value.int_value);
-    return covering_target_position.value;
-}
-
 void covering_toggle_up(const uint8_t gpio) {
     covering_on_callback(HOMEKIT_UINT8(100));
 }
@@ -1420,17 +1374,12 @@ void lock_on_callback(homekit_value_t value) {
     } else {
         lock_close();
     }
-}
-
-void lock_intr_callback(const uint8_t gpio) {
-    lock_on_callback(HOMEKIT_UINT8(0));
     
     factory_default_toggle_upcount();
 }
 
-homekit_value_t read_lock_on_callback() {
-    printf("RC > Returning lock_target_state -> %i\n", lock_target_state.value.int_value);
-    return lock_target_state.value;
+void lock_intr_callback(const uint8_t gpio) {
+    lock_on_callback(HOMEKIT_UINT8(0));
 }
 
 // ***** Buttons
@@ -1439,8 +1388,6 @@ void button_simple1_intr_callback(const uint8_t gpio) {
     switch1_on.value.bool_value = !switch1_on.value.bool_value;
     switch1_on_callback(switch1_on.value);
     homekit_characteristic_notify(&switch1_on, switch1_on.value);
-    
-    factory_default_toggle_upcount();
 }
 
 void button_simple2_intr_callback(const uint8_t gpio) {
@@ -1459,6 +1406,23 @@ void button_simple4_intr_callback(const uint8_t gpio) {
     switch4_on.value.bool_value = !switch4_on.value.bool_value;
     switch4_on_callback(switch4_on.value);
     homekit_characteristic_notify(&switch4_on, switch4_on.value);
+}
+
+void button_dual_rotation_intr_callback(const uint8_t gpio) {
+    if (!switch1_on.value.bool_value && !switch2_on.value.bool_value) {
+        button_simple1_intr_callback(gpio);
+        
+    } else if (switch1_on.value.bool_value && !switch2_on.value.bool_value) {
+        button_simple1_intr_callback(gpio);
+        button_simple2_intr_callback(gpio);
+        
+    } else if (!switch1_on.value.bool_value && switch2_on.value.bool_value) {
+        button_simple1_intr_callback(gpio);
+        
+    } else {
+        button_simple1_intr_callback(gpio);
+        button_simple2_intr_callback(gpio);
+    }
 }
 
 void button_event1_intr_callback(const uint8_t gpio) {
@@ -1524,10 +1488,6 @@ void th_target(homekit_value_t value) {
     }
     
     update_th_state();
-}
-
-homekit_value_t read_th_target() {
-    return target_state.value;
 }
 
 void update_th_state() {
@@ -1774,16 +1734,9 @@ void saturation_callback(homekit_value_t value) {
     rgbw_set();
 }
 
-homekit_value_t read_brightness_callback() {
-    return brightness.value;
-}
-
-homekit_value_t read_hue_callback() {
-    return hue.value;
-}
-
-homekit_value_t read_saturation_callback() {
-    return saturation.value;
+void color_boost_callback() {
+    change_settings_callback();
+    rgbw_set();
 }
 
 // ***** Identify
@@ -1908,6 +1861,11 @@ void hardware_init() {
                     adv_toggle_register_callback_fn(button1_gpio, button_simple1_intr_callback, 2);
                     break;
                     
+                case 3:
+                    adv_toggle_create(button1_gpio, pullup);
+                    adv_toggle_register_callback_fn(button1_gpio, button_dual_rotation_intr_callback, 0);
+                    break;
+                    
                 default:
                     break;
             }
@@ -1921,6 +1879,11 @@ void hardware_init() {
                 case 2:
                     adv_toggle_create(button2_gpio, pullup);
                     adv_toggle_register_callback_fn(button2_gpio, button_simple2_intr_callback, 2);
+                    break;
+                    
+                case 3:
+                    adv_toggle_create(button2_gpio, pullup);
+                    adv_toggle_register_callback_fn(button2_gpio, button_dual_rotation_intr_callback, 0);
                     break;
                     
                 default:
@@ -2332,7 +2295,7 @@ void hardware_init() {
     
     printf("RC > HW ready\n");
     
-    wifi_config_init("RavenCore", NULL, on_wifi_ready);
+    wifi_config_init("RavenCore", NULL, create_accessory);
 }
 
 void settings_init() {
@@ -2966,13 +2929,18 @@ homekit_characteristic_t rgbw_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "RGBW
 homekit_characteristic_t setup_service_name = HOMEKIT_CHARACTERISTIC_(NAME, "Setup", .id=100);
 homekit_characteristic_t device_type_name = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYPE_NAME, "", .id=101);
 
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, RAVENCORE_VERSION);
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, FIRMWARE_VERSION);
 
 homekit_accessory_category_t accessory_category;
 
-void create_accessory_name() {
-    printf("RC > Creating accessory name\n");
+homekit_server_config_t config;
+
+void create_accessory() {
+    printf("RC > Creating HK accessory\n");
     
+    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 6, 1, NULL);
+    
+    // Accessory Name and Serial
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     
@@ -2983,12 +2951,6 @@ void create_accessory_name() {
     char *serial_value = malloc(13);
     snprintf(serial_value, 13, "%02X%02X%02X%02X%02X%02X", macaddr[0], macaddr[1], macaddr[2], macaddr[3], macaddr[4], macaddr[5]);
     serial.value = HOMEKIT_STRING(serial_value);
-}
-
-homekit_server_config_t config;
-
-void create_accessory() {
-    printf("RC > Creating HK accessory\n");
     
     uint8_t service_count = 3, service_number = 2;
     
@@ -3706,7 +3668,7 @@ void create_accessory() {
     config.password = "021-82-017";
     config.setupId = "RAVE";
     config.category = accessory_category;
-    config.config_number = RAVENCORE_VERSION_OCTAL;
+    config.config_number = FIRMWARE_VERSION_OCTAL;
     
     printf("RC > Starting HomeKit Server\n");
     homekit_server_init(&config);
@@ -3714,13 +3676,6 @@ void create_accessory() {
     if (enable_dummy_switch.value.bool_value) {
         switchdm_on_callback(switchdm_on.value);
     }
-}
-
-void on_wifi_ready() {
-    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 6, 1, NULL);
-    
-    create_accessory_name();
-    create_accessory();
 }
 
 void old_settings_init() {
