@@ -216,9 +216,7 @@ int adv_button_create(const uint8_t gpio, bool pullup_resistor) {
         button->gpio = gpio;
         
         if (!buttons) {
-            sdk_os_timer_disarm(&push_down_timer);
             sdk_os_timer_setfn(&push_down_timer, push_down_timer_callback, NULL);
-            sdk_os_timer_disarm(&push_up_timer);
             sdk_os_timer_setfn(&push_up_timer, push_up_timer_callback, NULL);
         }
         
@@ -236,9 +234,7 @@ int adv_button_create(const uint8_t gpio, bool pullup_resistor) {
         gpio_set_pullup(button->gpio, pullup_resistor, pullup_resistor);
         gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_intr_callback);
         
-        sdk_os_timer_disarm(&button->hold_timer);
         sdk_os_timer_setfn(&button->hold_timer, adv_button_hold_callback, button);
-        sdk_os_timer_disarm(&button->press_timer);
         sdk_os_timer_setfn(&button->press_timer, adv_button_single_callback, button);
         
         button->singlepress_callback_fn = no_function_callback;
@@ -290,7 +286,6 @@ int adv_toggle_create(const uint8_t gpio, bool pullup_resistor) {
         toggle->gpio = gpio;
         
         if (!toggles) {
-            sdk_os_timer_disarm(&toggle_evaluate);
             sdk_os_timer_setfn(&toggle_evaluate, toggle_evaluate_fn, NULL);
             sdk_os_timer_arm(&toggle_evaluate, TOGGLE_EVALUATE_INTERVAL, 1);
         }
