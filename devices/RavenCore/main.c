@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.8.6
+ * v0.8.7
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -33,6 +33,7 @@
  12. Window
  13. Lock Mechanism
  14. RGB/W Lights
+ 15. Stateless Switch
  */
 
 //#include <stdio.h>
@@ -63,8 +64,8 @@
 #include "../common/custom_characteristics.h"
 
 // Version
-#define FIRMWARE_VERSION                "0.8.6"
-#define FIRMWARE_VERSION_OCTAL          001006      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.8.7"
+#define FIRMWARE_VERSION_OCTAL          001007      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -796,7 +797,7 @@ void factory_default_task() {
     vTaskDelay(500 / portTICK_PERIOD_MS);
     
     wifi_config_reset();
-    vTaskDelay(2700 / portTICK_PERIOD_MS);
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
     
     sdk_system_restart();
     
@@ -837,13 +838,11 @@ void ota_firmware_callback() {
 }
 
 void change_settings_callback() {
-    sdk_os_timer_disarm(&change_settings_timer);
-    sdk_os_timer_arm(&change_settings_timer, 3000, 0);
+    sdk_os_timer_arm(&change_settings_timer, 3500, 0);
 }
 
 void save_states_callback() {
-    sdk_os_timer_disarm(&save_states_timer);
-    sdk_os_timer_arm(&save_states_timer, 3000, 0);
+    sdk_os_timer_arm(&save_states_timer, 5000, 0);
 }
 
 // ***** General Getter
@@ -1427,16 +1426,19 @@ void button_dual_rotation_intr_callback(const uint8_t gpio) {
 
 void button_event1_intr_callback(const uint8_t gpio) {
     homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(0));
+    printf("RC > Single press\n");
     xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
 }
 
 void button_event2_intr_callback(const uint8_t gpio) {
     homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(1));
+    printf("RC > Double press\n");
     xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 2, 1, NULL);
 }
 
 void button_event3_intr_callback(const uint8_t gpio) {
     homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(2));
+    printf("RC > Long press\n");
     xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 3, 1, NULL);
 }
 
@@ -2260,6 +2262,20 @@ void hardware_init() {
             
             break;
             
+        case 15:
+            if (custom_w_gpio.value.int_value > 5 && custom_w_gpio.value.int_value < 9) {
+                custom_w_gpio.value.int_value = INITIAL_W_GPIO;
+            }
+            
+            adv_button_create(custom_w_gpio.value.int_value, true);
+            
+            adv_button_register_callback_fn(custom_w_gpio.value.int_value, button_event1_intr_callback, 1);
+            adv_button_register_callback_fn(custom_w_gpio.value.int_value, button_event2_intr_callback, 2);
+            adv_button_register_callback_fn(custom_w_gpio.value.int_value, button_event3_intr_callback, 3);
+            adv_button_register_callback_fn(custom_w_gpio.value.int_value, factory_default_call, 5);
+            
+            break;
+            
         default:    // case 1:
             if (board_type.value.int_value == 3) {  // It is a Shelly1
                 relay1_gpio = S1_RELAY_GPIO;
@@ -3031,6 +3047,11 @@ void create_accessory() {
             accessory_category = homekit_accessory_category_lightbulb;
             break;
             
+        case 15:
+            service_count += 0;
+            accessory_category = homekit_accessory_category_programmable_switch;
+            break;
+            
         default:    // case 1
             service_count += 0;
             accessory_category = homekit_accessory_category_switch;
@@ -3391,6 +3412,13 @@ void create_accessory() {
                 
                 charac_rgbw(1);
                 
+            } else if (device_type_static == 15) {
+                char *device_type_name_value = malloc(8);
+                snprintf(device_type_name_value, 8, "Prog SW");
+                device_type_name.value = HOMEKIT_STRING(device_type_name_value);
+                
+                charac_prog_button(1);
+                
             } else { // device_type_static == 1
                 char *device_type_name_value = malloc(11);
                 snprintf(device_type_name_value, 11, "Switch 1ch");
@@ -3468,6 +3496,10 @@ void create_accessory() {
                         
                     case 14:
                         setting_count += 6;
+                        break;
+                        
+                    case 15:
+                        setting_count += 1;
                         break;
                         
                     default:    // case 1:
@@ -3661,6 +3693,10 @@ void create_accessory() {
                         sonoff_setup->characteristics[setting_number] = &custom_w_gpio;
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_color_boost;
+                        
+                    } else if (device_type_static == 15) {
+                        sonoff_setup->characteristics[setting_number] = &custom_w_gpio;
+                        
                     }
             }
     

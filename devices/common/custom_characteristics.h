@@ -100,6 +100,7 @@
  12. Window
  13. Lock
  14. MagicHome
+ 15. Stateless Switch
  */
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_DEVICE_TYPE HOMEKIT_CUSTOM_UUID("F0000100")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_DEVICE_TYPE(_value, ...) \
@@ -110,11 +111,11 @@
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \
     .min_value = (float[]) {1}, \
-    .max_value = (float[]) {14}, \
+    .max_value = (float[]) {15}, \
     .min_step = (float[]) {1}, \
     .valid_values = { \
-    .count = 14, \
-    .values = (uint8_t[]) {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, \
+    .count = 15, \
+    .values = (uint8_t[]) {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}, \
     }, \
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
