@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.8.8
+ * v0.8.9
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -64,8 +64,8 @@
 #include "../common/custom_characteristics.h"
 
 // Version
-#define FIRMWARE_VERSION                "0.8.8"
-#define FIRMWARE_VERSION_OCTAL          001010      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.8.9"
+#define FIRMWARE_VERSION_OCTAL          001011      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -1855,18 +1855,19 @@ void hardware_init() {
             
             switch (external_toggle1.value.int_value) {
                 case 1:
-                    adv_toggle_create(button1_gpio, pullup);
-                    adv_toggle_register_callback_fn(button1_gpio, button_simple1_intr_callback, 0, NULL);
+                    adv_button_create(button1_gpio, pullup);
+                    adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1, NULL);
                     break;
                     
                 case 2:
-                    adv_toggle_create(button1_gpio, pullup);
-                    adv_toggle_register_callback_fn(button1_gpio, button_simple1_intr_callback, 2, NULL);
+                    adv_button_create(button1_gpio, pullup);
+                    adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 0, NULL);
+                    adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1, NULL);
                     break;
                     
                 case 3:
-                    adv_toggle_create(button1_gpio, pullup);
-                    adv_toggle_register_callback_fn(button1_gpio, button_dual_rotation_intr_callback, 0, NULL);
+                    adv_button_create(button1_gpio, pullup);
+                    adv_button_register_callback_fn(button1_gpio, button_dual_rotation_intr_callback, 1, NULL);
                     break;
                     
                 default:
@@ -1875,18 +1876,19 @@ void hardware_init() {
             
             switch (external_toggle2.value.int_value) {
                 case 1:
-                    adv_toggle_create(button2_gpio, pullup);
-                    adv_toggle_register_callback_fn(button2_gpio, button_simple2_intr_callback, 0, NULL);
+                    adv_button_create(button2_gpio, pullup);
+                    adv_button_register_callback_fn(button2_gpio, button_simple2_intr_callback, 1, NULL);
                     break;
                     
                 case 2:
-                    adv_toggle_create(button2_gpio, pullup);
-                    adv_toggle_register_callback_fn(button2_gpio, button_simple2_intr_callback, 2, NULL);
+                    adv_button_create(button2_gpio, pullup);
+                    adv_button_register_callback_fn(button2_gpio, button_simple2_intr_callback, 0, NULL);
+                    adv_button_register_callback_fn(button2_gpio, button_simple2_intr_callback, 1, NULL);
                     break;
                     
                 case 3:
-                    adv_toggle_create(button2_gpio, pullup);
-                    adv_toggle_register_callback_fn(button2_gpio, button_dual_rotation_intr_callback, 0, NULL);
+                    adv_button_create(button2_gpio, pullup);
+                    adv_button_register_callback_fn(button2_gpio, button_dual_rotation_intr_callback, 1, NULL);
                     break;
                     
                 default:
@@ -2001,25 +2003,25 @@ void hardware_init() {
             adv_button_register_callback_fn(button1_gpio, garage_on_button, 1, NULL);
             adv_button_register_callback_fn(button1_gpio, factory_default_call, 5, NULL);
             
-            adv_toggle_create(extra_gpio, true);
+            adv_button_create(extra_gpio, true);
             
             if (custom_garagedoor_sensor_close_nc.value.bool_value) {
-                adv_toggle_register_callback_fn(extra_gpio, door_closed_1_fn_callback, 0, NULL);
-                adv_toggle_register_callback_fn(extra_gpio, door_closed_0_fn_callback, 1, NULL);
+                adv_button_register_callback_fn(extra_gpio, door_closed_1_fn_callback, 0, NULL);
+                adv_button_register_callback_fn(extra_gpio, door_closed_0_fn_callback, 1, NULL);
             } else {
-                adv_toggle_register_callback_fn(extra_gpio, door_closed_0_fn_callback, 0, NULL);
-                adv_toggle_register_callback_fn(extra_gpio, door_closed_1_fn_callback, 1, NULL);
+                adv_button_register_callback_fn(extra_gpio, door_closed_0_fn_callback, 0, NULL);
+                adv_button_register_callback_fn(extra_gpio, door_closed_1_fn_callback, 1, NULL);
             }
             
             if (custom_garagedoor_sensor_open.value.int_value > 0) {
-                adv_toggle_create(DOOR_OPENED_GPIO, true);
+                adv_button_create(DOOR_OPENED_GPIO, true);
                 
                 if (custom_garagedoor_sensor_open.value.int_value == 2) {
-                    adv_toggle_register_callback_fn(DOOR_OPENED_GPIO, door_opened_1_fn_callback, 0, NULL);
-                    adv_toggle_register_callback_fn(DOOR_OPENED_GPIO, door_opened_0_fn_callback, 1, NULL);
+                    adv_button_register_callback_fn(DOOR_OPENED_GPIO, door_opened_1_fn_callback, 0, NULL);
+                    adv_button_register_callback_fn(DOOR_OPENED_GPIO, door_opened_0_fn_callback, 1, NULL);
                 } else {
-                    adv_toggle_register_callback_fn(DOOR_OPENED_GPIO, door_opened_0_fn_callback, 0, NULL);
-                    adv_toggle_register_callback_fn(DOOR_OPENED_GPIO, door_opened_1_fn_callback, 1, NULL);
+                    adv_button_register_callback_fn(DOOR_OPENED_GPIO, door_opened_0_fn_callback, 0, NULL);
+                    adv_button_register_callback_fn(DOOR_OPENED_GPIO, door_opened_1_fn_callback, 1, NULL);
                 }
                 
             } else {
@@ -2027,14 +2029,14 @@ void hardware_init() {
             }
             
             if (custom_garagedoor_sensor_obstruction.value.int_value > 0) {
-                adv_toggle_create(DOOR_OBSTRUCTION_GPIO, true);
+                adv_button_create(DOOR_OBSTRUCTION_GPIO, true);
                 
                 if (custom_garagedoor_sensor_obstruction.value.int_value == 2) {
-                    adv_toggle_register_callback_fn(DOOR_OBSTRUCTION_GPIO, door_obstructed_1_fn_callback, 0, NULL);
-                    adv_toggle_register_callback_fn(DOOR_OBSTRUCTION_GPIO, door_obstructed_0_fn_callback, 1, NULL);
+                    adv_button_register_callback_fn(DOOR_OBSTRUCTION_GPIO, door_obstructed_1_fn_callback, 0, NULL);
+                    adv_button_register_callback_fn(DOOR_OBSTRUCTION_GPIO, door_obstructed_0_fn_callback, 1, NULL);
                 } else {
-                    adv_toggle_register_callback_fn(DOOR_OBSTRUCTION_GPIO, door_obstructed_0_fn_callback, 0, NULL);
-                    adv_toggle_register_callback_fn(DOOR_OBSTRUCTION_GPIO, door_obstructed_1_fn_callback, 1, NULL);
+                    adv_button_register_callback_fn(DOOR_OBSTRUCTION_GPIO, door_obstructed_0_fn_callback, 0, NULL);
+                    adv_button_register_callback_fn(DOOR_OBSTRUCTION_GPIO, door_obstructed_1_fn_callback, 1, NULL);
                 }
                 
                 if (gpio_read(DOOR_OBSTRUCTION_GPIO) == custom_garagedoor_sensor_obstruction.value.int_value -1) {
@@ -2140,21 +2142,21 @@ void hardware_init() {
             
             switch (external_toggle1.value.int_value) {
                 case 1:
-                    adv_toggle_create(button1_gpio, pullup);
-                    adv_toggle_register_callback_fn(button1_gpio, covering_button_down, 0, NULL);
+                    adv_button_create(button1_gpio, pullup);
+                    adv_button_register_callback_fn(button1_gpio, covering_button_down, 1, NULL);
                     
-                    adv_toggle_create(button2_gpio, pullup);
-                    adv_toggle_register_callback_fn(button2_gpio, covering_button_up, 0, NULL);
+                    adv_button_create(button2_gpio, pullup);
+                    adv_button_register_callback_fn(button2_gpio, covering_button_up, 1, NULL);
                     break;
                     
                 case 2:
-                    adv_toggle_create(button1_gpio, pullup);
-                    adv_toggle_register_callback_fn(button1_gpio, covering_toggle_down, 0, NULL);
-                    adv_toggle_register_callback_fn(button1_gpio, covering_toggle_stop, 1, NULL);
+                    adv_button_create(button1_gpio, pullup);
+                    adv_button_register_callback_fn(button1_gpio, covering_toggle_down, 0, NULL);
+                    adv_button_register_callback_fn(button1_gpio, covering_toggle_stop, 1, NULL);
                     
-                    adv_toggle_create(button2_gpio, pullup);
-                    adv_toggle_register_callback_fn(button2_gpio, covering_toggle_up, 0, NULL);
-                    adv_toggle_register_callback_fn(button2_gpio, covering_toggle_stop, 1, NULL);
+                    adv_button_create(button2_gpio, pullup);
+                    adv_button_register_callback_fn(button2_gpio, covering_toggle_up, 0, NULL);
+                    adv_button_register_callback_fn(button2_gpio, covering_toggle_stop, 1, NULL);
                     break;
                     
                 default:
@@ -2192,11 +2194,12 @@ void hardware_init() {
             
             switch (external_toggle1.value.int_value) {
                 case 1:
-                    adv_toggle_create(extra_gpio, pullup);
-                    adv_toggle_register_callback_fn(extra_gpio, lock_intr_callback, 0, NULL);
+                    adv_button_create(extra_gpio, pullup);
+                    adv_button_register_callback_fn(extra_gpio, lock_intr_callback, 1, NULL);
                 case 2:
-                    adv_toggle_create(extra_gpio, pullup);
-                    adv_toggle_register_callback_fn(extra_gpio, lock_intr_callback, 2, NULL);
+                    adv_button_create(extra_gpio, pullup);
+                    adv_button_register_callback_fn(extra_gpio, lock_intr_callback, 0, NULL);
+                    adv_button_register_callback_fn(extra_gpio, lock_intr_callback, 1, NULL);
                     break;
                     
                 default:
@@ -2301,13 +2304,14 @@ void hardware_init() {
             
             switch (external_toggle1.value.int_value) {
                 case 1:
-                    adv_toggle_create(extra_gpio, pullup);
-                    adv_toggle_register_callback_fn(extra_gpio, button_simple1_intr_callback, 0, NULL);
+                    adv_button_create(extra_gpio, pullup);
+                    adv_button_register_callback_fn(extra_gpio, button_simple1_intr_callback, 1, NULL);
                     break;
                     
                 case 2:
-                    adv_toggle_create(extra_gpio, pullup);
-                    adv_toggle_register_callback_fn(extra_gpio, button_simple1_intr_callback, 2, NULL);
+                    adv_button_create(extra_gpio, pullup);
+                    adv_button_register_callback_fn(extra_gpio, button_simple1_intr_callback, 0, NULL);
+                    adv_button_register_callback_fn(extra_gpio, button_simple1_intr_callback, 1, NULL);
                     break;
                     
                 default:
