@@ -1,7 +1,7 @@
 /*
  * Advanced Button Manager
  *
- * Copyright 2018 José A. Jiménez (@RavenSystem)
+ * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@
 #ifndef __ADVANCED_BUTTON__
 #define __ADVANCED_BUTTON__
 
-typedef void (*button_callback_fn)(uint8_t gpio);
+typedef void (*button_callback_fn)(uint8_t gpio, void *args);
 
 int adv_button_create(uint8_t gpio, bool pullup_resistor);
 void adv_button_destroy(uint8_t gpio);
@@ -41,7 +41,7 @@ void adv_toggle_destroy(uint8_t gpio);
  * 4 Very long press
  * 5 Hold press
  */
-int adv_button_register_callback_fn(uint8_t gpio, button_callback_fn callback, uint8_t button_callback_type);
+int adv_button_register_callback_fn(uint8_t gpio, button_callback_fn callback, uint8_t button_callback_type, void *args);
 
 /*
  * Toggle callback types:
@@ -49,6 +49,6 @@ int adv_button_register_callback_fn(uint8_t gpio, button_callback_fn callback, u
  * 1 High
  * 2 Both
  */
-int adv_toggle_register_callback_fn(uint8_t gpio, button_callback_fn callback, uint8_t toggle_callback_type);
+int adv_toggle_register_callback_fn(uint8_t gpio, button_callback_fn callback, uint8_t toggle_callback_type, void *args);
 
 #endif // __ADVANCED_BUTTON__

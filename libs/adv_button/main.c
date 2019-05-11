@@ -1,7 +1,7 @@
 /*
  * Advanced Button Manager Example
  *
- * Copyright 2018 José A. Jiménez (@RavenSystem)
+ * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,23 +28,23 @@
 #define BUTTON_GPIO     0
 #endif
 
-void singlepress_callback(uint8_t gpio) {
+void singlepress_callback(uint8_t gpio, void *args) {
     printf(">>>>> Example button: Single Press function called using GPIO->%i\n", gpio);
 }
 
-void doublepress_callback(uint8_t gpio) {
+void doublepress_callback(uint8_t gpio, void *args) {
     printf(">>>>> Example button: Double Press function called using GPIO->%i\n", gpio);
 }
 
-void longpress_callback(uint8_t gpio) {
+void longpress_callback(uint8_t gpio, void *args) {
     printf(">>>>> Example button: Long Press function called using GPIO->%i\n", gpio);
 }
 
-void verylongpress_callback(uint8_t gpio) {
+void verylongpress_callback(uint8_t gpio, void *args) {
     printf(">>>>> Example button: Very Long Press function called using GPIO->%i\n", gpio);
 }
 
-void holdpress_callback(uint8_t gpio) {
+void holdpress_callback(uint8_t gpio, void *args) {
     printf(">>>>> Example button: Hold Press function called using GPIO->%i\n", gpio);
 }
 
@@ -55,9 +55,9 @@ void user_init(void) {
     
     adv_button_create(BUTTON_GPIO, true);
     
-    adv_button_register_callback_fn(BUTTON_GPIO, singlepress_callback, 1);
-    adv_button_register_callback_fn(BUTTON_GPIO, doublepress_callback, 2);
-    adv_button_register_callback_fn(BUTTON_GPIO, longpress_callback, 3);
-    adv_button_register_callback_fn(BUTTON_GPIO, verylongpress_callback, 4);
-    adv_button_register_callback_fn(BUTTON_GPIO, holdpress_callback, 5);
+    adv_button_register_callback_fn(BUTTON_GPIO, singlepress_callback, 1, NULL);
+    adv_button_register_callback_fn(BUTTON_GPIO, doublepress_callback, 2, NULL);
+    adv_button_register_callback_fn(BUTTON_GPIO, longpress_callback, 3, NULL);
+    adv_button_register_callback_fn(BUTTON_GPIO, verylongpress_callback, 4, NULL);
+    adv_button_register_callback_fn(BUTTON_GPIO, holdpress_callback, 5, NULL);
 }
