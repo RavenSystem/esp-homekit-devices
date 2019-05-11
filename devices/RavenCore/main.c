@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.8.9
+ * v0.8.10
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -64,8 +64,8 @@
 #include "../common/custom_characteristics.h"
 
 // Version
-#define FIRMWARE_VERSION                "0.8.9"
-#define FIRMWARE_VERSION_OCTAL          001011      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.8.10"
+#define FIRMWARE_VERSION_OCTAL          001012      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -111,7 +111,7 @@
 #define RELAY4_GPIO                     15
 
 #define DISABLED_TIME                   60
-#define ALLOWED_FACTORY_RESET_TIME      120000
+#define ALLOWED_FACTORY_RESET_TIME      60000
 
 #define PWM_RGBW_SCALE                  65535
 #define PWM_RGBW_SCALE_OFFSET           100
