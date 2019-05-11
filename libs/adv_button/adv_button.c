@@ -31,7 +31,7 @@
 #define LONGPRESS_TIME              410
 #define VERYLONGPRESS_TIME          1500
 #define HOLDPRESS_COUNT             5       // HOLDPRESS_TIME = HOLDPRESS_COUNT * 2000
-#define BUTTON_EVALUATE_DELAY       20
+#define BUTTON_EVALUATE_DELAY       10
 
 typedef struct _adv_button {
     uint8_t gpio;
@@ -170,7 +170,10 @@ static void adv_button_hold_callback(void *arg) {
 
 #define maxvalue_unsigned(x) ((1 << (8 * sizeof(x))) - 1)
 IRAM static void button_evaluate_fn() {        // Based on https://github.com/pcsaito/esp-homekit-demo/blob/LPFToggle/examples/sonoff_basic_toggle/toggle.c
-    while (1) {
+    const TickType_t delay = pdMS_TO_TICKS(BUTTON_EVALUATE_DELAY);
+    TickType_t last_wake_time = xTaskGetTickCount();
+    
+    for (;;) {
         adv_button_t *button = buttons;
         
         if (!buttons) {
@@ -194,7 +197,7 @@ IRAM static void button_evaluate_fn() {        // Based on https://github.com/pc
             button = button->next;
         }
         
-        vTaskDelay(BUTTON_EVALUATE_DELAY / portTICK_PERIOD_MS);
+        vTaskDelayUntil(&last_wake_time, delay);
     }
 }
 
