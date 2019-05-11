@@ -26,17 +26,17 @@
 #include <esplibs/libmain.h>
 #include "adv_button.h"
 
-#define DEBOUNCE_TIME               40
 #define DISABLE_TIME                80
 #define DOUBLEPRESS_TIME            400
-#define LONGPRESS_TIME              450
-#define VERYLONGPRESS_TIME          1200
+#define LONGPRESS_TIME              410
+#define VERYLONGPRESS_TIME          1500
 #define HOLDPRESS_COUNT             5       // HOLDPRESS_TIME = HOLDPRESS_COUNT * 2000
-#define TOGGLE_EVALUATE_DELAY       20
+#define BUTTON_EVALUATE_DELAY       20
 
 typedef struct _adv_button {
     uint8_t gpio;
     
+    button_callback_fn singlepress0_callback_fn;
     button_callback_fn singlepress_callback_fn;
     button_callback_fn doublepress_callback_fn;
     button_callback_fn longpress_callback_fn;
@@ -45,7 +45,10 @@ typedef struct _adv_button {
     
     void *args;
     
-    bool is_down;
+    bool state;
+    bool old_state;
+    volatile uint16_t value;
+
     uint8_t press_count;
     uint8_t hold_count;
     ETSTimer press_timer;
@@ -55,27 +58,8 @@ typedef struct _adv_button {
     struct _adv_button *next;
 } adv_button_t;
 
-typedef struct _adv_toggle {
-    uint8_t gpio;
-    
-    button_callback_fn low_callback_fn;
-    button_callback_fn high_callback_fn;
-    button_callback_fn both_callback_fn;
-    
-    void *args;
-    
-    bool state;
-    bool old_state;
-    volatile uint16_t value;
-    
-    struct _adv_toggle *next;
-} adv_toggle_t;
-
 static adv_button_t *buttons = NULL;
-static adv_toggle_t *toggles = NULL;
-static uint8_t used_gpio;
 static uint32_t disable_time = 0;
-static ETSTimer push_down_timer, push_up_timer;
 
 static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
     adv_button_t *button = buttons;
@@ -87,90 +71,64 @@ static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
     return button;
 }
 
-static adv_toggle_t *toggle_find_by_gpio(const uint8_t gpio) {
-    adv_toggle_t *toggle = toggles;
-    
-    while (toggle && toggle->gpio != gpio) {
-        toggle = toggle->next;
-    }
-    
-    return toggle;
-}
-
 IRAM void adv_button_set_disable_time() {
     disable_time = xTaskGetTickCountFromISR();
 }
 
-IRAM static void push_down_timer_callback() {
-    sdk_os_timer_disarm(&push_down_timer);
-    
+IRAM static void push_down(const uint8_t used_gpio) {
     const uint32_t now = xTaskGetTickCountFromISR();
     
     if (now - disable_time > DISABLE_TIME / portTICK_PERIOD_MS) {
-        if (gpio_read(used_gpio) == 0) {
-            adv_button_t *button = button_find_by_gpio(used_gpio);
+        adv_button_t *button = button_find_by_gpio(used_gpio);
+        if (button->singlepress0_callback_fn) {
+            button->singlepress0_callback_fn(used_gpio, button->args);
+        } else {
             sdk_os_timer_arm(&button->hold_timer, 2000, 1);
-            button->hold_count = 0;
-            button->last_event_time = now;
-            button->is_down = true;
         }
+        button->hold_count = 0;
+        button->last_event_time = now;
     }
 }
 
-IRAM static void push_up_timer_callback() {
-    sdk_os_timer_disarm(&push_up_timer);
-    
+IRAM static void push_up(const uint8_t used_gpio) {
     const uint32_t now = xTaskGetTickCountFromISR();
 
     if (now - disable_time > DISABLE_TIME / portTICK_PERIOD_MS) {
         adv_button_t *button = button_find_by_gpio(used_gpio);
-        if (gpio_read(used_gpio) == 1 && button->is_down) {
-            sdk_os_timer_disarm(&button->hold_timer);
-            button->is_down = false;
-            button->hold_count = 0;
-            
-            if (now - button->last_event_time > VERYLONGPRESS_TIME / portTICK_PERIOD_MS) {
-                // Very Long button pressed
-                button->press_count = 0;
-                if (button->verylongpress_callback_fn) {
-                    button->verylongpress_callback_fn(used_gpio, button->args);
-                } else if (button->longpress_callback_fn) {
-                    button->longpress_callback_fn(used_gpio, button->args);
-                } else {
-                    button->singlepress_callback_fn(used_gpio, button->args);
-                }
-            } else if (now - button->last_event_time > LONGPRESS_TIME / portTICK_PERIOD_MS) {
-                // Long button pressed
-                button->press_count = 0;
-                if (button->longpress_callback_fn) {
-                    button->longpress_callback_fn(used_gpio, button->args);
-                } else {
-                    button->singlepress_callback_fn(used_gpio, button->args);
-                }
-            } else if (button->doublepress_callback_fn) {
-                button->press_count++;
-                if (button->press_count > 1) {
-                    // Double button pressed
-                    sdk_os_timer_disarm(&button->press_timer);
-                    button->press_count = 0;
-                    button->doublepress_callback_fn(used_gpio, button->args);
-                } else {
-                    sdk_os_timer_arm(&button->press_timer, DOUBLEPRESS_TIME, 0);
-                }
+        sdk_os_timer_disarm(&button->hold_timer);
+        button->hold_count = 0;
+        
+        if (now - button->last_event_time > VERYLONGPRESS_TIME / portTICK_PERIOD_MS) {
+            // Very Long button pressed
+            button->press_count = 0;
+            if (button->verylongpress_callback_fn) {
+                button->verylongpress_callback_fn(used_gpio, button->args);
+            } else if (button->longpress_callback_fn) {
+                button->longpress_callback_fn(used_gpio, button->args);
             } else {
                 button->singlepress_callback_fn(used_gpio, button->args);
             }
+        } else if (now - button->last_event_time > LONGPRESS_TIME / portTICK_PERIOD_MS) {
+            // Long button pressed
+            button->press_count = 0;
+            if (button->longpress_callback_fn) {
+                button->longpress_callback_fn(used_gpio, button->args);
+            } else {
+                button->singlepress_callback_fn(used_gpio, button->args);
+            }
+        } else if (button->doublepress_callback_fn) {
+            button->press_count++;
+            if (button->press_count > 1) {
+                // Double button pressed
+                sdk_os_timer_disarm(&button->press_timer);
+                button->press_count = 0;
+                button->doublepress_callback_fn(used_gpio, button->args);
+            } else {
+                sdk_os_timer_arm(&button->press_timer, DOUBLEPRESS_TIME, 0);
+            }
+        } else {
+            button->singlepress_callback_fn(used_gpio, button->args);
         }
-    }
-}
-
-IRAM static void adv_button_intr_callback(const uint8_t gpio) {
-    used_gpio = gpio;
-    
-    if (gpio_read(used_gpio) == 1) {
-        sdk_os_timer_arm(&push_up_timer, DEBOUNCE_TIME, 0);
-    } else {
-        sdk_os_timer_arm(&push_down_timer, DEBOUNCE_TIME, 0);
     }
 }
 
@@ -210,24 +168,51 @@ static void adv_button_hold_callback(void *arg) {
     }
 }
 
+#define maxvalue_unsigned(x) ((1 << (8 * sizeof(x))) - 1)
+IRAM static void button_evaluate_fn() {        // Based on https://github.com/pcsaito/esp-homekit-demo/blob/LPFToggle/examples/sonoff_basic_toggle/toggle.c
+    while (1) {
+        adv_button_t *button = buttons;
+        
+        if (!buttons) {
+            vTaskDelete(NULL);
+        }
+        
+        while (button) {
+            button->value += ((gpio_read(button->gpio) * maxvalue_unsigned(button->value)) - button->value) >> 3;
+            button->state = (button->value > (maxvalue_unsigned(button->value) >> 1));
+            
+            if (button->state != button->old_state) {
+                button->old_state = button->state;
+                
+                if (gpio_read(button->gpio)) {      // 1
+                    push_up(button->gpio);
+                } else {                            // 0
+                    push_down(button->gpio);
+                }
+            }
+            
+            button = button->next;
+        }
+        
+        vTaskDelay(BUTTON_EVALUATE_DELAY / portTICK_PERIOD_MS);
+    }
+}
+
 int adv_button_create(const uint8_t gpio, bool pullup_resistor) {
     adv_button_t *button = button_find_by_gpio(gpio);
-    adv_toggle_t *toggle = toggle_find_by_gpio(gpio);
     
-    if (!button && !toggle) {
+    if (!button) {
         button = malloc(sizeof(adv_button_t));
         memset(button, 0, sizeof(*button));
         button->gpio = gpio;
         
         if (!buttons) {
-            sdk_os_timer_setfn(&push_down_timer, push_down_timer_callback, NULL);
-            sdk_os_timer_setfn(&push_up_timer, push_up_timer_callback, NULL);
+            xTaskCreate(button_evaluate_fn, "button_evaluate_fn", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
         }
         
         button->next = buttons;
         buttons = button;
         
-        button->is_down = false;
         button->hold_count = 0;
         button->press_count = 0;
         
@@ -236,7 +221,11 @@ int adv_button_create(const uint8_t gpio, bool pullup_resistor) {
         }
         
         gpio_set_pullup(button->gpio, pullup_resistor, pullup_resistor);
-        gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_intr_callback);
+        
+        button->state = gpio_read(button->gpio);
+        
+        button->old_state = button->state;
+        button->value = 32764;
         
         sdk_os_timer_setfn(&button->hold_timer, adv_button_hold_callback, button);
         sdk_os_timer_setfn(&button->press_timer, adv_button_single_callback, button);
@@ -249,83 +238,15 @@ int adv_button_create(const uint8_t gpio, bool pullup_resistor) {
     return -1;
 }
 
-#define maxvalue_unsigned(x) ((1 << (8 * sizeof(x))) - 1)
-IRAM static void toggle_evaluate_fn() {        // Based on https://github.com/pcsaito/esp-homekit-demo/blob/LPFToggle/examples/sonoff_basic_toggle/toggle.c
-    while (1) {
-        adv_toggle_t *toggle = toggles;
-        
-        if (!toggles) {
-            vTaskDelete(NULL);
-        }
-        
-        while (toggle) {
-            toggle->value += ((gpio_read(toggle->gpio) * maxvalue_unsigned(toggle->value)) - toggle->value) >> 3;
-            toggle->state = (toggle->value > (maxvalue_unsigned(toggle->value) >> 1));
-            
-            if (toggle->state != toggle->old_state) {
-                toggle->old_state = toggle->state;
-
-                if (toggle->both_callback_fn) {
-                    toggle->both_callback_fn(toggle->gpio, toggle->args);
-                }
-                
-                if (gpio_read(toggle->gpio)) {
-                    if (toggle->high_callback_fn) {
-                        toggle->high_callback_fn(toggle->gpio, toggle->args);
-                    }
-                } else {
-                    if (toggle->low_callback_fn) {
-                        toggle->low_callback_fn(toggle->gpio, toggle->args);
-                    }
-                }
-                
-            }
-            
-            toggle = toggle->next;
-        }
-
-        vTaskDelay(TOGGLE_EVALUATE_DELAY / portTICK_PERIOD_MS);
-    }
-}
-
-int adv_toggle_create(const uint8_t gpio, bool pullup_resistor) {
-    adv_button_t *button = button_find_by_gpio(gpio);
-    adv_toggle_t *toggle = toggle_find_by_gpio(gpio);
-    
-    if (!button && !toggle) {
-        toggle = malloc(sizeof(adv_toggle_t));
-        memset(toggle, 0, sizeof(*toggle));
-        toggle->gpio = gpio;
-        
-        if (!toggles) {
-            xTaskCreate(toggle_evaluate_fn, "toggle_evaluate_fn", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
-        }
-        
-        toggle->next = toggles;
-        toggles = toggle;
-        
-        if (toggle->gpio != 0) {
-            gpio_enable(toggle->gpio, GPIO_INPUT);
-        }
-        
-        gpio_set_pullup(toggle->gpio, pullup_resistor, pullup_resistor);
-        
-        toggle->state = gpio_read(toggle->gpio);
-        
-        toggle->old_state = toggle->state;
-        toggle->value = 32764;
-        
-        return 0;
-    }
-    
-    return -1;
-}
-
 int adv_button_register_callback_fn(const uint8_t gpio, button_callback_fn callback, const uint8_t button_callback_type, void *args) {
     adv_button_t *button = button_find_by_gpio(gpio);
     
     if (button) {
         switch (button_callback_type) {
+            case 0:
+                button->singlepress0_callback_fn = callback;
+                button->holdpress_callback_fn = NULL;
+                break;
             case 1:
                 if (callback) {
                     button->singlepress_callback_fn = callback;
@@ -348,6 +269,7 @@ int adv_button_register_callback_fn(const uint8_t gpio, button_callback_fn callb
                 
             case 5:
                 button->holdpress_callback_fn = callback;
+                button->singlepress0_callback_fn = NULL;
                 break;
                 
             default:
@@ -356,36 +278,6 @@ int adv_button_register_callback_fn(const uint8_t gpio, button_callback_fn callb
         }
         
         button->args = args;
-        return 0;
-    }
-    
-    return -1;
-}
-
-int adv_toggle_register_callback_fn(const uint8_t gpio, button_callback_fn callback, const uint8_t toggle_callback_type, void *args) {
-    adv_toggle_t *toggle = toggle_find_by_gpio(gpio);
-    
-    if (toggle) {
-        switch (toggle_callback_type) {
-            case 0:
-                toggle->low_callback_fn = callback;
-                break;
-                
-            case 1:
-                toggle->high_callback_fn = callback;
-                break;
-                
-            case 2:
-                toggle->both_callback_fn = callback;
-                break;
-                
-            default:
-                return -2;
-                break;
-        }
-        
-        toggle->args = args;
-        
         return 0;
     }
     
@@ -410,36 +302,9 @@ void adv_button_destroy(const uint8_t gpio) {
         }
 
         if (button) {
-            sdk_os_timer_disarm(&button->hold_timer);
-            sdk_os_timer_disarm(&button->press_timer);
             gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, NULL);
             if (button->gpio != 0) {
                 gpio_disable(button->gpio);
-            }
-        }
-    }
-}
-
-void adv_toggle_destroy(const uint8_t gpio) {
-    if (toggles) {
-        adv_toggle_t *toggle = NULL;
-        if (toggles->gpio == gpio) {
-            toggle = toggles;
-            toggles = toggles->next;
-        } else {
-            adv_toggle_t *b = toggles;
-            while (b->next) {
-                if (b->next->gpio == gpio) {
-                    toggle = b->next;
-                    b->next = b->next->next;
-                    break;
-                }
-            }
-        }
-        
-        if (toggle) {
-            if (toggle->gpio != 0) {
-                gpio_disable(toggle->gpio);
             }
         }
     }

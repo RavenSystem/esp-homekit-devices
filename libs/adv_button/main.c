@@ -28,6 +28,10 @@
 #define BUTTON_GPIO     0
 #endif
 
+#ifndef TOGGLE_GPIO
+#define TOGGLE_GPIO     2
+#endif
+
 void singlepress_callback(uint8_t gpio, void *args) {
     printf(">>>>> Example button: Single Press function called using GPIO->%i\n", gpio);
 }
@@ -48,6 +52,10 @@ void holdpress_callback(uint8_t gpio, void *args) {
     printf(">>>>> Example button: Hold Press function called using GPIO->%i\n", gpio);
 }
 
+void toggle_callback(uint8_t gpio, void *args) {
+    printf(">>>>> Example button: Toggle function called using GPIO->%i\n", gpio);
+}
+
 void user_init(void) {
     uart_set_baud(0, 115200);
     
@@ -60,4 +68,8 @@ void user_init(void) {
     adv_button_register_callback_fn(BUTTON_GPIO, longpress_callback, 3, NULL);
     adv_button_register_callback_fn(BUTTON_GPIO, verylongpress_callback, 4, NULL);
     adv_button_register_callback_fn(BUTTON_GPIO, holdpress_callback, 5, NULL);
+    
+    adv_button_create(TOGGLE_GPIO, true);
+    adv_button_register_callback_fn(TOGGLE_GPIO, toggle_callback, 0, NULL);     // Low
+    adv_button_register_callback_fn(TOGGLE_GPIO, toggle_callback, 1, NULL);     // High
 }
