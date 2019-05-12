@@ -61,7 +61,7 @@ void user_init(void) {
     
     printf("\n>>>>> ADV BUTTON EXAMPLE\n\n");
     
-    adv_button_create(BUTTON_GPIO, true);
+    adv_button_create(BUTTON_GPIO, true, false);
     
     adv_button_register_callback_fn(BUTTON_GPIO, singlepress_callback, 1, NULL);
     adv_button_register_callback_fn(BUTTON_GPIO, doublepress_callback, 2, NULL);
@@ -69,7 +69,7 @@ void user_init(void) {
     adv_button_register_callback_fn(BUTTON_GPIO, verylongpress_callback, 4, NULL);
     adv_button_register_callback_fn(BUTTON_GPIO, holdpress_callback, 5, NULL);
     
-    adv_button_create(TOGGLE_GPIO, true);
+    adv_button_create(TOGGLE_GPIO, true, false);
     adv_button_register_callback_fn(TOGGLE_GPIO, toggle_callback, 0, NULL);     // Low
     adv_button_register_callback_fn(TOGGLE_GPIO, toggle_callback, 1, NULL);     // High
 }

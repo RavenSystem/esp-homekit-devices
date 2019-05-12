@@ -35,6 +35,7 @@
 
 typedef struct _adv_button {
     uint8_t gpio;
+    bool inverted;
     
     button_callback_fn singlepress0_callback_fn;
     button_callback_fn singlepress_callback_fn;
@@ -136,7 +137,7 @@ IRAM static void push_up(const uint8_t used_gpio) {
     }
 }
 
-static void no_function_callback(uint8_t gpio, void *args) {
+static void no_function_callback(const uint8_t gpio, void *args) {
     printf("!!! AdvButton: No function defined\n");
 }
 
@@ -191,7 +192,7 @@ IRAM static void button_evaluate_fn() {        // Based on https://github.com/pc
             if (button->state != button->old_state) {
                 button->old_state = button->state;
                 
-                if (gpio_read(button->gpio)) {      // 1
+                if (gpio_read(button->gpio) ^ button->inverted) {      // 1
                     push_up(button->gpio);
                 } else {                            // 0
                     push_down(button->gpio);
@@ -205,13 +206,14 @@ IRAM static void button_evaluate_fn() {        // Based on https://github.com/pc
     }
 }
 
-int adv_button_create(const uint8_t gpio, bool pullup_resistor) {
+int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool inverted) {
     adv_button_t *button = button_find_by_gpio(gpio);
     
     if (!button) {
         button = malloc(sizeof(adv_button_t));
         memset(button, 0, sizeof(*button));
         button->gpio = gpio;
+        button->inverted = inverted;
         
         if (!buttons) {
             xTaskCreate(button_evaluate_fn, "button_evaluate_fn", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
@@ -245,7 +247,7 @@ int adv_button_create(const uint8_t gpio, bool pullup_resistor) {
     return -1;
 }
 
-int adv_button_register_callback_fn(const uint8_t gpio, button_callback_fn callback, const uint8_t button_callback_type, void *args) {
+int adv_button_register_callback_fn(const uint8_t gpio, const button_callback_fn callback, const uint8_t button_callback_type, void *args) {
     adv_button_t *button = button_find_by_gpio(gpio);
     
     if (button) {

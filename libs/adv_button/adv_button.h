@@ -26,29 +26,19 @@
 
 typedef void (*button_callback_fn)(uint8_t gpio, void *args);
 
-int adv_button_create(uint8_t gpio, bool pullup_resistor);
-void adv_button_destroy(uint8_t gpio);
+int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool inverted);
+void adv_button_destroy(const uint8_t gpio);
 void adv_button_set_disable_time();
-
-int adv_toggle_create(uint8_t gpio, bool pullup_resistor);
-void adv_toggle_destroy(uint8_t gpio);
 
 /*
  * Button callback types:
+ * 0 Single press (inverted to 1)
  * 1 Single press
  * 2 Double press
  * 3 Long press
  * 4 Very long press
  * 5 Hold press
  */
-int adv_button_register_callback_fn(uint8_t gpio, button_callback_fn callback, uint8_t button_callback_type, void *args);
-
-/*
- * Toggle callback types:
- * 0 Low
- * 1 High
- * 2 Both
- */
-int adv_toggle_register_callback_fn(uint8_t gpio, button_callback_fn callback, uint8_t toggle_callback_type, void *args);
+int adv_button_register_callback_fn(const uint8_t gpio, const button_callback_fn callback, const uint8_t button_callback_type, void *args);
 
 #endif // __ADVANCED_BUTTON__
