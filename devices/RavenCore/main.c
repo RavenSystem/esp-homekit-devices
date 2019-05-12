@@ -1804,7 +1804,7 @@ void hardware_init() {
         gpio_enable(led_gpio, GPIO_OUTPUT);
         gpio_write(led_gpio, false);
         
-        adv_button_create(button1_gpio, true);
+        adv_button_create(button1_gpio, true, false);
     }
     
     void register_button_event(const uint8_t gpio) {
@@ -1830,7 +1830,7 @@ void hardware_init() {
                 button2_gpio = S25_TOGGLE2_GPIO;
                 led_gpio = S25_LED_GPIO;
                 
-                adv_button_create(S25_BUTTON_GPIO, false);
+                adv_button_create(S25_BUTTON_GPIO, false, false);
                 adv_button_register_callback_fn(S25_BUTTON_GPIO, factory_default_call, 5, NULL);
                 
                 gpio_enable(led_gpio, GPIO_OUTPUT);
@@ -1842,7 +1842,7 @@ void hardware_init() {
                 
                 adv_button_destroy(button1_gpio);
                 
-                adv_button_create(BUTTON3_GPIO, true);
+                adv_button_create(BUTTON3_GPIO, true, false);
                 
                 adv_button_register_callback_fn(BUTTON3_GPIO, button_simple1_intr_callback, 1, NULL);
                 adv_button_register_callback_fn(BUTTON3_GPIO, button_simple2_intr_callback, 2, NULL);
@@ -1855,18 +1855,18 @@ void hardware_init() {
             
             switch (external_toggle1.value.int_value) {
                 case 1:
-                    adv_button_create(button1_gpio, pullup);
+                    adv_button_create(button1_gpio, pullup, false);
                     adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1, NULL);
                     break;
                     
                 case 2:
-                    adv_button_create(button1_gpio, pullup);
+                    adv_button_create(button1_gpio, pullup, false);
                     adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 0, NULL);
                     adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1, NULL);
                     break;
                     
                 case 3:
-                    adv_button_create(button1_gpio, pullup);
+                    adv_button_create(button1_gpio, pullup, false);
                     adv_button_register_callback_fn(button1_gpio, button_dual_rotation_intr_callback, 1, NULL);
                     break;
                     
@@ -1876,18 +1876,18 @@ void hardware_init() {
             
             switch (external_toggle2.value.int_value) {
                 case 1:
-                    adv_button_create(button2_gpio, pullup);
+                    adv_button_create(button2_gpio, pullup, false);
                     adv_button_register_callback_fn(button2_gpio, button_simple2_intr_callback, 1, NULL);
                     break;
                     
                 case 2:
-                    adv_button_create(button2_gpio, pullup);
+                    adv_button_create(button2_gpio, pullup, false);
                     adv_button_register_callback_fn(button2_gpio, button_simple2_intr_callback, 0, NULL);
                     adv_button_register_callback_fn(button2_gpio, button_simple2_intr_callback, 1, NULL);
                     break;
                     
                 case 3:
-                    adv_button_create(button2_gpio, pullup);
+                    adv_button_create(button2_gpio, pullup, false);
                     adv_button_register_callback_fn(button2_gpio, button_dual_rotation_intr_callback, 1, NULL);
                     break;
                     
@@ -1919,13 +1919,13 @@ void hardware_init() {
             adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1, NULL);
             adv_button_register_callback_fn(button1_gpio, factory_default_call, 5, NULL);
             
-            adv_button_create(button2_gpio, true);
+            adv_button_create(button2_gpio, true, false);
             adv_button_register_callback_fn(button2_gpio, button_simple2_intr_callback, 1, NULL);
             
-            adv_button_create(BUTTON3_GPIO, true);
+            adv_button_create(BUTTON3_GPIO, true, false);
             adv_button_register_callback_fn(BUTTON3_GPIO, button_simple3_intr_callback, 1, NULL);
             
-            adv_button_create(extra_gpio, true);
+            adv_button_create(extra_gpio, true, false);
             adv_button_register_callback_fn(extra_gpio, button_simple4_intr_callback, 1, NULL);
             
             gpio_enable(relay1_gpio, GPIO_OUTPUT);
@@ -2003,7 +2003,7 @@ void hardware_init() {
             adv_button_register_callback_fn(button1_gpio, garage_on_button, 1, NULL);
             adv_button_register_callback_fn(button1_gpio, factory_default_call, 5, NULL);
             
-            adv_button_create(extra_gpio, true);
+            adv_button_create(extra_gpio, true, false);
             
             if (custom_garagedoor_sensor_close_nc.value.bool_value) {
                 adv_button_register_callback_fn(extra_gpio, door_closed_1_fn_callback, 0, NULL);
@@ -2014,7 +2014,7 @@ void hardware_init() {
             }
             
             if (custom_garagedoor_sensor_open.value.int_value > 0) {
-                adv_button_create(DOOR_OPENED_GPIO, true);
+                adv_button_create(DOOR_OPENED_GPIO, true, false);
                 
                 if (custom_garagedoor_sensor_open.value.int_value == 2) {
                     adv_button_register_callback_fn(DOOR_OPENED_GPIO, door_opened_1_fn_callback, 0, NULL);
@@ -2029,7 +2029,7 @@ void hardware_init() {
             }
             
             if (custom_garagedoor_sensor_obstruction.value.int_value > 0) {
-                adv_button_create(DOOR_OBSTRUCTION_GPIO, true);
+                adv_button_create(DOOR_OBSTRUCTION_GPIO, true, false);
                 
                 if (custom_garagedoor_sensor_obstruction.value.int_value == 2) {
                     adv_button_register_callback_fn(DOOR_OBSTRUCTION_GPIO, door_obstructed_1_fn_callback, 0, NULL);
@@ -2072,7 +2072,7 @@ void hardware_init() {
                 adv_button_destroy(button1_gpio);
                 button1_gpio = 2;
                 relay1_gpio = 0;
-                adv_button_create(button1_gpio, true);
+                adv_button_create(button1_gpio, true, false);
             } else {
                 relay1_gpio = 2;
             }
@@ -2090,10 +2090,10 @@ void hardware_init() {
             adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1, NULL);
             adv_button_register_callback_fn(button1_gpio, factory_default_call, 5, NULL);
             
-            adv_button_create(button2_gpio, true);
+            adv_button_create(button2_gpio, true, false);
             adv_button_register_callback_fn(button2_gpio, button_simple2_intr_callback, 1, NULL);
             
-            adv_button_create(BUTTON3_GPIO, true);
+            adv_button_create(BUTTON3_GPIO, true, false);
             adv_button_register_callback_fn(BUTTON3_GPIO, button_simple3_intr_callback, 1, NULL);
             
             gpio_enable(relay1_gpio, GPIO_OUTPUT);
@@ -2123,7 +2123,7 @@ void hardware_init() {
                 gpio_enable(led_gpio, GPIO_OUTPUT);
                 gpio_write(led_gpio, false);
                 
-                adv_button_create(S25_BUTTON_GPIO, false);
+                adv_button_create(S25_BUTTON_GPIO, false, false);
                 adv_button_register_callback_fn(S25_BUTTON_GPIO, factory_default_call, 5, NULL);
                 
                 pullup = false;
@@ -2132,7 +2132,7 @@ void hardware_init() {
                 
                 adv_button_destroy(button1_gpio);
                 
-                adv_button_create(BUTTON3_GPIO, true);
+                adv_button_create(BUTTON3_GPIO, true, false);
                 adv_button_register_callback_fn(BUTTON3_GPIO, factory_default_call, 5, NULL);
                 
                 if (board_type.value.int_value == 4) {
@@ -2142,19 +2142,19 @@ void hardware_init() {
             
             switch (external_toggle1.value.int_value) {
                 case 1:
-                    adv_button_create(button1_gpio, pullup);
+                    adv_button_create(button1_gpio, pullup, false);
                     adv_button_register_callback_fn(button1_gpio, covering_button_down, 1, NULL);
                     
-                    adv_button_create(button2_gpio, pullup);
+                    adv_button_create(button2_gpio, pullup, false);
                     adv_button_register_callback_fn(button2_gpio, covering_button_up, 1, NULL);
                     break;
                     
                 case 2:
-                    adv_button_create(button1_gpio, pullup);
+                    adv_button_create(button1_gpio, pullup, false);
                     adv_button_register_callback_fn(button1_gpio, covering_toggle_down, 0, NULL);
                     adv_button_register_callback_fn(button1_gpio, covering_toggle_stop, 1, NULL);
                     
-                    adv_button_create(button2_gpio, pullup);
+                    adv_button_create(button2_gpio, pullup, false);
                     adv_button_register_callback_fn(button2_gpio, covering_toggle_up, 0, NULL);
                     adv_button_register_callback_fn(button2_gpio, covering_toggle_stop, 1, NULL);
                     break;
@@ -2194,10 +2194,10 @@ void hardware_init() {
             
             switch (external_toggle1.value.int_value) {
                 case 1:
-                    adv_button_create(extra_gpio, pullup);
+                    adv_button_create(extra_gpio, pullup, false);
                     adv_button_register_callback_fn(extra_gpio, lock_intr_callback, 1, NULL);
                 case 2:
-                    adv_button_create(extra_gpio, pullup);
+                    adv_button_create(extra_gpio, pullup, false);
                     adv_button_register_callback_fn(extra_gpio, lock_intr_callback, 0, NULL);
                     adv_button_register_callback_fn(extra_gpio, lock_intr_callback, 1, NULL);
                     break;
@@ -2212,7 +2212,7 @@ void hardware_init() {
             break;
             
         case 14:
-            adv_button_create(button1_gpio, true);
+            adv_button_create(button1_gpio, true, false);
             adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1, NULL);
             adv_button_register_callback_fn(button1_gpio, factory_default_call, 5, NULL);
             
@@ -2281,7 +2281,7 @@ void hardware_init() {
                 custom_w_gpio.value.int_value = INITIAL_W_GPIO;
             }
             
-            adv_button_create(custom_w_gpio.value.int_value, pullup);
+            adv_button_create(custom_w_gpio.value.int_value, pullup, false);
             
             adv_button_register_callback_fn(custom_w_gpio.value.int_value, button_event1_intr_callback, 1, NULL);
             adv_button_register_callback_fn(custom_w_gpio.value.int_value, button_event2_intr_callback, 2, NULL);
@@ -2304,12 +2304,12 @@ void hardware_init() {
             
             switch (external_toggle1.value.int_value) {
                 case 1:
-                    adv_button_create(extra_gpio, pullup);
+                    adv_button_create(extra_gpio, pullup, false);
                     adv_button_register_callback_fn(extra_gpio, button_simple1_intr_callback, 1, NULL);
                     break;
                     
                 case 2:
-                    adv_button_create(extra_gpio, pullup);
+                    adv_button_create(extra_gpio, pullup, false);
                     adv_button_register_callback_fn(extra_gpio, button_simple1_intr_callback, 0, NULL);
                     adv_button_register_callback_fn(extra_gpio, button_simple1_intr_callback, 1, NULL);
                     break;
