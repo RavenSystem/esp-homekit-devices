@@ -14,6 +14,9 @@
 
 #include "form_urlencoded.h"
 
+#include <rboot-api.h>
+#include <homekit/homekit.h>
+
 #define WIFI_CONFIG_SERVER_PORT 80
 
 #ifndef WIFI_CONFIG_CONNECT_TIMEOUT
@@ -201,7 +204,15 @@ static void wifi_config_server_on_settings(client_t *client) {
 
     client_send(client, http_prologue, sizeof(http_prologue)-1);
     client_send_chunk(client, html_settings_header);
+    
+    char *json = NULL;
+    sysparam_get_string("haa_conf", &json);
 
+    client_send_chunk(client, json);
+    free(json);
+
+    client_send_chunk(client, html_settings_middle);
+    
     char buffer[64];
     if (xSemaphoreTake(wifi_networks_mutex, 5000 / portTICK_PERIOD_MS)) {
         wifi_network_info_t *net = wifi_networks;
@@ -234,14 +245,10 @@ static void wifi_config_server_on_settings_update(client_t *client) {
     }
     
     form_param_t *conf_param = form_params_find(form, "conf");
+    form_param_t *reset_param = form_params_find(form, "reset");
+    form_param_t *ota_param = form_params_find(form, "ota");
     form_param_t *ssid_param = form_params_find(form, "ssid");
     form_param_t *password_param = form_params_find(form, "password");
-    
-    if (!conf_param->value) {
-        form_params_free(form);
-        client_send_redirect(client, 302, "/settings");
-        return;
-    }
     
     static const char payload[] = "HTTP/1.1 204 \r\nContent-Type: text/html\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
     client_send(client, payload, sizeof(payload)-1);
@@ -270,9 +277,23 @@ static void wifi_config_server_on_settings_update(client_t *client) {
         
     }
 
-    sysparam_set_string("haa_conf", conf_param->value);
+    if (conf_param->value) {
+        sysparam_set_string("haa_conf", conf_param->value);
+    }
     
-    form_params_free(form);
+    vTaskDelay(300 / portTICK_PERIOD_MS);
+    sysparam_compact();
+    vTaskDelay(900 / portTICK_PERIOD_MS);
+    
+    if (ota_param) {
+        INFO("Enable OTA Update");
+        rboot_set_temp_rom(1);
+    }
+    
+    if (reset_param) {
+        INFO("Reset HomeKit ID");
+        homekit_server_reset();
+    }
 
     INFO("Restarting...");
     vTaskDelay(2000 / portTICK_PERIOD_MS);

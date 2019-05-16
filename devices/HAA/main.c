@@ -1,9 +1,9 @@
 /*
- * HAA
+ * Home Accessory Architect
+ *
+ * v0.0.2
  * 
- * v0.0.1
- * 
- * Copyright 2018 José A. Jiménez (@RavenSystem)
+ * Copyright 2019 José A. Jiménez (@RavenSystem)
  *  
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.0.1"
-#define FIRMWARE_VERSION_OCTAL          000001      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.0.2"
+#define FIRMWARE_VERSION_OCTAL          000002      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // JSON
 #define GENERAL_CONFIG                  "c"
@@ -94,7 +94,7 @@ void led_task(void *pvParameters) {
 
 void setup_mode_task() {
     sysparam_set_bool("setup", true);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    vTaskDelay(3000 / portTICK_PERIOD_MS);
     sdk_system_restart();
 }
 
@@ -111,7 +111,7 @@ void setup_mode_call(const uint8_t gpio) {
 
 void setup_mode_toggle_upcount() {
     setup_mode_toggle_counter++;
-    sdk_os_timer_arm(&setup_mode_toggle_timer, 3100, 0);
+    sdk_os_timer_arm(&setup_mode_toggle_timer, 1000, 0);
 }
 
 void setup_mode_toggle() {
@@ -251,7 +251,8 @@ void normal_mode_init() {
         
         switch (acc_type) {
             case ACC_TYPE_OUTLET:
-                // TODO
+                hk_total_ac += 1;
+                hk_total_ch += 2;
                 break;
                 
             default:    // case ACC_TYPE_SWITCH:
@@ -269,38 +270,8 @@ void normal_mode_init() {
     homekit_accessory_t **accessories = calloc(hk_total_ac, sizeof(homekit_accessory_t*));
     homekit_characteristic_t *hk_ch[hk_total_ch];
     
-    // Define services and characteristics
-    void new_accessory(const uint8_t accessory) {
-        accessories[accessory] = calloc(1, sizeof(homekit_accessory_t));
-        accessories[accessory]->id = accessory + 1;
-        accessories[accessory]->services = calloc(3, sizeof(homekit_service_t*));
-        
-        accessories[accessory]->services[0] = calloc(1, sizeof(homekit_service_t));
-        accessories[accessory]->services[0]->id = 1;
-        accessories[accessory]->services[0]->type = HOMEKIT_SERVICE_ACCESSORY_INFORMATION;
-        accessories[accessory]->services[0]->characteristics = calloc(7, sizeof(homekit_characteristic_t*));
-        accessories[accessory]->services[0]->characteristics[0] = &name;
-        accessories[accessory]->services[0]->characteristics[1] = &manufacturer;
-        accessories[accessory]->services[0]->characteristics[2] = &serial;
-        accessories[accessory]->services[0]->characteristics[3] = &model;
-        accessories[accessory]->services[0]->characteristics[4] = &firmware;
-        accessories[accessory]->services[0]->characteristics[5] = &identify_function;
-    }
-
-    void new_switch(const int accessory, const int ch_number, cJSON *json_context) {
-        new_accessory(accessory);
-        
-        hk_ch[ch_number] = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .getter_ex=hkc_getter, .setter_ex=hkc_on_setter, .context=json_context);
-        
-        accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
-        accessories[accessory]->services[1]->id = 8;
-        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_SWITCH;
-        accessories[accessory]->services[1]->primary = true;
-        accessories[accessory]->services[1]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
-        accessories[accessory]->services[1]->characteristics[0] = hk_ch[ch_number];
-        
-        // Buttons GPIO Setup
-        cJSON *json_buttons = cJSON_GetObjectItem(json_context, BUTTONS_ARRAY);
+    // Buttons GPIO Setup
+    void buttons_setup(cJSON *json_buttons, void *hk_ch) {
         for(int j=0; j<cJSON_GetArraySize(json_buttons); j++) {
             const uint8_t gpio = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PIN_GPIO)->valuedouble;
             bool pullup_resistor = false;
@@ -321,9 +292,64 @@ void normal_mode_init() {
             }
             
             adv_button_create(gpio, pullup_resistor, inverted);
-            adv_button_register_callback_fn(gpio, button_on, button_type, (void*) hk_ch[ch_number]);
+            adv_button_register_callback_fn(gpio, button_on, button_type, hk_ch);
             printf("HAA > Enable button GPIO %i, type=%i, inverted=%i\n", gpio, button_type, inverted);
         }
+    }
+    
+    // Define services and characteristics
+    void new_accessory(const uint8_t accessory) {
+        accessories[accessory] = calloc(1, sizeof(homekit_accessory_t));
+        accessories[accessory]->id = accessory + 1;
+        accessories[accessory]->services = calloc(3, sizeof(homekit_service_t*));
+        
+        accessories[accessory]->services[0] = calloc(1, sizeof(homekit_service_t));
+        accessories[accessory]->services[0]->id = 1;
+        accessories[accessory]->services[0]->type = HOMEKIT_SERVICE_ACCESSORY_INFORMATION;
+        accessories[accessory]->services[0]->characteristics = calloc(7, sizeof(homekit_characteristic_t*));
+        accessories[accessory]->services[0]->characteristics[0] = &name;
+        accessories[accessory]->services[0]->characteristics[1] = &manufacturer;
+        accessories[accessory]->services[0]->characteristics[2] = &serial;
+        accessories[accessory]->services[0]->characteristics[3] = &model;
+        accessories[accessory]->services[0]->characteristics[4] = &firmware;
+        accessories[accessory]->services[0]->characteristics[5] = &identify_function;
+    }
+
+    int new_switch(const int accessory, const int ch_number, cJSON *json_context) {
+        new_accessory(accessory);
+        
+        hk_ch[ch_number] = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .getter_ex=hkc_getter, .setter_ex=hkc_on_setter, .context=json_context);
+        
+        accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
+        accessories[accessory]->services[1]->id = 8;
+        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_SWITCH;
+        accessories[accessory]->services[1]->primary = true;
+        accessories[accessory]->services[1]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
+        accessories[accessory]->services[1]->characteristics[0] = hk_ch[ch_number];
+        
+        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), (void*) hk_ch[ch_number]);
+        
+        return ch_number +1;
+    }
+    
+    int new_outlet(const int accessory, int ch_number, cJSON *json_context) {
+        new_accessory(accessory);
+        
+        hk_ch[ch_number] = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .getter_ex=hkc_getter, .setter_ex=hkc_on_setter, .context=json_context);
+        
+        accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
+        accessories[accessory]->services[1]->id = 8;
+        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_OUTLET;
+        accessories[accessory]->services[1]->primary = true;
+        accessories[accessory]->services[1]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
+        accessories[accessory]->services[1]->characteristics[0] = hk_ch[ch_number];
+        ch_number++;
+        hk_ch[ch_number] = NEW_HOMEKIT_CHARACTERISTIC(OUTLET_IN_USE, true, .getter_ex=hkc_getter, .context=json_context);
+        accessories[accessory]->services[1]->characteristics[1] = hk_ch[ch_number];
+        
+        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), (void*) hk_ch[ch_number]);
+        
+        return ch_number +1;
     }
     
     // Accessory Builder
@@ -352,13 +378,15 @@ void normal_mode_init() {
         }
         
         if (acc_type == ACC_TYPE_OUTLET) {
-            // TODO
+            ch_count = new_outlet(acc_count, ch_count, cJSON_GetArrayItem(json_accessories, i));
+            acc_count += 1;
         } else {    // case ACC_TYPE_SWITCH:
-            new_switch(acc_count, ch_count, cJSON_GetArrayItem(json_accessories, i));
-            ch_count += 1;
+            ch_count = new_switch(acc_count, ch_count, cJSON_GetArrayItem(json_accessories, i));
             acc_count += 1;
         }
     }
+    
+    // -----
     
     cJSON_Delete(json_config);
 
