@@ -690,16 +690,21 @@ static int wifi_config_station_connect() {
     sysparam_get_string("wifi_ssid", &wifi_ssid);
     sysparam_get_string("wifi_password", &wifi_password);
 
+    sysparam_status_t status;
     bool haa_setup = false;
-    sysparam_get_bool("setup", &haa_setup);
+    status = sysparam_get_bool("setup", &haa_setup);
     
-    if (haa_setup) {
-        DEBUG("HAA Setup mode");
+    if (status == SYSPARAM_OK && haa_setup == true) {
+        INFO("HAA Setup mode");
         sysparam_set_bool("setup", false);
-        if (wifi_ssid)
+
+        if (wifi_ssid) {
             free(wifi_ssid);
-        if (wifi_password)
+        }
+        if (wifi_password) {
             free(wifi_password);
+        }
+        
         return -1;
     }
     

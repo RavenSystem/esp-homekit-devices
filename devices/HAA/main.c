@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.0.3
+ * v0.0.4
  * 
  * Copyright 2019 José A. Jiménez (@RavenSystem)
  *  
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.0.3"
-#define FIRMWARE_VERSION_OCTAL          000003      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.0.4"
+#define FIRMWARE_VERSION_OCTAL          000004      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // JSON
 #define GENERAL_CONFIG                  "c"
@@ -152,14 +152,6 @@ void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
     }
     
     setup_mode_toggle_upcount();
-}
-
-void hkc_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
-    printf("HAA > Setter\n");
-    LED_BLINK(1);
-    
-    ch->value = value;
-    homekit_characteristic_notify(ch, ch->value);
 }
 
 void button_on(const uint8_t gpio, void *args) {
@@ -532,10 +524,12 @@ void normal_mode_init() {
 }
 
 void user_init(void) {
-    bool haa_setup;
-    sysparam_get_bool("setup", &haa_setup);
-    if (haa_setup) {
+    sysparam_status_t status;
+    bool haa_setup = false;
+    status = sysparam_get_bool("setup", &haa_setup);
+    if (status == SYSPARAM_OK && haa_setup == true) {
         uart_set_baud(0, 115200);
+        printf("\n\nHAA > Home Accessory Architect\nHAA > Developed by @RavenSystem - José Antonio Jiménez\nHAA > Version: %s\n\n", FIRMWARE_VERSION);
         printf("HAA > Running in SETUP mode...\n");
         wifi_config_init("HAA", NULL, NULL);
     } else {
