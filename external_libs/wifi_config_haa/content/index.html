@@ -1,5 +1,4 @@
-<!-- part HTML_SETTINGS_HEADER -->
-<!DOCTYPE html>
+<!-- part HTML_SETTINGS_HEADER --><!DOCTYPE html>
 <html>
 <head>
 <title>HAA</title>
@@ -50,7 +49,7 @@ padding-left: 1.1em;
 </head>
 <body>
 <div class="container">
-<h1>Home Accessory Architect v0.0.2</h1>
+<h1>Home Accessory Architect v0.0.3</h1>
 <form action="/settings" method="get">
 <input type="submit" id="refresh" value="⟲ Refresh" />
 </form>
@@ -58,25 +57,20 @@ padding-left: 1.1em;
 <div class="field required conf">
 <label for="conf">JSON:</label>
 <textarea id="conf" name="conf">
-<!-- part HTML_JSON_ITEM -->
-{{ network.json }}
-<!-- part HTML_SETTINGS_MIDDLE -->
-</textarea>
+<!-- part HTML_SETTINGS_MIDDLE --></textarea>
 <br>
 <input type="checkbox" name="reset" value="y"> Reset HomeKit ID<br>
-<input type="checkbox" name="ota" value="y"> OTA Update<br>
-</div>
+<!-- part HTML_SETTINGS_OTA --><input type="checkbox" name="ota" value="y"> OTA Update<br>
+<!-- part HTML_SETTINGS_POSTOTA --></div>
 <input type="submit" id="join" value="Save" />
 <div class="nonetworks" style="display: none;">
 No networks found
 </div>
 <ul id="networks" class="networks">
-<!-- part HTML_NETWORK_ITEM -->
-{% for network in networks %}
+<!-- part HTML_NETWORK_ITEM -->{% for network in networks %}
 <li class="{{ network.secure | ternary('secure', 'unsecure') }}">{{ network.ssid }}</li>
 {% endfor %}
-<!-- part HTML_SETTINGS_FOOTER -->
-<li class="other">Enter SSID manually</li>
+<!-- part HTML_SETTINGS_FOOTER --><li class="other">Enter SSID manually</li>
 </ul>
 <div class="field required ssid" style="display: none;">
 <label for="ssid">SSID:</label>
@@ -171,6 +165,4 @@ f = disable;
 }
 f(join_button);
 }
-</script>
-</body>
-</html>
+</script></body></html>

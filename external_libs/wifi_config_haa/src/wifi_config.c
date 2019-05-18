@@ -206,12 +206,23 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send_chunk(client, html_settings_header);
     
     char *json = NULL;
-    sysparam_get_string("haa_conf", &json);
-
-    client_send_chunk(client, json);
-    free(json);
+    sysparam_status_t status;
+    status = sysparam_get_string("haa_conf", &json);
+    if (status == SYSPARAM_OK) {
+        client_send_chunk(client, json);
+        free(json);
+    }
 
     client_send_chunk(client, html_settings_middle);
+    
+    char *ota = NULL;
+    status = sysparam_get_string("ota_repo", &ota);
+    if (status == SYSPARAM_OK) {
+        client_send_chunk(client, html_settings_ota);
+        free(ota);
+    }
+    
+    client_send_chunk(client, html_settings_postota);
     
     char buffer[64];
     if (xSemaphoreTake(wifi_networks_mutex, 5000 / portTICK_PERIOD_MS)) {
@@ -280,6 +291,8 @@ static void wifi_config_server_on_settings_update(client_t *client) {
     if (conf_param->value) {
         sysparam_set_string("haa_conf", conf_param->value);
     }
+    
+    sysparam_set_bool("setup", false);
     
     vTaskDelay(300 / portTICK_PERIOD_MS);
     sysparam_compact();
@@ -677,7 +690,7 @@ static int wifi_config_station_connect() {
     sysparam_get_string("wifi_ssid", &wifi_ssid);
     sysparam_get_string("wifi_password", &wifi_password);
 
-    bool haa_setup;
+    bool haa_setup = false;
     sysparam_get_bool("setup", &haa_setup);
     
     if (haa_setup) {

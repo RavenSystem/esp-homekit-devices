@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.0.2
+ * v0.0.3
  * 
  * Copyright 2019 José A. Jiménez (@RavenSystem)
  *  
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.0.2"
-#define FIRMWARE_VERSION_OCTAL          000002      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.0.3"
+#define FIRMWARE_VERSION_OCTAL          000003      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // JSON
 #define GENERAL_CONFIG                  "c"
@@ -73,6 +73,7 @@
 
 uint8_t setup_mode_toggle_counter = 0, led_gpio = 255;
 ETSTimer setup_mode_toggle_timer;
+bool used_gpio[17];
 bool led_inverted = false;
 
 void led_task(void *pvParameters) {
@@ -125,32 +126,40 @@ void setup_mode_toggle() {
 // -----
 
 homekit_value_t hkc_getter(const homekit_characteristic_t *ch) {
+    printf("HAA > Getter\n");
     return ch->value;
 }
 
 void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
+    printf("HAA > Setter ON\n");
+    LED_BLINK(1);
+    
     ch->value = value;
     homekit_characteristic_notify(ch, ch->value);
     
     cJSON *json_context = ch->context;
-
-    printf("HAA > Setter ON\n");
-    LED_BLINK(1);
-
     cJSON *json_relays = cJSON_GetObjectItem(json_context, RELAYS_ARRAY);
     
-    for(int i=0; i<cJSON_GetArraySize(json_relays); i++) {
-        const int gpio = (int) cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, i), PIN_GPIO)->valuedouble;
+    for(uint8_t i=0; i<cJSON_GetArraySize(json_relays); i++) {
+        const uint8_t gpio = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, i), PIN_GPIO)->valuedouble;
         bool inverted = false;
         if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, i), INVERTED) != NULL) {
             inverted = (bool) cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, i), INVERTED)->valuedouble;
         }
         const bool relay_value = value.bool_value ^ inverted;
         gpio_write(gpio, relay_value);
-        printf("HAA > Relay GPIO %i -> %i\n", gpio, relay_value);
+        printf("HAA > Output GPIO %i -> %i\n", gpio, relay_value);
     }
     
     setup_mode_toggle_upcount();
+}
+
+void hkc_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
+    printf("HAA > Setter\n");
+    LED_BLINK(1);
+    
+    ch->value = value;
+    homekit_characteristic_notify(ch, ch->value);
 }
 
 void button_on(const uint8_t gpio, void *args) {
@@ -159,19 +168,53 @@ void button_on(const uint8_t gpio, void *args) {
     hkc_on_setter(ch, ch->value);
 }
 
+void button_event1(const uint8_t gpio, void *args) {
+    homekit_characteristic_t *ch = args;
+    homekit_characteristic_notify(ch, HOMEKIT_UINT8(0));
+    printf("HAA > Single press event\n");
+    LED_BLINK(1);
+    
+    setup_mode_toggle_upcount();
+}
+
+void button_event2(const uint8_t gpio, void *args) {
+    homekit_characteristic_t *ch = args;
+    homekit_characteristic_notify(ch, HOMEKIT_UINT8(1));
+    printf("HAA > Double press event\n");
+    LED_BLINK(2);
+    
+    setup_mode_toggle_upcount();
+}
+
+void button_event3(const uint8_t gpio, void *args) {
+    homekit_characteristic_t *ch = args;
+    homekit_characteristic_notify(ch, HOMEKIT_UINT8(2));
+    printf("HAA > Long press event\n");
+    LED_BLINK(3);
+}
+
 void identify(homekit_value_t _value) {
     printf("HAA > Identifying\n");
     LED_BLINK(6);
 }
 
 // ---------
-
+/*
 void *memdup(const void *src, size_t size) {
     void *dst = malloc(size);
     return dst ? memcpy(dst, src, size) : NULL;
 }
 
-#define NEW_HOMEKIT_CHARACTERISTIC(name, ...)   (homekit_characteristic_t*)memdup((homekit_characteristic_t[]){HOMEKIT_CHARACTERISTIC_(name, ##__VA_ARGS__)}, sizeof(homekit_characteristic_t))
+#define NEW_HOMEKIT_CHARACTERISTIC(name, ...)   (homekit_characteristic_t*) memdup((homekit_characteristic_t[]){HOMEKIT_CHARACTERISTIC_(name, ##__VA_ARGS__)}, sizeof(homekit_characteristic_t))
+*/
+
+void *memdup(void *data, size_t data_size) {
+    void *result = malloc(data_size);
+    memcpy(result, data, data_size);
+    return result;
+}
+
+#define NEW_HOMEKIT_CHARACTERISTIC(name, ...)   memdup(HOMEKIT_CHARACTERISTIC(name, ##__VA_ARGS__), sizeof(homekit_characteristic_t))
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, NULL);
 homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, NULL);
@@ -179,6 +222,8 @@ homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, "R
 homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "HAA");
 homekit_characteristic_t identify_function = HOMEKIT_CHARACTERISTIC_(IDENTIFY, identify);
 homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, FIRMWARE_VERSION);
+
+homekit_characteristic_t button_event = HOMEKIT_CHARACTERISTIC_(PROGRAMMABLE_SWITCH_EVENT, 0);
 
 homekit_server_config_t config;
 
@@ -189,6 +234,10 @@ void run_homekit_server() {
 }
 
 void normal_mode_init() {
+    for (uint8_t g=0; g<17; g++) {
+        used_gpio[g] = false;
+    }
+    
     sdk_os_timer_setfn(&setup_mode_toggle_timer, setup_mode_toggle, NULL);
     
     uint8_t macaddr[6];
@@ -210,7 +259,7 @@ void normal_mode_init() {
     
     free(txt_config);
     
-    const int total_accessories = cJSON_GetArraySize(json_accessories);
+    const uint8_t total_accessories = cJSON_GetArraySize(json_accessories);
     
     if (total_accessories == 0) {
         uart_set_baud(0, 115200);
@@ -223,7 +272,9 @@ void normal_mode_init() {
     if (cJSON_GetObjectItem(json_config, LOG_OUTPUT) != NULL &&
         cJSON_GetObjectItem(json_config, LOG_OUTPUT)->valuedouble == 1) {
         uart_set_baud(0, 115200);
+        printf("\n\nHAA > Home Accessory Architect\nHAA > Developed by @RavenSystem - José Antonio Jiménez\nHAA > Version: %s\n\n", FIRMWARE_VERSION);
         printf("HAA > Running in NORMAL mode...\n");
+        printf("HAA > ----- PROCESSING JSON -----\n");
         printf("HAA > Enable UART log output\n");
     }
 
@@ -236,48 +287,52 @@ void normal_mode_init() {
         }
         
         gpio_enable(led_gpio, GPIO_OUTPUT);
+        used_gpio[led_gpio] = true;
         gpio_write(led_gpio, false ^ led_inverted);
-        printf("HAA > Enable LED GPIO %i\n", led_gpio);
+        printf("HAA > Enable LED GPIO %i, inverted=%i\n", led_gpio, led_inverted);
     }
     
-    int hk_total_ac = 1;
-    int hk_total_ch = 0;
+    uint8_t hk_total_ac = 1;
+    bool bridge_needed = false;
 
-    for(int i=0; i<total_accessories; i++) {
-        int acc_type = ACC_TYPE_SWITCH;
+    for(uint8_t i=0; i<total_accessories; i++) {
+        uint8_t acc_type = ACC_TYPE_SWITCH;
         if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE) != NULL) {
-            acc_type = (int) cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE)->valuedouble;
+            acc_type = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE)->valuedouble;
         }
         
         switch (acc_type) {
             case ACC_TYPE_OUTLET:
                 hk_total_ac += 1;
-                hk_total_ch += 2;
                 break;
-                
+/*
+            case ACC_TYPE_BUTTON:
+                hk_total_ac += 1;
+                break;
+*/
             default:    // case ACC_TYPE_SWITCH:
                 hk_total_ac += 1;
-                hk_total_ch += 1;
                 break;
         }
     }
     
-    if (total_accessories > HAA_MAX_ACCESSORIES) {
+    if (total_accessories > HAA_MAX_ACCESSORIES || bridge_needed) {
         // Bridge needed
+        bridge_needed = true;
         hk_total_ac += 1;
     }
     
     homekit_accessory_t **accessories = calloc(hk_total_ac, sizeof(homekit_accessory_t*));
-    homekit_characteristic_t *hk_ch[hk_total_ch];
+    //homekit_characteristic_t *hk_ch[hk_total_ch];
     
     // Buttons GPIO Setup
     void buttons_setup(cJSON *json_buttons, void *hk_ch) {
-        for(int j=0; j<cJSON_GetArraySize(json_buttons); j++) {
+        for(uint8_t j=0; j<cJSON_GetArraySize(json_buttons); j++) {
             const uint8_t gpio = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PIN_GPIO)->valuedouble;
-            bool pullup_resistor = false;
+            bool pullup_resistor = true;
             if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR) != NULL &&
-                cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR)->valuedouble == 1) {
-                pullup_resistor = true;
+                cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR)->valuedouble == 0) {
+                pullup_resistor = false;
             }
             
             bool inverted = false;
@@ -288,20 +343,71 @@ void normal_mode_init() {
             
             uint8_t button_type = 1;
             if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE) != NULL) {
-                button_type = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE)->valuedouble == 1;
+                button_type = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE)->valuedouble;
             }
             
-            adv_button_create(gpio, pullup_resistor, inverted);
+            if (!used_gpio[gpio]) {
+                adv_button_create(gpio, pullup_resistor, inverted);
+                used_gpio[gpio] = true;
+            }
             adv_button_register_callback_fn(gpio, button_on, button_type, hk_ch);
             printf("HAA > Enable button GPIO %i, type=%i, inverted=%i\n", gpio, button_type, inverted);
         }
     }
     
+    void buttons_setup_programable(cJSON *json_buttons, void *hk_ch) {
+        for(int j=0; j<cJSON_GetArraySize(json_buttons); j++) {
+            const uint8_t gpio = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PIN_GPIO)->valuedouble;
+            bool pullup_resistor = true;
+            if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR) != NULL &&
+                cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR)->valuedouble == 0) {
+                pullup_resistor = false;
+            }
+            
+            bool inverted = false;
+            if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), INVERTED) != NULL &&
+                cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), INVERTED)->valuedouble == 1) {
+                inverted = true;
+            }
+            
+            uint8_t button_type = 1;
+            if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE) != NULL) {
+                button_type = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE)->valuedouble;
+            }
+            
+            if (!used_gpio[gpio]) {
+                adv_button_create(gpio, pullup_resistor, inverted);
+                used_gpio[gpio] = true;
+            }
+            
+            switch (j) {
+                case 0:
+                    adv_button_register_callback_fn(gpio, button_event1, button_type, hk_ch);
+                    printf("HAA > Enable button GPIO %i, type=%i, inverted=%i\n", gpio, button_type, inverted);
+                    break;
+                    
+                case 1:
+                    adv_button_register_callback_fn(gpio, button_event2, button_type, hk_ch);
+                    printf("HAA > Enable button GPIO %i, type=%i, inverted=%i\n", gpio, button_type, inverted);
+                    break;
+                    
+                case 2:
+                    adv_button_register_callback_fn(gpio, button_event3, button_type, hk_ch);
+                    printf("HAA > Enable button GPIO %i, type=%i, inverted=%i\n", gpio, button_type, inverted);
+                    break;
+                    
+                default:
+                    printf("HAA ! Error with button GPIO %i, type=%i. Only 3 buttons are allowed\n", gpio, button_type);
+                    break;
+            }
+        }
+    }
+    
     // Define services and characteristics
-    void new_accessory(const uint8_t accessory) {
+    void new_accessory(const uint8_t accessory, const uint8_t services) {
         accessories[accessory] = calloc(1, sizeof(homekit_accessory_t));
         accessories[accessory]->id = accessory + 1;
-        accessories[accessory]->services = calloc(3, sizeof(homekit_service_t*));
+        accessories[accessory]->services = calloc(services, sizeof(homekit_service_t*));
         
         accessories[accessory]->services[0] = calloc(1, sizeof(homekit_service_t));
         accessories[accessory]->services[0]->id = 1;
@@ -315,74 +421,97 @@ void normal_mode_init() {
         accessories[accessory]->services[0]->characteristics[5] = &identify_function;
     }
 
-    int new_switch(const int accessory, const int ch_number, cJSON *json_context) {
-        new_accessory(accessory);
+    void new_switch(const uint8_t accessory, cJSON *json_context) {
+        new_accessory(accessory, 3);
         
-        hk_ch[ch_number] = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .getter_ex=hkc_getter, .setter_ex=hkc_on_setter, .context=json_context);
+        homekit_characteristic_t *ch = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .getter_ex=hkc_getter, .setter_ex=hkc_on_setter, .context=json_context);
         
         accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
         accessories[accessory]->services[1]->id = 8;
         accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_SWITCH;
         accessories[accessory]->services[1]->primary = true;
-        accessories[accessory]->services[1]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
-        accessories[accessory]->services[1]->characteristics[0] = hk_ch[ch_number];
+        accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
+        accessories[accessory]->services[1]->characteristics[0] = ch;
         
-        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), (void*) hk_ch[ch_number]);
-        
-        return ch_number +1;
+        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), (void*) ch);
     }
     
-    int new_outlet(const int accessory, int ch_number, cJSON *json_context) {
-        new_accessory(accessory);
+    void new_outlet(const uint8_t accessory, cJSON *json_context) {
+        new_accessory(accessory, 3);
         
-        hk_ch[ch_number] = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .getter_ex=hkc_getter, .setter_ex=hkc_on_setter, .context=json_context);
+        homekit_characteristic_t *ch = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .getter_ex=hkc_getter, .setter_ex=hkc_on_setter, .context=json_context);
         
         accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
         accessories[accessory]->services[1]->id = 8;
         accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_OUTLET;
         accessories[accessory]->services[1]->primary = true;
-        accessories[accessory]->services[1]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
-        accessories[accessory]->services[1]->characteristics[0] = hk_ch[ch_number];
-        ch_number++;
-        hk_ch[ch_number] = NEW_HOMEKIT_CHARACTERISTIC(OUTLET_IN_USE, true, .getter_ex=hkc_getter, .context=json_context);
-        accessories[accessory]->services[1]->characteristics[1] = hk_ch[ch_number];
+        accessories[accessory]->services[1]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+        accessories[accessory]->services[1]->characteristics[0] = ch;
+        accessories[accessory]->services[1]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(OUTLET_IN_USE, true, .getter_ex=hkc_getter, .context=json_context);;
         
-        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), (void*) hk_ch[ch_number]);
+        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), (void*) ch);
+    }
+    
+    void new_button(const uint8_t accessory, cJSON *json_context) {
+        new_accessory(accessory, 3);
         
-        return ch_number +1;
+        homekit_characteristic_t *ch = NEW_HOMEKIT_CHARACTERISTIC(PROGRAMMABLE_SWITCH_EVENT, 0);
+        
+        accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
+        accessories[accessory]->services[1]->id = 8;
+        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_STATELESS_PROGRAMMABLE_SWITCH;
+        accessories[accessory]->services[1]->primary = true;
+        accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
+        accessories[accessory]->services[1]->characteristics[0] = ch;
+        
+        buttons_setup_programable(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), (void*) ch);
     }
     
     // Accessory Builder
-    int acc_count = 0;
-    int ch_count = 0;
+    uint8_t acc_count = 0;
     
-    if (total_accessories > HAA_MAX_ACCESSORIES) {
-        new_accessory(0);
+    if (bridge_needed) {
+        new_accessory(0, 2);
         acc_count += 1;
     }
     
-    for(int i=0; i<total_accessories; i++) {
-        int acc_type = ACC_TYPE_SWITCH;
+    for(uint8_t i=0; i<total_accessories; i++) {
+        uint8_t acc_type = ACC_TYPE_SWITCH;
         if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE) != NULL) {
-            acc_type = (int) cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE)->valuedouble;
+            acc_type = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE)->valuedouble;
         }
 
-        printf("HAA > Creating acc_type=%i\n", acc_type);
+        printf("HAA > Creating Acc %i, type=%i\n", acc_count, acc_type);
+        if (acc_type == ACC_TYPE_OUTLET) {
+            new_outlet(acc_count, cJSON_GetArrayItem(json_accessories, i));
+            acc_count += 1;
+        } else if (acc_type == ACC_TYPE_BUTTON) {
+            new_button(acc_count, cJSON_GetArrayItem(json_accessories, i));
+            acc_count += 1;
+        } else {    // case ACC_TYPE_SWITCH:
+            new_switch(acc_count, cJSON_GetArrayItem(json_accessories, i));
+            acc_count += 1;
+        }
         
         // Relays GPIO Setup
         cJSON *json_relays = cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), RELAYS_ARRAY);
-        for(int j=0; j<cJSON_GetArraySize(json_relays); j++) {
-            const int gpio = (int) cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, j), PIN_GPIO)->valuedouble;
-            gpio_enable(gpio, GPIO_OUTPUT);
-            printf("HAA > Enable relay GPIO %i\n", gpio);
-        }
-        
-        if (acc_type == ACC_TYPE_OUTLET) {
-            ch_count = new_outlet(acc_count, ch_count, cJSON_GetArrayItem(json_accessories, i));
-            acc_count += 1;
-        } else {    // case ACC_TYPE_SWITCH:
-            ch_count = new_switch(acc_count, ch_count, cJSON_GetArrayItem(json_accessories, i));
-            acc_count += 1;
+        for(uint8_t j=0; j<cJSON_GetArraySize(json_relays); j++) {
+            const uint8_t gpio = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, j), PIN_GPIO)->valuedouble;
+            if (!used_gpio[gpio]) {
+                gpio_enable(gpio, GPIO_OUTPUT);
+                used_gpio[gpio] = true;
+                printf("HAA > Enable output GPIO %i\n", gpio);
+            }
+            
+            // Initial relay state
+            bool inverted = false;
+            if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, j), INVERTED) != NULL) {
+                inverted = (bool) cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, j), INVERTED)->valuedouble;
+            }
+            const bool init_state = false;
+            const bool relay_value = init_state ^ inverted;
+            gpio_write(gpio, relay_value);
+            printf("HAA > Output GPIO %i -> %i\n", gpio, relay_value);
         }
     }
     
@@ -397,6 +526,7 @@ void normal_mode_init() {
     config.config_number = FIRMWARE_VERSION_OCTAL;
     
     FREEHEAP();
+    printf("HAA > ---------------------------\n");
     
     wifi_config_init("HAA", NULL, run_homekit_server);
 }
