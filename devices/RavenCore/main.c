@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.8.10
+ * v0.8.11
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -64,8 +64,8 @@
 #include "../common/custom_characteristics.h"
 
 // Version
-#define FIRMWARE_VERSION                "0.8.10"
-#define FIRMWARE_VERSION_OCTAL          001012      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.8.11"
+#define FIRMWARE_VERSION_OCTAL          001013      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -179,7 +179,6 @@ bool is_moving = false;
 uint8_t device_type_static = 1, reset_toggle_counter = 0, gd_time_state = 0;
 uint8_t button1_gpio = BUTTON1_GPIO, button2_gpio = BUTTON2_GPIO, relay1_gpio = RELAY1_GPIO, relay2_gpio = RELAY2_GPIO, led_gpio = LED_GPIO, extra_gpio = TOGGLE_GPIO;
 uint8_t r_gpio, g_gpio, b_gpio, w_gpio;
-volatile uint32_t last_press_time;
 volatile float old_humidity_value = 0.0, old_temperature_value = 0.0, covering_actual_pos = 0.0, covering_step_time_up = 0.2, covering_step_time_down = 0.2;
 ETSTimer device_restart_timer, factory_default_toggle_timer, change_settings_timer, save_states_timer, extra_func_timer;
 pwm_info_t pwm_info;
@@ -362,8 +361,7 @@ void relay_write(bool on, const uint8_t gpio) {
         on = !on;
     }
     
-    last_press_time = xTaskGetTickCountFromISR() + (DISABLED_TIME / portTICK_PERIOD_MS);
-    adv_button_set_disable_time();
+    //adv_button_set_disable_time();
     gpio_write(gpio, on ? 1 : 0);
 }
 
@@ -1681,24 +1679,48 @@ void rgbw_set_task() {
         multipwm_start(&pwm_info);
     }
     
+    bool fixed_r = false;
+    bool fixed_g = false;
+    bool fixed_b = false;
+    bool fixed_w = false;
+    
     while (1) {
-        current_rgbw_color.red   += (target_rgbw_color.red      - current_rgbw_color.red)   >> 4;
-        current_rgbw_color.green += (target_rgbw_color.green    - current_rgbw_color.green) >> 4;
-        current_rgbw_color.blue  += (target_rgbw_color.blue     - current_rgbw_color.blue)  >> 4;
-        current_rgbw_color.white += (target_rgbw_color.white    - current_rgbw_color.white) >> 4;
+        if (abs(target_rgbw_color.red   - current_rgbw_color.red)   <= current_rgbw_color.red   >> 4) {
+            fixed_r = true;
+        } else {
+            current_rgbw_color.red   += (target_rgbw_color.red      - current_rgbw_color.red)   >> 4;
+        }
+        
+        if (abs(target_rgbw_color.green - current_rgbw_color.green) <= current_rgbw_color.green >> 4) {
+            fixed_g = true;
+        } else {
+            current_rgbw_color.green += (target_rgbw_color.green    - current_rgbw_color.green) >> 4;
+        }
+        
+        if (abs(target_rgbw_color.blue  - current_rgbw_color.blue)  <= current_rgbw_color.blue  >> 4) {
+            fixed_b = true;
+        } else {
+            current_rgbw_color.blue  += (target_rgbw_color.blue     - current_rgbw_color.blue)  >> 4;
+        }
+        
+        if (abs(target_rgbw_color.white - current_rgbw_color.white) <= current_rgbw_color.white >> 4) {
+            fixed_w = true;
+        } else {
+            current_rgbw_color.white += (target_rgbw_color.white    - current_rgbw_color.white) >> 4;
+        }
     
         apply_color(current_rgbw_color);
         
         vTaskDelay(RGBW_DELAY / portTICK_PERIOD_MS);
     
-        if (abs(target_rgbw_color.red   - current_rgbw_color.red)   <= current_rgbw_color.red   >> 4 &&
-            abs(target_rgbw_color.green - current_rgbw_color.green) <= current_rgbw_color.green >> 4 &&
-            abs(target_rgbw_color.blue  - current_rgbw_color.blue)  <= current_rgbw_color.blue  >> 4 &&
-            abs(target_rgbw_color.white - current_rgbw_color.white) <= current_rgbw_color.white >> 4) {
-            
-            apply_color(target_rgbw_color);
-            
+        if (fixed_r && fixed_g && fixed_b && fixed_w) {
             printf("RC > Target color established\n");
+            
+            fixed_r = false;
+            fixed_g = false;
+            fixed_b = false;
+            fixed_w = false;
+            
             vTaskSuspend(NULL);
         }
     }
@@ -3528,6 +3550,7 @@ void create_accessory() {
                 status = sysparam_get_string(OTA_REPO_SYSPARAM, &char_value);
                 if (status == SYSPARAM_OK) {
                     setting_count += 1;
+                    free(char_value);
                 }
         
                 sonoff_setup->characteristics = calloc(setting_count, sizeof(homekit_characteristic_t*));
@@ -3910,7 +3933,7 @@ void user_init(void) {
             break;
     }
     
-    printf("\n\nRC > RavenCore\nRC > Developed by RavenSystem - José Antonio Jiménez\nRC > Version: %s\n\n", firmware.value.string_value);
+    printf("\n\nRC > RavenCore\nRC > Developed by @RavenSystem - José Antonio Jiménez\nRC > Version: %s\n\n", FIRMWARE_VERSION);
     
     // Old settings check
     status = sysparam_get_int8("device_type", &int8_value);
