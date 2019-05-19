@@ -26,6 +26,7 @@
 
 typedef void (*button_callback_fn)(uint8_t gpio, void *args);
 
+void adv_button_set_evaluate_delay(const uint8_t new_delay);
 int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool inverted);
 void adv_button_destroy(const uint8_t gpio);
 void adv_button_set_disable_time();

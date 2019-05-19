@@ -31,7 +31,8 @@
 #define LONGPRESS_TIME              410
 #define VERYLONGPRESS_TIME          1500
 #define HOLDPRESS_COUNT             5       // HOLDPRESS_TIME = HOLDPRESS_COUNT * 2000
-#define BUTTON_EVALUATE_DELAY       10
+#define BUTTON_EVAL_DELAY_MAX       110
+#define BUTTON_EVAL_DELAY_MIN       10
 
 typedef struct _adv_button {
     uint8_t gpio;
@@ -65,6 +66,7 @@ typedef struct _adv_button {
 
 static adv_button_t *buttons = NULL;
 static uint32_t disable_time = 0;
+static uint8_t button_evaluate_delay = BUTTON_EVAL_DELAY_MIN;
 
 static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
     adv_button_t *button = buttons;
@@ -74,6 +76,16 @@ static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
     }
 
     return button;
+}
+
+void adv_button_set_evaluate_delay(const uint8_t new_delay) {
+    if (new_delay < BUTTON_EVAL_DELAY_MIN) {
+        button_evaluate_delay = BUTTON_EVAL_DELAY_MIN;
+    } else if (new_delay > BUTTON_EVAL_DELAY_MAX) {
+        button_evaluate_delay = BUTTON_EVAL_DELAY_MAX;
+    } else {
+        button_evaluate_delay = new_delay;
+    }
 }
 
 IRAM void adv_button_set_disable_time() {
@@ -175,7 +187,7 @@ static void adv_button_hold_callback(void *arg) {
 
 #define maxvalue_unsigned(x) ((1 << (8 * sizeof(x))) - 1)
 IRAM static void button_evaluate_fn() {        // Based on https://github.com/pcsaito/esp-homekit-demo/blob/LPFToggle/examples/sonoff_basic_toggle/toggle.c
-    const TickType_t delay = pdMS_TO_TICKS(BUTTON_EVALUATE_DELAY);
+    const TickType_t delay = pdMS_TO_TICKS(button_evaluate_delay);
     TickType_t last_wake_time = xTaskGetTickCount();
     
     for (;;) {
@@ -192,9 +204,9 @@ IRAM static void button_evaluate_fn() {        // Based on https://github.com/pc
             if (button->state != button->old_state) {
                 button->old_state = button->state;
                 
-                if (gpio_read(button->gpio) ^ button->inverted) {      // 1
+                if (gpio_read(button->gpio) ^ button->inverted) {   // 1
                     push_up(button->gpio);
-                } else {                            // 0
+                } else {                                            // 0
                     push_down(button->gpio);
                 }
             }

@@ -61,6 +61,8 @@ void user_init(void) {
     
     printf("\n>>>>> ADV BUTTON EXAMPLE\n\n");
     
+    adv_button_set_evaluate_delay(10);
+    
     adv_button_create(BUTTON_GPIO, true, false);
     
     adv_button_register_callback_fn(BUTTON_GPIO, singlepress_callback, 1, NULL);
