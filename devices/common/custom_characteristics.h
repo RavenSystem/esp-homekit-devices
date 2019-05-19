@@ -586,12 +586,26 @@
     .value = HOMEKIT_UINT8_(_value), \
     ##__VA_ARGS__
 
-#define HOMEKIT_CHARACTERISTIC_CUSTOM_COLOR_BOOST HOMEKIT_CUSTOM_UUID("F0000131")
-#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_COLOR_BOOST(_value, ...) \
-    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_COLOR_BOOST, \
-    .description = "Color Boost", \
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_BOOST HOMEKIT_CUSTOM_UUID("F0000131")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_BOOST(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_BOOST, \
+    .description = "Boost", \
     .format = homekit_format_uint8, \
     .unit = homekit_unit_percentage, \
+    .permissions = homekit_permissions_paired_read \
+    | homekit_permissions_paired_write \
+    | homekit_permissions_notify, \
+    .min_value = (float[]) {0}, \
+    .max_value = (float[]) {100}, \
+    .min_step = (float[]) {1}, \
+    .value = HOMEKIT_UINT8_(_value), \
+    ##__VA_ARGS__
+
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_BUTTON_FILTER HOMEKIT_CUSTOM_UUID("F0000140")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_BUTTON_FILTER(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_BUTTON_FILTER, \
+    .description = "Button Filter", \
+    .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
     | homekit_permissions_notify, \

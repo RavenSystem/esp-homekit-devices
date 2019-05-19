@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.8.11
+ * v0.8.12
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -64,8 +64,8 @@
 #include "../common/custom_characteristics.h"
 
 // Version
-#define FIRMWARE_VERSION                "0.8.11"
-#define FIRMWARE_VERSION_OCTAL          001013      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.8.12"
+#define FIRMWARE_VERSION_OCTAL          001014      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -110,7 +110,7 @@
 #define RELAY3_GPIO                     4
 #define RELAY4_GPIO                     15
 
-#define DISABLED_TIME                   60
+#define BUTTON_EVAL_DELAY_MIN           10
 #define ALLOWED_FACTORY_RESET_TIME      60000
 
 #define PWM_RGBW_SCALE                  65535
@@ -167,19 +167,20 @@
 #define LAST_STATE_BRIGHTNESS_SYSPARAM                  "G"
 #define LAST_STATE_HUE_SYSPARAM                         "H"
 #define LAST_STATE_SATURATION_SYSPARAM                  "I"
-#define COLOR_BOOST_SYSPARAM                            "J"
+#define BOOST_SYSPARAM                                  "J"
 #define INCHING_TIME1_SYSPARAM                          "p"
 #define INCHING_TIME2_SYSPARAM                          "K"
 #define INCHING_TIME3_SYSPARAM                          "L"
 #define INCHING_TIME4_SYSPARAM                          "M"
 #define INCHING_TIMEDM_SYSPARAM                         "N"
 #define ENABLE_DUMMY_SWITCH_SYSPARAM                    "Q"
+#define BUTTON_FILTER_SYSPARAM                          "R"
 
 bool is_moving = false;
 uint8_t device_type_static = 1, reset_toggle_counter = 0, gd_time_state = 0;
 uint8_t button1_gpio = BUTTON1_GPIO, button2_gpio = BUTTON2_GPIO, relay1_gpio = RELAY1_GPIO, relay2_gpio = RELAY2_GPIO, led_gpio = LED_GPIO, extra_gpio = TOGGLE_GPIO;
 uint8_t r_gpio, g_gpio, b_gpio, w_gpio;
-volatile float old_humidity_value = 0.0, old_temperature_value = 0.0, covering_actual_pos = 0.0, covering_step_time_up = 0.2, covering_step_time_down = 0.2;
+volatile float old_humidity_value = 0.0, old_temperature_value = 0.0, covering_actual_pos = 0.0, real_covering_actual_pos = 0.0, covering_step_time_up = 0.2, covering_step_time_down = 0.2;
 ETSTimer device_restart_timer, factory_default_toggle_timer, change_settings_timer, save_states_timer, extra_func_timer;
 pwm_info_t pwm_info;
 
@@ -206,7 +207,7 @@ void rgbw_set();
 void brightness_callback(homekit_value_t value);
 void hue_callback(homekit_value_t value);
 void saturation_callback(homekit_value_t value);
-void color_boost_callback();
+void boost_callback();
 
 void show_setup_callback();
 void ota_firmware_callback();
@@ -274,6 +275,7 @@ homekit_characteristic_t ota_firmware = HOMEKIT_CHARACTERISTIC_(CUSTOM_OTA_UPDAT
 homekit_characteristic_t log_output = HOMEKIT_CHARACTERISTIC_(CUSTOM_LOG_OUTPUT, 1, .id=129, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t ip_addr = HOMEKIT_CHARACTERISTIC_(CUSTOM_IP_ADDR, "", .id=130, .getter=read_ip_addr);
 homekit_characteristic_t wifi_reset = HOMEKIT_CHARACTERISTIC_(CUSTOM_WIFI_RESET, false, .id=131, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
+homekit_characteristic_t button_filter = HOMEKIT_CHARACTERISTIC_(CUSTOM_BUTTON_FILTER, 0, .id=152, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t enable_dummy_switch = HOMEKIT_CHARACTERISTIC_(CUSTOM_SWITCH_DM, false, .id=150, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 
 homekit_characteristic_t custom_inching_time1 = HOMEKIT_CHARACTERISTIC_(CUSTOM_INCHING_TIME1, 0, .id=117, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
@@ -314,7 +316,7 @@ homekit_characteristic_t custom_r_gpio = HOMEKIT_CHARACTERISTIC_(CUSTOM_R_GPIO, 
 homekit_characteristic_t custom_g_gpio = HOMEKIT_CHARACTERISTIC_(CUSTOM_G_GPIO, INITIAL_G_GPIO, .id=144, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t custom_b_gpio = HOMEKIT_CHARACTERISTIC_(CUSTOM_B_GPIO, INITIAL_B_GPIO, .id=145, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t custom_w_gpio = HOMEKIT_CHARACTERISTIC_(CUSTOM_W_GPIO, INITIAL_W_GPIO, .id=146, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
-homekit_characteristic_t custom_color_boost = HOMEKIT_CHARACTERISTIC_(CUSTOM_COLOR_BOOST, 0, .id=147, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(color_boost_callback));
+homekit_characteristic_t custom_boost = HOMEKIT_CHARACTERISTIC_(CUSTOM_BOOST, 0, .id=147, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(boost_callback));
 
 // Initial State Setup
 homekit_characteristic_t custom_init_state_sw1 = HOMEKIT_CHARACTERISTIC_(CUSTOM_INIT_STATE_SW1, 0, .id=120, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
@@ -330,7 +332,7 @@ homekit_characteristic_t custom_reverse_sw2 = HOMEKIT_CHARACTERISTIC_(CUSTOM_REV
 homekit_characteristic_t custom_reverse_sw3 = HOMEKIT_CHARACTERISTIC_(CUSTOM_REVERSE_SW3, false, .id=137, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t custom_reverse_sw4 = HOMEKIT_CHARACTERISTIC_(CUSTOM_REVERSE_SW4, false, .id=138, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 
-// Last used ID = 151
+// Last used ID = 152
 // ---------------------------
 
 void led_write(bool on) {
@@ -390,6 +392,11 @@ void save_settings() {
     }
     
     status = sysparam_set_int8(LOG_OUTPUT_SYSPARAM, log_output.value.int_value);
+    if (status != SYSPARAM_OK) {
+        flash_error = status;
+    }
+    
+    status = sysparam_set_int8(BUTTON_FILTER_SYSPARAM, button_filter.value.int_value);
     if (status != SYSPARAM_OK) {
         flash_error = status;
     }
@@ -524,7 +531,7 @@ void save_settings() {
         flash_error = status;
     }
     
-    status = sysparam_set_int8(COLOR_BOOST_SYSPARAM, custom_color_boost.value.int_value);
+    status = sysparam_set_int8(BOOST_SYSPARAM, custom_boost.value.int_value);
     if (status != SYSPARAM_OK) {
         flash_error = status;
     }
@@ -724,6 +731,7 @@ void factory_default_task() {
     }
     
     status = sysparam_set_int8(LOG_OUTPUT_SYSPARAM, 1);
+    status = sysparam_set_int8(BUTTON_FILTER_SYSPARAM, 0);
     
     status = sysparam_set_int8(EXTERNAL_TOGGLE1_SYSPARAM, 0);
     status = sysparam_set_int8(EXTERNAL_TOGGLE2_SYSPARAM, 0);
@@ -760,7 +768,7 @@ void factory_default_task() {
     status = sysparam_set_int8(G_GPIO_SYSPARAM, INITIAL_G_GPIO);
     status = sysparam_set_int8(B_GPIO_SYSPARAM, INITIAL_B_GPIO);
     status = sysparam_set_int8(W_GPIO_SYSPARAM, INITIAL_W_GPIO);
-    status = sysparam_set_int8(COLOR_BOOST_SYSPARAM, 0);
+    status = sysparam_set_int8(BOOST_SYSPARAM, 0);
     
     status = sysparam_set_int32(TARGET_TEMPERATURE_SYSPARAM, 23 * 100);
     status = sysparam_set_int8(INIT_STATE_SW1_SYSPARAM, 0);
@@ -1203,6 +1211,12 @@ void normalize_actual_pos() {
     } else if (covering_actual_pos > 100) {
         covering_actual_pos = 100;
     }
+    
+    if (real_covering_actual_pos < 0) {
+        real_covering_actual_pos = 0;
+    } else if (real_covering_actual_pos > 100) {
+        real_covering_actual_pos = 100;
+    }
 }
 
 void covering_stop() {
@@ -1213,7 +1227,7 @@ void covering_stop() {
     
     normalize_actual_pos();
     
-    covering_current_position.value.int_value = covering_actual_pos;
+    covering_current_position.value.int_value = real_covering_actual_pos;
     homekit_characteristic_notify(&covering_current_position, covering_current_position.value);
     
     covering_target_position.value = covering_current_position.value;
@@ -1222,7 +1236,7 @@ void covering_stop() {
     covering_position_state.value.int_value = 2;
     homekit_characteristic_notify(&covering_position_state, covering_position_state.value);
     
-    printf("RC > Covering stoped at %f\n", covering_actual_pos);
+    printf("RC > Covering stoped at %f, real %f\n", covering_actual_pos, real_covering_actual_pos);
     xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
     
     save_states_callback();
@@ -1272,7 +1286,7 @@ void covering_worker() {
         }
         
         if (((uint8_t)covering_actual_pos * COVERING_POLL_PERIOD_MS) % 2000 == 0) {
-            printf("RC > Covering moving at %f\n", covering_actual_pos);
+            printf("RC > Covering moving at %f, real %f\n", covering_actual_pos, real_covering_actual_pos);
             homekit_characteristic_notify(&covering_current_position, covering_current_position.value);
         }
     }
@@ -1280,18 +1294,30 @@ void covering_worker() {
     switch (covering_position_state.value.int_value) {
         case 0: // Down
             covering_actual_pos -= covering_step_time_down;
+            if (covering_actual_pos > 0) {
+                real_covering_actual_pos = covering_actual_pos / (1 + ((100 - covering_actual_pos) * custom_boost.value.int_value * 0.0002));
+            } else {
+                real_covering_actual_pos = covering_actual_pos;
+            }
+            
             normalize_covering_current_position();
 
-            if ((covering_target_position.value.int_value - gd_time_state) >= covering_actual_pos) {
+            if ((covering_target_position.value.int_value - gd_time_state) >= real_covering_actual_pos) {
                 covering_stop();
             }
             break;
             
         case 1: // Up
             covering_actual_pos += covering_step_time_up;
+            if (covering_actual_pos < 100) {
+                real_covering_actual_pos = covering_actual_pos / (1 + ((100 - covering_actual_pos) * custom_boost.value.int_value * 0.0002));
+            } else {
+                real_covering_actual_pos = covering_actual_pos;
+            }
+        
             normalize_covering_current_position();
             
-            if ((covering_target_position.value.int_value + gd_time_state) <= covering_actual_pos) {
+            if ((covering_target_position.value.int_value + gd_time_state) <= real_covering_actual_pos) {
                 covering_stop();
             }
             break;
@@ -1626,7 +1652,7 @@ rgb_color_t target_rgbw_color = { { 0, 0, 0, 0 } };
 
 //http://blog.saikoled.com/post/44677718712/how-to-convert-from-hsi-to-rgb-white
 void hsi2rgbw(float h, float s, float i, rgb_color_t* rgbw) {
-    const float color_boost = (custom_color_boost.value.int_value * 0.02) + 1;
+    const float color_boost = (custom_boost.value.int_value * 0.02) + 1;
     
     while (h < 0) {
         h += 360.0F;
@@ -1759,9 +1785,11 @@ void saturation_callback(homekit_value_t value) {
     rgbw_set();
 }
 
-void color_boost_callback() {
+void boost_callback() {
     change_settings_callback();
-    rgbw_set();
+    if (device_type_static == 14) {
+        rgbw_set();
+    }
 }
 
 // ***** Identify
@@ -1810,6 +1838,9 @@ homekit_value_t read_ip_addr() {
 
 void hardware_init() {
     printf("RC > Initializing hardware...\n");
+    
+    adv_button_set_evaluate_delay(button_filter.value.int_value + BUTTON_EVAL_DELAY_MIN);
+    printf("RC > Set button filter to %i\n", button_filter.value.int_value + BUTTON_EVAL_DELAY_MIN);
     
     sdk_os_timer_setfn(&factory_default_toggle_timer, factory_default_toggle, NULL);
     sdk_os_timer_setfn(&change_settings_timer, save_settings, NULL);
@@ -2398,6 +2429,16 @@ void settings_init() {
         }
     }
     
+    status = sysparam_get_int8(BUTTON_FILTER_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        button_filter.value.int_value = int8_value;
+    } else {
+        status = sysparam_set_int8(BUTTON_FILTER_SYSPARAM, 0);
+        if (status != SYSPARAM_OK) {
+            flash_error = status;
+        }
+    }
+    
     status = sysparam_get_int8(EXTERNAL_TOGGLE1_SYSPARAM, &int8_value);
     if (status == SYSPARAM_OK) {
         external_toggle1.value.int_value = int8_value;
@@ -2669,11 +2710,11 @@ void settings_init() {
         }
     }
     
-    status = sysparam_get_int8(COLOR_BOOST_SYSPARAM, &int8_value);
+    status = sysparam_get_int8(BOOST_SYSPARAM, &int8_value);
     if (status == SYSPARAM_OK) {
-        custom_color_boost.value.int_value = int8_value;
+        custom_boost.value.int_value = int8_value;
     } else {
-        status = sysparam_set_int8(COLOR_BOOST_SYSPARAM, 0);
+        status = sysparam_set_int8(BOOST_SYSPARAM, 0);
         if (status != SYSPARAM_OK) {
             flash_error = status;
         }
@@ -3479,7 +3520,7 @@ void create_accessory() {
                 sonoff_setup->type = HOMEKIT_SERVICE_CUSTOM_SETUP;
                 sonoff_setup->primary = false;
         
-                uint8_t setting_number = 12;
+                uint8_t setting_number = 13;
                 uint8_t setting_count = setting_number + 1;
 
                 switch (device_type_static) {
@@ -3524,7 +3565,7 @@ void create_accessory() {
                         break;
                         
                     case 12:
-                        setting_count += 5;
+                        setting_count += 6;
                         break;
                         
                     case 13:
@@ -3566,6 +3607,7 @@ void create_accessory() {
                     sonoff_setup->characteristics[9] = &enable_dummy_switch;
                     sonoff_setup->characteristics[10] = &custom_init_state_swdm;
                     sonoff_setup->characteristics[11] = &custom_inching_timedm;
+                    sonoff_setup->characteristics[12] = &button_filter;
                 
                     if (status == SYSPARAM_OK) {
                         sonoff_setup->characteristics[setting_number] = &ota_firmware;
@@ -3713,6 +3755,8 @@ void create_accessory() {
                         sonoff_setup->characteristics[setting_number] = &custom_covering_down_time;
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_covering_type;
+                        setting_number++;
+                        sonoff_setup->characteristics[setting_number] = &custom_boost;
                         
                     } else if (device_type_static == 13) {
                         sonoff_setup->characteristics[setting_number] = &external_toggle1;
@@ -3730,7 +3774,7 @@ void create_accessory() {
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_w_gpio;
                         setting_number++;
-                        sonoff_setup->characteristics[setting_number] = &custom_color_boost;
+                        sonoff_setup->characteristics[setting_number] = &custom_boost;
                         
                     } else if (device_type_static == 15) {
                         sonoff_setup->characteristics[setting_number] = &custom_w_gpio;
