@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.0.4
+ * v0.0.5
  * 
  * Copyright 2019 José A. Jiménez (@RavenSystem)
  *  
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.0.4"
-#define FIRMWARE_VERSION_OCTAL          000004      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.0.5"
+#define FIRMWARE_VERSION_OCTAL          000005      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // JSON
 #define GENERAL_CONFIG                  "c"
@@ -82,7 +82,7 @@ void led_task(void *pvParameters) {
         
         for (uint8_t i=0; i<times; i++) {
             gpio_write(led_gpio, true ^ led_inverted);
-            vTaskDelay(20 / portTICK_PERIOD_MS);
+            vTaskDelay(30 / portTICK_PERIOD_MS);
             gpio_write(led_gpio, false ^ led_inverted);
             vTaskDelay(150 / portTICK_PERIOD_MS);
         }
@@ -131,8 +131,8 @@ homekit_value_t hkc_getter(const homekit_characteristic_t *ch) {
 }
 
 void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
-    printf("HAA > Setter ON\n");
     LED_BLINK(1);
+    printf("HAA > Setter ON\n");
     
     ch->value = value;
     homekit_characteristic_notify(ch, ch->value);
@@ -163,8 +163,8 @@ void button_on(const uint8_t gpio, void *args) {
 void button_event1(const uint8_t gpio, void *args) {
     homekit_characteristic_t *ch = args;
     homekit_characteristic_notify(ch, HOMEKIT_UINT8(0));
-    printf("HAA > Single press event\n");
     LED_BLINK(1);
+    printf("HAA > Single press event\n");
     
     setup_mode_toggle_upcount();
 }
@@ -172,8 +172,8 @@ void button_event1(const uint8_t gpio, void *args) {
 void button_event2(const uint8_t gpio, void *args) {
     homekit_characteristic_t *ch = args;
     homekit_characteristic_notify(ch, HOMEKIT_UINT8(1));
-    printf("HAA > Double press event\n");
     LED_BLINK(2);
+    printf("HAA > Double press event\n");
     
     setup_mode_toggle_upcount();
 }
@@ -181,32 +181,16 @@ void button_event2(const uint8_t gpio, void *args) {
 void button_event3(const uint8_t gpio, void *args) {
     homekit_characteristic_t *ch = args;
     homekit_characteristic_notify(ch, HOMEKIT_UINT8(2));
-    printf("HAA > Long press event\n");
     LED_BLINK(3);
+    printf("HAA > Long press event\n");
 }
 
 void identify(homekit_value_t _value) {
-    printf("HAA > Identifying\n");
     LED_BLINK(6);
+    printf("HAA > Identifying\n");
 }
 
 // ---------
-/*
-void *memdup(const void *src, size_t size) {
-    void *dst = malloc(size);
-    return dst ? memcpy(dst, src, size) : NULL;
-}
-
-#define NEW_HOMEKIT_CHARACTERISTIC(name, ...)   (homekit_characteristic_t*) memdup((homekit_characteristic_t[]){HOMEKIT_CHARACTERISTIC_(name, ##__VA_ARGS__)}, sizeof(homekit_characteristic_t))
-*/
-
-void *memdup(void *data, size_t data_size) {
-    void *result = malloc(data_size);
-    memcpy(result, data, data_size);
-    return result;
-}
-
-#define NEW_HOMEKIT_CHARACTERISTIC(name, ...)   memdup(HOMEKIT_CHARACTERISTIC(name, ##__VA_ARGS__), sizeof(homekit_characteristic_t))
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, NULL);
 homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, NULL);
@@ -214,8 +198,6 @@ homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, "R
 homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "HAA");
 homekit_characteristic_t identify_function = HOMEKIT_CHARACTERISTIC_(IDENTIFY, identify);
 homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, FIRMWARE_VERSION);
-
-homekit_characteristic_t button_event = HOMEKIT_CHARACTERISTIC_(PROGRAMMABLE_SWITCH_EVENT, 0);
 
 homekit_server_config_t config;
 
@@ -297,11 +279,11 @@ void normal_mode_init() {
             case ACC_TYPE_OUTLET:
                 hk_total_ac += 1;
                 break;
-/*
+
             case ACC_TYPE_BUTTON:
                 hk_total_ac += 1;
                 break;
-*/
+
             default:    // case ACC_TYPE_SWITCH:
                 hk_total_ac += 1;
                 break;
@@ -315,7 +297,6 @@ void normal_mode_init() {
     }
     
     homekit_accessory_t **accessories = calloc(hk_total_ac, sizeof(homekit_accessory_t*));
-    //homekit_characteristic_t *hk_ch[hk_total_ch];
     
     // Buttons GPIO Setup
     void buttons_setup(cJSON *json_buttons, void *hk_ch) {
@@ -463,6 +444,7 @@ void normal_mode_init() {
     uint8_t acc_count = 0;
     
     if (bridge_needed) {
+        printf("HAA > Creating Acc 0, type=bridge\n");
         new_accessory(0, 2);
         acc_count += 1;
     }
@@ -514,7 +496,7 @@ void normal_mode_init() {
     config.accessories = accessories;
     config.password = "021-82-017";
     config.setupId = "JOSE";
-    config.category = homekit_accessory_category_bridge;
+    config.category = homekit_accessory_category_other;
     config.config_number = FIRMWARE_VERSION_OCTAL;
     
     FREEHEAP();
