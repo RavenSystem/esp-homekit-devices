@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.8.13
+ * v0.8.14
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -66,8 +66,8 @@
 #define LED_BLINK(x)                    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) x, 1, NULL)
 
 // Version
-#define FIRMWARE_VERSION                "0.8.13"
-#define FIRMWARE_VERSION_OCTAL          001015      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.8.14"
+#define FIRMWARE_VERSION_OCTAL          001016      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -118,6 +118,7 @@
 #define PWM_RGBW_SCALE                  65535
 #define PWM_RGBW_SCALE_OFFSET           100
 #define RGBW_DELAY                      10
+#define RGBW_SET_DELAY                  1000
 
 // Sensors
 #define CONTACT_SENSOR                  0
@@ -1793,19 +1794,23 @@ void rgbw_set() {
     save_states_callback();
 }
 
+void rgbw_set_delay() {
+    sdk_os_timer_arm(&extra_func_timer, RGBW_SET_DELAY, 0);
+}
+
 void brightness_callback(homekit_value_t value) {
     brightness.value = value;
-    rgbw_set();
+    rgbw_set_delay();
 }
 
 void hue_callback(homekit_value_t value) {
     hue.value = value;
-    rgbw_set();
+    rgbw_set_delay();
 }
 
 void saturation_callback(homekit_value_t value) {
     saturation.value = value;
-    rgbw_set();
+    rgbw_set_delay();
 }
 
 void boost_callback() {
@@ -2341,6 +2346,8 @@ void hardware_init() {
                 pwm_info.channels++;
                 multipwm_set_pin(&pwm_info, 3, w_gpio);
             }
+            
+            sdk_os_timer_setfn(&extra_func_timer, rgbw_set, NULL);
             
             xTaskCreate(rgbw_set_task, "rgbw_set_task", configMINIMAL_STACK_SIZE, NULL, 1, &rgbw_set_task_handle);
             
