@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.8.14
+ * v0.8.15
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -66,8 +66,8 @@
 #define LED_BLINK(x)                    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) x, 1, NULL)
 
 // Version
-#define FIRMWARE_VERSION                "0.8.14"
-#define FIRMWARE_VERSION_OCTAL          001016      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.8.15"
+#define FIRMWARE_VERSION_OCTAL          001017      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -118,7 +118,7 @@
 #define PWM_RGBW_SCALE                  65535
 #define PWM_RGBW_SCALE_OFFSET           100
 #define RGBW_DELAY                      10
-#define RGBW_SET_DELAY                  1000
+#define RGBW_SET_DELAY                  300
 
 // Sensors
 #define CONTACT_SENSOR                  0
