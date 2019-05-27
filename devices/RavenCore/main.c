@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.8.12
+ * v0.8.13
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -63,9 +63,11 @@
 
 #include "../common/custom_characteristics.h"
 
+#define LED_BLINK(x)                    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) x, 1, NULL)
+
 // Version
-#define FIRMWARE_VERSION                "0.8.12"
-#define FIRMWARE_VERSION_OCTAL          001014      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.8.13"
+#define FIRMWARE_VERSION_OCTAL          001015      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -116,6 +118,16 @@
 #define PWM_RGBW_SCALE                  65535
 #define PWM_RGBW_SCALE_OFFSET           100
 #define RGBW_DELAY                      10
+
+// Sensors
+#define CONTACT_SENSOR                  0
+#define MOTION_SENSOR                   1
+#define OCCUPANCY_SENSOR                2
+#define LEAK_SENSOR                     3
+#define SMOKE_SENSOR                    4
+#define CARBON_MONOXIDE_SENSOR          5
+#define CARBON_DIOXIDE_SENSOR           6
+#define FILTER_CHANGE_SENSOR            7
 
 // SysParam
 #define OTA_BETA_SYSPARAM                               "ota_beta"  // Will be removed
@@ -344,9 +356,9 @@ void led_task(void *pvParameters) {
     
     for (int i=0; i<times; i++) {
         led_write(true);
-        vTaskDelay(50 / portTICK_PERIOD_MS);
+        vTaskDelay(30 / portTICK_PERIOD_MS);
         led_write(false);
-        vTaskDelay(130 / portTICK_PERIOD_MS);
+        vTaskDelay(150 / portTICK_PERIOD_MS);
     }
     
     vTaskDelete(NULL);
@@ -698,7 +710,7 @@ void device_restart_task() {
 
 void device_restart() {
     printf("RC > Restarting device\n");
-    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 6, 1, NULL);
+    LED_BLINK(6);
     xTaskCreate(device_restart_task, "device_restart_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
 }
 
@@ -815,7 +827,7 @@ void factory_default_call(const uint8_t gpio, void *args) {
     printf("RC > Checking factory default call\n");
     
     if (xTaskGetTickCountFromISR() < ALLOWED_FACTORY_RESET_TIME / portTICK_PERIOD_MS) {
-        xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 4, 1, NULL);
+        LED_BLINK(4);
         xTaskCreate(factory_default_task, "factory_default_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
     } else {
         printf("RC ! Reset to factory defaults not allowed after %i msecs since boot. Repower device and try again\n", ALLOWED_FACTORY_RESET_TIME);
@@ -910,7 +922,7 @@ void switch1_on_callback(homekit_value_t value) {
     
     if (device_type_static != 14) {
         relay_write(switch1_on.value.bool_value, relay1_gpio);
-        xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
+        LED_BLINK(1);
         printf("RC > Relay 1 -> %i\n", switch1_on.value.bool_value);
         
         if (custom_inching_time1.value.float_value > 0 && switch1_on.value.bool_value) {
@@ -929,7 +941,7 @@ void switch2_on_callback(homekit_value_t value) {
     printf("RC > Toggle SW 2\n");
     switch2_on.value = value;
     relay_write(switch2_on.value.bool_value, relay2_gpio);
-    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
+    LED_BLINK(1);
     printf("RC > Relay 2 -> %i\n", switch2_on.value.bool_value);
     
     if (custom_inching_time2.value.float_value > 0 && switch2_on.value.bool_value) {
@@ -943,7 +955,7 @@ void switch3_on_callback(homekit_value_t value) {
     printf("RC > Toggle SW 3\n");
     switch3_on.value = value;
     relay_write(switch3_on.value.bool_value, RELAY3_GPIO);
-    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
+    LED_BLINK(1);
     printf("RC > Relay 3 -> %i\n", switch3_on.value.bool_value);
     
     if (custom_inching_time3.value.float_value > 0 && switch3_on.value.bool_value) {
@@ -957,7 +969,7 @@ void switch4_on_callback(homekit_value_t value) {
     printf("RC > Toggle SW 4\n");
     switch4_on.value = value;
     relay_write(switch4_on.value.bool_value, RELAY4_GPIO);
-    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
+    LED_BLINK(1);
     printf("RC > Relay 4 -> %i\n", switch4_on.value.bool_value);
     
     if (custom_inching_time4.value.float_value > 0 && switch4_on.value.bool_value) {
@@ -970,7 +982,7 @@ void switch4_on_callback(homekit_value_t value) {
 void switchdm_on_callback(homekit_value_t value) {
     printf("RC > Toggle SW DM\n");
     switchdm_on.value = value;
-    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
+    LED_BLINK(1);
     
     if (custom_inching_timedm.value.float_value > 0 && switchdm_on.value.bool_value) {
         xTaskCreate(switch_autooff_task, "switch_autooff_task", configMINIMAL_STACK_SIZE, (void *) 5, 1, NULL);
@@ -1006,7 +1018,7 @@ void valve_control() {
         homekit_characteristic_notify(&active, active.value);
         homekit_characteristic_notify(&in_use, in_use.value);
         
-        xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 4, 1, NULL);
+        LED_BLINK(4);
     }
 }
 
@@ -1038,7 +1050,7 @@ void valve_on_callback(homekit_value_t value) {
         homekit_characteristic_notify(&remaining_duration, remaining_duration.value);
     }
     
-    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
+    LED_BLINK(1);
 }
 
 // ***** Garage Door
@@ -1091,9 +1103,9 @@ void garage_on_callback(homekit_value_t value) {
     
     if (value.int_value != current_door_state_simple) {
         xTaskCreate(garage_button_task, "garage_button_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
-        xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
+        LED_BLINK(1);
     } else {
-        xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 4, 1, NULL);
+        LED_BLINK(4);
     }
     
     target_door_state.value = value;
@@ -1110,7 +1122,7 @@ void garage_on_button(const uint8_t gpio, void *args) {
         }
     } else {
         printf("RC > GD: built-in button DISABLED\n");
-        xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 4, 1, NULL);
+        LED_BLINK(4);
     }
 }
 
@@ -1237,14 +1249,14 @@ void covering_stop() {
     homekit_characteristic_notify(&covering_position_state, covering_position_state.value);
     
     printf("RC > Covering stoped at %f, real %f\n", covering_actual_pos, real_covering_actual_pos);
-    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
+    LED_BLINK(1);
     
     save_states_callback();
 }
 
 void covering_on_callback(homekit_value_t value) {
     printf("RC > Covering activated: Current pos -> %i, Target pos -> %i\n", covering_current_position.value.int_value, value.int_value);
-    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
+    LED_BLINK(1);
     
     covering_target_position.value = value;
     homekit_characteristic_notify(&covering_target_position, covering_target_position.value);
@@ -1389,7 +1401,7 @@ void lock_on_callback(homekit_value_t value) {
     
     if (value.int_value == 0) {
         printf("RC > Lock opened\n");
-        xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
+        LED_BLINK(1);
         relay_write(true, relay1_gpio);
         
         if (custom_inching_time1.value.float_value > 0) {
@@ -1403,7 +1415,11 @@ void lock_on_callback(homekit_value_t value) {
 }
 
 void lock_intr_callback(const uint8_t gpio, void *args) {
-    lock_on_callback(HOMEKIT_UINT8(0));
+    if (lock_current_state.value.int_value == 1) {
+        lock_on_callback(HOMEKIT_UINT8(0));
+    } else {
+        lock_on_callback(HOMEKIT_UINT8(1));
+    }
 }
 
 // ***** Buttons
@@ -1451,20 +1467,20 @@ void button_dual_rotation_intr_callback(const uint8_t gpio, void *args) {
 
 void button_event1_intr_callback(const uint8_t gpio, void *args) {
     homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(0));
+    LED_BLINK(1);
     printf("RC > Single press\n");
-    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
 }
 
 void button_event2_intr_callback(const uint8_t gpio, void *args) {
     homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(1));
+    LED_BLINK(2);
     printf("RC > Double press\n");
-    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 2, 1, NULL);
 }
 
 void button_event3_intr_callback(const uint8_t gpio, void *args) {
     homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(2));
+    LED_BLINK(3);
     printf("RC > Long press\n");
-    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 3, 1, NULL);
 }
 
 // ***** Thermostat
@@ -1473,19 +1489,19 @@ void th_button_intr_callback(const uint8_t gpio, void *args) {
     uint8_t state = target_state.value.int_value + 1;
     switch (state) {
         case 1:
+            LED_BLINK(2);
             printf("RC > HEAT\n");
-            xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 2, 1, NULL);
             break;
             
         case 2:
+            LED_BLINK(3);
             printf("RC > COOL\n");
-            xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 3, 1, NULL);
             break;
 
         default:
+            LED_BLINK(1);
             state = 0;
             printf("RC > OFF\n");
-            xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
             break;
     }
     
@@ -1499,18 +1515,18 @@ void th_target(homekit_value_t value) {
     target_state.value = value;
     switch (target_state.value.int_value) {
         case 1:
+            LED_BLINK(2);
             printf("RC > HEAT\n");
-            xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 2, 1, NULL);
             break;
             
         case 2:
+            LED_BLINK(3);
             printf("RC > COOL\n");
-            xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 3, 1, NULL);
             break;
             
         default:
+            LED_BLINK(1);
             printf("RC > OFF\n");
-            xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 1, 1, NULL);
             break;
     }
     
@@ -1623,8 +1639,8 @@ void temperature_sensor_worker() {
         
         printf("RC > TEMP %g, HUM %g\n", temperature_value, humidity_value);
     } else {
+        LED_BLINK(5);
         printf("RC ! ERROR Sensor\n");
-        xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 5, 1, NULL);
         
         if (current_state.value.int_value != 0 && device_type_static == 5) {
             current_state.value = HOMEKIT_UINT8(0);
@@ -1705,6 +1721,9 @@ void rgbw_set_task() {
         multipwm_start(&pwm_info);
     }
     
+    const TickType_t delay = pdMS_TO_TICKS(RGBW_DELAY);
+    TickType_t last_wake_time = xTaskGetTickCount();
+    
     bool fixed_r = false;
     bool fixed_g = false;
     bool fixed_b = false;
@@ -1712,24 +1731,28 @@ void rgbw_set_task() {
     
     while (1) {
         if (abs(target_rgbw_color.red   - current_rgbw_color.red)   <= current_rgbw_color.red   >> 4) {
+            current_rgbw_color.red = target_rgbw_color.red;
             fixed_r = true;
         } else {
             current_rgbw_color.red   += (target_rgbw_color.red      - current_rgbw_color.red)   >> 4;
         }
         
         if (abs(target_rgbw_color.green - current_rgbw_color.green) <= current_rgbw_color.green >> 4) {
+            current_rgbw_color.green = target_rgbw_color.green;
             fixed_g = true;
         } else {
             current_rgbw_color.green += (target_rgbw_color.green    - current_rgbw_color.green) >> 4;
         }
         
         if (abs(target_rgbw_color.blue  - current_rgbw_color.blue)  <= current_rgbw_color.blue  >> 4) {
+            current_rgbw_color.blue = target_rgbw_color.blue;
             fixed_b = true;
         } else {
             current_rgbw_color.blue  += (target_rgbw_color.blue     - current_rgbw_color.blue)  >> 4;
         }
         
         if (abs(target_rgbw_color.white - current_rgbw_color.white) <= current_rgbw_color.white >> 4) {
+            current_rgbw_color.white = target_rgbw_color.white;
             fixed_w = true;
         } else {
             current_rgbw_color.white += (target_rgbw_color.white    - current_rgbw_color.white) >> 4;
@@ -1737,8 +1760,8 @@ void rgbw_set_task() {
     
         apply_color(current_rgbw_color);
         
-        vTaskDelay(RGBW_DELAY / portTICK_PERIOD_MS);
-    
+        vTaskDelayUntil(&last_wake_time, delay);
+        
         if (fixed_r && fixed_g && fixed_b && fixed_w) {
             printf("RC > Target color established\n");
             
@@ -1817,7 +1840,7 @@ void identify(homekit_value_t _value) {
             break;
             
         default:
-            xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 8, 1, NULL);
+            LED_BLINK(8);
             break;
     }
 }
@@ -3032,7 +3055,7 @@ homekit_server_config_t config;
 void create_accessory() {
     printf("RC > Creating HK accessory\n");
     
-    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) 6, 1, NULL);
+    LED_BLINK(6);
     
     // Accessory Name and Serial
     uint8_t macaddr[6];
