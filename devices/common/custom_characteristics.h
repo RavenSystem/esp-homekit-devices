@@ -98,9 +98,9 @@
  10. ESP01 Switch + Button
  11. Switch 3ch
  12. Window
- 13. Lock
- 14. MagicHome
- 15. Stateless Switch
+ 13. Lock Mechanism
+ 14. RGB/W Lights
+ 15. Stateless Button
  */
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_DEVICE_TYPE HOMEKIT_CUSTOM_UUID("F0000100")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_DEVICE_TYPE(_value, ...) \
@@ -497,10 +497,10 @@
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
 
-#define HOMEKIT_CHARACTERISTIC_CUSTOM_COVERING_TYPE HOMEKIT_CUSTOM_UUID("F0000125")
-#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_COVERING_TYPE(_value, ...) \
-    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_COVERING_TYPE, \
-    .description = "Cover Type", \
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_TYPE HOMEKIT_CUSTOM_UUID("F0000125")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_TYPE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_TYPE, \
+    .description = "Type", \
     .format = homekit_format_uint8, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
