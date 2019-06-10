@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.9.0
+ * v0.9.1
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -54,6 +54,7 @@
 #include <homekit/homekit.h>
 #include <homekit/characteristics.h>
 #include <wifi_config.h>
+#include <led_codes.h>
 #include <adv_button.h>
 
 #include <multipwm/multipwm.h>
@@ -64,8 +65,8 @@
 #include "../common/custom_characteristics.h"
 
 // Version
-#define FIRMWARE_VERSION                "0.9.0"
-#define FIRMWARE_VERSION_OCTAL          001100      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.9.1"
+#define FIRMWARE_VERSION_OCTAL          001101      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -115,7 +116,7 @@
 
 #define PWM_RGBW_SCALE                  65535
 #define PWM_RGBW_SCALE_OFFSET           100
-#define RGBW_DELAY                      10
+#define RGBW_DELAY                      15
 #define RGBW_SET_DELAY                  300
 
 // Sensors
@@ -168,7 +169,7 @@
 #define REVERSE_SW4_SYSPARAM                            "7"
 #define COVERING_UP_TIME_SYSPARAM                       "8"
 #define COVERING_DOWN_TIME_SYSPARAM                     "9"
-#define TYPE_SYSPARAM                          "!"
+#define TYPE_SYSPARAM                                   "!"
 #define COVERING_LAST_POSITION_SYSPARAM                 "A"
 #define TEMP_DEADBAND_SYSPARAM                          "B"
 #define R_GPIO_SYSPARAM                                 "C"
@@ -246,8 +247,8 @@ homekit_characteristic_t button_event = HOMEKIT_CHARACTERISTIC_(PROGRAMMABLE_SWI
 homekit_characteristic_t current_temperature = HOMEKIT_CHARACTERISTIC_(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200});
 homekit_characteristic_t target_temperature  = HOMEKIT_CHARACTERISTIC_(TARGET_TEMPERATURE, 23, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(update_th_state));
 homekit_characteristic_t units = HOMEKIT_CHARACTERISTIC_(TEMPERATURE_DISPLAY_UNITS, 0);
-homekit_characteristic_t current_state = HOMEKIT_CHARACTERISTIC_(CURRENT_HEATING_COOLING_STATE, 0);
-homekit_characteristic_t target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_COOLING_STATE, 0, .getter_ex=hkc_general_getter, .setter=th_target);
+homekit_characteristic_t current_state = HOMEKIT_CHARACTERISTIC_(CURRENT_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .valid_values={.count=3, .values=(uint8_t[]) {0, 1, 2}});
+homekit_characteristic_t target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .valid_values={.count=3, .values=(uint8_t[]) {0, 1, 2}}, .getter_ex=hkc_general_getter, .setter=th_target);
 homekit_characteristic_t current_humidity = HOMEKIT_CHARACTERISTIC_(CURRENT_RELATIVE_HUMIDITY, 0);
 
 // Water Valve
@@ -346,25 +347,6 @@ homekit_characteristic_t custom_reverse_sw4 = HOMEKIT_CHARACTERISTIC_(CUSTOM_REV
 
 // Last used ID = 153
 // ---------------------------
-
-void led_task(void *pvParameters) {
-    const uint8_t times = (int) pvParameters;
-    
-    for (uint8_t i=0; i<times; i++) {
-        gpio_write(led_gpio, false);
-        vTaskDelay(30 / portTICK_PERIOD_MS);
-        gpio_write(led_gpio, true);
-        vTaskDelay(130 / portTICK_PERIOD_MS);
-    }
-    
-    vTaskDelete(NULL);
-}
-
-void led_blink(const int blinks) {
-    if (led_gpio != 255) {
-        xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) blinks, 1, NULL);
-    }
-}
 
 void relay_write(bool on, const uint8_t gpio) {
     if (custom_reverse_sw1.value.bool_value && gpio == relay1_gpio ) {
@@ -711,7 +693,7 @@ void device_restart_task() {
 
 void device_restart() {
     printf("RC > Restarting device\n");
-    led_blink(6);
+    led_code(led_gpio, FUNCTION_F);
     xTaskCreate(device_restart_task, "device_restart_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
 }
 
@@ -828,7 +810,7 @@ void factory_default_call(const uint8_t gpio, void *args) {
     printf("RC > Checking factory default call\n");
     
     if (xTaskGetTickCountFromISR() < ALLOWED_FACTORY_RESET_TIME / portTICK_PERIOD_MS) {
-        led_blink(4);
+        led_code(led_gpio, FUNCTION_D);
         xTaskCreate(factory_default_task, "factory_default_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
     } else {
         printf("RC ! Reset to factory defaults not allowed after %i msecs since boot. Repower device and try again\n", ALLOWED_FACTORY_RESET_TIME);
@@ -923,7 +905,7 @@ void switch1_on_callback(homekit_value_t value) {
     
     if (device_type_static != 14) {
         relay_write(switch1_on.value.bool_value, relay1_gpio);
-        led_blink(1);
+        led_code(led_gpio, FUNCTION_A);
         printf("RC > Relay 1 -> %i\n", switch1_on.value.bool_value);
         
         if (custom_inching_time1.value.float_value > 0 && switch1_on.value.bool_value) {
@@ -942,7 +924,7 @@ void switch2_on_callback(homekit_value_t value) {
     printf("RC > Toggle SW 2\n");
     switch2_on.value = value;
     relay_write(switch2_on.value.bool_value, relay2_gpio);
-    led_blink(1);
+    led_code(led_gpio, FUNCTION_A);
     printf("RC > Relay 2 -> %i\n", switch2_on.value.bool_value);
     
     if (custom_inching_time2.value.float_value > 0 && switch2_on.value.bool_value) {
@@ -956,7 +938,7 @@ void switch3_on_callback(homekit_value_t value) {
     printf("RC > Toggle SW 3\n");
     switch3_on.value = value;
     relay_write(switch3_on.value.bool_value, RELAY3_GPIO);
-    led_blink(1);
+    led_code(led_gpio, FUNCTION_A);
     printf("RC > Relay 3 -> %i\n", switch3_on.value.bool_value);
     
     if (custom_inching_time3.value.float_value > 0 && switch3_on.value.bool_value) {
@@ -970,7 +952,7 @@ void switch4_on_callback(homekit_value_t value) {
     printf("RC > Toggle SW 4\n");
     switch4_on.value = value;
     relay_write(switch4_on.value.bool_value, RELAY4_GPIO);
-    led_blink(1);
+    led_code(led_gpio, FUNCTION_A);
     printf("RC > Relay 4 -> %i\n", switch4_on.value.bool_value);
     
     if (custom_inching_time4.value.float_value > 0 && switch4_on.value.bool_value) {
@@ -983,7 +965,7 @@ void switch4_on_callback(homekit_value_t value) {
 void switchdm_on_callback(homekit_value_t value) {
     printf("RC > Toggle SW DM\n");
     switchdm_on.value = value;
-    led_blink(1);
+    led_code(led_gpio, FUNCTION_A);
     
     if (custom_inching_timedm.value.float_value > 0 && switchdm_on.value.bool_value) {
         xTaskCreate(switch_autooff_task, "switch_autooff_task", configMINIMAL_STACK_SIZE, (void *) 5, 1, NULL);
@@ -1019,7 +1001,7 @@ void valve_control() {
         homekit_characteristic_notify(&active, active.value);
         homekit_characteristic_notify(&in_use, in_use.value);
         
-        led_blink(4);
+        led_code(led_gpio, FUNCTION_D);
     }
 }
 
@@ -1051,7 +1033,9 @@ void valve_on_callback(homekit_value_t value) {
         homekit_characteristic_notify(&remaining_duration, remaining_duration.value);
     }
     
-    led_blink(1);
+    led_code(led_gpio, FUNCTION_A);
+    
+    factory_default_toggle_upcount();
 }
 
 // ***** Garage Door
@@ -1105,9 +1089,9 @@ void garage_on_callback(homekit_value_t value) {
         
         if (value.int_value != current_door_state_simple) {
             xTaskCreate(garage_button_task, "garage_button_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
-            led_blink(1);
+            led_code(led_gpio, FUNCTION_A);
         } else {
-            led_blink(4);
+            led_code(led_gpio, FUNCTION_D);
         }
         
         target_door_state.value = value;
@@ -1122,6 +1106,8 @@ void garage_on_callback(homekit_value_t value) {
     } else {
         door_worker();
     }
+    
+    factory_default_toggle_upcount();
 }
 
 void garage_on_button(const uint8_t gpio, void *args) {
@@ -1135,7 +1121,7 @@ void garage_on_button(const uint8_t gpio, void *args) {
         }
     } else {
         printf("RC > GD: built-in button DISABLED\n");
-        led_blink(4);
+        led_code(led_gpio, FUNCTION_D);
     }
 }
 
@@ -1262,14 +1248,14 @@ void covering_stop() {
     homekit_characteristic_notify(&covering_position_state, covering_position_state.value);
     
     printf("RC > Covering stoped at %f, real %f\n", covering_actual_pos, real_covering_actual_pos);
-    led_blink(1);
+    led_code(led_gpio, FUNCTION_A);
     
     save_states_callback();
 }
 
 void covering_on_callback(homekit_value_t value) {
     printf("RC > Covering activated: Current pos -> %i, Target pos -> %i\n", covering_current_position.value.int_value, value.int_value);
-    led_blink(1);
+    led_code(led_gpio, FUNCTION_A);
     
     covering_target_position.value = value;
     homekit_characteristic_notify(&covering_target_position, covering_target_position.value);
@@ -1415,7 +1401,7 @@ void lock_on_callback(homekit_value_t value) {
         
         if (value.int_value == 0) {
             printf("RC > Lock opened\n");
-            led_blink(1);
+            led_code(led_gpio, FUNCTION_A);
             relay_write(true, relay1_gpio);
             
             if (custom_inching_time1.value.float_value > 0) {
@@ -1504,19 +1490,19 @@ void button_dual_rotation_intr_callback(const uint8_t gpio, void *args) {
 
 void button_event1_intr_callback(const uint8_t gpio, void *args) {
     homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(0));
-    led_blink(1);
+    led_code(led_gpio, FUNCTION_A);
     printf("RC > Single press\n");
 }
 
 void button_event2_intr_callback(const uint8_t gpio, void *args) {
     homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(1));
-    led_blink(2);
+    led_code(led_gpio, FUNCTION_B);
     printf("RC > Double press\n");
 }
 
 void button_event3_intr_callback(const uint8_t gpio, void *args) {
     homekit_characteristic_notify(&button_event, HOMEKIT_UINT8(2));
-    led_blink(3);
+    led_code(led_gpio, FUNCTION_C);
     printf("RC > Long press\n");
 }
 
@@ -1526,17 +1512,17 @@ void th_button_intr_callback(const uint8_t gpio, void *args) {
     uint8_t state = target_state.value.int_value + 1;
     switch (state) {
         case 1:
-            led_blink(2);
+            led_code(led_gpio, FUNCTION_B);
             printf("RC > HEAT\n");
             break;
             
         case 2:
-            led_blink(3);
+            led_code(led_gpio, FUNCTION_C);
             printf("RC > COOL\n");
             break;
 
         default:
-            led_blink(1);
+            led_code(led_gpio, FUNCTION_A);
             state = 0;
             printf("RC > OFF\n");
             break;
@@ -1552,17 +1538,17 @@ void th_target(homekit_value_t value) {
     target_state.value = value;
     switch (target_state.value.int_value) {
         case 1:
-            led_blink(2);
+            led_code(led_gpio, FUNCTION_B);
             printf("RC > HEAT\n");
             break;
             
         case 2:
-            led_blink(3);
+            led_code(led_gpio, FUNCTION_C);
             printf("RC > COOL\n");
             break;
             
         default:
-            led_blink(1);
+            led_code(led_gpio, FUNCTION_A);
             printf("RC > OFF\n");
             break;
     }
@@ -1676,7 +1662,7 @@ void temperature_sensor_worker() {
         
         printf("RC > TEMP %g, HUM %g\n", temperature_value, humidity_value);
     } else {
-        led_blink(5);
+        led_code(led_gpio, FUNCTION_E);
         printf("RC ! ERROR Sensor\n");
         
         if (current_state.value.int_value != 0 && device_type_static == 5) {
@@ -1761,52 +1747,24 @@ void rgbw_set_task() {
     const TickType_t delay = pdMS_TO_TICKS(RGBW_DELAY);
     TickType_t last_wake_time = xTaskGetTickCount();
     
-    bool fixed_r = false;
-    bool fixed_g = false;
-    bool fixed_b = false;
-    bool fixed_w = false;
-    
     while (1) {
-        if (abs(target_rgbw_color.red   - current_rgbw_color.red)   <= current_rgbw_color.red   >> 4) {
-            current_rgbw_color.red = target_rgbw_color.red;
-            fixed_r = true;
-        } else {
-            current_rgbw_color.red   += (target_rgbw_color.red      - current_rgbw_color.red)   >> 4;
-        }
+        current_rgbw_color.red   += (target_rgbw_color.red      - current_rgbw_color.red)   >> 4;
+        current_rgbw_color.green += (target_rgbw_color.green    - current_rgbw_color.green) >> 4;
+        current_rgbw_color.blue  += (target_rgbw_color.blue     - current_rgbw_color.blue)  >> 4;
+        current_rgbw_color.white += (target_rgbw_color.white    - current_rgbw_color.white) >> 4;
         
-        if (abs(target_rgbw_color.green - current_rgbw_color.green) <= current_rgbw_color.green >> 4) {
-            current_rgbw_color.green = target_rgbw_color.green;
-            fixed_g = true;
-        } else {
-            current_rgbw_color.green += (target_rgbw_color.green    - current_rgbw_color.green) >> 4;
-        }
-        
-        if (abs(target_rgbw_color.blue  - current_rgbw_color.blue)  <= current_rgbw_color.blue  >> 4) {
-            current_rgbw_color.blue = target_rgbw_color.blue;
-            fixed_b = true;
-        } else {
-            current_rgbw_color.blue  += (target_rgbw_color.blue     - current_rgbw_color.blue)  >> 4;
-        }
-        
-        if (abs(target_rgbw_color.white - current_rgbw_color.white) <= current_rgbw_color.white >> 4) {
-            current_rgbw_color.white = target_rgbw_color.white;
-            fixed_w = true;
-        } else {
-            current_rgbw_color.white += (target_rgbw_color.white    - current_rgbw_color.white) >> 4;
-        }
-    
         apply_color(current_rgbw_color);
         
         vTaskDelayUntil(&last_wake_time, delay);
         
-        if (fixed_r && fixed_g && fixed_b && fixed_w) {
+        if (abs(target_rgbw_color.red   - current_rgbw_color.red)   <= current_rgbw_color.red   >> 4 &&
+            abs(target_rgbw_color.green - current_rgbw_color.green) <= current_rgbw_color.green >> 4 &&
+            abs(target_rgbw_color.blue  - current_rgbw_color.blue)  <= current_rgbw_color.blue  >> 4 &&
+            abs(target_rgbw_color.white - current_rgbw_color.white) <= current_rgbw_color.white >> 4) {
+            
+            apply_color(target_rgbw_color);
+            
             printf("RC > Target color established\n");
-            
-            fixed_r = false;
-            fixed_g = false;
-            fixed_b = false;
-            fixed_w = false;
-            
             vTaskSuspend(NULL);
         }
     }
@@ -1881,7 +1839,7 @@ void identify(homekit_value_t _value) {
             break;
             
         default:
-            led_blink(8);
+            led_code(led_gpio, SENSOR_ERROR);
             break;
     }
 }
@@ -1919,9 +1877,7 @@ void hardware_init() {
         }
         
         led_gpio = LED_GPIO;
-        gpio_enable(led_gpio, GPIO_OUTPUT);
-        gpio_write(led_gpio, true);
-        
+
         adv_button_create(button1_gpio, true, false);
     }
     
@@ -1949,10 +1905,8 @@ void hardware_init() {
                 led_gpio = S25_LED_GPIO;
                 
                 adv_button_create(S25_BUTTON_GPIO, false, false);
-                adv_button_register_callback_fn(S25_BUTTON_GPIO, factory_default_call, 5, NULL);
-                
-                gpio_enable(led_gpio, GPIO_OUTPUT);
-                gpio_write(led_gpio, false);
+                adv_button_register_callback_fn(S25_BUTTON_GPIO, button_simple1_intr_callback, 1, NULL);
+                adv_button_register_callback_fn(S25_BUTTON_GPIO, button_simple2_intr_callback, 2, NULL);
                 
                 pullup = false;
             } else {                                // It is a Sonoff
@@ -1964,7 +1918,6 @@ void hardware_init() {
                 
                 adv_button_register_callback_fn(BUTTON3_GPIO, button_simple1_intr_callback, 1, NULL);
                 adv_button_register_callback_fn(BUTTON3_GPIO, button_simple2_intr_callback, 2, NULL);
-                adv_button_register_callback_fn(BUTTON3_GPIO, factory_default_call, 5, NULL);
                 
                 if (board_type.value.int_value == 4) {
                     button1_gpio = 3;
@@ -2035,7 +1988,6 @@ void hardware_init() {
             enable_sonoff_device();
             
             adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1, NULL);
-            adv_button_register_callback_fn(button1_gpio, factory_default_call, 5, NULL);
             
             adv_button_create(button2_gpio, true, false);
             adv_button_register_callback_fn(button2_gpio, button_simple2_intr_callback, 1, NULL);
@@ -2064,7 +2016,6 @@ void hardware_init() {
             enable_sonoff_device();
             
             adv_button_register_callback_fn(button1_gpio, th_button_intr_callback, 1, NULL);
-            adv_button_register_callback_fn(button1_gpio, factory_default_call, 5, NULL);
             
             gpio_set_pullup(extra_gpio, false, false);
             
@@ -2082,7 +2033,6 @@ void hardware_init() {
             enable_sonoff_device();
             
             adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1, NULL);
-            adv_button_register_callback_fn(button1_gpio, factory_default_call, 5, NULL);
             
             gpio_set_pullup(extra_gpio, false, false);
             
@@ -2105,7 +2055,6 @@ void hardware_init() {
                 enable_sonoff_device();
                 
                 adv_button_register_callback_fn(button1_gpio, toggle_valve, 1, NULL);
-                adv_button_register_callback_fn(button1_gpio, factory_default_call, 5, NULL);
             }
             
             sdk_os_timer_setfn(&extra_func_timer, valve_control, NULL);
@@ -2119,7 +2068,6 @@ void hardware_init() {
             enable_sonoff_device();
             
             adv_button_register_callback_fn(button1_gpio, garage_on_button, 1, NULL);
-            adv_button_register_callback_fn(button1_gpio, factory_default_call, 5, NULL);
             
             adv_button_create(extra_gpio, pullup, false);
             
@@ -2214,7 +2162,6 @@ void hardware_init() {
             enable_sonoff_device();
             
             adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1, NULL);
-            adv_button_register_callback_fn(button1_gpio, factory_default_call, 5, NULL);
             
             adv_button_create(button2_gpio, true, false);
             adv_button_register_callback_fn(button2_gpio, button_simple2_intr_callback, 1, NULL);
@@ -2246,11 +2193,10 @@ void hardware_init() {
                 button2_gpio = S25_TOGGLE2_GPIO;
                 led_gpio = S25_LED_GPIO;
                 
-                gpio_enable(led_gpio, GPIO_OUTPUT);
-                gpio_write(led_gpio, false);
-                
                 adv_button_create(S25_BUTTON_GPIO, false, false);
-                adv_button_register_callback_fn(S25_BUTTON_GPIO, factory_default_call, 5, NULL);
+                adv_button_register_callback_fn(S25_BUTTON_GPIO, covering_button_up, 1, NULL);
+                adv_button_register_callback_fn(S25_BUTTON_GPIO, covering_button_down, 2, NULL);
+                adv_button_register_callback_fn(S25_BUTTON_GPIO, covering_toggle_stop, 3, NULL);
                 
                 pullup = false;
             } else {                                // It is a Sonoff
@@ -2259,7 +2205,9 @@ void hardware_init() {
                 adv_button_destroy(button1_gpio);
                 
                 adv_button_create(BUTTON3_GPIO, true, false);
-                adv_button_register_callback_fn(BUTTON3_GPIO, factory_default_call, 5, NULL);
+                adv_button_register_callback_fn(BUTTON3_GPIO, covering_button_up, 1, NULL);
+                adv_button_register_callback_fn(BUTTON3_GPIO, covering_button_down, 2, NULL);
+                adv_button_register_callback_fn(BUTTON3_GPIO, covering_toggle_stop, 3, NULL);
                 
                 if (board_type.value.int_value == 4) {
                     button1_gpio = 3;
@@ -2315,7 +2263,6 @@ void hardware_init() {
                 enable_sonoff_device();
                 
                 adv_button_register_callback_fn(button1_gpio, lock_intr_callback, 1, NULL);
-                adv_button_register_callback_fn(button1_gpio, factory_default_call, 5, NULL);
                 
                 if (custom_garagedoor_sensor_open.value.int_value > 0) {
                     adv_button_create(DOOR_OPENED_GPIO, pullup, false);
@@ -2358,7 +2305,6 @@ void hardware_init() {
         case 14:
             adv_button_create(button1_gpio, true, false);
             adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1, NULL);
-            adv_button_register_callback_fn(button1_gpio, factory_default_call, 5, NULL);
             
             r_gpio = custom_r_gpio.value.int_value;
             g_gpio = custom_g_gpio.value.int_value;
@@ -2432,7 +2378,6 @@ void hardware_init() {
             adv_button_register_callback_fn(custom_w_gpio.value.int_value, button_event1_intr_callback, 1, NULL);
             adv_button_register_callback_fn(custom_w_gpio.value.int_value, button_event2_intr_callback, 2, NULL);
             adv_button_register_callback_fn(custom_w_gpio.value.int_value, button_event3_intr_callback, 3, NULL);
-            adv_button_register_callback_fn(custom_w_gpio.value.int_value, factory_default_call, 5, NULL);
             
             break;
             
@@ -2445,7 +2390,6 @@ void hardware_init() {
                 enable_sonoff_device();
                 
                 adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1, NULL);
-                adv_button_register_callback_fn(button1_gpio, factory_default_call, 5, NULL);
             }
             
             switch (external_toggle1.value.int_value) {
@@ -2468,6 +2412,10 @@ void hardware_init() {
             switch1_on_callback(switch1_on.value);
             
             break;
+    }
+    
+    if (led_gpio != 255) {
+        led_create(led_gpio, true);
     }
     
     printf("RC > HW ready\n");
@@ -3126,7 +3074,7 @@ homekit_server_config_t config;
 void create_accessory() {
     printf("RC > Creating HK accessory\n");
     
-    led_blink(6);
+    led_code(led_gpio, FUNCTION_F);
     
     // Accessory Name and Serial
     uint8_t macaddr[6];
