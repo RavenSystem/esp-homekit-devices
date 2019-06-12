@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.9.1
+ * v0.9.2
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -65,8 +65,8 @@
 #include "../common/custom_characteristics.h"
 
 // Version
-#define FIRMWARE_VERSION                "0.9.1"
-#define FIRMWARE_VERSION_OCTAL          001101      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.9.2"
+#define FIRMWARE_VERSION_OCTAL          001102      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -247,9 +247,13 @@ homekit_characteristic_t button_event = HOMEKIT_CHARACTERISTIC_(PROGRAMMABLE_SWI
 homekit_characteristic_t current_temperature = HOMEKIT_CHARACTERISTIC_(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200});
 homekit_characteristic_t target_temperature  = HOMEKIT_CHARACTERISTIC_(TARGET_TEMPERATURE, 23, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(update_th_state));
 homekit_characteristic_t units = HOMEKIT_CHARACTERISTIC_(TEMPERATURE_DISPLAY_UNITS, 0);
+homekit_characteristic_t current_humidity = HOMEKIT_CHARACTERISTIC_(CURRENT_RELATIVE_HUMIDITY, 0);
 homekit_characteristic_t current_state = HOMEKIT_CHARACTERISTIC_(CURRENT_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .valid_values={.count=3, .values=(uint8_t[]) {0, 1, 2}});
 homekit_characteristic_t target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .valid_values={.count=3, .values=(uint8_t[]) {0, 1, 2}}, .getter_ex=hkc_general_getter, .setter=th_target);
-homekit_characteristic_t current_humidity = HOMEKIT_CHARACTERISTIC_(CURRENT_RELATIVE_HUMIDITY, 0);
+homekit_characteristic_t heater_current_state = HOMEKIT_CHARACTERISTIC_(CURRENT_HEATING_COOLING_STATE, 0, .max_value=(float[]) {1}, .valid_values={.count=2, .values=(uint8_t[]) {0, 1}});
+homekit_characteristic_t heater_target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_COOLING_STATE, 0, .max_value=(float[]) {1}, .valid_values={.count=2, .values=(uint8_t[]) {0, 1}}, .getter_ex=hkc_general_getter, .setter=th_target);
+homekit_characteristic_t cooler_current_state = HOMEKIT_CHARACTERISTIC_(CURRENT_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .min_step = (float[]) {2}, .valid_values={.count=2, .values=(uint8_t[]) {0, 2}});
+homekit_characteristic_t cooler_target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .min_step = (float[]) {2}, .valid_values={.count=2, .values=(uint8_t[]) {0, 2}}, .getter_ex=hkc_general_getter, .setter=th_target);
 
 // Water Valve
 homekit_characteristic_t active = HOMEKIT_CHARACTERISTIC_(ACTIVE, 0, .getter_ex=hkc_general_getter, .setter=valve_on_callback);
@@ -1051,8 +1055,9 @@ void garage_button_task() {
         vTaskDelay((custom_inching_time1.value.float_value + 0.05) * 1000 / portTICK_PERIOD_MS);
         relay_write(false, relay1_gpio);
 
-        if (custom_garagedoor_has_stop.value.bool_value && is_moving) {
+        if (custom_garagedoor_has_stop.value.bool_value && !is_moving) {
             vTaskDelay(2500 / portTICK_PERIOD_MS);
+            printf("RC > GD -> GD relay working again\n");
             relay_write(true, relay1_gpio);
             vTaskDelay((custom_inching_time1.value.float_value + 0.05) * 1000 / portTICK_PERIOD_MS);
             relay_write(false, relay1_gpio);
@@ -1510,6 +1515,26 @@ void button_event3_intr_callback(const uint8_t gpio, void *args) {
 
 void th_button_intr_callback(const uint8_t gpio, void *args) {
     uint8_t state = target_state.value.int_value + 1;
+    
+    switch (custom_type.value.int_value) {
+        case 1:
+            if (state == 2) {
+                state = 0;
+            }
+            break;
+            
+        case 2:
+            if (state == 1) {
+                state = 2;
+            } else {
+                state = 0;
+            }
+            break;
+            
+        default:    // case 0:
+            break;
+    }
+    
     switch (state) {
         case 1:
             led_code(led_gpio, FUNCTION_B);
@@ -1521,7 +1546,7 @@ void th_button_intr_callback(const uint8_t gpio, void *args) {
             printf("RC > COOL\n");
             break;
 
-        default:
+        default:    // case 0:
             led_code(led_gpio, FUNCTION_A);
             state = 0;
             printf("RC > OFF\n");
@@ -1564,12 +1589,6 @@ void update_th_state() {
     }
     
     switch (target_state.value.int_value) {
-        case 0:
-            if (current_state.value.int_value != 0) {
-                th_state_off();
-            }
-            break;
-            
         case 1:
             if (current_state.value.int_value == 0) {
                 if (current_temperature.value.float_value < (target_temperature.value.float_value - temp_deadband.value.float_value)) {
@@ -1594,9 +1613,10 @@ void update_th_state() {
             }
             break;
             
-        default:    // case 3
-            target_state.value.int_value = 0;
-            homekit_characteristic_notify(&target_state, target_state.value);
+        default:    // case 0
+            if (current_state.value.int_value != 0) {
+                th_state_off();
+            }
             break;
     }
     
@@ -2014,6 +2034,21 @@ void hardware_init() {
             
         case 5:
             enable_sonoff_device();
+            
+            switch (custom_type.value.int_value) {
+                case 1:
+                    current_state = heater_current_state;
+                    target_state = heater_target_state;
+                    break;
+                    
+                case 2:
+                    current_state = cooler_current_state;
+                    target_state = cooler_target_state;
+                    break;
+                    
+                default:    // case 0:
+                    break;
+            }
             
             adv_button_register_callback_fn(button1_gpio, th_button_intr_callback, 1, NULL);
             
@@ -3598,7 +3633,7 @@ void create_accessory() {
                         break;
                         
                     case 5:
-                        setting_count += 6;
+                        setting_count += 7;
                         break;
                         
                     case 6:
@@ -3726,6 +3761,8 @@ void create_accessory() {
                         sonoff_setup->characteristics[setting_number] = &custom_inching_time4;
                         
                     } else if (device_type_static == 5) {
+                        sonoff_setup->characteristics[setting_number] = &custom_type;
+                        setting_number++;
                         sonoff_setup->characteristics[setting_number] = &dht_sensor_type;
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &hum_offset;
