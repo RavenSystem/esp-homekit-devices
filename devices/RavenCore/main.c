@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.9.2
+ * v0.9.3
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -65,8 +65,8 @@
 #include "../common/custom_characteristics.h"
 
 // Version
-#define FIRMWARE_VERSION                "0.9.2"
-#define FIRMWARE_VERSION_OCTAL          001102      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.9.3"
+#define FIRMWARE_VERSION_OCTAL          001103      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -696,7 +696,7 @@ void device_restart_task() {
 }
 
 void device_restart() {
-    printf("RC > Restarting device\n");
+    printf("RC > Restarting...\n");
     led_code(led_gpio, FUNCTION_F);
     xTaskCreate(device_restart_task, "device_restart_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
 }
@@ -713,21 +713,13 @@ void show_setup_callback() {
 }
 
 void factory_default_task() {
-    printf("RC > Resetting to factory defaults\n");
-    
-    relay_write(false, relay1_gpio);
-    gpio_disable(relay1_gpio);
+    printf("RC > Resetting to factory\n");
     
     sysparam_status_t status;
     
     status = sysparam_set_bool(SHOW_SETUP_SYSPARAM, true);
     //status = sysparam_set_int8(BOARD_TYPE_SYSPARAM, 1);   // This value is not reseted
-    
-    if (board_type.value.int_value == 4) {
-        status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 0);
-    } else {
-        status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 1);
-    }
+    status = sysparam_set_int8(DEVICE_TYPE_SYSPARAM, 1);
     
     status = sysparam_set_int8(LOG_OUTPUT_SYSPARAM, 1);
     status = sysparam_set_int8(BUTTON_FILTER_SYSPARAM, 0);
@@ -811,13 +803,13 @@ void factory_default_task() {
 }
 
 void factory_default_call(const uint8_t gpio, void *args) {
-    printf("RC > Checking factory default call\n");
+    printf("RC > Checking factory reset call\n");
     
     if (xTaskGetTickCountFromISR() < ALLOWED_FACTORY_RESET_TIME / portTICK_PERIOD_MS) {
         led_code(led_gpio, FUNCTION_D);
         xTaskCreate(factory_default_task, "factory_default_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
     } else {
-        printf("RC ! Reset to factory defaults not allowed after %i msecs since boot. Repower device and try again\n", ALLOWED_FACTORY_RESET_TIME);
+        printf("RC ! Factory reset not allowed after %ims since boot. Repower device and try again\n", ALLOWED_FACTORY_RESET_TIME);
     }
 }
 
@@ -994,7 +986,7 @@ void toggle_valve(const uint8_t gpio, void *args) {
 void valve_control() {
     remaining_duration.value.int_value--;
     if (remaining_duration.value.int_value == 0) {
-        printf("RC > Valve OFF\n");
+        printf("RC > Valve auto OFF\n");
         
         sdk_os_timer_disarm(&extra_func_timer);
         relay_write(false, relay1_gpio);
@@ -1022,7 +1014,7 @@ void valve_on_callback(homekit_value_t value) {
             sdk_os_timer_arm(&extra_func_timer, 1000, 1);
         }
     } else {
-        printf("RC > Valve manual OFF\n");
+        printf("RC > Valve OFF\n");
         relay_write(false, relay1_gpio);
         
         if (custom_garagedoor_has_stop.value.bool_value) {
@@ -1045,7 +1037,7 @@ void valve_on_callback(homekit_value_t value) {
 // ***** Garage Door
 
 void garage_button_task() {
-    printf("RC > GD relay working\n");
+    printf("RC > Relay working\n");
     if (custom_garagedoor_sensor_open.value.int_value == 0) {
         sdk_os_timer_disarm(&extra_func_timer);
     }
@@ -1055,9 +1047,9 @@ void garage_button_task() {
         vTaskDelay((custom_inching_time1.value.float_value + 0.05) * 1000 / portTICK_PERIOD_MS);
         relay_write(false, relay1_gpio);
 
-        if (custom_garagedoor_has_stop.value.bool_value && !is_moving) {
+        if (custom_garagedoor_has_stop.value.bool_value && is_moving) {
             vTaskDelay(2500 / portTICK_PERIOD_MS);
-            printf("RC > GD -> GD relay working again\n");
+            printf("RC > GD -> Relay working again\n");
             relay_write(true, relay1_gpio);
             vTaskDelay((custom_inching_time1.value.float_value + 0.05) * 1000 / portTICK_PERIOD_MS);
             relay_write(false, relay1_gpio);
@@ -1065,17 +1057,17 @@ void garage_button_task() {
 
         if (custom_garagedoor_sensor_open.value.int_value == 0) {
             if (current_door_state.value.int_value == 0 || current_door_state.value.int_value == 2) {
-                printf("RC > GD -> CLOSING\n");
+                printf("RC > CLOSING\n");
                 current_door_state.value.int_value = 3;
                 sdk_os_timer_arm(&extra_func_timer, 1000, 1);
             } else if (current_door_state.value.int_value == 3) {
-                printf("RC > GD -> OPENING\n");
+                printf("RC > OPENING\n");
                 current_door_state.value.int_value = 2;
                 sdk_os_timer_arm(&extra_func_timer, 1000, 1);
             }
         }
     } else {
-        printf("RC ! GD -> OBSTRUCTION DETECTED - RELAY IS OFF\n");
+        printf("RC ! OBSTRUCTION DETECTED - RELAY IS OFF\n");
     }
 
     homekit_characteristic_notify(&current_door_state, current_door_state.value);
@@ -1085,7 +1077,7 @@ void garage_button_task() {
 
 void garage_on_callback(homekit_value_t value) {
     void door_worker() {
-        printf("RC > GD activated: Current state -> %i, Target state -> %i\n", current_door_state.value.int_value, value.int_value);
+        printf("RC > Current state -> %i, Target state -> %i\n", current_door_state.value.int_value, value.int_value);
         
         uint8_t current_door_state_simple = current_door_state.value.int_value;
         if (current_door_state_simple > 1) {
@@ -1117,7 +1109,7 @@ void garage_on_callback(homekit_value_t value) {
 
 void garage_on_button(const uint8_t gpio, void *args) {
     if (custom_garagedoor_control_with_button.value.bool_value) {
-        printf("RC > GD: built-in button PRESSED\n");
+        printf("RC > Builtin button PRESSED\n");
         
         if (target_door_state.value.int_value == 0) {
             garage_on_callback(HOMEKIT_UINT8(1));
@@ -1125,7 +1117,7 @@ void garage_on_button(const uint8_t gpio, void *args) {
             garage_on_callback(HOMEKIT_UINT8(0));
         }
     } else {
-        printf("RC > GD: built-in button DISABLED\n");
+        printf("RC > Builtin button DISABLED\n");
         led_code(led_gpio, FUNCTION_D);
     }
 }
@@ -1136,7 +1128,7 @@ static void homekit_gd_notify() {
 }
 
 void door_opened_0_fn_callback(const uint8_t gpio, void *args) {
-    printf("RC > GD -> CLOSING\n");
+    printf("RC > CLOSING\n");
     is_moving = true;
     target_door_state.value.int_value = 1;
     current_door_state.value.int_value = 3;
@@ -1145,7 +1137,7 @@ void door_opened_0_fn_callback(const uint8_t gpio, void *args) {
 }
 
 void door_opened_1_fn_callback(const uint8_t gpio, void *args) {
-    printf("RC > GD -> OPENED\n");
+    printf("RC > OPENED\n");
     is_moving = false;
     target_door_state.value.int_value = 0;
     current_door_state.value.int_value = 0;
@@ -1154,7 +1146,7 @@ void door_opened_1_fn_callback(const uint8_t gpio, void *args) {
 }
 
 void door_closed_0_fn_callback(const uint8_t gpio, void *args) {
-    printf("RC > GD -> OPENING\n");
+    printf("RC > OPENING\n");
     is_moving = true;
     target_door_state.value.int_value = 0;
     current_door_state.value.int_value = 2;
@@ -1171,7 +1163,7 @@ void door_closed_1_fn_callback(const uint8_t gpio, void *args) {
         sdk_os_timer_disarm(&extra_func_timer);
     }
     
-    printf("RC > GD -> CLOSED\n");
+    printf("RC > CLOSED\n");
     gd_time_state = 0;
     is_moving = false;
     target_door_state.value.int_value = 1;
@@ -1189,7 +1181,7 @@ void door_opened_countdown_timer() {
         gd_time_state++;
     
         if (gd_time_state == custom_garagedoor_working_time.value.int_value) {
-            printf("RC > GD -> OPENED\n");
+            printf("RC > OPENED\n");
             sdk_os_timer_disarm(&extra_func_timer);
             is_moving = false;
             gd_time_state = custom_garagedoor_working_time.value.int_value;
@@ -1208,13 +1200,13 @@ void door_opened_countdown_timer() {
 }
 
 void door_obstructed_0_fn_callback(const uint8_t gpio, void *args) {
-    printf("RC > GD -> OBSTRUCTION REMOVED\n");
+    printf("RC > OBSTRUCTION REMOVED\n");
     obstruction_detected.value.bool_value = false;
     homekit_characteristic_notify(&obstruction_detected, obstruction_detected.value);
 }
 
 void door_obstructed_1_fn_callback(const uint8_t gpio, void *args) {
-    printf("RC > GD -> OBSTRUCTED\n");
+    printf("RC > OBSTRUCTED\n");
     obstruction_detected.value.bool_value = true;
     homekit_characteristic_notify(&obstruction_detected, obstruction_detected.value);
 }
@@ -1252,14 +1244,14 @@ void covering_stop() {
     covering_position_state.value.int_value = 2;
     homekit_characteristic_notify(&covering_position_state, covering_position_state.value);
     
-    printf("RC > Covering stoped at %f, real %f\n", covering_actual_pos, real_covering_actual_pos);
+    printf("RC > Stoped at %f, real %f\n", covering_actual_pos, real_covering_actual_pos);
     led_code(led_gpio, FUNCTION_A);
     
     save_states_callback();
 }
 
 void covering_on_callback(homekit_value_t value) {
-    printf("RC > Covering activated: Current pos -> %i, Target pos -> %i\n", covering_current_position.value.int_value, value.int_value);
+    printf("RC > Activated: Current pos -> %i, Target pos -> %i\n", covering_current_position.value.int_value, value.int_value);
     led_code(led_gpio, FUNCTION_A);
     
     covering_target_position.value = value;
@@ -1302,7 +1294,7 @@ void covering_worker() {
         }
         
         if (((uint8_t)covering_actual_pos * COVERING_POLL_PERIOD_MS) % 2000 == 0) {
-            printf("RC > Covering moving at %f, real %f\n", covering_actual_pos, real_covering_actual_pos);
+            printf("RC > Moving at %f, real %f\n", covering_actual_pos, real_covering_actual_pos);
             homekit_characteristic_notify(&covering_current_position, covering_current_position.value);
         }
     }
@@ -1879,7 +1871,7 @@ homekit_value_t read_ip_addr() {
 }
 
 void hardware_init() {
-    printf("RC > Initializing hardware...\n");
+    printf("RC > Initializing HW...\n");
     
     adv_button_set_evaluate_delay(button_filter.value.int_value + BUTTON_EVAL_DELAY_MIN);
     printf("RC > Set button filter to %i\n", button_filter.value.int_value + BUTTON_EVAL_DELAY_MIN);
@@ -2275,9 +2267,6 @@ void hardware_init() {
 # define STEP_TIME(x)       ((100.0 / (x)) * (COVERING_POLL_PERIOD_MS / 1000.0))
             covering_step_time_up = STEP_TIME(custom_covering_up_time.value.float_value);
             covering_step_time_down = STEP_TIME(custom_covering_down_time.value.float_value);
-            
-            printf("RC > covering_step_time_up = %f\n", covering_step_time_up);
-            printf("RC > covering_step_time_down = %f\n", covering_step_time_down);
             
             sdk_os_timer_setfn(&extra_func_timer, covering_worker, NULL);
             
