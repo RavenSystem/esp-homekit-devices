@@ -26,7 +26,7 @@
 #include "led_codes.h"
 
 #define DURATION_OFF        130
-#define DURATION_ON_MIN     30
+#define DURATION_ON_MIN     20
 
 typedef struct _led {
     uint8_t gpio;
