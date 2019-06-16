@@ -31,7 +31,7 @@
 #define LONGPRESS_TIME              410
 #define VERYLONGPRESS_TIME          1500
 #define HOLDPRESS_COUNT             5       // HOLDPRESS_TIME = HOLDPRESS_COUNT * 2000
-#define BUTTON_EVAL_DELAY_MAX       110
+#define BUTTON_EVAL_DELAY_MAX       210
 #define BUTTON_EVAL_DELAY_MIN       10
 
 typedef struct _adv_button {
@@ -64,9 +64,12 @@ typedef struct _adv_button {
     struct _adv_button *next;
 } adv_button_t;
 
-static adv_button_t *buttons = NULL;
 static uint32_t disable_time = 0;
 static uint8_t button_evaluate_delay = BUTTON_EVAL_DELAY_MIN;
+static bool button_evaluate_is_working = false;
+static ETSTimer button_evaluate_timer;
+
+static adv_button_t *buttons = NULL;
 
 static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
     adv_button_t *button = buttons;
@@ -88,7 +91,7 @@ void adv_button_set_evaluate_delay(const uint8_t new_delay) {
     }
 }
 
-IRAM void adv_button_set_disable_time() {
+void adv_button_set_disable_time() {
     disable_time = xTaskGetTickCountFromISR();
 }
 
@@ -187,15 +190,9 @@ static void adv_button_hold_callback(void *arg) {
 
 #define maxvalue_unsigned(x) ((1 << (8 * sizeof(x))) - 1)
 IRAM static void button_evaluate_fn() {        // Based on https://github.com/pcsaito/esp-homekit-demo/blob/LPFToggle/examples/sonoff_basic_toggle/toggle.c
-    const TickType_t delay = pdMS_TO_TICKS(button_evaluate_delay);
-    TickType_t last_wake_time = xTaskGetTickCount();
-    
-    for (;;) {
+    if (!button_evaluate_is_working) {
+        button_evaluate_is_working = true;
         adv_button_t *button = buttons;
-        
-        if (!buttons) {
-            vTaskDelete(NULL);
-        }
         
         while (button) {
             button->value += ((gpio_read(button->gpio) * maxvalue_unsigned(button->value)) - button->value) >> 3;
@@ -214,7 +211,7 @@ IRAM static void button_evaluate_fn() {        // Based on https://github.com/pc
             button = button->next;
         }
         
-        vTaskDelayUntil(&last_wake_time, delay);
+        button_evaluate_is_working = false;
     }
 }
 
@@ -228,7 +225,8 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
         button->inverted = inverted;
         
         if (!buttons) {
-            xTaskCreate(button_evaluate_fn, "button_evaluate_fn", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+            sdk_os_timer_setfn(&button_evaluate_timer, button_evaluate_fn, NULL);
+            sdk_os_timer_arm(&button_evaluate_timer, button_evaluate_delay, 1);
         }
         
         button->next = buttons;
@@ -246,7 +244,7 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
         button->state = gpio_read(button->gpio);
         
         button->old_state = button->state;
-        button->value = 32764;
+        button->value = 32767;      // Max value of uint16_t / 2
         
         sdk_os_timer_setfn(&button->hold_timer, adv_button_hold_callback, button);
         sdk_os_timer_setfn(&button->press_timer, adv_button_single_callback, button);
@@ -332,6 +330,10 @@ void adv_button_destroy(const uint8_t gpio) {
             if (button->gpio != 0) {
                 gpio_disable(button->gpio);
             }
+        }
+        
+        if (!buttons) {
+            sdk_os_timer_disarm(&button_evaluate_timer);
         }
     }
 }
