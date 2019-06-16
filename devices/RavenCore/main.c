@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.9.5
+ * v0.9.6
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -65,8 +65,8 @@
 #include "../common/custom_characteristics.h"
 
 // Version
-#define FIRMWARE_VERSION                "0.9.5"
-#define FIRMWARE_VERSION_OCTAL          001105      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.9.6"
+#define FIRMWARE_VERSION_OCTAL          001106      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -98,6 +98,7 @@
 //#define DOOR_CLOSED_GPIO              14
 
 #define COVERING_POLL_PERIOD_MS         250
+#define COVERING_PAUSE                  1000
 
 #define TOGGLE_GPIO                     14
 
@@ -112,7 +113,7 @@
 #define RELAY4_GPIO                     15
 
 #define BUTTON_EVAL_DELAY_MIN           10
-#define ALLOWED_FACTORY_RESET_TIME      60000
+#define ALLOWED_FACTORY_RESET_TIME      30000
 
 #define PWM_RGBW_SCALE                  65535
 #define PWM_RGBW_SCALE_OFFSET           100
@@ -120,7 +121,6 @@
 #define RGBW_SET_DELAY                  300
 
 // SysParam
-#define OTA_BETA_SYSPARAM                               "ota_beta"  // Will be removed
 #define OTA_REPO_SYSPARAM                               "ota_repo"
 #define SHOW_SETUP_SYSPARAM                             "a"
 #define DEVICE_TYPE_SYSPARAM                            "b"
@@ -178,7 +178,7 @@
 #define ENABLE_DUMMY_SWITCH_SYSPARAM                    "Q"
 #define BUTTON_FILTER_SYSPARAM                          "R"
 
-bool is_moving = false;
+bool is_moving = false, rgbw_set_worker_is_running = false;
 uint8_t device_type_static = 1, reset_toggle_counter = 0, gd_time_state = 0;
 uint8_t button1_gpio = BUTTON1_GPIO, button2_gpio = BUTTON2_GPIO, relay1_gpio = RELAY1_GPIO, relay2_gpio = RELAY2_GPIO, led_gpio = 255, extra_gpio = TOGGLE_GPIO;
 uint8_t r_gpio, g_gpio, b_gpio, w_gpio;
@@ -1254,17 +1254,41 @@ void covering_on_callback(homekit_value_t value) {
         gd_time_state = 15;
     }
     
+    void safe_stop() {
+        sdk_os_timer_disarm(&extra_func_timer);
+        covering_position_state.value.int_value = 2;
+        homekit_characteristic_notify(&covering_position_state, covering_position_state.value);
+        printf("RC > Safe stop\n");
+        vTaskDelay(COVERING_PAUSE / portTICK_PERIOD_MS);
+    }
+    
     if (value.int_value < covering_current_position.value.int_value) {
         relay_write(false, relay2_gpio);
-        covering_position_state.value.int_value = 0;
         
-        sdk_os_timer_arm(&extra_func_timer, COVERING_POLL_PERIOD_MS, 1);
+        if (covering_position_state.value.int_value == 1) {
+            safe_stop();
+        }
+        
+        if (covering_position_state.value.int_value == 2) {
+            sdk_os_timer_arm(&extra_func_timer, COVERING_POLL_PERIOD_MS, 1);
+        }
+        
+        covering_position_state.value.int_value = 0;
+
         relay_write(true, relay1_gpio);
-    } else if (value.int_value > covering_current_position.value.int_value){
+    } else if (value.int_value > covering_current_position.value.int_value) {
         relay_write(false, relay1_gpio);
+        
+        if (covering_position_state.value.int_value == 0) {
+            safe_stop();
+        }
+        
+        if (covering_position_state.value.int_value == 2) {
+            sdk_os_timer_arm(&extra_func_timer, COVERING_POLL_PERIOD_MS, 1);
+        }
+        
         covering_position_state.value.int_value = 1;
         
-        sdk_os_timer_arm(&extra_func_timer, COVERING_POLL_PERIOD_MS, 1);
         relay_write(true, relay2_gpio);
     } else {
         covering_stop();
@@ -1715,10 +1739,18 @@ void rgbw_set_worker() {
     if (!is_moving) {
         is_moving = true;
         
-        current_rgbw_color.red   += (target_rgbw_color.red      - current_rgbw_color.red)   >> 4;
-        current_rgbw_color.green += (target_rgbw_color.green    - current_rgbw_color.green) >> 4;
-        current_rgbw_color.blue  += (target_rgbw_color.blue     - current_rgbw_color.blue)  >> 4;
-        current_rgbw_color.white += (target_rgbw_color.white    - current_rgbw_color.white) >> 4;
+        if (abs(target_rgbw_color.red - current_rgbw_color.red) <= current_rgbw_color.red >> 4 &&
+            abs(target_rgbw_color.green - current_rgbw_color.green) <= current_rgbw_color.green >> 4 &&
+            abs(target_rgbw_color.blue  - current_rgbw_color.blue)  <= current_rgbw_color.blue  >> 4 &&
+            abs(target_rgbw_color.white - current_rgbw_color.white) <= current_rgbw_color.white >> 4) {
+            
+            current_rgbw_color = target_rgbw_color;
+            
+            printf("RC > Target color established\n");
+            
+            sdk_os_timer_disarm(&extra_func_timer2);
+            rgbw_set_worker_is_running = false;
+        }
     
         // ----- Set PWM
         multipwm_stop(&pwm_info);
@@ -1734,24 +1766,12 @@ void rgbw_set_worker() {
         multipwm_start(&pwm_info);
         // -----
         
-        //printf("RC > Transition RGBW -> %i, %i, %i, %i\n", current_rgbw_color.red, current_rgbw_color.green, current_rgbw_color.blue, current_rgbw_color.white);
+        // printf("RC > Transition RGBW -> %i, %i, %i, %i\n", current_rgbw_color.red, current_rgbw_color.green, current_rgbw_color.blue, current_rgbw_color.white);
         
-        if (current_rgbw_color.red == target_rgbw_color.red &&
-            current_rgbw_color.green == target_rgbw_color.green &&
-            current_rgbw_color.blue == target_rgbw_color.blue &&
-            current_rgbw_color.white == target_rgbw_color.white) {
-            
-            printf("RC > Target color established\n");
-            sdk_os_timer_disarm(&extra_func_timer2);
-            
-        } else if (abs(target_rgbw_color.red - current_rgbw_color.red) <= current_rgbw_color.red >> 4 &&
-            abs(target_rgbw_color.green - current_rgbw_color.green) <= current_rgbw_color.green >> 4 &&
-            abs(target_rgbw_color.blue  - current_rgbw_color.blue)  <= current_rgbw_color.blue  >> 4 &&
-            abs(target_rgbw_color.white - current_rgbw_color.white) <= current_rgbw_color.white >> 4) {
-
-            current_rgbw_color = target_rgbw_color;
-            
-        }
+        current_rgbw_color.red   += (target_rgbw_color.red      - current_rgbw_color.red)   >> 4;
+        current_rgbw_color.green += (target_rgbw_color.green    - current_rgbw_color.green) >> 4;
+        current_rgbw_color.blue  += (target_rgbw_color.blue     - current_rgbw_color.blue)  >> 4;
+        current_rgbw_color.white += (target_rgbw_color.white    - current_rgbw_color.white) >> 4;
         
         is_moving = false;
     }
@@ -1770,7 +1790,10 @@ void rgbw_set() {
     
     printf("RC > RGBW = %i, %i, %i, %i\n", target_rgbw_color.red, target_rgbw_color.green, target_rgbw_color.blue, target_rgbw_color.white);
     
-    sdk_os_timer_arm(&extra_func_timer2, RGBW_DELAY, true);
+    if (!rgbw_set_worker_is_running) {
+        sdk_os_timer_arm(&extra_func_timer2, RGBW_DELAY, true);
+        rgbw_set_worker_is_running = true;
+    }
     
     save_states_callback();
 }
@@ -1797,7 +1820,7 @@ void saturation_callback(homekit_value_t value) {
 void boost_callback() {
     change_settings_callback();
     if (device_type_static == 14) {
-        rgbw_set();
+        rgbw_set_delay();
     }
 }
 
@@ -2358,7 +2381,7 @@ void hardware_init() {
             sdk_os_timer_setfn(&extra_func_timer, rgbw_set, NULL);
             sdk_os_timer_setfn(&extra_func_timer2, rgbw_set_worker, NULL);
             
-            rgbw_set();
+            rgbw_set_delay();
             
             break;
             
@@ -2439,12 +2462,6 @@ void settings_init() {
         if (status != SYSPARAM_OK) {
             flash_error = status;
         }
-    }
-    
-    status = sysparam_get_bool(OTA_BETA_SYSPARAM, &bool_value);
-    if (status == SYSPARAM_OK) {
-        status = sysparam_set_data(OTA_BETA_SYSPARAM, NULL, 0, false);
-        status = sysparam_compact();
     }
     
     status = sysparam_get_int8(BOARD_TYPE_SYSPARAM, &int8_value);
