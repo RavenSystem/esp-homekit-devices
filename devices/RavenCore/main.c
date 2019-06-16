@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.9.3
+ * v0.9.5
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -65,8 +65,8 @@
 #include "../common/custom_characteristics.h"
 
 // Version
-#define FIRMWARE_VERSION                "0.9.3"
-#define FIRMWARE_VERSION_OCTAL          001103      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.9.5"
+#define FIRMWARE_VERSION_OCTAL          001105      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -118,16 +118,6 @@
 #define PWM_RGBW_SCALE_OFFSET           100
 #define RGBW_DELAY                      15
 #define RGBW_SET_DELAY                  300
-
-// Sensors
-#define CONTACT_SENSOR                  0
-#define MOTION_SENSOR                   1
-#define OCCUPANCY_SENSOR                2
-#define LEAK_SENSOR                     3
-#define SMOKE_SENSOR                    4
-#define CARBON_MONOXIDE_SENSOR          5
-#define CARBON_DIOXIDE_SENSOR           6
-#define FILTER_CHANGE_SENSOR            7
 
 // SysParam
 #define OTA_BETA_SYSPARAM                               "ota_beta"  // Will be removed
@@ -193,7 +183,7 @@ uint8_t device_type_static = 1, reset_toggle_counter = 0, gd_time_state = 0;
 uint8_t button1_gpio = BUTTON1_GPIO, button2_gpio = BUTTON2_GPIO, relay1_gpio = RELAY1_GPIO, relay2_gpio = RELAY2_GPIO, led_gpio = 255, extra_gpio = TOGGLE_GPIO;
 uint8_t r_gpio, g_gpio, b_gpio, w_gpio;
 volatile float old_humidity_value = 0.0, old_temperature_value = 0.0, covering_actual_pos = 0.0, real_covering_actual_pos = 0.0, covering_step_time_up = 0.2, covering_step_time_down = 0.2;
-ETSTimer device_restart_timer, factory_default_toggle_timer, change_settings_timer, save_states_timer, extra_func_timer;
+ETSTimer device_restart_timer, factory_default_toggle_timer, change_settings_timer, save_states_timer, extra_func_timer, extra_func_timer2;
 pwm_info_t pwm_info;
 
 homekit_value_t hkc_general_getter(const homekit_characteristic_t *ch);
@@ -1505,6 +1495,72 @@ void button_event3_intr_callback(const uint8_t gpio, void *args) {
 
 // ***** Thermostat
 
+void update_th_state() {
+    void th_state_off() {
+        current_state.value.int_value = 0;
+        relay_write(false, relay1_gpio);
+        homekit_characteristic_notify(&current_state, current_state.value);
+    }
+    
+    switch (target_state.value.int_value) {
+        case 1:
+        if (current_state.value.int_value == 0) {
+            if (current_temperature.value.float_value < (target_temperature.value.float_value - temp_deadband.value.float_value)) {
+                current_state.value.int_value = 1;
+                relay_write(true, relay1_gpio);
+                homekit_characteristic_notify(&current_state, current_state.value);
+            }
+        } else if (current_temperature.value.float_value >= target_temperature.value.float_value) {
+            th_state_off();
+        }
+        break;
+        
+        case 2:
+        if (current_state.value.int_value == 0) {
+            if (current_temperature.value.float_value > (target_temperature.value.float_value + temp_deadband.value.float_value)) {
+                current_state.value.int_value = 2;
+                relay_write(true, relay1_gpio);
+                homekit_characteristic_notify(&current_state, current_state.value);
+            }
+        } else if (current_temperature.value.float_value <= target_temperature.value.float_value) {
+            th_state_off();
+        }
+        break;
+        
+        default:    // case 0
+        if (current_state.value.int_value != 0) {
+            th_state_off();
+        }
+        break;
+    }
+    
+    save_states_callback();
+}
+
+void th_target(homekit_value_t value) {
+    target_state.value = value;
+    switch (target_state.value.int_value) {
+        case 1:
+        led_code(led_gpio, FUNCTION_B);
+        printf("RC > HEAT\n");
+        break;
+        
+        case 2:
+        led_code(led_gpio, FUNCTION_C);
+        printf("RC > COOL\n");
+        break;
+        
+        default:
+        led_code(led_gpio, FUNCTION_A);
+        printf("RC > OFF\n");
+        break;
+    }
+    
+    factory_default_toggle_upcount();
+    
+    update_th_state();
+}
+
 void th_button_intr_callback(const uint8_t gpio, void *args) {
     uint8_t state = target_state.value.int_value + 1;
     
@@ -1527,92 +1583,7 @@ void th_button_intr_callback(const uint8_t gpio, void *args) {
             break;
     }
     
-    switch (state) {
-        case 1:
-            led_code(led_gpio, FUNCTION_B);
-            printf("RC > HEAT\n");
-            break;
-            
-        case 2:
-            led_code(led_gpio, FUNCTION_C);
-            printf("RC > COOL\n");
-            break;
-
-        default:    // case 0:
-            led_code(led_gpio, FUNCTION_A);
-            state = 0;
-            printf("RC > OFF\n");
-            break;
-    }
-    
-    target_state.value.int_value = state;
-    homekit_characteristic_notify(&target_state, target_state.value);
-    
-    update_th_state();
-}
-
-void th_target(homekit_value_t value) {
-    target_state.value = value;
-    switch (target_state.value.int_value) {
-        case 1:
-            led_code(led_gpio, FUNCTION_B);
-            printf("RC > HEAT\n");
-            break;
-            
-        case 2:
-            led_code(led_gpio, FUNCTION_C);
-            printf("RC > COOL\n");
-            break;
-            
-        default:
-            led_code(led_gpio, FUNCTION_A);
-            printf("RC > OFF\n");
-            break;
-    }
-    
-    update_th_state();
-}
-
-void update_th_state() {
-    void th_state_off() {
-        current_state.value.int_value = 0;
-        relay_write(false, relay1_gpio);
-        homekit_characteristic_notify(&current_state, current_state.value);
-    }
-    
-    switch (target_state.value.int_value) {
-        case 1:
-            if (current_state.value.int_value == 0) {
-                if (current_temperature.value.float_value < (target_temperature.value.float_value - temp_deadband.value.float_value)) {
-                    current_state.value.int_value = 1;
-                    relay_write(true, relay1_gpio);
-                    homekit_characteristic_notify(&current_state, current_state.value);
-                }
-            } else if (current_temperature.value.float_value >= target_temperature.value.float_value) {
-                th_state_off();
-            }
-            break;
-            
-        case 2:
-            if (current_state.value.int_value == 0) {
-                if (current_temperature.value.float_value > (target_temperature.value.float_value + temp_deadband.value.float_value)) {
-                    current_state.value.int_value = 2;
-                    relay_write(true, relay1_gpio);
-                    homekit_characteristic_notify(&current_state, current_state.value);
-                }
-            } else if (current_temperature.value.float_value <= target_temperature.value.float_value) {
-                th_state_off();
-            }
-            break;
-            
-        default:    // case 0
-            if (current_state.value.int_value != 0) {
-                th_state_off();
-            }
-            break;
-    }
-    
-    save_states_callback();
+    th_target(HOMEKIT_UINT8(state));
 }
 
 // ***** Temperature and Humidity sensors
@@ -1740,51 +1711,55 @@ void hsi2rgbw(float h, float s, float i, rgb_color_t* rgbw) {
     }
 }
 
-TaskHandle_t rgbw_set_task_handle;
-void rgbw_set_task() {
-    void apply_color(rgb_color_t rgbw_color) {
+void rgbw_set_worker() {
+    if (!is_moving) {
+        is_moving = true;
+        
+        current_rgbw_color.red   += (target_rgbw_color.red      - current_rgbw_color.red)   >> 4;
+        current_rgbw_color.green += (target_rgbw_color.green    - current_rgbw_color.green) >> 4;
+        current_rgbw_color.blue  += (target_rgbw_color.blue     - current_rgbw_color.blue)  >> 4;
+        current_rgbw_color.white += (target_rgbw_color.white    - current_rgbw_color.white) >> 4;
+    
+        // ----- Set PWM
         multipwm_stop(&pwm_info);
         
-        multipwm_set_duty(&pwm_info, 0, rgbw_color.red);
-        multipwm_set_duty(&pwm_info, 1, rgbw_color.green);
-        multipwm_set_duty(&pwm_info, 2, rgbw_color.blue);
+        multipwm_set_duty(&pwm_info, 0, current_rgbw_color.red);
+        multipwm_set_duty(&pwm_info, 1, current_rgbw_color.green);
+        multipwm_set_duty(&pwm_info, 2, current_rgbw_color.blue);
         
         if (w_gpio != 0) {
             multipwm_set_duty(&pwm_info, 3, current_rgbw_color.white);
         }
         
         multipwm_start(&pwm_info);
-    }
-    
-    const TickType_t delay = pdMS_TO_TICKS(RGBW_DELAY);
-    TickType_t last_wake_time = xTaskGetTickCount();
-    
-    while (1) {
-        current_rgbw_color.red   += (target_rgbw_color.red      - current_rgbw_color.red)   >> 4;
-        current_rgbw_color.green += (target_rgbw_color.green    - current_rgbw_color.green) >> 4;
-        current_rgbw_color.blue  += (target_rgbw_color.blue     - current_rgbw_color.blue)  >> 4;
-        current_rgbw_color.white += (target_rgbw_color.white    - current_rgbw_color.white) >> 4;
+        // -----
         
-        apply_color(current_rgbw_color);
+        //printf("RC > Transition RGBW -> %i, %i, %i, %i\n", current_rgbw_color.red, current_rgbw_color.green, current_rgbw_color.blue, current_rgbw_color.white);
         
-        vTaskDelayUntil(&last_wake_time, delay);
-        
-        if (abs(target_rgbw_color.red   - current_rgbw_color.red)   <= current_rgbw_color.red   >> 4 &&
+        if (current_rgbw_color.red == target_rgbw_color.red &&
+            current_rgbw_color.green == target_rgbw_color.green &&
+            current_rgbw_color.blue == target_rgbw_color.blue &&
+            current_rgbw_color.white == target_rgbw_color.white) {
+            
+            printf("RC > Target color established\n");
+            sdk_os_timer_disarm(&extra_func_timer2);
+            
+        } else if (abs(target_rgbw_color.red - current_rgbw_color.red) <= current_rgbw_color.red >> 4 &&
             abs(target_rgbw_color.green - current_rgbw_color.green) <= current_rgbw_color.green >> 4 &&
             abs(target_rgbw_color.blue  - current_rgbw_color.blue)  <= current_rgbw_color.blue  >> 4 &&
             abs(target_rgbw_color.white - current_rgbw_color.white) <= current_rgbw_color.white >> 4) {
+
+            current_rgbw_color = target_rgbw_color;
             
-            apply_color(target_rgbw_color);
-            
-            printf("RC > Target color established\n");
-            vTaskSuspend(NULL);
         }
+        
+        is_moving = false;
     }
 }
 
 void rgbw_set() {
     if (switch1_on.value.bool_value) {
-        printf("RC > Hue -> %0.0f, Sat -> %0.0f, Bri -> %i\n", hue.value.float_value, saturation.value.float_value, brightness.value.int_value);
+        printf("RC > Hue = %0.0f, Sat = %0.0f, Bri = %i\n", hue.value.float_value, saturation.value.float_value, brightness.value.int_value);
         hsi2rgbw(hue.value.float_value, saturation.value.float_value, brightness.value.int_value, &target_rgbw_color);
     } else {
         target_rgbw_color.red = 0;
@@ -1793,15 +1768,15 @@ void rgbw_set() {
         target_rgbw_color.white = 0;
     }
     
-    printf("RC > RGBW -> %i, %i, %i, %i\n", target_rgbw_color.red, target_rgbw_color.green, target_rgbw_color.blue, target_rgbw_color.white);
+    printf("RC > RGBW = %i, %i, %i, %i\n", target_rgbw_color.red, target_rgbw_color.green, target_rgbw_color.blue, target_rgbw_color.white);
     
-    vTaskResume(rgbw_set_task_handle);
+    sdk_os_timer_arm(&extra_func_timer2, RGBW_DELAY, true);
     
     save_states_callback();
 }
 
 void rgbw_set_delay() {
-    sdk_os_timer_arm(&extra_func_timer, RGBW_SET_DELAY, 0);
+    sdk_os_timer_arm(&extra_func_timer, RGBW_SET_DELAY, false);
 }
 
 void brightness_callback(homekit_value_t value) {
@@ -2381,8 +2356,7 @@ void hardware_init() {
             }
             
             sdk_os_timer_setfn(&extra_func_timer, rgbw_set, NULL);
-            
-            xTaskCreate(rgbw_set_task, "rgbw_set_task", configMINIMAL_STACK_SIZE, NULL, 1, &rgbw_set_task_handle);
+            sdk_os_timer_setfn(&extra_func_timer2, rgbw_set_worker, NULL);
             
             rgbw_set();
             
