@@ -30,6 +30,7 @@ void adv_button_set_evaluate_delay(const uint8_t new_delay);
 int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool inverted);
 void adv_button_destroy(const uint8_t gpio);
 void adv_button_set_disable_time();
+void dummy_button(const uint8_t used_gpio) ; //fake button to trigger the accessory ---> format ----> {"a":[{"t":1,"r": [{"g":100}], "b": [{"g":50,"t": 1}]}]}
 
 /*
  * Button callback types:
