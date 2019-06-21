@@ -152,6 +152,11 @@ IRAM static void push_up(const uint8_t used_gpio) {
     }
 }
 
+void dummy_button(const uint8_t used_gpio) {  
+//fake button to trigger the accessory {"a":[{"t":1,"r": [{"g":100}], "b": [{"g":50,"t": 1}]}]}
+push_up(used_gpio);
+}
+
 static void no_function_callback(const uint8_t gpio, void *args) {
     printf("!!! AdvButton: No function defined\n");
 }
