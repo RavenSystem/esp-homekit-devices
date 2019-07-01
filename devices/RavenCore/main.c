@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v0.9.6
+ * v1.0.0
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -65,8 +65,8 @@
 #include "../common/custom_characteristics.h"
 
 // Version
-#define FIRMWARE_VERSION                "0.9.6"
-#define FIRMWARE_VERSION_OCTAL          001106      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "1.0.0"
+#define FIRMWARE_VERSION_OCTAL          010000      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -118,7 +118,7 @@
 #define PWM_RGBW_SCALE                  65535
 #define PWM_RGBW_SCALE_OFFSET           100
 #define RGBW_DELAY                      15
-#define RGBW_SET_DELAY                  300
+#define RGBW_SET_DELAY                  500
 
 // SysParam
 #define OTA_REPO_SYSPARAM                               "ota_repo"
@@ -1037,9 +1037,9 @@ void garage_button_task() {
         vTaskDelay((custom_inching_time1.value.float_value + 0.05) * 1000 / portTICK_PERIOD_MS);
         relay_write(false, relay1_gpio);
 
-        if (custom_garagedoor_has_stop.value.bool_value && is_moving) {
+        if (custom_garagedoor_has_stop.value.bool_value && current_door_state.value.int_value > 1) {
             vTaskDelay(2500 / portTICK_PERIOD_MS);
-            printf("RC > GD -> Relay working again\n");
+            printf("RC > Relay working again\n");
             relay_write(true, relay1_gpio);
             vTaskDelay((custom_inching_time1.value.float_value + 0.05) * 1000 / portTICK_PERIOD_MS);
             relay_write(false, relay1_gpio);
@@ -1119,7 +1119,6 @@ static void homekit_gd_notify() {
 
 void door_opened_0_fn_callback(const uint8_t gpio, void *args) {
     printf("RC > CLOSING\n");
-    is_moving = true;
     target_door_state.value.int_value = 1;
     current_door_state.value.int_value = 3;
     
@@ -1128,7 +1127,6 @@ void door_opened_0_fn_callback(const uint8_t gpio, void *args) {
 
 void door_opened_1_fn_callback(const uint8_t gpio, void *args) {
     printf("RC > OPENED\n");
-    is_moving = false;
     target_door_state.value.int_value = 0;
     current_door_state.value.int_value = 0;
     
@@ -1137,7 +1135,6 @@ void door_opened_1_fn_callback(const uint8_t gpio, void *args) {
 
 void door_closed_0_fn_callback(const uint8_t gpio, void *args) {
     printf("RC > OPENING\n");
-    is_moving = true;
     target_door_state.value.int_value = 0;
     current_door_state.value.int_value = 2;
     
@@ -1155,7 +1152,6 @@ void door_closed_1_fn_callback(const uint8_t gpio, void *args) {
     
     printf("RC > CLOSED\n");
     gd_time_state = 0;
-    is_moving = false;
     target_door_state.value.int_value = 1;
     current_door_state.value.int_value = 1;
     
@@ -1173,7 +1169,6 @@ void door_opened_countdown_timer() {
         if (gd_time_state == custom_garagedoor_working_time.value.int_value) {
             printf("RC > OPENED\n");
             sdk_os_timer_disarm(&extra_func_timer);
-            is_moving = false;
             gd_time_state = custom_garagedoor_working_time.value.int_value;
             target_door_state.value.int_value = 0;
             current_door_state.value.int_value = 0;
@@ -3864,7 +3859,7 @@ void create_accessory() {
     
     config.accessories = accessories;
     config.password = "021-82-017";
-    config.setupId = "RAVE";
+    config.setupId = "JOSE";
     config.category = accessory_category;
     config.config_number = FIRMWARE_VERSION_OCTAL;
     
@@ -3873,167 +3868,6 @@ void create_accessory() {
     
     if (enable_dummy_switch.value.bool_value) {
         switchdm_on_callback(switchdm_on.value);
-    }
-}
-
-void old_settings_init() {
-    sysparam_status_t status;
-    bool bool_value;
-    int8_t int8_value;
-    int32_t int32_value;
-    
-    // Load old Saved Settings and set factory values for missing settings
-    printf("RC > Loading old settings and cleaning\n");
-    
-    status = sysparam_get_bool("show_setup", &bool_value);
-    if (status == SYSPARAM_OK) {
-        show_setup.value.bool_value = bool_value;
-        status = sysparam_set_data("show_setup", NULL, 0, false);
-    }
-    
-    status = sysparam_get_int8("board_type", &int8_value);
-    if (status == SYSPARAM_OK) {
-        if (board_type.value.int_value != 3) {
-            board_type.value.int_value = int8_value;
-        }
-        
-        status = sysparam_set_data("board_type", NULL, 0, false);
-    }
-    
-    status = sysparam_get_bool("gpio14_toggle", &bool_value);
-    if (status == SYSPARAM_OK) {
-        status = sysparam_set_data("gpio14_toggle", NULL, 0, false);
-    }
-    
-    status = sysparam_get_int8("dht_sensor_type", &int8_value);
-    if (status == SYSPARAM_OK) {
-        dht_sensor_type.value.int_value = int8_value;
-        status = sysparam_set_data("dht_sensor_type", NULL, 0, false);
-    }
-    
-    status = sysparam_get_int8("poll_period", &int8_value);
-    if (status == SYSPARAM_OK) {
-        poll_period.value.int_value = int8_value;
-        status = sysparam_set_data("poll_period", NULL, 0, false);
-    }
-    
-    status = sysparam_get_int8("valve_type", &int8_value);
-    if (status == SYSPARAM_OK) {
-        valve_type.value.int_value = int8_value;
-        custom_valve_type.value.int_value = int8_value;
-        status = sysparam_set_data("valve_type", NULL, 0, false);
-    }
-    
-    status = sysparam_get_int8("garagedoor_working_time", &int8_value);
-    if (status == SYSPARAM_OK) {
-        custom_garagedoor_working_time.value.int_value = int8_value;
-        status = sysparam_set_data("garagedoor_working_time", NULL, 0, false);
-    }
-    
-    status = sysparam_get_bool("garagedoor_has_stop", &bool_value);
-    if (status == SYSPARAM_OK) {
-        custom_garagedoor_has_stop.value.bool_value = bool_value;
-        status = sysparam_set_data("garagedoor_has_stop", NULL, 0, false);
-    }
-    
-    status = sysparam_get_bool("garagedoor_sensor_close_nc", &bool_value);
-    if (status == SYSPARAM_OK) {
-        custom_garagedoor_sensor_close_nc.value.bool_value = bool_value;
-        status = sysparam_set_data("garagedoor_sensor_close_nc", NULL, 0, false);
-    }
-    
-    status = sysparam_get_bool("garagedoor_sensor_open_nc", &bool_value);
-    if (status == SYSPARAM_OK) {
-        status = sysparam_set_data("garagedoor_sensor_open_nc", NULL, 0, false);
-    }
-    
-    status = sysparam_get_bool("garagedoor_has_sensor_open", &bool_value);
-    if (status == SYSPARAM_OK) {
-        status = sysparam_set_data("garagedoor_has_sensor_open", NULL, 0, false);
-    }
-    
-    status = sysparam_get_bool("garagedoor_control_with_button", &bool_value);
-    if (status == SYSPARAM_OK) {
-        custom_garagedoor_control_with_button.value.bool_value = bool_value;
-        status = sysparam_set_data("garagedoor_control_with_button", NULL, 0, false);
-    }
-    
-    status = sysparam_get_int8("init_state_sw1", &int8_value);
-    if (status == SYSPARAM_OK) {
-        custom_init_state_sw1.value.int_value = int8_value;
-        status = sysparam_set_data("init_state_sw1", NULL, 0, false);
-    }
-    
-    status = sysparam_get_int8("init_state_sw2", &int8_value);
-    if (status == SYSPARAM_OK) {
-        custom_init_state_sw2.value.int_value = int8_value;
-        status = sysparam_set_data("init_state_sw2", NULL, 0, false);
-    }
-    
-    status = sysparam_get_int8("init_state_sw3", &int8_value);
-    if (status == SYSPARAM_OK) {
-        custom_init_state_sw3.value.int_value = int8_value;
-        status = sysparam_set_data("init_state_sw3", NULL, 0, false);
-    }
-    
-    status = sysparam_get_int8("init_state_sw4", &int8_value);
-    if (status == SYSPARAM_OK) {
-        custom_init_state_sw4.value.int_value = int8_value;
-        status = sysparam_set_data("init_state_sw4", NULL, 0, false);
-    }
-    
-    status = sysparam_get_int8("init_state_th", &int8_value);
-    if (status == SYSPARAM_OK) {
-        custom_init_state_th.value.int_value = int8_value;
-        status = sysparam_set_data("init_state_th", NULL, 0, false);
-    }
-    
-    printf("RC > Removing old saved states\n");
-    
-    status = sysparam_get_bool("last_state_sw1", &bool_value);
-    if (status == SYSPARAM_OK) {
-        status = sysparam_set_data("last_state_sw1", NULL, 0, false);
-    }
-    
-    status = sysparam_get_bool("last_state_sw2", &bool_value);
-    if (status == SYSPARAM_OK) {
-        status = sysparam_set_data("last_state_sw2", NULL, 0, false);
-    }
-    
-    status = sysparam_get_bool("last_state_sw3", &bool_value);
-    if (status == SYSPARAM_OK) {
-        status = sysparam_set_data("last_state_sw3", NULL, 0, false);
-    }
-    
-    status = sysparam_get_bool("last_state_sw4", &bool_value);
-    if (status == SYSPARAM_OK) {
-        status = sysparam_set_data("last_state_sw4", NULL, 0, false);
-    }
-    
-    status = sysparam_get_int8("last_target_state_th", &int8_value);
-    if (status == SYSPARAM_OK) {
-        status = sysparam_set_data("last_target_state_th", NULL, 0, false);
-    }
-    
-    status = sysparam_get_int32("target_temp", &int32_value);
-    if (status == SYSPARAM_OK) {
-        status = sysparam_set_data("target_temp", NULL, 0, false);
-    }
-    
-    status = sysparam_get_int32("set_duration", &int32_value);
-    if (status == SYSPARAM_OK) {
-        status = sysparam_set_data("set_duration", NULL, 0, false);
-    }
-    
-    sdk_os_timer_disarm(&change_settings_timer);
-    
-    save_settings();
-    status = sysparam_compact();
-    
-    if (status == SYSPARAM_OK) {
-        device_restart();
-    } else {
-        printf("RC ! ERROR in old_settings_init loading old settings. Flash problem\n");
     }
 }
 
@@ -4059,27 +3893,5 @@ void user_init(void) {
     
     printf("\n\nRC > RavenCore\nRC > Developed by @RavenSystem - José Antonio Jiménez\nRC > Version: %s\n\n", FIRMWARE_VERSION);
     
-    // Old settings check
-    status = sysparam_get_int8("device_type", &int8_value);
-    if (status != SYSPARAM_OK) {
-        settings_init();
-    } else {
-        // For old Shelly device types (device type 12 and 13)
-        if (int8_value == 12) {
-            int8_value = 1;
-            board_type.value.int_value = 3;
-        }
-        
-        if (int8_value == 13) {
-            int8_value = 2;
-            board_type.value.int_value = 3;
-        }
-        // END - For old Shelly device types (device type 12 and 13)
-        
-        device_type.value.int_value = int8_value;
-        device_type_static = int8_value;
-        status = sysparam_set_data("device_type", NULL, 0, false);
-        old_settings_init();
-    }
-    // END Old settings check
+    settings_init();
 }
