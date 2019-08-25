@@ -65,8 +65,8 @@
 #include "../common/custom_characteristics.h"
 
 // Version
-#define FIRMWARE_VERSION                "1.0.0"
-#define FIRMWARE_VERSION_OCTAL          010000      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "1.1.0"
+#define FIRMWARE_VERSION_OCTAL          010100      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -1611,11 +1611,13 @@ void temperature_sensor_worker() {
     float humidity_value, temperature_value;
     bool get_temp = false;
     
-    if (dht_sensor_type.value.int_value < 3) {
-        dht_sensor_type_t current_sensor_type = DHT_TYPE_DHT22;
+    if (dht_sensor_type.value.int_value != 3) {
+        dht_sensor_type_t current_sensor_type = DHT_TYPE_DHT22; // dht_sensor_type.value.int_value == 2
         
         if (dht_sensor_type.value.int_value == 1) {
             current_sensor_type = DHT_TYPE_DHT11;
+        } else if (dht_sensor_type.value.int_value == 4) {
+            current_sensor_type = DHT_TYPE_SI7021;
         }
         
         get_temp = dht_read_float_data(current_sensor_type, extra_gpio, &humidity_value, &temperature_value);
@@ -2077,6 +2079,22 @@ void hardware_init() {
                 adv_button_register_callback_fn(button1_gpio, toggle_valve, 1, NULL);
             }
             
+            switch (external_toggle1.value.int_value) {
+                case 1:
+                    adv_button_create(extra_gpio, pullup, false);
+                    adv_button_register_callback_fn(extra_gpio, toggle_valve, 1, NULL);
+                    break;
+                    
+                case 2:
+                    adv_button_create(extra_gpio, pullup, false);
+                    adv_button_register_callback_fn(extra_gpio, toggle_valve, 0, NULL);
+                    adv_button_register_callback_fn(extra_gpio, toggle_valve, 1, NULL);
+                    break;
+                    
+                default:
+                    break;
+            }
+            
             sdk_os_timer_setfn(&extra_func_timer, valve_control, NULL);
             
             gpio_enable(relay1_gpio, GPIO_OUTPUT);
@@ -2320,6 +2338,27 @@ void hardware_init() {
             break;
             
         case 14:
+            if (board_type.value.int_value == 3) {  // It is a Shelly RGBW2
+                extra_gpio = 5;
+                pullup = false;
+            }
+            
+            switch (external_toggle1.value.int_value) {
+                case 1:
+                    adv_button_create(extra_gpio, pullup, false);
+                    adv_button_register_callback_fn(extra_gpio, button_simple1_intr_callback, 1, NULL);
+                    break;
+                    
+                case 2:
+                    adv_button_create(extra_gpio, pullup, false);
+                    adv_button_register_callback_fn(extra_gpio, button_simple1_intr_callback, 0, NULL);
+                    adv_button_register_callback_fn(extra_gpio, button_simple1_intr_callback, 1, NULL);
+                    break;
+                    
+                default:
+                    break;
+            }
+            
             adv_button_create(button1_gpio, true, false);
             adv_button_register_callback_fn(button1_gpio, button_simple1_intr_callback, 1, NULL);
             
@@ -3616,7 +3655,7 @@ void create_accessory() {
                         break;
                         
                     case 7:
-                        setting_count += 2;
+                        setting_count += 3;
                         break;
                         
                     case 8:
@@ -3644,7 +3683,7 @@ void create_accessory() {
                         break;
                         
                     case 14:
-                        setting_count += 6;
+                        setting_count += 7;
                         break;
                         
                     case 15:
@@ -3764,6 +3803,8 @@ void create_accessory() {
                         sonoff_setup->characteristics[setting_number] = &custom_inching_time1;
                         
                     } else if (device_type_static == 7) {
+                        sonoff_setup->characteristics[setting_number] = &external_toggle1;
+                        setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_valve_type;
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_garagedoor_has_stop;
@@ -3839,6 +3880,8 @@ void create_accessory() {
                         sonoff_setup->characteristics[setting_number] = &custom_garagedoor_sensor_open;
                         
                     } else if (device_type_static == 14) {
+                        sonoff_setup->characteristics[setting_number] = &external_toggle1;
+                        setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_init_state_sw1;
                         setting_number++;
                         sonoff_setup->characteristics[setting_number] = &custom_r_gpio;
