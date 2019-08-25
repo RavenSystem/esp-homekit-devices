@@ -616,6 +616,7 @@ static void wifi_config_sta_connect_timeout_callback(void *arg) {
         return;
     }
 
+    /*
     if ((xTaskGetTickCount() - context->connect_start_time) * portTICK_PERIOD_MS < WIFI_CONFIG_CONNECT_TIMEOUT) {
         // Still have time, continue trying
         return;
@@ -625,6 +626,7 @@ static void wifi_config_sta_connect_timeout_callback(void *arg) {
     DEBUG("Timeout connecting to WiFi network, starting config AP");
     // Not connected to station, launch configuration AP
     wifi_config_softap_start();
+     */
 }
 
 
