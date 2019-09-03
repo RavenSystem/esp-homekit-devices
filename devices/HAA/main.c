@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.0.5
+ * v0.0.6
  * 
  * Copyright 2019 José A. Jiménez (@RavenSystem)
  *  
@@ -43,20 +43,26 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.0.5"
-#define FIRMWARE_VERSION_OCTAL          000005      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.0.6"
+#define FIRMWARE_VERSION_OCTAL          000006      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // JSON
 #define GENERAL_CONFIG                  "c"
 #define LOG_OUTPUT                      "o"
 #define STATUS_LED_GPIO                 "l"
-#define ACCESSORIES                     "a"
+#define INVERTED                        "i"
+#define BUTTON_FILTER                   "f"
+#define ACCESSORIES                     "h"
 #define BUTTONS_ARRAY                   "b"
 #define BUTTON_PRESS_TYPE               "t"
 #define PULLUP_RESISTOR                 "p"
-#define RELAYS_ARRAY                    "r"
+#define ACTIONS_ARRAY                   "a"
+#define VALUE                           "v"
+#define DIGITAL_OUTPUTS_ARRAY           "r"
+#define AUTOSWITCH_TIME                 "i"
 #define PIN_GPIO                        "g"
-#define INVERTED                        "i"
+#define MAX_ACTIONS                     2
+
 #define ACCESSORY_TYPE                  "t"
 #define ACC_TYPE_SWITCH                 1
 #define ACC_TYPE_OUTLET                 2
@@ -68,8 +74,18 @@
 
 #define ALLOWED_SETUP_MODE_TIME         30000
 
-#define LED_BLINK(x)                    xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) x, 1, NULL)
 #define FREEHEAP()                      printf("HAA > Free Heap: %d\n", xPortGetFreeHeapSize())
+
+typedef struct _autoswitch_params {
+    uint8_t gpio;
+    bool value;
+    double time;
+} autoswitch_params_t;
+
+typedef struct _autooff_setter_params {
+    homekit_characteristic_t *ch;
+    double time;
+} autooff_setter_params_t;
 
 uint8_t setup_mode_toggle_counter = 0, led_gpio = 255;
 ETSTimer setup_mode_toggle_timer;
@@ -77,18 +93,22 @@ bool used_gpio[17];
 bool led_inverted = false;
 
 void led_task(void *pvParameters) {
-    if (led_gpio != 255) {
-        const uint8_t times = (int) pvParameters;
-        
-        for (uint8_t i=0; i<times; i++) {
-            gpio_write(led_gpio, true ^ led_inverted);
-            vTaskDelay(30 / portTICK_PERIOD_MS);
-            gpio_write(led_gpio, false ^ led_inverted);
-            vTaskDelay(150 / portTICK_PERIOD_MS);
-        }
+    const uint8_t times = (int) pvParameters;
+    
+    for (uint8_t i=0; i<times; i++) {
+        gpio_write(led_gpio, true ^ led_inverted);
+        vTaskDelay(30 / portTICK_PERIOD_MS);
+        gpio_write(led_gpio, false ^ led_inverted);
+        vTaskDelay(130 / portTICK_PERIOD_MS);
     }
     
     vTaskDelete(NULL);
+}
+
+void led_blink(const int blinks) {
+    if (led_gpio != 255) {
+        xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) blinks, 1, NULL);
+    }
 }
 
 // -----
@@ -99,11 +119,11 @@ void setup_mode_task() {
     sdk_system_restart();
 }
 
-void setup_mode_call(const uint8_t gpio) {
+void setup_mode_call(const uint8_t gpio, void *args) {
     printf("HAA > Checking setup mode call\n");
     
     if (xTaskGetTickCountFromISR() < ALLOWED_SETUP_MODE_TIME / portTICK_PERIOD_MS) {
-        LED_BLINK(4);
+        led_blink(4);
         xTaskCreate(setup_mode_task, "setup_mode_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
     } else {
         printf("HAA ! Setup mode not allowed after %i msecs since boot. Repower device and try again\n", ALLOWED_SETUP_MODE_TIME);
@@ -117,38 +137,103 @@ void setup_mode_toggle_upcount() {
 
 void setup_mode_toggle() {
     if (setup_mode_toggle_counter > 10) {
-        setup_mode_call(0);
+        setup_mode_call(0, NULL);
     }
     
     setup_mode_toggle_counter = 0;
 }
 
 // -----
+void autoswitch_task(void *pvParameters) {
+    autoswitch_params_t *autoswitch_params = pvParameters;
+
+    vTaskDelay(autoswitch_params->time * 1000 / portTICK_PERIOD_MS);
+    
+    gpio_write(autoswitch_params->gpio, autoswitch_params->value);
+    printf("HAA > Autoswitch digital output GPIO %i -> %i\n", autoswitch_params->gpio, autoswitch_params->value);
+    
+    free(autoswitch_params);
+    vTaskDelete(NULL);
+}
+
+void do_actions(cJSON *json_actions, const uint8_t int_action) {
+    char *action = malloc(2);
+    itoa(int_action, action, 10);
+    
+    if (cJSON_GetObjectItem(json_actions, action) != NULL) {
+        cJSON *actions = cJSON_GetObjectItem(json_actions, action);
+        
+        // Digital outputs
+        cJSON *json_relays = cJSON_GetObjectItem(actions, DIGITAL_OUTPUTS_ARRAY);
+        for(uint8_t i=0; i<cJSON_GetArraySize(json_relays); i++) {
+            cJSON *json_relay = cJSON_GetArrayItem(json_relays, i);
+            
+            const uint8_t gpio = (uint8_t) cJSON_GetObjectItem(json_relay, PIN_GPIO)->valuedouble;
+            const bool output_value = (bool) cJSON_GetObjectItem(json_relay, VALUE)->valuedouble;
+
+            gpio_write(gpio, output_value);
+            printf("HAA > Digital output GPIO %i -> %i\n", gpio, output_value);
+            
+            if (cJSON_GetObjectItem(json_relay, AUTOSWITCH_TIME) != NULL) {
+                const double autoswitch_time = cJSON_GetObjectItem(json_relay, AUTOSWITCH_TIME)->valuedouble;
+                if (autoswitch_time > 0) {
+                    autoswitch_params_t *autoswitch_params = malloc(sizeof(autoswitch_params_t));
+                    autoswitch_params->gpio = gpio;
+                    autoswitch_params->value = output_value ^ 1;
+                    autoswitch_params->time = autoswitch_time;
+                    xTaskCreate(autoswitch_task, "autoswitch_task", configMINIMAL_STACK_SIZE, autoswitch_params, 1, NULL);
+                }
+            }
+        }
+    }
+    
+    free(action);
+}
 
 homekit_value_t hkc_getter(const homekit_characteristic_t *ch) {
     printf("HAA > Getter\n");
     return ch->value;
 }
 
+void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value);
+
+void hkc_autooff_setter_task(void *pvParameters) {
+    autooff_setter_params_t *autooff_setter_params = pvParameters;
+    
+    vTaskDelay(autooff_setter_params->time * 1000 / portTICK_PERIOD_MS);
+    
+    hkc_on_setter(autooff_setter_params->ch, HOMEKIT_BOOL(false));
+    
+    free(autooff_setter_params);
+    vTaskDelete(NULL);
+}
+
 void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
-    LED_BLINK(1);
+    led_blink(1);
     printf("HAA > Setter ON\n");
     
     ch->value = value;
     homekit_characteristic_notify(ch, ch->value);
     
     cJSON *json_context = ch->context;
-    cJSON *json_relays = cJSON_GetObjectItem(json_context, RELAYS_ARRAY);
     
-    for(uint8_t i=0; i<cJSON_GetArraySize(json_relays); i++) {
-        const uint8_t gpio = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, i), PIN_GPIO)->valuedouble;
-        bool inverted = false;
-        if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, i), INVERTED) != NULL) {
-            inverted = (bool) cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, i), INVERTED)->valuedouble;
+    if (cJSON_GetObjectItem(json_context, ACTIONS_ARRAY) != NULL) {
+        uint8_t action = 0;
+        if (ch->value.bool_value) {
+            action = 1;
         }
-        const bool relay_value = value.bool_value ^ inverted;
-        gpio_write(gpio, relay_value);
-        printf("HAA > Output GPIO %i -> %i\n", gpio, relay_value);
+        
+        do_actions(cJSON_GetObjectItem(json_context, ACTIONS_ARRAY), action);
+    }
+    
+    if (ch->value.bool_value && cJSON_GetObjectItem(json_context, AUTOSWITCH_TIME) != NULL) {
+        const double autoswitch_time = cJSON_GetObjectItem(json_context, AUTOSWITCH_TIME)->valuedouble;
+        if (autoswitch_time > 0) {
+            autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+            autooff_setter_params->ch = ch;
+            autooff_setter_params->time = autoswitch_time;
+            xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", configMINIMAL_STACK_SIZE, autooff_setter_params, 1, NULL);
+        }
     }
     
     setup_mode_toggle_upcount();
@@ -163,7 +248,7 @@ void button_on(const uint8_t gpio, void *args) {
 void button_event1(const uint8_t gpio, void *args) {
     homekit_characteristic_t *ch = args;
     homekit_characteristic_notify(ch, HOMEKIT_UINT8(0));
-    LED_BLINK(1);
+    led_blink(1);
     printf("HAA > Single press event\n");
     
     setup_mode_toggle_upcount();
@@ -172,7 +257,7 @@ void button_event1(const uint8_t gpio, void *args) {
 void button_event2(const uint8_t gpio, void *args) {
     homekit_characteristic_t *ch = args;
     homekit_characteristic_notify(ch, HOMEKIT_UINT8(1));
-    LED_BLINK(2);
+    led_blink(2);
     printf("HAA > Double press event\n");
     
     setup_mode_toggle_upcount();
@@ -181,12 +266,12 @@ void button_event2(const uint8_t gpio, void *args) {
 void button_event3(const uint8_t gpio, void *args) {
     homekit_characteristic_t *ch = args;
     homekit_characteristic_notify(ch, HOMEKIT_UINT8(2));
-    LED_BLINK(3);
+    led_blink(3);
     printf("HAA > Long press event\n");
 }
 
 void identify(homekit_value_t _value) {
-    LED_BLINK(6);
+    led_blink(6);
     printf("HAA > Identifying\n");
 }
 
@@ -204,7 +289,37 @@ homekit_server_config_t config;
 void run_homekit_server() {
     printf("HAA > Starting HK Server\n");
     homekit_server_init(&config);
-    LED_BLINK(6);
+    led_blink(6);
+}
+
+// Buttons GPIO Setup
+void buttons_setup(cJSON *json_buttons, void *callback, void *hk_ch) {
+    for(uint8_t j=0; j<cJSON_GetArraySize(json_buttons); j++) {
+        const uint8_t gpio = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PIN_GPIO)->valuedouble;
+        bool pullup_resistor = true;
+        if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR) != NULL &&
+            cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR)->valuedouble == 0) {
+            pullup_resistor = false;
+        }
+        
+        bool inverted = false;
+        if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), INVERTED) != NULL &&
+            cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), INVERTED)->valuedouble == 1) {
+            inverted = true;
+        }
+        
+        uint8_t button_type = 1;
+        if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE) != NULL) {
+            button_type = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE)->valuedouble;
+        }
+        
+        if (!used_gpio[gpio]) {
+            adv_button_create(gpio, pullup_resistor, inverted);
+            used_gpio[gpio] = true;
+        }
+        adv_button_register_callback_fn(gpio, callback, button_type, hk_ch);
+        printf("HAA > Enable button GPIO %i, type=%i, inverted=%i\n", gpio, button_type, inverted);
+    }
 }
 
 void normal_mode_init() {
@@ -242,6 +357,8 @@ void normal_mode_init() {
         return;
     }
     
+    // ----- CONFIG SECTION
+    
     // Log output type
     if (cJSON_GetObjectItem(json_config, LOG_OUTPUT) != NULL &&
         cJSON_GetObjectItem(json_config, LOG_OUTPUT)->valuedouble == 1) {
@@ -265,6 +382,18 @@ void normal_mode_init() {
         gpio_write(led_gpio, false ^ led_inverted);
         printf("HAA > Enable LED GPIO %i, inverted=%i\n", led_gpio, led_inverted);
     }
+    
+    // Button filter
+    if (cJSON_GetObjectItem(json_config, BUTTON_FILTER) != NULL) {
+        uint8_t button_filter_value = (uint8_t) cJSON_GetObjectItem(json_config, BUTTON_FILTER)->valuedouble;
+        adv_button_set_evaluate_delay(button_filter_value);
+        printf("HAA > Button filter set to %i\n", button_filter_value);
+    }
+    
+    // Buttons to enter setup mode
+    buttons_setup(cJSON_GetObjectItem(json_config, BUTTONS_ARRAY), setup_mode_call, NULL);
+    
+    // ----- END CONFIG SECTION
     
     uint8_t hk_total_ac = 1;
     bool bridge_needed = false;
@@ -298,35 +427,6 @@ void normal_mode_init() {
     
     homekit_accessory_t **accessories = calloc(hk_total_ac, sizeof(homekit_accessory_t*));
     
-    // Buttons GPIO Setup
-    void buttons_setup(cJSON *json_buttons, void *hk_ch) {
-        for(uint8_t j=0; j<cJSON_GetArraySize(json_buttons); j++) {
-            const uint8_t gpio = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PIN_GPIO)->valuedouble;
-            bool pullup_resistor = true;
-            if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR) != NULL &&
-                cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR)->valuedouble == 0) {
-                pullup_resistor = false;
-            }
-            
-            bool inverted = false;
-            if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), INVERTED) != NULL &&
-                cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), INVERTED)->valuedouble == 1) {
-                inverted = true;
-            }
-            
-            uint8_t button_type = 1;
-            if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE) != NULL) {
-                button_type = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE)->valuedouble;
-            }
-            
-            if (!used_gpio[gpio]) {
-                adv_button_create(gpio, pullup_resistor, inverted);
-                used_gpio[gpio] = true;
-            }
-            adv_button_register_callback_fn(gpio, button_on, button_type, hk_ch);
-            printf("HAA > Enable button GPIO %i, type=%i, inverted=%i\n", gpio, button_type, inverted);
-        }
-    }
     
     void buttons_setup_programable(cJSON *json_buttons, void *hk_ch) {
         for(int j=0; j<cJSON_GetArraySize(json_buttons); j++) {
@@ -406,7 +506,7 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
         accessories[accessory]->services[1]->characteristics[0] = ch;
         
-        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), (void*) ch);
+        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), button_on, (void*) ch);
     }
     
     void new_outlet(const uint8_t accessory, cJSON *json_context) {
@@ -422,7 +522,7 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->characteristics[0] = ch;
         accessories[accessory]->services[1]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(OUTLET_IN_USE, true, .getter_ex=hkc_getter, .context=json_context);;
         
-        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), (void*) ch);
+        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), button_on, (void*) ch);
     }
     
     void new_button(const uint8_t accessory, cJSON *json_context) {
@@ -454,38 +554,41 @@ void normal_mode_init() {
         if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE) != NULL) {
             acc_type = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE)->valuedouble;
         }
+        
+        cJSON *json_accessory = cJSON_GetArrayItem(json_accessories, i);
 
-        printf("HAA > Creating Acc %i, type=%i\n", acc_count, acc_type);
-        if (acc_type == ACC_TYPE_OUTLET) {
-            new_outlet(acc_count, cJSON_GetArrayItem(json_accessories, i));
-            acc_count += 1;
-        } else if (acc_type == ACC_TYPE_BUTTON) {
-            new_button(acc_count, cJSON_GetArrayItem(json_accessories, i));
-            acc_count += 1;
-        } else {    // case ACC_TYPE_SWITCH:
-            new_switch(acc_count, cJSON_GetArrayItem(json_accessories, i));
-            acc_count += 1;
+        // Digital outputs GPIO Setup
+        if (cJSON_GetObjectItem(json_accessory, ACTIONS_ARRAY) != NULL) {
+            cJSON *json_actions = cJSON_GetObjectItem(json_accessory, ACTIONS_ARRAY);
+            
+            for (uint8_t int_action=0; int_action<MAX_ACTIONS; int_action++) {
+                char *action = malloc(2);
+                itoa(int_action, action, 10);
+                
+                cJSON *json_relays = cJSON_GetObjectItem(cJSON_GetObjectItem(json_actions, action), DIGITAL_OUTPUTS_ARRAY);
+                free(action);
+                for(uint8_t j=0; j<cJSON_GetArraySize(json_relays); j++) {
+                    const uint8_t gpio = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, j), PIN_GPIO)->valuedouble;
+                    if (!used_gpio[gpio]) {
+                        gpio_enable(gpio, GPIO_OUTPUT);
+                        used_gpio[gpio] = true;
+                        printf("HAA > Enable digital output GPIO %i\n", gpio);
+                    }
+                }
+            }
         }
         
-        // Relays GPIO Setup
-        cJSON *json_relays = cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), RELAYS_ARRAY);
-        for(uint8_t j=0; j<cJSON_GetArraySize(json_relays); j++) {
-            const uint8_t gpio = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, j), PIN_GPIO)->valuedouble;
-            if (!used_gpio[gpio]) {
-                gpio_enable(gpio, GPIO_OUTPUT);
-                used_gpio[gpio] = true;
-                printf("HAA > Enable output GPIO %i\n", gpio);
-            }
-            
-            // Initial relay state
-            bool inverted = false;
-            if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, j), INVERTED) != NULL) {
-                inverted = (bool) cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, j), INVERTED)->valuedouble;
-            }
-            const bool init_state = false;
-            const bool relay_value = init_state ^ inverted;
-            gpio_write(gpio, relay_value);
-            printf("HAA > Output GPIO %i -> %i\n", gpio, relay_value);
+        // Creating HomeKit Accessory
+        printf("HAA > Creating Acc %i, type=%i\n", acc_count, acc_type);
+        if (acc_type == ACC_TYPE_OUTLET) {
+            new_outlet(acc_count, json_accessory);
+            acc_count += 1;
+        } else if (acc_type == ACC_TYPE_BUTTON) {
+            new_button(acc_count, json_accessory);
+            acc_count += 1;
+        } else {    // case ACC_TYPE_SWITCH:
+            new_switch(acc_count, json_accessory);
+            acc_count += 1;
         }
     }
     
