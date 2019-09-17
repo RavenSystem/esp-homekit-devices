@@ -3,7 +3,7 @@
  *
  * v0.0.6
  * 
- * Copyright 2019 José A. Jiménez (@RavenSystem)
+ * Copyright 2019 José Antonio Jiménez (@RavenSystem)
  *  
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.0.6"
-#define FIRMWARE_VERSION_OCTAL          000006      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.0.7"
+#define FIRMWARE_VERSION_OCTAL          000007      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // JSON
 #define GENERAL_CONFIG                  "c"
@@ -52,11 +52,11 @@
 #define STATUS_LED_GPIO                 "l"
 #define INVERTED                        "i"
 #define BUTTON_FILTER                   "f"
-#define ACCESSORIES                     "h"
+#define ENABLE_HOMEKIT_SERVER           "h"
+#define ACCESSORIES                     "a"
 #define BUTTONS_ARRAY                   "b"
 #define BUTTON_PRESS_TYPE               "t"
 #define PULLUP_RESISTOR                 "p"
-#define ACTIONS_ARRAY                   "a"
 #define VALUE                           "v"
 #define DIGITAL_OUTPUTS_ARRAY           "r"
 #define AUTOSWITCH_TIME                 "i"
@@ -91,6 +91,7 @@ uint8_t setup_mode_toggle_counter = 0, led_gpio = 255;
 ETSTimer setup_mode_toggle_timer;
 bool used_gpio[17];
 bool led_inverted = false;
+bool enable_homekit_server = true;
 
 void led_task(void *pvParameters) {
     const uint8_t times = (int) pvParameters;
@@ -156,12 +157,12 @@ void autoswitch_task(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
-void do_actions(cJSON *json_actions, const uint8_t int_action) {
+void do_actions(cJSON *json_context, const uint8_t int_action) {
     char *action = malloc(2);
     itoa(int_action, action, 10);
     
-    if (cJSON_GetObjectItem(json_actions, action) != NULL) {
-        cJSON *actions = cJSON_GetObjectItem(json_actions, action);
+    if (cJSON_GetObjectItem(json_context, action) != NULL) {
+        cJSON *actions = cJSON_GetObjectItem(json_context, action);
         
         // Digital outputs
         cJSON *json_relays = cJSON_GetObjectItem(actions, DIGITAL_OUTPUTS_ARRAY);
@@ -217,14 +218,7 @@ void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
     
     cJSON *json_context = ch->context;
     
-    if (cJSON_GetObjectItem(json_context, ACTIONS_ARRAY) != NULL) {
-        uint8_t action = 0;
-        if (ch->value.bool_value) {
-            action = 1;
-        }
-        
-        do_actions(cJSON_GetObjectItem(json_context, ACTIONS_ARRAY), action);
-    }
+    do_actions(json_context, (uint8_t) ch->value.bool_value);
     
     if (ch->value.bool_value && cJSON_GetObjectItem(json_context, AUTOSWITCH_TIME) != NULL) {
         const double autoswitch_time = cJSON_GetObjectItem(json_context, AUTOSWITCH_TIME)->valuedouble;
@@ -287,8 +281,11 @@ homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, F
 homekit_server_config_t config;
 
 void run_homekit_server() {
-    printf("HAA > Starting HK Server\n");
-    homekit_server_init(&config);
+    if (enable_homekit_server) {
+        printf("HAA > Starting HK Server\n");
+        homekit_server_init(&config);
+    }
+    
     led_blink(6);
 }
 
@@ -388,6 +385,12 @@ void normal_mode_init() {
         uint8_t button_filter_value = (uint8_t) cJSON_GetObjectItem(json_config, BUTTON_FILTER)->valuedouble;
         adv_button_set_evaluate_delay(button_filter_value);
         printf("HAA > Button filter set to %i\n", button_filter_value);
+    }
+    
+    // Run HomeKit Server
+    if (cJSON_GetObjectItem(json_config, ENABLE_HOMEKIT_SERVER) != NULL) {
+        enable_homekit_server = (bool) cJSON_GetObjectItem(json_config, ENABLE_HOMEKIT_SERVER)->valuedouble;
+        printf("HAA > Run HomeKit Server set to %i\n", enable_homekit_server);
     }
     
     // Buttons to enter setup mode
@@ -558,21 +561,21 @@ void normal_mode_init() {
         cJSON *json_accessory = cJSON_GetArrayItem(json_accessories, i);
 
         // Digital outputs GPIO Setup
-        if (cJSON_GetObjectItem(json_accessory, ACTIONS_ARRAY) != NULL) {
-            cJSON *json_actions = cJSON_GetObjectItem(json_accessory, ACTIONS_ARRAY);
+        for (uint8_t int_action=0; int_action<MAX_ACTIONS; int_action++) {
+            char *action = malloc(2);
+            itoa(int_action, action, 10);
             
-            for (uint8_t int_action=0; int_action<MAX_ACTIONS; int_action++) {
-                char *action = malloc(2);
-                itoa(int_action, action, 10);
-                
-                cJSON *json_relays = cJSON_GetObjectItem(cJSON_GetObjectItem(json_actions, action), DIGITAL_OUTPUTS_ARRAY);
-                free(action);
-                for(uint8_t j=0; j<cJSON_GetArraySize(json_relays); j++) {
-                    const uint8_t gpio = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, j), PIN_GPIO)->valuedouble;
-                    if (!used_gpio[gpio]) {
-                        gpio_enable(gpio, GPIO_OUTPUT);
-                        used_gpio[gpio] = true;
-                        printf("HAA > Enable digital output GPIO %i\n", gpio);
+            if (cJSON_GetObjectItem(json_accessory, action) != NULL) {
+                if (cJSON_GetObjectItem(cJSON_GetObjectItem(json_accessory, action), DIGITAL_OUTPUTS_ARRAY) != NULL) {
+                    cJSON *json_relays = cJSON_GetObjectItem(cJSON_GetObjectItem(json_accessory, action), DIGITAL_OUTPUTS_ARRAY);
+                    free(action);
+                    for(uint8_t j=0; j<cJSON_GetArraySize(json_relays); j++) {
+                        const uint8_t gpio = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, j), PIN_GPIO)->valuedouble;
+                        if (!used_gpio[gpio]) {
+                            gpio_enable(gpio, GPIO_OUTPUT);
+                            used_gpio[gpio] = true;
+                            printf("HAA > Enable digital output GPIO %i\n", gpio);
+                        }
                     }
                 }
             }
