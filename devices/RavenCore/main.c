@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v1.0.0
+ * v1.1.1
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -65,8 +65,8 @@
 #include "../common/custom_characteristics.h"
 
 // Version
-#define FIRMWARE_VERSION                "1.1.0"
-#define FIRMWARE_VERSION_OCTAL          010100      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "1.1.1"
+#define FIRMWARE_VERSION_OCTAL          010101      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -122,6 +122,7 @@
 
 // SysParam
 #define OTA_REPO_SYSPARAM                               "ota_repo"
+#define OTA_VERSION_SYSPARAM                            "ota_version"
 #define SHOW_SETUP_SYSPARAM                             "a"
 #define DEVICE_TYPE_SYSPARAM                            "b"
 #define BOARD_TYPE_SYSPARAM                             "c"
@@ -213,6 +214,7 @@ void boost_callback();
 
 void show_setup_callback();
 void ota_firmware_callback();
+void migrate_to_haa();
 void change_settings_callback();
 void save_states_callback();
 homekit_value_t read_ip_addr();
@@ -279,6 +281,7 @@ homekit_characteristic_t device_type = HOMEKIT_CHARACTERISTIC_(CUSTOM_DEVICE_TYP
 homekit_characteristic_t board_type = HOMEKIT_CHARACTERISTIC_(CUSTOM_BOARD_TYPE, 1, .id=126, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t reboot_device = HOMEKIT_CHARACTERISTIC_(CUSTOM_REBOOT_DEVICE, false, .id=103, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(ota_firmware_callback));
 homekit_characteristic_t ota_firmware = HOMEKIT_CHARACTERISTIC_(CUSTOM_OTA_UPDATE, false, .id=110, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(ota_firmware_callback));
+homekit_characteristic_t haa_firmware = HOMEKIT_CHARACTERISTIC_(CUSTOM_HAA_UPDATE, false, .id=154);
 homekit_characteristic_t log_output = HOMEKIT_CHARACTERISTIC_(CUSTOM_LOG_OUTPUT, 1, .id=129, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t ip_addr = HOMEKIT_CHARACTERISTIC_(CUSTOM_IP_ADDR, "", .id=130, .getter=read_ip_addr);
 homekit_characteristic_t wifi_reset = HOMEKIT_CHARACTERISTIC_(CUSTOM_WIFI_RESET, false, .id=131, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
@@ -339,7 +342,7 @@ homekit_characteristic_t custom_reverse_sw2 = HOMEKIT_CHARACTERISTIC_(CUSTOM_REV
 homekit_characteristic_t custom_reverse_sw3 = HOMEKIT_CHARACTERISTIC_(CUSTOM_REVERSE_SW3, false, .id=137, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 homekit_characteristic_t custom_reverse_sw4 = HOMEKIT_CHARACTERISTIC_(CUSTOM_REVERSE_SW4, false, .id=138, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(change_settings_callback));
 
-// Last used ID = 153
+// Last used ID = 154
 // ---------------------------
 
 void relay_write(bool on, const uint8_t gpio) {
@@ -676,6 +679,13 @@ void device_restart_task() {
     }
     
     if (ota_firmware.value.bool_value) {
+        if (haa_firmware.value.bool_value) {
+            sdk_os_timer_disarm(&change_settings_timer);
+            sdk_os_timer_disarm(&save_states_timer);
+            
+            migrate_to_haa();
+        }
+        
         rboot_set_temp_rom(1);
         vTaskDelay(150 / portTICK_PERIOD_MS);
     }
@@ -3700,7 +3710,7 @@ void create_accessory() {
                 
                 status = sysparam_get_string(OTA_REPO_SYSPARAM, &char_value);
                 if (status == SYSPARAM_OK) {
-                    setting_count += 1;
+                    setting_count += 2;
                     free(char_value);
                 }
         
@@ -3721,6 +3731,8 @@ void create_accessory() {
                 
                     if (status == SYSPARAM_OK) {
                         sonoff_setup->characteristics[setting_number] = &ota_firmware;
+                        setting_number++;
+                        sonoff_setup->characteristics[setting_number] = &haa_firmware;
                         setting_number++;
                     }
                 
@@ -3911,6 +3923,308 @@ void create_accessory() {
     
     if (enable_dummy_switch.value.bool_value) {
         switchdm_on_callback(switchdm_on.value);
+    }
+}
+
+void migrate_to_haa() {
+    sysparam_status_t status;
+    bool bool_value;
+    int8_t int8_value;
+    int32_t int32_value;
+    
+    printf("RC > Cleaning settings\n");
+    
+    status = sysparam_get_bool(SHOW_SETUP_SYSPARAM, &bool_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(SHOW_SETUP_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(BOARD_TYPE_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(BOARD_TYPE_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(DEVICE_TYPE_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(DEVICE_TYPE_SYSPARAM, NULL, 0, false);
+    }
+
+    status = sysparam_get_int8(LOG_OUTPUT_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(LOG_OUTPUT_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(BUTTON_FILTER_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(BUTTON_FILTER_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(EXTERNAL_TOGGLE1_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(EXTERNAL_TOGGLE1_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(EXTERNAL_TOGGLE2_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(EXTERNAL_TOGGLE2_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(DHT_SENSOR_TYPE_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(DHT_SENSOR_TYPE_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(HUM_OFFSET_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(HUM_OFFSET_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int32(TEMP_OFFSET_SYSPARAM, &int32_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(TEMP_OFFSET_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int32(TEMP_DEADBAND_SYSPARAM, &int32_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(TEMP_DEADBAND_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(POLL_PERIOD_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(POLL_PERIOD_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(VALVE_TYPE_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(VALVE_TYPE_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int32(VALVE_SET_DURATION_SYSPARAM, &int32_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(VALVE_SET_DURATION_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_bool(ENABLE_DUMMY_SWITCH_SYSPARAM, &bool_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(ENABLE_DUMMY_SWITCH_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(GARAGEDOOR_WORKING_TIME_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(GARAGEDOOR_WORKING_TIME_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_bool(GARAGEDOOR_HAS_STOP_SYSPARAM, &bool_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(GARAGEDOOR_HAS_STOP_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_bool(GARAGEDOOR_SENSOR_CLOSE_NC_SYSPARAM, &bool_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(GARAGEDOOR_SENSOR_CLOSE_NC_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(GARAGEDOOR_SENSOR_OPEN_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(GARAGEDOOR_SENSOR_OPEN_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(GARAGEDOOR_SENSOR_OBSTRUCTION_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(GARAGEDOOR_SENSOR_OBSTRUCTION_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_bool(GARAGEDOOR_CONTROL_WITH_BUTTON_SYSPARAM, &bool_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(GARAGEDOOR_CONTROL_WITH_BUTTON_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int32(INCHING_TIME1_SYSPARAM, &int32_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(INCHING_TIME1_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int32(INCHING_TIME2_SYSPARAM, &int32_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(INCHING_TIME2_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int32(INCHING_TIME3_SYSPARAM, &int32_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(INCHING_TIME3_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int32(INCHING_TIME4_SYSPARAM, &int32_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(INCHING_TIME4_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int32(INCHING_TIMEDM_SYSPARAM, &int32_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(INCHING_TIMEDM_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int32(COVERING_UP_TIME_SYSPARAM, &int32_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(COVERING_UP_TIME_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int32(COVERING_DOWN_TIME_SYSPARAM, &int32_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(COVERING_DOWN_TIME_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(TYPE_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(TYPE_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int32(COVERING_LAST_POSITION_SYSPARAM, &int32_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(COVERING_LAST_POSITION_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(R_GPIO_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(R_GPIO_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(G_GPIO_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(G_GPIO_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(B_GPIO_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(B_GPIO_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(W_GPIO_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(W_GPIO_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(BOOST_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(BOOST_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int32(TARGET_TEMPERATURE_SYSPARAM, &int32_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(TARGET_TEMPERATURE_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(INIT_STATE_SW1_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(INIT_STATE_SW1_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(INIT_STATE_SW2_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(INIT_STATE_SW2_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(INIT_STATE_SW3_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(INIT_STATE_SW3_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(INIT_STATE_SW4_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(INIT_STATE_SW4_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(INIT_STATE_SWDM_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(INIT_STATE_SWDM_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(INIT_STATE_TH_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(INIT_STATE_TH_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_bool(REVERSE_SW1_SYSPARAM, &bool_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(REVERSE_SW1_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_bool(REVERSE_SW2_SYSPARAM, &bool_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(REVERSE_SW2_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_bool(REVERSE_SW3_SYSPARAM, &bool_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(REVERSE_SW3_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_bool(REVERSE_SW4_SYSPARAM, &bool_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(REVERSE_SW4_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_bool(LAST_STATE_SW1_SYSPARAM, &bool_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(LAST_STATE_SW1_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_bool(LAST_STATE_SW2_SYSPARAM, &bool_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(LAST_STATE_SW2_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_bool(LAST_STATE_SW3_SYSPARAM, &bool_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(LAST_STATE_SW3_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_bool(LAST_STATE_SW4_SYSPARAM, &bool_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(LAST_STATE_SW4_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_bool(LAST_STATE_SWDM_SYSPARAM, &bool_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(LAST_STATE_SWDM_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(LAST_TARGET_STATE_TH_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(LAST_TARGET_STATE_TH_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(LAST_STATE_BRIGHTNESS_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(LAST_STATE_BRIGHTNESS_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(LAST_STATE_HUE_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(LAST_STATE_HUE_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_get_int8(LAST_STATE_SATURATION_SYSPARAM, &int8_value);
+    if (status == SYSPARAM_OK) {
+        status = sysparam_set_data(LAST_STATE_SATURATION_SYSPARAM, NULL, 0, false);
+    }
+    
+    status = sysparam_set_string(OTA_REPO_SYSPARAM, "RavenSystem/haa");
+    if (status == SYSPARAM_OK) {
+        printf("RC > OTA repository changed to HAA\n");
+    }
+    
+    status = sysparam_set_string(OTA_VERSION_SYSPARAM, "0.0.0");
+    if (status == SYSPARAM_OK) {
+        printf("RC > OTA version changed to 0.0.0\n");
+    }
+    
+    status = sysparam_compact();
+    
+    if (status == SYSPARAM_OK) {
+        device_restart();
+    } else {
+        printf("RC ! ERROR removing settings. Flash problem\n");
     }
 }
 

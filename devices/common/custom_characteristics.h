@@ -74,10 +74,10 @@
     .value = HOMEKIT_BOOL_(_value), \
     ##__VA_ARGS__
 
-#define HOMEKIT_CHARACTERISTIC_CUSTOM_OTA_BETA HOMEKIT_CUSTOM_UUID("F0000005")
-#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_OTA_BETA(_value, ...) \
-    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_OTA_BETA, \
-    .description = "Firmware BETA", \
+#define HOMEKIT_CHARACTERISTIC_CUSTOM_HAA_UPDATE HOMEKIT_CUSTOM_UUID("F0000005")
+#define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_HAA_UPDATE(_value, ...) \
+    .type = HOMEKIT_CHARACTERISTIC_CUSTOM_HAA_UPDATE, \
+    .description = "Firmware HAA", \
     .format = homekit_format_bool, \
     .permissions = homekit_permissions_paired_read \
     | homekit_permissions_paired_write \
