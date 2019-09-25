@@ -2113,9 +2113,15 @@ void hardware_init() {
             break;
             
         case 8:
-            enable_sonoff_device();
-            
-            adv_button_register_callback_fn(button1_gpio, garage_on_button, 1, NULL);
+            if (board_type.value.int_value == 3) {  // It is a Shelly1
+                relay1_gpio = S1_RELAY_GPIO;
+                extra_gpio = S1_TOGGLE_GPIO;
+                pullup = false;
+            } else {                                // It is a Sonoff
+                enable_sonoff_device();
+                
+                adv_button_register_callback_fn(button1_gpio, toggle_valve, 1, NULL);
+            }
             
             adv_button_create(extra_gpio, pullup, false);
             
