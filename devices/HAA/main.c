@@ -1,9 +1,9 @@
 /*
  * Home Accessory Architect
  *
- * v0.0.6
+ * v0.1.0
  * 
- * Copyright 2019 José Antonio Jiménez (@RavenSystem)
+ * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -43,8 +43,18 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.0.7"
-#define FIRMWARE_VERSION_OCTAL          000007      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.1.0"
+#define FIRMWARE_VERSION_OCTAL          000100      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+
+// Characteristic types (ch_type)
+#define CH_TYPE_BOOL                    0
+#define CH_TYPE_INT8                    1
+#define CH_TYPE_INT32                   2
+#define CH_TYPE_FLOAT                   3
+
+// Initial states
+#define INIT_STATE_LAST                 5
+#define INIT_STATE_INV_LAST             6
 
 // JSON
 #define GENERAL_CONFIG                  "c"
@@ -61,6 +71,7 @@
 #define DIGITAL_OUTPUTS_ARRAY           "r"
 #define AUTOSWITCH_TIME                 "i"
 #define PIN_GPIO                        "g"
+#define INITIAL_STATE                   "s"
 #define MAX_ACTIONS                     2
 
 #define ACCESSORY_TYPE                  "t"
@@ -87,11 +98,21 @@ typedef struct _autooff_setter_params {
     double time;
 } autooff_setter_params_t;
 
+typedef struct _last_state {
+    char *id;
+    homekit_characteristic_t *ch;
+    uint8_t ch_type;
+    struct _last_state *next;
+} last_state_t;
+
 uint8_t setup_mode_toggle_counter = 0, led_gpio = 255;
-ETSTimer setup_mode_toggle_timer;
+ETSTimer setup_mode_toggle_timer, save_states_timer;
 bool used_gpio[17];
 bool led_inverted = false;
 bool enable_homekit_server = true;
+
+last_state_t *last_states = NULL;
+
 
 void led_task(void *pvParameters) {
     const uint8_t times = (int) pvParameters;
@@ -145,6 +166,42 @@ void setup_mode_toggle() {
 }
 
 // -----
+void save_states() {
+    printf("HAA > Saving states\n");
+    last_state_t *last_state = last_states;
+    sysparam_status_t status;
+    
+    while (last_state) {
+        switch (last_state->ch_type) {
+            case CH_TYPE_INT8:
+                status = sysparam_set_int8(last_state->id, last_state->ch->value.int_value);
+                break;
+                
+            case CH_TYPE_INT32:
+                status = sysparam_set_int32(last_state->id, last_state->ch->value.int_value);
+                break;
+                
+            case CH_TYPE_FLOAT:
+                status = sysparam_set_int32(last_state->id, last_state->ch->value.float_value * 100);
+                break;
+                
+            default:    // case CH_TYPE_BOOL
+                status = sysparam_set_bool(last_state->id, last_state->ch->value.bool_value);
+                break;
+        }
+        
+        if (status != SYSPARAM_OK) {
+            printf("HAA ! Flash error saving states\n");
+        }
+        
+        last_state = last_state->next;
+    }
+}
+
+void save_states_callback() {
+    sdk_os_timer_arm(&save_states_timer, 5000, 0);
+}
+
 void autoswitch_task(void *pvParameters) {
     autoswitch_params_t *autoswitch_params = pvParameters;
 
@@ -170,7 +227,11 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
             cJSON *json_relay = cJSON_GetArrayItem(json_relays, i);
             
             const uint8_t gpio = (uint8_t) cJSON_GetObjectItem(json_relay, PIN_GPIO)->valuedouble;
-            const bool output_value = (bool) cJSON_GetObjectItem(json_relay, VALUE)->valuedouble;
+            
+            bool output_value = false;
+            if (cJSON_GetObjectItem(json_relay, VALUE) != NULL) {
+                output_value = (bool) cJSON_GetObjectItem(json_relay, VALUE)->valuedouble;
+            }
 
             gpio_write(gpio, output_value);
             printf("HAA > Digital output GPIO %i -> %i\n", gpio, output_value);
@@ -180,7 +241,7 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                 if (autoswitch_time > 0) {
                     autoswitch_params_t *autoswitch_params = malloc(sizeof(autoswitch_params_t));
                     autoswitch_params->gpio = gpio;
-                    autoswitch_params->value = output_value ^ 1;
+                    autoswitch_params->value = !output_value;
                     autoswitch_params->time = autoswitch_time;
                     xTaskCreate(autoswitch_task, "autoswitch_task", configMINIMAL_STACK_SIZE, autoswitch_params, 1, NULL);
                 }
@@ -231,6 +292,8 @@ void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
     }
     
     setup_mode_toggle_upcount();
+    
+    save_states_callback();
 }
 
 void button_on(const uint8_t gpio, void *args) {
@@ -362,7 +425,7 @@ void normal_mode_init() {
         uart_set_baud(0, 115200);
         printf("\n\nHAA > Home Accessory Architect\nHAA > Developed by @RavenSystem - José Antonio Jiménez\nHAA > Version: %s\n\n", FIRMWARE_VERSION);
         printf("HAA > Running in NORMAL mode...\n");
-        printf("HAA > ----- PROCESSING JSON -----\n");
+        printf("HAA >\nHAA > ----- PROCESSING JSON -----\n");
         printf("HAA > Enable UART log output\n");
     }
 
@@ -479,6 +542,46 @@ void normal_mode_init() {
         }
     }
     
+    float set_initial_state(const uint8_t accessory, const uint8_t ch_number, cJSON *json_context, homekit_characteristic_t *ch, const uint8_t ch_type) {
+        // Initial state
+        float state = 0;
+        printf("HAA > Setting initial state\n");
+        if (cJSON_GetObjectItem(json_context, INITIAL_STATE) != NULL) {
+            const uint8_t initial_state = (uint8_t) cJSON_GetObjectItem(json_context, INITIAL_STATE)->valuedouble;
+            if (initial_state < INIT_STATE_LAST) {
+                    state = initial_state;
+            } else {
+                char *saved_state_id = malloc(3);
+                uint16_t int_saved_state_id = ((accessory + 10) * 10) + ch_number;
+                bool saved_state = false;
+                
+                itoa(int_saved_state_id, saved_state_id, 10);
+                last_state_t *last_state = malloc(sizeof(last_state_t));
+                memset(last_state, 0, sizeof(*last_state));
+                last_state->id = saved_state_id;
+                last_state->ch = ch;
+                last_state->ch_type = ch_type;
+                last_state->next = last_states;
+                last_states = last_state;
+                
+                sysparam_status_t status;
+                status = sysparam_get_bool(saved_state_id, &saved_state);
+                
+                if (status != SYSPARAM_OK) {
+                    printf("HAA ! No previous state found\n");
+                }
+                
+                if (initial_state == INIT_STATE_LAST) {
+                    state = saved_state;
+                } else if (ch_type == CH_TYPE_BOOL) {    // initial_state == INIT_STATE_INV_LAST
+                    state = !saved_state;
+                }
+            }
+        }
+        
+        return state;
+    }
+    
     // Define services and characteristics
     void new_accessory(const uint8_t accessory, const uint8_t services) {
         accessories[accessory] = calloc(1, sizeof(homekit_accessory_t));
@@ -510,6 +613,8 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->characteristics[0] = ch;
         
         buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), button_on, (void*) ch);
+        
+        hkc_on_setter(ch, HOMEKIT_BOOL((bool) set_initial_state(accessory, 0, json_context, ch, CH_TYPE_BOOL)));
     }
     
     void new_outlet(const uint8_t accessory, cJSON *json_context) {
@@ -526,6 +631,8 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(OUTLET_IN_USE, true, .getter_ex=hkc_getter, .context=json_context);;
         
         buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), button_on, (void*) ch);
+        
+        hkc_on_setter(ch, HOMEKIT_BOOL((bool) set_initial_state(accessory, 0, json_context, ch, CH_TYPE_BOOL)));
     }
     
     void new_button(const uint8_t accessory, cJSON *json_context) {
@@ -547,7 +654,7 @@ void normal_mode_init() {
     uint8_t acc_count = 0;
     
     if (bridge_needed) {
-        printf("HAA > Creating Acc 0, type=bridge\n");
+        printf("HAA >\nHAA > Creating Acc 0, type=bridge\n");
         new_accessory(0, 2);
         acc_count += 1;
     }
@@ -569,6 +676,7 @@ void normal_mode_init() {
                 if (cJSON_GetObjectItem(cJSON_GetObjectItem(json_accessory, action), DIGITAL_OUTPUTS_ARRAY) != NULL) {
                     cJSON *json_relays = cJSON_GetObjectItem(cJSON_GetObjectItem(json_accessory, action), DIGITAL_OUTPUTS_ARRAY);
                     free(action);
+                    
                     for(uint8_t j=0; j<cJSON_GetArraySize(json_relays); j++) {
                         const uint8_t gpio = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_relays, j), PIN_GPIO)->valuedouble;
                         if (!used_gpio[gpio]) {
@@ -582,7 +690,7 @@ void normal_mode_init() {
         }
         
         // Creating HomeKit Accessory
-        printf("HAA > Creating Acc %i, type=%i\n", acc_count, acc_type);
+        printf("HAA >\nHAA > Accessory %i, type=%i\n", acc_count, acc_type);
         if (acc_type == ACC_TYPE_OUTLET) {
             new_outlet(acc_count, json_accessory);
             acc_count += 1;
@@ -595,6 +703,8 @@ void normal_mode_init() {
         }
     }
     
+    sdk_os_timer_setfn(&save_states_timer, save_states, NULL);
+    
     // -----
     
     cJSON_Delete(json_config);
@@ -605,8 +715,9 @@ void normal_mode_init() {
     config.category = homekit_accessory_category_other;
     config.config_number = FIRMWARE_VERSION_OCTAL;
     
+    printf("HAA >\n");
     FREEHEAP();
-    printf("HAA > ---------------------------\n");
+    printf("HAA > ---------------------------\n\n");
     
     wifi_config_init("HAA", NULL, run_homekit_server);
 }
@@ -617,7 +728,7 @@ void user_init(void) {
     status = sysparam_get_bool("setup", &haa_setup);
     if (status == SYSPARAM_OK && haa_setup == true) {
         uart_set_baud(0, 115200);
-        printf("\n\nHAA > Home Accessory Architect\nHAA > Developed by @RavenSystem - José Antonio Jiménez\nHAA > Version: %s\n\n", FIRMWARE_VERSION);
+        printf("\n\nHAA > Home Accessory Architect\nHAA > Developed by José Antonio Jiménez Campos (@RavenSystem)\nHAA > Version: %s\n\n", FIRMWARE_VERSION);
         printf("HAA > Running in SETUP mode...\n");
         wifi_config_init("HAA", NULL, NULL);
     } else {
