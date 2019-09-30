@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.1.0
+ * v0.1.1
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.1.0"
-#define FIRMWARE_VERSION_OCTAL          000100      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.1.1"
+#define FIRMWARE_VERSION_OCTAL          000101      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -78,6 +78,8 @@
 #define ACC_TYPE_SWITCH                 1
 #define ACC_TYPE_OUTLET                 2
 #define ACC_TYPE_BUTTON                 3
+#define ACC_TYPE_LOCK                   4
+#define ACC_TYPE_LOCK_SECURED           5
 
 #ifndef HAA_MAX_ACCESSORIES
 #define HAA_MAX_ACCESSORIES             4           // Max number of accessories before use a bridge
@@ -105,6 +107,17 @@ typedef struct _last_state {
     struct _last_state *next;
 } last_state_t;
 
+typedef struct _ch_group {
+    homekit_characteristic_t *ch0;
+    homekit_characteristic_t *ch1;
+    homekit_characteristic_t *ch2;
+    homekit_characteristic_t *ch3;
+    homekit_characteristic_t *ch4;
+    homekit_characteristic_t *ch5;
+    homekit_characteristic_t *ch_sec;
+    struct _ch_group *next;
+} ch_group_t;
+
 uint8_t setup_mode_toggle_counter = 0, led_gpio = 255;
 ETSTimer setup_mode_toggle_timer, save_states_timer;
 bool used_gpio[17];
@@ -112,7 +125,24 @@ bool led_inverted = false;
 bool enable_homekit_server = true;
 
 last_state_t *last_states = NULL;
+ch_group_t *ch_groups = NULL;
 
+ch_group_t *ch_group_find(homekit_characteristic_t *ch) {
+    ch_group_t *ch_group = ch_groups;
+    
+    while (ch_group &&
+           ch_group->ch0 != ch &&
+           ch_group->ch1 != ch &&
+           ch_group->ch2 != ch &&
+           ch_group->ch3 != ch &&
+           ch_group->ch4 != ch &&
+           ch_group->ch5 != ch &&
+           ch_group->ch_sec != ch) {
+        ch_group = ch_group->next;
+    }
+
+    return ch_group;
+}
 
 void led_task(void *pvParameters) {
     const uint8_t times = (int) pvParameters;
@@ -257,9 +287,9 @@ homekit_value_t hkc_getter(const homekit_characteristic_t *ch) {
     return ch->value;
 }
 
+// --- ON
 void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value);
-
-void hkc_autooff_setter_task(void *pvParameters) {
+void hkc_on_autooff_setter_task(void *pvParameters) {
     autooff_setter_params_t *autooff_setter_params = pvParameters;
     
     vTaskDelay(autooff_setter_params->time * 1000 / portTICK_PERIOD_MS);
@@ -287,7 +317,7 @@ void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
             autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
             autooff_setter_params->ch = ch;
             autooff_setter_params->time = autoswitch_time;
-            xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", configMINIMAL_STACK_SIZE, autooff_setter_params, 1, NULL);
+            xTaskCreate(hkc_on_autooff_setter_task, "hkc_on_autooff_setter_task", configMINIMAL_STACK_SIZE, autooff_setter_params, 1, NULL);
         }
     }
     
@@ -302,6 +332,71 @@ void button_on(const uint8_t gpio, void *args) {
     hkc_on_setter(ch, ch->value);
 }
 
+// --- LOCK MECHANISM
+void hkc_lock_setter(homekit_characteristic_t *ch, const homekit_value_t value);
+void hkc_lock_autooff_setter_task(void *pvParameters) {
+    autooff_setter_params_t *autooff_setter_params = pvParameters;
+    
+    vTaskDelay(autooff_setter_params->time * 1000 / portTICK_PERIOD_MS);
+    
+    hkc_lock_setter(autooff_setter_params->ch, HOMEKIT_UINT8(1));
+    
+    free(autooff_setter_params);
+    vTaskDelete(NULL);
+}
+
+void hkc_lock_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
+    ch_group_t *ch_group = ch_group_find(ch);
+    
+    void lock_worker() {
+        led_blink(1);
+        printf("HAA > Setter LOCK\n");
+        
+        ch->value = value;
+        homekit_characteristic_notify(ch, ch->value);
+        ch_group->ch0->value = value;
+        homekit_characteristic_notify(ch_group->ch0, ch_group->ch0->value);
+        
+        cJSON *json_context = ch->context;
+        
+        do_actions(json_context, (uint8_t) ch->value.int_value);
+        
+        if (ch->value.int_value == 0 && cJSON_GetObjectItem(json_context, AUTOSWITCH_TIME) != NULL) {
+            const double autoswitch_time = cJSON_GetObjectItem(json_context, AUTOSWITCH_TIME)->valuedouble;
+            if (autoswitch_time > 0) {
+                autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                autooff_setter_params->ch = ch;
+                autooff_setter_params->time = autoswitch_time;
+                xTaskCreate(hkc_lock_autooff_setter_task, "hkc_lock_autooff_setter_task", configMINIMAL_STACK_SIZE, autooff_setter_params, 1, NULL);
+            }
+        }
+        
+        setup_mode_toggle_upcount();
+        
+        save_states_callback();
+    }
+    
+    if (ch_group->ch_sec) {
+        if (ch_group->ch_sec->value.bool_value) {
+            lock_worker();
+        } else {
+            homekit_characteristic_notify(ch, ch->value);
+        }
+    } else {
+        lock_worker();
+    }
+}
+
+void button_lock(const uint8_t gpio, void *args) {
+    homekit_characteristic_t *ch = args;
+    if (ch->value.int_value == 1) {
+        hkc_lock_setter(ch, HOMEKIT_UINT8(0));
+    } else {
+        hkc_lock_setter(ch, HOMEKIT_UINT8(1));
+    }
+}
+
+// --- BUTTON EVENT
 void button_event1(const uint8_t gpio, void *args) {
     homekit_characteristic_t *ch = args;
     homekit_characteristic_notify(ch, HOMEKIT_UINT8(0));
@@ -327,6 +422,7 @@ void button_event3(const uint8_t gpio, void *args) {
     printf("HAA > Long press event\n");
 }
 
+// --- IDENTIFY
 void identify(homekit_value_t _value) {
     led_blink(6);
     printf("HAA > Identifying\n");
@@ -406,14 +502,15 @@ void normal_mode_init() {
     cJSON *json_config = cJSON_GetObjectItem(cJSON_Parse(txt_config), GENERAL_CONFIG);
     cJSON *json_accessories = cJSON_GetObjectItem(cJSON_Parse(txt_config), ACCESSORIES);
     
-    free(txt_config);
-    
     const uint8_t total_accessories = cJSON_GetArraySize(json_accessories);
     
     if (total_accessories == 0) {
         uart_set_baud(0, 115200);
         printf("HAA ! ERROR: Invalid JSON\n");
         xTaskCreate(setup_mode_task, "setup_mode_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+        
+        free(txt_config);
+        
         return;
     }
     
@@ -423,12 +520,15 @@ void normal_mode_init() {
     if (cJSON_GetObjectItem(json_config, LOG_OUTPUT) != NULL &&
         cJSON_GetObjectItem(json_config, LOG_OUTPUT)->valuedouble == 1) {
         uart_set_baud(0, 115200);
-        printf("\n\nHAA > Home Accessory Architect\nHAA > Developed by @RavenSystem - José Antonio Jiménez\nHAA > Version: %s\n\n", FIRMWARE_VERSION);
-        printf("HAA > Running in NORMAL mode...\n");
-        printf("HAA >\nHAA > ----- PROCESSING JSON -----\n");
+        printf("\n\nHAA > Home Accessory Architect\nHAA > Developed by José Antonio Jiménez Campos (@RavenSystem)\nHAA > Version: %s\n\n", FIRMWARE_VERSION);
+        printf("HAA > Running in NORMAL mode...\n\n");
+        printf("HAA > JSON: %s\n\n", txt_config);
+        printf("HAA > ----- PROCESSING JSON -----\n");
         printf("HAA > Enable UART log output\n");
     }
 
+    free(txt_config);
+    
     // Status LED
     if (cJSON_GetObjectItem(json_config, STATUS_LED_GPIO) != NULL) {
         led_gpio = (uint8_t) cJSON_GetObjectItem(json_config, STATUS_LED_GPIO)->valuedouble;
@@ -471,15 +571,11 @@ void normal_mode_init() {
         }
         
         switch (acc_type) {
-            case ACC_TYPE_OUTLET:
-                hk_total_ac += 1;
+            case ACC_TYPE_LOCK_SECURED:
+                hk_total_ac += 2;
                 break;
 
-            case ACC_TYPE_BUTTON:
-                hk_total_ac += 1;
-                break;
-
-            default:    // case ACC_TYPE_SWITCH:
+            default:
                 hk_total_ac += 1;
                 break;
         }
@@ -542,9 +638,9 @@ void normal_mode_init() {
         }
     }
     
-    float set_initial_state(const uint8_t accessory, const uint8_t ch_number, cJSON *json_context, homekit_characteristic_t *ch, const uint8_t ch_type) {
-        // Initial state
-        float state = 0;
+    // Initial state
+    float set_initial_state(const uint8_t accessory, const uint8_t ch_number, cJSON *json_context, homekit_characteristic_t *ch, const uint8_t ch_type, const float default_value) {
+        float state = default_value;
         printf("HAA > Setting initial state\n");
         if (cJSON_GetObjectItem(json_context, INITIAL_STATE) != NULL) {
             const uint8_t initial_state = (uint8_t) cJSON_GetObjectItem(json_context, INITIAL_STATE)->valuedouble;
@@ -614,7 +710,7 @@ void normal_mode_init() {
         
         buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), button_on, (void*) ch);
         
-        hkc_on_setter(ch, HOMEKIT_BOOL((bool) set_initial_state(accessory, 0, json_context, ch, CH_TYPE_BOOL)));
+        hkc_on_setter(ch, HOMEKIT_BOOL((bool) set_initial_state(accessory, 0, json_context, ch, CH_TYPE_BOOL, 0)));
     }
     
     void new_outlet(const uint8_t accessory, cJSON *json_context) {
@@ -632,7 +728,7 @@ void normal_mode_init() {
         
         buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), button_on, (void*) ch);
         
-        hkc_on_setter(ch, HOMEKIT_BOOL((bool) set_initial_state(accessory, 0, json_context, ch, CH_TYPE_BOOL)));
+        hkc_on_setter(ch, HOMEKIT_BOOL((bool) set_initial_state(accessory, 0, json_context, ch, CH_TYPE_BOOL, 0)));
     }
     
     void new_button(const uint8_t accessory, cJSON *json_context) {
@@ -650,16 +746,84 @@ void normal_mode_init() {
         buttons_setup_programable(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), (void*) ch);
     }
     
+    void new_lock(const uint8_t accessory, cJSON *json_context) {
+        new_accessory(accessory, 3);
+        
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(LOCK_CURRENT_STATE, 1, .getter_ex=hkc_getter, .context=json_context);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(LOCK_TARGET_STATE, 1, .getter_ex=hkc_getter, .setter_ex=hkc_lock_setter, .context=json_context);
+        
+        ch_group_t *ch_group = malloc(sizeof(ch_group_t));
+        memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->ch0 = ch0;
+        ch_group->ch1 = ch1;
+        ch_group->next = ch_groups;
+        ch_groups = ch_group;
+        
+        accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
+        accessories[accessory]->services[1]->id = 8;
+        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_LOCK_MECHANISM;
+        accessories[accessory]->services[1]->primary = true;
+        accessories[accessory]->services[1]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+        accessories[accessory]->services[1]->characteristics[0] = ch0;
+        accessories[accessory]->services[1]->characteristics[1] = ch1;
+        
+        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), button_lock, (void*) ch1);
+        
+        hkc_lock_setter(ch1, HOMEKIT_UINT8((uint8_t) set_initial_state(accessory, 0, json_context, ch1, CH_TYPE_INT8, 1)));
+    }
+    
+    void new_lock_secured(uint8_t accessory, cJSON *json_context) {
+        new_accessory(accessory, 3);
+        
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(LOCK_CURRENT_STATE, 1, .getter_ex=hkc_getter, .context=json_context);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(LOCK_TARGET_STATE, 1, .getter_ex=hkc_getter, .setter_ex=hkc_lock_setter, .context=json_context);
+        
+        ch_group_t *ch_group = malloc(sizeof(ch_group_t));
+        memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->ch0 = ch0;
+        ch_group->ch1 = ch1;
+        ch_group->next = ch_groups;
+        ch_groups = ch_group;
+        
+        accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
+        accessories[accessory]->services[1]->id = 8;
+        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_LOCK_MECHANISM;
+        accessories[accessory]->services[1]->primary = true;
+        accessories[accessory]->services[1]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+        accessories[accessory]->services[1]->characteristics[0] = ch0;
+        accessories[accessory]->services[1]->characteristics[1] = ch1;
+        
+        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), button_lock, (void*) ch1);
+        
+        // --- Secure switch
+        accessory++;
+        new_accessory(accessory, 3);
+        
+        homekit_characteristic_t *ch_sec = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .getter_ex=hkc_getter, .context=json_context);
+        ch_group->ch_sec = ch_sec;
+        
+        accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
+        accessories[accessory]->services[1]->id = 8;
+        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_SWITCH;
+        accessories[accessory]->services[1]->primary = true;
+        accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
+        accessories[accessory]->services[1]->characteristics[0] = ch_sec;
+        // ---
+    }
+    
     // Accessory Builder
     uint8_t acc_count = 0;
     
     if (bridge_needed) {
-        printf("HAA >\nHAA > Creating Acc 0, type=bridge\n");
+        printf("HAA >\nHAA > ACCESSORY 0\n");
+        printf("HAA > Accessory type=bridge\n");
         new_accessory(0, 2);
         acc_count += 1;
     }
     
     for(uint8_t i=0; i<total_accessories; i++) {
+        printf("HAA >\nHAA > ACCESSORY %i\n", acc_count);
+        
         uint8_t acc_type = ACC_TYPE_SWITCH;
         if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE) != NULL) {
             acc_type = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE)->valuedouble;
@@ -690,13 +854,19 @@ void normal_mode_init() {
         }
         
         // Creating HomeKit Accessory
-        printf("HAA >\nHAA > Accessory %i, type=%i\n", acc_count, acc_type);
+        printf("HAA > Accessory type=%i\n", acc_type);
         if (acc_type == ACC_TYPE_OUTLET) {
             new_outlet(acc_count, json_accessory);
             acc_count += 1;
         } else if (acc_type == ACC_TYPE_BUTTON) {
             new_button(acc_count, json_accessory);
             acc_count += 1;
+        } else if (acc_type == ACC_TYPE_LOCK) {
+            new_lock(acc_count, json_accessory);
+            acc_count += 1;
+        } else if (acc_type == ACC_TYPE_LOCK_SECURED) {
+            new_lock_secured(acc_count, json_accessory);
+            acc_count += 2;
         } else {    // case ACC_TYPE_SWITCH:
             new_switch(acc_count, json_accessory);
             acc_count += 1;
