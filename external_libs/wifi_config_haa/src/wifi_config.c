@@ -23,6 +23,10 @@
 #define WIFI_CONFIG_CONNECT_TIMEOUT 15000
 #endif
 
+#ifndef AUTO_OTA_TIMEOUT
+#define AUTO_OTA_TIMEOUT            90000
+#endif
+
 #define DEBUG(message, ...) printf(">>> wifi_config: %s: " message "\n", __func__, ##__VA_ARGS__);
 #define INFO(message, ...) printf(">>> wifi_config: " message "\n", ##__VA_ARGS__);
 #define ERROR(message, ...) printf("!!! wifi_config: " message "\n", ##__VA_ARGS__);
@@ -60,6 +64,7 @@ typedef struct _client {
     size_t body_length;
 } client_t;
 
+ETSTimer auto_ota_timer;
 
 static int wifi_config_station_connect();
 static void wifi_config_softap_start();
@@ -194,6 +199,8 @@ static void wifi_scan_task(void *arg)
 #include "index.html.h"
 
 static void wifi_config_server_on_settings(client_t *client) {
+    sdk_os_timer_disarm(&auto_ota_timer);
+    
     static const char http_prologue[] =
         "HTTP/1.1 200 \r\n"
         "Content-Type: text/html; charset=utf-8\r\n"
@@ -220,6 +227,15 @@ static void wifi_config_server_on_settings(client_t *client) {
     if (status == SYSPARAM_OK) {
         client_send_chunk(client, html_settings_ota);
         free(ota);
+        
+        bool auto_ota = false;
+        status = sysparam_get_bool("aota", &auto_ota);
+        if (status == SYSPARAM_OK && auto_ota) {
+            client_send_chunk(client, "checked");
+        }
+        free(ota);
+        
+        client_send_chunk(client, html_settings_autoota);
     }
     
     client_send_chunk(client, html_settings_postota);
@@ -266,6 +282,7 @@ static void wifi_config_server_on_settings_update(client_t *client) {
     form_param_t *conf_param = form_params_find(form, "conf");
     form_param_t *reset_param = form_params_find(form, "reset");
     form_param_t *ota_param = form_params_find(form, "ota");
+    form_param_t *autoota_param = form_params_find(form, "autoota");
     form_param_t *ssid_param = form_params_find(form, "ssid");
     form_param_t *password_param = form_params_find(form, "password");
     
@@ -298,6 +315,14 @@ static void wifi_config_server_on_settings_update(client_t *client) {
 
     if (conf_param->value) {
         sysparam_set_string("haa_conf", conf_param->value);
+    }
+    
+    if (autoota_param) {
+        INFO("Enable Auto OTA Updates");
+        sysparam_set_bool("aota", true);
+    } else {
+        INFO("Disable Auto OTA Updates");
+        sysparam_set_bool("aota", false);
     }
     
     sysparam_set_bool("setup", false);
@@ -693,6 +718,15 @@ static void wifi_config_sta_connect_timeout_callback(void *arg) {
      */
 }
 
+static void auto_ota_run() {
+    INFO("Enable OTA Update");
+    rboot_set_temp_rom(1);
+
+    INFO("Restarting...");
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
+    
+    sdk_system_restart();
+}
 
 static int wifi_config_station_connect() {
     char *wifi_ssid = NULL;
@@ -713,6 +747,13 @@ static int wifi_config_station_connect() {
         }
         if (wifi_password) {
             free(wifi_password);
+        }
+        
+        sdk_os_timer_setfn(&auto_ota_timer, auto_ota_run, NULL);
+        bool auto_ota = false;
+        sysparam_get_bool("aota", &auto_ota);
+        if (auto_ota) {
+            sdk_os_timer_arm(&auto_ota_timer, AUTO_OTA_TIMEOUT, 0);
         }
         
         return -1;
