@@ -1,8 +1,6 @@
 <!-- part HTML_SETTINGS_HEADER -->
 <!DOCTYPE html>
-<html>
-<head>
-<title>WiFi Configuration</title>
+<html><head><title>WiFi</title>
 <style type="text/css">
 html, input {font-size: 40px;}
 h1 { font-size: 150%; text-align: center; }
@@ -46,9 +44,8 @@ padding-left: 1.1em;
 .field.required label::before {content: "*"; color: red;}
 </style>
 </head>
-<body>
-<div class="container">
-<h1>Join WiFi network</h1>
+<body><div class="container">
+<h1>RavenCore v1.2</h1>
 <form action="/settings" method="get">
 <input type="submit" id="refresh" value="⟲ Refresh" />
 </form>
@@ -78,6 +75,7 @@ No networks found
 
 <input type="submit" id="join" value="Join" disabled />
 </form>
+<center>by Jos&eacute; A. Jim&eacute;nez Campos</center>
 </div>
 <script>
 var ssid_field, password_block, password_field, join_button;

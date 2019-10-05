@@ -1,7 +1,7 @@
 /*
  * RavenCore
  * 
- * v1.1.1
+ * v1.2 FINAL RELEASE
  * 
  * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
  *  
@@ -65,8 +65,8 @@
 #include "../common/custom_characteristics.h"
 
 // Version
-#define FIRMWARE_VERSION                "1.1.1"
-#define FIRMWARE_VERSION_OCTAL          010101      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "1.2.0"
+#define FIRMWARE_VERSION_OCTAL          010200      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // RGBW
 #define INITIAL_R_GPIO                  5
@@ -2113,9 +2113,15 @@ void hardware_init() {
             break;
             
         case 8:
-            enable_sonoff_device();
-            
-            adv_button_register_callback_fn(button1_gpio, garage_on_button, 1, NULL);
+            if (board_type.value.int_value == 3) {  // It is a Shelly1
+                relay1_gpio = S1_RELAY_GPIO;
+                extra_gpio = S1_TOGGLE_GPIO;
+                pullup = false;
+            } else {                                // It is a Sonoff
+                enable_sonoff_device();
+                
+                adv_button_register_callback_fn(button1_gpio, garage_on_button, 1, NULL);
+            }
             
             adv_button_create(extra_gpio, pullup, false);
             
@@ -2131,7 +2137,7 @@ void hardware_init() {
                 door_closed_0_fn_callback(extra_gpio, NULL);
             }
             
-            if (custom_garagedoor_sensor_open.value.int_value > 0) {
+            if (custom_garagedoor_sensor_open.value.int_value > 0 && board_type.value.int_value != 3) {
                 adv_button_create(DOOR_OPENED_GPIO, pullup, false);
                 
                 if (custom_garagedoor_sensor_open.value.int_value == 2) {
