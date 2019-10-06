@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.2.0
+ * v0.2.1
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.2.0"
-#define FIRMWARE_VERSION_OCTAL          000200      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.2.1"
+#define FIRMWARE_VERSION_OCTAL          000201      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -311,6 +311,9 @@ void hkc_autooff_setter_task(void *pvParameters);
 
 // --- KILL SWITCH ON
 void hkc_kill_switch_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
+    ch->value = value;
+    homekit_characteristic_notify(ch, ch->value);
+    
     setup_mode_toggle_upcount();
     save_states_callback();
 }
