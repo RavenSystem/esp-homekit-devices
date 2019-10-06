@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.1.3
+ * v0.2.0
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.1.3"
-#define FIRMWARE_VERSION_OCTAL          000103      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.2.0"
+#define FIRMWARE_VERSION_OCTAL          000200      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -56,6 +56,7 @@
 #define TYPE_ON                         0
 #define TYPE_LOCK                       1
 #define TYPE_SENSOR                     2
+#define TYPE_SENSOR_BOOL                3
 
 // Initial states
 #define INIT_STATE_LAST                 5
@@ -89,6 +90,14 @@
 #define ACC_TYPE_BUTTON                 3
 #define ACC_TYPE_LOCK                   4
 #define ACC_TYPE_CONTACT_SENSOR         5
+#define ACC_TYPE_OCCUPANCY_SENSOR       6
+#define ACC_TYPE_LEAK_SENSOR            7
+#define ACC_TYPE_SMOKE_SENSOR           8
+#define ACC_TYPE_CARBON_MONOXIDE_SENSOR 9
+#define ACC_TYPE_CARBON_DIOXIDE_SENSOR  10
+#define ACC_TYPE_FILTER_CHANGE_SENSOR   11
+#define ACC_TYPE_MOTION_SENSOR          12
+#define ACC_TYPE_WATER_VALVE            20
 
 #ifndef HAA_MAX_ACCESSORIES
 #define HAA_MAX_ACCESSORIES             4           // Max number of accessories before use a bridge
@@ -437,8 +446,8 @@ void button_event3(const uint8_t gpio, void *args) {
     }
 }
 
-// --- SENSOR
-void sensor_on(const uint8_t gpio, void *args) {
+// --- SENSOR 0/1
+void sensor_1(const uint8_t gpio, void *args) {
     homekit_characteristic_t *ch = args;
     
     led_blink(1);
@@ -463,13 +472,53 @@ void sensor_on(const uint8_t gpio, void *args) {
     }
 }
 
-void sensor_off(const uint8_t gpio, void *args) {
+void sensor_0(const uint8_t gpio, void *args) {
     homekit_characteristic_t *ch = args;
     
     led_blink(1);
     printf("HAA > Sensor deactivated\n");
     
     ch->value = HOMEKIT_UINT8(0);
+    homekit_characteristic_notify(ch, ch->value);
+    
+    cJSON *json_context = ch->context;
+    
+    do_actions(json_context, (uint8_t) ch->value.int_value);
+}
+
+// --- SENSOR BOOL
+void sensor_true(const uint8_t gpio, void *args) {
+    homekit_characteristic_t *ch = args;
+    
+    led_blink(1);
+    printf("HAA > Sensor bool activated\n");
+    
+    ch->value = HOMEKIT_BOOL(true);
+    homekit_characteristic_notify(ch, ch->value);
+    
+    cJSON *json_context = ch->context;
+    
+    do_actions(json_context, (uint8_t) ch->value.int_value);
+    
+    if (ch->value.bool_value && cJSON_GetObjectItem(json_context, AUTOSWITCH_TIME) != NULL) {
+        const double autoswitch_time = cJSON_GetObjectItem(json_context, AUTOSWITCH_TIME)->valuedouble;
+        if (autoswitch_time > 0) {
+            autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+            autooff_setter_params->ch = ch;
+            autooff_setter_params->type = TYPE_SENSOR_BOOL;
+            autooff_setter_params->time = autoswitch_time;
+            xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", configMINIMAL_STACK_SIZE, autooff_setter_params, 1, NULL);
+        }
+    }
+}
+
+void sensor_false(const uint8_t gpio, void *args) {
+    homekit_characteristic_t *ch = args;
+    
+    led_blink(1);
+    printf("HAA > Sensor bool deactivated\n");
+    
+    ch->value = HOMEKIT_BOOL(false);
     homekit_characteristic_notify(ch, ch->value);
     
     cJSON *json_context = ch->context;
@@ -489,7 +538,11 @@ void hkc_autooff_setter_task(void *pvParameters) {
             break;
             
         case 2:
-            sensor_off(0, autooff_setter_params->ch);
+            sensor_0(0, autooff_setter_params->ch);
+            break;
+            
+        case 3:
+            sensor_false(0, autooff_setter_params->ch);
             break;
             
         default:    // case 0:
@@ -528,7 +581,9 @@ void run_homekit_server() {
 }
 
 // Buttons GPIO Setup
-void buttons_setup(cJSON *json_buttons, void *callback, void *hk_ch, const bool run_at_launch) {
+bool buttons_setup(cJSON *json_buttons, void *callback, void *hk_ch) {
+    bool run_at_launch = false;
+    
     for(uint8_t j=0; j<cJSON_GetArraySize(json_buttons); j++) {
         const uint8_t gpio = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PIN_GPIO)->valuedouble;
         bool pullup_resistor = true;
@@ -555,15 +610,13 @@ void buttons_setup(cJSON *json_buttons, void *callback, void *hk_ch, const bool 
         adv_button_register_callback_fn(gpio, callback, button_type, hk_ch);
         
         printf("HAA > Enable button GPIO %i, type=%i, inverted=%i\n", gpio, button_type, inverted);
-        
-        if (run_at_launch) {
-            if (gpio_read(gpio) == button_type) {
-                typedef void (*button_callback_fn)(uint8_t gpio, void *args);
-                button_callback_fn run_callback = callback;
-                run_callback(gpio, hk_ch);
-            }
+         
+        if (gpio_read(gpio) == button_type) {
+            run_at_launch = true;
         }
     }
+    
+    return run_at_launch;
 }
 
 void normal_mode_init() {
@@ -651,7 +704,7 @@ void normal_mode_init() {
     }
     
     // Buttons to enter setup mode
-    buttons_setup(cJSON_GetObjectItem(json_config, BUTTONS_ARRAY), setup_mode_call, NULL, false);
+    buttons_setup(cJSON_GetObjectItem(json_config, BUTTONS_ARRAY), setup_mode_call, NULL);
     
     // ----- END CONFIG SECTION
     
@@ -659,11 +712,6 @@ void normal_mode_init() {
     bool bridge_needed = false;
 
     for(uint8_t i=0; i<total_accessories; i++) {
-        uint8_t acc_type = ACC_TYPE_SWITCH;
-        if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE) != NULL) {
-            acc_type = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE)->valuedouble;
-        }
-        
         // Kill Switch Accessory count
         if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), KILL_SWITCH) != NULL) {
         const uint8_t kill_switch = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), KILL_SWITCH)->valuedouble;
@@ -683,6 +731,11 @@ void normal_mode_init() {
         }
         
         // Accessory Type Accessory count
+        uint8_t acc_type = ACC_TYPE_SWITCH;     // Default accessory type
+        if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE) != NULL) {
+            acc_type = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE)->valuedouble;
+        }
+
         switch (acc_type) {
             default:
                 hk_total_ac += 1;
@@ -867,8 +920,8 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
         accessories[accessory]->services[1]->characteristics[0] = ch0;
         
-        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), button_on, (void*) ch0, false);
-        
+        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), button_on, (void*) ch0);
+
         const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         
         hkc_on_setter(ch0, HOMEKIT_BOOL((bool) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_BOOL, 0)));
@@ -895,7 +948,7 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->characteristics[0] = ch0;
         accessories[accessory]->services[1]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(OUTLET_IN_USE, true, .getter_ex=hkc_getter, .context=json_context);;
         
-        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), button_on, (void*) ch0, false);
+        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), button_on, (void*) ch0);
         
         const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         
@@ -950,7 +1003,7 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->characteristics[0] = ch0;
         accessories[accessory]->services[1]->characteristics[1] = ch1;
         
-        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), button_lock, (void*) ch1, false);
+        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), button_lock, (void*) ch1);
         
         const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         
@@ -959,20 +1012,77 @@ void normal_mode_init() {
         return new_accessory_count;
     }
     
-    uint8_t new_contact_sensor(const uint8_t accessory, cJSON *json_context) {
+    uint8_t new_sensor(const uint8_t accessory, cJSON *json_context, const uint8_t acc_type) {
         new_accessory(accessory, 3);
         
-        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CONTACT_SENSOR_STATE, 0, .getter_ex=hkc_getter, .context=json_context);
+        homekit_characteristic_t *ch0;
         
         accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
         accessories[accessory]->services[1]->id = 8;
-        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_CONTACT_SENSOR;
+        
+        switch (acc_type) {
+            case ACC_TYPE_OCCUPANCY_SENSOR:
+                accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_OCCUPANCY_SENSOR;
+                ch0 = NEW_HOMEKIT_CHARACTERISTIC(OCCUPANCY_DETECTED, 0, .getter_ex=hkc_getter, .context=json_context);
+                break;
+                
+            case ACC_TYPE_LEAK_SENSOR:
+                accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_LEAK_SENSOR;
+                ch0 = NEW_HOMEKIT_CHARACTERISTIC(LEAK_DETECTED, 0, .getter_ex=hkc_getter, .context=json_context);
+                break;
+                
+            case ACC_TYPE_SMOKE_SENSOR:
+                accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_SMOKE_SENSOR;
+                ch0 = NEW_HOMEKIT_CHARACTERISTIC(SMOKE_DETECTED, 0, .getter_ex=hkc_getter, .context=json_context);
+                break;
+                
+            case ACC_TYPE_CARBON_MONOXIDE_SENSOR:
+                accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_CARBON_MONOXIDE_SENSOR;
+                ch0 = NEW_HOMEKIT_CHARACTERISTIC(CARBON_MONOXIDE_DETECTED, 0, .getter_ex=hkc_getter, .context=json_context);
+                break;
+                
+            case ACC_TYPE_CARBON_DIOXIDE_SENSOR:
+                accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_CARBON_DIOXIDE_SENSOR;
+                ch0 = NEW_HOMEKIT_CHARACTERISTIC(CARBON_DIOXIDE_DETECTED, 0, .getter_ex=hkc_getter, .context=json_context);
+                break;
+                
+            case ACC_TYPE_FILTER_CHANGE_SENSOR:
+                accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_FILTER_MAINTENANCE;
+                ch0 = NEW_HOMEKIT_CHARACTERISTIC(FILTER_CHANGE_INDICATION, 0, .getter_ex=hkc_getter, .context=json_context);
+                break;
+                
+            case ACC_TYPE_MOTION_SENSOR:
+                accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_MOTION_SENSOR;
+                ch0 = NEW_HOMEKIT_CHARACTERISTIC(MOTION_DETECTED, 0, .getter_ex=hkc_getter, .context=json_context);
+                break;
+                
+            default:    // case ACC_TYPE_CONTACT_SENSOR:
+                accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_CONTACT_SENSOR;
+                ch0 = NEW_HOMEKIT_CHARACTERISTIC(CONTACT_SENSOR_STATE, 0, .getter_ex=hkc_getter, .context=json_context);
+                break;
+        }
+        
         accessories[accessory]->services[1]->primary = true;
         accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
         accessories[accessory]->services[1]->characteristics[0] = ch0;
         
-        buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), sensor_off, (void*) ch0, true);
-        buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), sensor_on, (void*) ch0, true);
+        if (acc_type == ACC_TYPE_MOTION_SENSOR) {
+            if (buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), sensor_false, (void*) ch0)) {
+                sensor_false(0, ch0);
+            }
+            
+            if (buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), sensor_true, (void*) ch0)) {
+                sensor_true(0, ch0);
+            }
+        } else {
+            if (buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), sensor_0, (void*) ch0)) {
+                sensor_0(0, ch0);
+            }
+            
+            if (buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), sensor_1, (void*) ch0)) {
+                sensor_1(0, ch0);
+            }
+        }
         
         return accessory + 1;
     }
@@ -1030,12 +1140,13 @@ void normal_mode_init() {
         } else if (acc_type == ACC_TYPE_LOCK) {
             acc_count = new_lock(acc_count, json_accessory);
             
-        } else if (acc_type == ACC_TYPE_CONTACT_SENSOR) {
-            acc_count = new_contact_sensor(acc_count, json_accessory);
+        } else if (acc_type >= ACC_TYPE_CONTACT_SENSOR && acc_type < ACC_TYPE_WATER_VALVE) {
+            acc_count = new_sensor(acc_count, json_accessory, acc_type);
             
-        } else {    // case ACC_TYPE_SWITCH:
+        } else {    // acc_type == ACC_TYPE_SWITCH
             acc_count = new_switch(acc_count, json_accessory);
         }
+        
     }
     
     sdk_os_timer_setfn(&save_states_timer, save_states, NULL);
@@ -1061,7 +1172,7 @@ void user_init(void) {
     sysparam_status_t status;
     bool haa_setup = false;
     
-    //sysparam_set_bool("setup", true);;    // Force to enter always in setup mode. Only for tests. Keep comment for releases
+    //sysparam_set_bool("setup", true);    // Force to enter always in setup mode. Only for tests. Keep comment for releases
     
     status = sysparam_get_bool("setup", &haa_setup);
     if (status == SYSPARAM_OK && haa_setup == true) {
