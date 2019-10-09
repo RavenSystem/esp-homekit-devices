@@ -225,15 +225,15 @@ static void wifi_config_server_on_settings(client_t *client) {
     char *ota = NULL;
     status = sysparam_get_string("ota_repo", &ota);
     if (status == SYSPARAM_OK) {
-        client_send_chunk(client, html_settings_ota);
         free(ota);
+        
+        client_send_chunk(client, html_settings_ota);
         
         bool auto_ota = false;
         status = sysparam_get_bool("aota", &auto_ota);
         if (status == SYSPARAM_OK && auto_ota) {
             client_send_chunk(client, "checked");
         }
-        free(ota);
         
         client_send_chunk(client, html_settings_autoota);
     }

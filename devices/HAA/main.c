@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.2.2
+ * v0.2.3
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.2.2"
-#define FIRMWARE_VERSION_OCTAL          000202      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.2.3"
+#define FIRMWARE_VERSION_OCTAL          000203      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -951,13 +951,14 @@ void normal_mode_init() {
         
         accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
         accessories[accessory]->services[1]->id = 8;
-        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_SWITCH;
         accessories[accessory]->services[1]->primary = true;
         
         if (acc_type == ACC_TYPE_SWITCH) {
+            accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_SWITCH;
             accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[1]->characteristics[0] = ch0;
         } else {    // acc_type == ACC_TYPE_OUTLET
+            accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_OUTLET;
             accessories[accessory]->services[1]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[1]->characteristics[0] = ch0;
             accessories[accessory]->services[1]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(OUTLET_IN_USE, true, .getter_ex=hkc_getter, .context=json_context);
