@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.2.3
+ * v0.2.4
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.2.3"
-#define FIRMWARE_VERSION_OCTAL          000203      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.2.4"
+#define FIRMWARE_VERSION_OCTAL          000204      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -75,6 +75,7 @@
 #define BUTTONS_ARRAY                   "b"
 #define FIXED_BUTTONS_ARRAY_0           "f0"
 #define FIXED_BUTTONS_ARRAY_1           "f1"
+#define FIXED_BUTTONS_ARRAY_2           "f2"
 #define BUTTON_PRESS_TYPE               "t"
 #define PULLUP_RESISTOR                 "p"
 #define VALUE                           "v"
@@ -437,8 +438,30 @@ void button_lock(const uint8_t gpio, void *args) {
     }
 }
 
+void button_lock_1(const uint8_t gpio, void *args) {
+    homekit_characteristic_t *ch = args;
+    
+    ch_group_t *ch_group = ch_group_find(ch);
+    if (!(ch_group->ch_child && !ch_group->ch_child->value.bool_value)) {
+        if (ch->value.int_value == 0) {
+            hkc_lock_setter(ch, HOMEKIT_UINT8(1));
+        }
+    }
+}
+
+void button_lock_0(const uint8_t gpio, void *args) {
+    homekit_characteristic_t *ch = args;
+    
+    ch_group_t *ch_group = ch_group_find(ch);
+    if (!(ch_group->ch_child && !ch_group->ch_child->value.bool_value)) {
+        if (ch->value.int_value == 1) {
+            hkc_lock_setter(ch, HOMEKIT_UINT8(0));
+        }
+    }
+}
+
 // --- BUTTON EVENT
-void button_event1(const uint8_t gpio, void *args) {
+void button_event_0(const uint8_t gpio, void *args) {
     homekit_characteristic_t *ch = args;
     
     ch_group_t *ch_group = ch_group_find(ch);
@@ -451,7 +474,7 @@ void button_event1(const uint8_t gpio, void *args) {
     }
 }
 
-void button_event2(const uint8_t gpio, void *args) {
+void button_event_1(const uint8_t gpio, void *args) {
     homekit_characteristic_t *ch = args;
     
     ch_group_t *ch_group = ch_group_find(ch);
@@ -464,7 +487,7 @@ void button_event2(const uint8_t gpio, void *args) {
     }
 }
 
-void button_event3(const uint8_t gpio, void *args) {
+void button_event_2(const uint8_t gpio, void *args) {
     homekit_characteristic_t *ch = args;
     
     ch_group_t *ch_group = ch_group_find(ch);
@@ -690,54 +713,6 @@ void normal_mode_init() {
         }
         
         return run_at_launch;
-    }
-    
-    void buttons_setup_programable(cJSON *json_buttons, homekit_characteristic_t *hk_ch) {
-        for(int j=0; j<cJSON_GetArraySize(json_buttons); j++) {
-            const uint8_t gpio = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PIN_GPIO)->valuedouble;
-            bool pullup_resistor = true;
-            if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR) != NULL &&
-                cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR)->valuedouble == 0) {
-                pullup_resistor = false;
-            }
-            
-            bool inverted = false;
-            if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), INVERTED) != NULL &&
-                cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), INVERTED)->valuedouble == 1) {
-                inverted = true;
-            }
-            
-            uint8_t button_type = 1;
-            if (cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE) != NULL) {
-                button_type = (uint8_t) cJSON_GetObjectItem(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE)->valuedouble;
-            }
-            
-            if (!used_gpio[gpio]) {
-                adv_button_create(gpio, pullup_resistor, inverted);
-                used_gpio[gpio] = true;
-            }
-            
-            switch (j) {
-                case 0:
-                    adv_button_register_callback_fn(gpio, button_event1, button_type, (void*) hk_ch);
-                    printf("HAA > Enable button GPIO %i, type=%i, inverted=%i\n", gpio, button_type, inverted);
-                    break;
-                    
-                case 1:
-                    adv_button_register_callback_fn(gpio, button_event2, button_type, (void*) hk_ch);
-                    printf("HAA > Enable button GPIO %i, type=%i, inverted=%i\n", gpio, button_type, inverted);
-                    break;
-                    
-                case 2:
-                    adv_button_register_callback_fn(gpio, button_event3, button_type, (void*) hk_ch);
-                    printf("HAA > Enable button GPIO %i, type=%i, inverted=%i\n", gpio, button_type, inverted);
-                    break;
-                    
-                default:
-                    printf("HAA ! Error with button GPIO %i, type=%i. Only 3 buttons are allowed\n", gpio, button_type);
-                    break;
-            }
-        }
     }
     
     // Initial state function
@@ -968,20 +943,22 @@ void normal_mode_init() {
 
         const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         
+        uint8_t initial_state = 0;
         if (cJSON_GetObjectItem(json_context, INITIAL_STATE) != NULL) {
-            const uint8_t initial_state = (uint8_t) cJSON_GetObjectItem(json_context, INITIAL_STATE)->valuedouble;
-            if (initial_state != INIT_STATE_FIXED_INPUT) {
-                buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), button_on_true, ch0);
-                buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), button_on_false, ch0);
-                
-                hkc_on_setter(ch0, HOMEKIT_BOOL((bool) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_BOOL, 0)));
-            } else {
-                if (buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), button_on_true, ch0)) {
-                    button_on_true(0, ch0);
-                }
-                if (buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), button_on_false, ch0)) {
-                    button_on_false(0, ch0);
-                }
+            initial_state = (uint8_t) cJSON_GetObjectItem(json_context, INITIAL_STATE)->valuedouble;
+        }
+        
+        if (initial_state != INIT_STATE_FIXED_INPUT) {
+            buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), button_on_true, ch0);
+            buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), button_on_false, ch0);
+            
+            hkc_on_setter(ch0, HOMEKIT_BOOL((bool) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_BOOL, 0)));
+        } else {
+            if (buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), button_on_true, ch0)) {
+                button_on_true(0, ch0);
+            }
+            if (buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), button_on_false, ch0)) {
+                button_on_false(0, ch0);
             }
         }
         
@@ -1006,7 +983,9 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
         accessories[accessory]->services[1]->characteristics[0] = ch0;
         
-        buttons_setup_programable(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), ch0);
+        buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), button_event_0, ch0);
+        buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), button_event_1, ch0);
+        buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_2), button_event_2, ch0);
         
         const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         
@@ -1038,7 +1017,24 @@ void normal_mode_init() {
         
         const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         
-        hkc_lock_setter(ch1, HOMEKIT_UINT8((uint8_t) set_initial_state(accessory, 0, json_context, ch1, CH_TYPE_INT8, 1)));
+        uint8_t initial_state = 0;
+        if (cJSON_GetObjectItem(json_context, INITIAL_STATE) != NULL) {
+            initial_state = (uint8_t) cJSON_GetObjectItem(json_context, INITIAL_STATE)->valuedouble;
+        }
+        
+        if (initial_state != INIT_STATE_FIXED_INPUT) {
+            buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), button_lock_1, ch1);
+            buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), button_lock_0, ch1);
+            
+            hkc_lock_setter(ch1, HOMEKIT_UINT8((uint8_t) set_initial_state(accessory, 0, json_context, ch1, CH_TYPE_INT8, 1)));
+        } else {
+            if (buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), button_lock_1, ch1)) {
+                button_lock_1(0, ch1);
+            }
+            if (buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), button_lock_0, ch1)) {
+                button_lock_0(0, ch1);
+            }
+        }
         
         return new_accessory_count;
     }
