@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.2.4
+ * v0.3.0
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.2.4"
-#define FIRMWARE_VERSION_OCTAL          000204      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.3.0"
+#define FIRMWARE_VERSION_OCTAL          000300      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -57,11 +57,13 @@
 #define TYPE_LOCK                       1
 #define TYPE_SENSOR                     2
 #define TYPE_SENSOR_BOOL                3
+#define TYPE_VALVE                      4
 
 // Initial states
 #define INIT_STATE_FIXED_INPUT          4
 #define INIT_STATE_LAST                 5
 #define INIT_STATE_INV_LAST             6
+#define INIT_STATE_LAST_STR             "{\"s\":5}"
 
 // JSON
 #define GENERAL_CONFIG                  "c"
@@ -84,6 +86,10 @@
 #define PIN_GPIO                        "g"
 #define INITIAL_STATE                   "s"
 #define KILL_SWITCH                     "k"
+#define VALVE_SYSTEM_TYPE               "w"
+#define VALVE_MAX_DURATION              "d"
+#define VALVE_DEFAULT_MAX_DURATION      3600
+
 #define MAX_ACTIONS                     2
 
 #define ACCESSORY_TYPE                  "t"
@@ -131,10 +137,13 @@ typedef struct _ch_group {
     homekit_characteristic_t *ch1;
     homekit_characteristic_t *ch2;
     homekit_characteristic_t *ch3;
-    homekit_characteristic_t *ch4;
-    homekit_characteristic_t *ch5;
+    //homekit_characteristic_t *ch4;
+    //homekit_characteristic_t *ch5;
     homekit_characteristic_t *ch_child;
     homekit_characteristic_t *ch_sec;
+    
+    ETSTimer timer;
+    
     struct _ch_group *next;
 } ch_group_t;
 
@@ -156,8 +165,8 @@ ch_group_t *ch_group_find(homekit_characteristic_t *ch) {
            ch_group->ch1 != ch &&
            ch_group->ch2 != ch &&
            ch_group->ch3 != ch &&
-           ch_group->ch4 != ch &&
-           ch_group->ch5 != ch &&
+           //ch_group->ch4 != ch &&
+           //ch_group->ch5 != ch &&
            ch_group->ch_child != ch &&
            ch_group->ch_sec != ch) {
         ch_group = ch_group->next;
@@ -309,16 +318,23 @@ homekit_value_t hkc_getter(const homekit_characteristic_t *ch) {
     return ch->value;
 }
 
-void hkc_autooff_setter_task(void *pvParameters);
+void hkc_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
+    printf("HAA > Setter\n");
+    ch->value = value;
+    homekit_characteristic_notify(ch, ch->value);
+    
+    save_states_callback();
+}
 
-// --- KILL SWITCH ON
-void hkc_kill_switch_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
+void hkc_setter_with_setup(homekit_characteristic_t *ch, const homekit_value_t value) {
     ch->value = value;
     homekit_characteristic_notify(ch, ch->value);
     
     setup_mode_toggle_upcount();
     save_states_callback();
 }
+
+void hkc_autooff_setter_task(void *pvParameters);
 
 // --- ON
 void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
@@ -586,6 +602,104 @@ void sensor_false(const uint8_t gpio, void *args) {
     }
 }
 
+// --- WATER VALVE
+void hkc_valve_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
+    ch_group_t *ch_group = ch_group_find(ch);
+    if (ch_group->ch_sec && !ch_group->ch_sec->value.bool_value) {
+        homekit_characteristic_notify(ch, ch->value);
+    } else {
+        
+        led_blink(1);
+        printf("HAA > Setter VALVE\n");
+        
+        ch->value = value;
+        homekit_characteristic_notify(ch, ch->value);
+        ch_group->ch1->value = value;
+        homekit_characteristic_notify(ch_group->ch1, ch_group->ch1->value);
+        
+        cJSON *json_context = ch->context;
+        
+        do_actions(json_context, (uint8_t) ch->value.int_value);
+        
+        if (ch->value.int_value == 0 && cJSON_GetObjectItem(json_context, AUTOSWITCH_TIME) != NULL) {
+            const double autoswitch_time = cJSON_GetObjectItem(json_context, AUTOSWITCH_TIME)->valuedouble;
+            if (autoswitch_time > 0) {
+                autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                autooff_setter_params->ch = ch;
+                autooff_setter_params->type = TYPE_VALVE;
+                autooff_setter_params->time = autoswitch_time;
+                xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", configMINIMAL_STACK_SIZE, autooff_setter_params, 1, NULL);
+            }
+        }
+        
+        setup_mode_toggle_upcount();
+        
+        save_states_callback();
+        
+        if (ch_group->ch3) {
+            if (value.int_value == 0) {
+                ch_group->ch3->value.int_value = 0;
+                sdk_os_timer_disarm(&ch_group->timer);
+            } else {
+                ch_group->ch3->value = ch_group->ch2->value;
+                sdk_os_timer_arm(&ch_group->timer, 1000, 1);
+            }
+            
+            homekit_characteristic_notify(ch_group->ch3, ch_group->ch3->value);
+        }
+    }
+}
+
+void valve_timer_worker(void *args) {
+    homekit_characteristic_t *ch = args;
+    
+    ch_group_t *ch_group = ch_group_find(ch);
+    
+    ch_group->ch3->value.int_value--;
+    //homekit_characteristic_notify(ch_group->ch3, ch_group->ch3->value);   // Is it necessary??
+    
+    if (ch_group->ch3->value.int_value == 0) {
+        sdk_os_timer_disarm(&ch_group->timer);
+        
+        hkc_valve_setter(ch, HOMEKIT_UINT8(0));
+    }
+}
+
+void button_valve(const uint8_t gpio, void *args) {
+    homekit_characteristic_t *ch = args;
+    
+    ch_group_t *ch_group = ch_group_find(ch);
+    if (!(ch_group->ch_child && !ch_group->ch_child->value.bool_value)) {
+        if (ch->value.int_value == 1) {
+            hkc_valve_setter(ch, HOMEKIT_UINT8(0));
+        } else {
+            hkc_valve_setter(ch, HOMEKIT_UINT8(1));
+        }
+    }
+}
+
+void button_valve_1(const uint8_t gpio, void *args) {
+    homekit_characteristic_t *ch = args;
+    
+    ch_group_t *ch_group = ch_group_find(ch);
+    if (!(ch_group->ch_child && !ch_group->ch_child->value.bool_value)) {
+        if (ch->value.int_value == 0) {
+            hkc_valve_setter(ch, HOMEKIT_UINT8(1));
+        }
+    }
+}
+
+void button_valve_0(const uint8_t gpio, void *args) {
+    homekit_characteristic_t *ch = args;
+    
+    ch_group_t *ch_group = ch_group_find(ch);
+    if (!(ch_group->ch_child && !ch_group->ch_child->value.bool_value)) {
+        if (ch->value.int_value == 1) {
+            hkc_valve_setter(ch, HOMEKIT_UINT8(0));
+        }
+    }
+}
+
 // --- AUTO-OFF
 void hkc_autooff_setter_task(void *pvParameters) {
     autooff_setter_params_t *autooff_setter_params = pvParameters;
@@ -593,19 +707,23 @@ void hkc_autooff_setter_task(void *pvParameters) {
     vTaskDelay(autooff_setter_params->time * 1000 / portTICK_PERIOD_MS);
     
     switch (autooff_setter_params->type) {
-        case 1:
+        case TYPE_LOCK:
             hkc_lock_setter(autooff_setter_params->ch, HOMEKIT_UINT8(1));
             break;
             
-        case 2:
+        case TYPE_SENSOR:
             sensor_0(0, autooff_setter_params->ch);
             break;
             
-        case 3:
+        case TYPE_SENSOR_BOOL:
             sensor_false(0, autooff_setter_params->ch);
             break;
             
-        default:    // case 0:
+        case TYPE_VALVE:
+            hkc_valve_setter(autooff_setter_params->ch, HOMEKIT_UINT8(0));
+            break;
+            
+        default:    // case TYPE_ON:
             hkc_on_setter(autooff_setter_params->ch, HOMEKIT_BOOL(false));
             break;
     }
@@ -726,7 +844,6 @@ void normal_mode_init() {
             } else {
                 char *saved_state_id = malloc(3);
                 uint16_t int_saved_state_id = ((accessory + 10) * 10) + ch_number;
-                bool saved_state = false;
                 
                 itoa(int_saved_state_id, saved_state_id, 10);
                 last_state_t *last_state = malloc(sizeof(last_state_t));
@@ -738,17 +855,55 @@ void normal_mode_init() {
                 last_states = last_state;
                 
                 sysparam_status_t status;
-                status = sysparam_get_bool(saved_state_id, &saved_state);
+                bool saved_state_bool = false;
+                int8_t saved_state_int8;
+                int32_t saved_state_int32;
+                
+                
+                switch (ch_type) {
+                    case CH_TYPE_INT8:
+                        status = sysparam_get_int8(saved_state_id, &saved_state_int8);
+                        
+                        if (status == SYSPARAM_OK) {
+                            state = saved_state_int8;
+                        }
+                        break;
+                        
+                    case CH_TYPE_INT32:
+                        status = sysparam_get_int32(saved_state_id, &saved_state_int32);
+                        
+                        if (status == SYSPARAM_OK) {
+                            state = saved_state_int32;
+                        }
+                        break;
+                        
+                    case CH_TYPE_FLOAT:
+                        status = sysparam_get_int32(saved_state_id, &saved_state_int32);
+                        
+                        if (status == SYSPARAM_OK) {
+                            state = saved_state_int32 / 100.00f;
+                        }
+                        break;
+                        
+                    default:    // case CH_TYPE_BOOL
+                        status = sysparam_get_bool(saved_state_id, &saved_state_bool);
+                        
+                        if (status == SYSPARAM_OK) {
+                            if (initial_state == INIT_STATE_LAST) {
+                                state = saved_state_bool;
+                            } else if (ch_type == CH_TYPE_BOOL) {    // initial_state == INIT_STATE_INV_LAST
+                                state = !saved_state_bool;
+                            }
+                        }
+                        break;
+                }
                 
                 if (status != SYSPARAM_OK) {
                     printf("HAA ! No previous state found\n");
                 }
                 
-                if (initial_state == INIT_STATE_LAST) {
-                    state = saved_state;
-                } else if (ch_type == CH_TYPE_BOOL) {    // initial_state == INIT_STATE_INV_LAST
-                    state = !saved_state;
-                }
+                printf("HAA > Init state = %.2f\n", state);
+                
             }
         }
         
@@ -872,7 +1027,7 @@ void normal_mode_init() {
     homekit_characteristic_t *new_kill_switch(const uint8_t accessory, cJSON *json_context) {
         new_accessory(accessory, 3);
         
-        homekit_characteristic_t *ch = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .getter_ex=hkc_getter, .setter_ex=hkc_kill_switch_on_setter, .context=json_context);
+        homekit_characteristic_t *ch = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .getter_ex=hkc_getter, .setter_ex=hkc_setter_with_setup);
         
         accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
         accessories[accessory]->services[1]->id = 8;
@@ -1046,6 +1201,7 @@ void normal_mode_init() {
         
         accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
         accessories[accessory]->services[1]->id = 8;
+        accessories[accessory]->services[1]->primary = true;
         
         switch (acc_type) {
             case ACC_TYPE_OCCUPANCY_SENSOR:
@@ -1089,7 +1245,6 @@ void normal_mode_init() {
                 break;
         }
         
-        accessories[accessory]->services[1]->primary = true;
         accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
         accessories[accessory]->services[1]->characteristics[0] = ch0;
         
@@ -1112,6 +1267,87 @@ void normal_mode_init() {
         }
         
         return accessory + 1;
+    }
+    
+    uint8_t new_water_valve(uint8_t accessory, cJSON *json_context) {
+        new_accessory(accessory, 3);
+        
+        uint8_t valve_type = 0;
+        if (cJSON_GetObjectItem(json_context, VALVE_SYSTEM_TYPE) != NULL) {
+            valve_type = (uint8_t) cJSON_GetObjectItem(json_context, VALVE_SYSTEM_TYPE)->valuedouble;
+        }
+        
+        uint32_t valve_max_duration = VALVE_DEFAULT_MAX_DURATION;
+        if (cJSON_GetObjectItem(json_context, VALVE_MAX_DURATION) != NULL) {
+            valve_max_duration = (uint32_t) cJSON_GetObjectItem(json_context, VALVE_MAX_DURATION)->valuedouble;
+        }
+        
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .getter_ex=hkc_getter, .setter_ex=hkc_valve_setter, .context=json_context);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(IN_USE, 0, .getter_ex=hkc_getter, .context=json_context);
+        homekit_characteristic_t *ch2;
+        homekit_characteristic_t *ch3;
+        
+        ch_group_t *ch_group = malloc(sizeof(ch_group_t));
+        memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->ch0 = ch0;
+        ch_group->ch1 = ch1;
+        ch_group->next = ch_groups;
+        ch_groups = ch_group;
+        
+        accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
+        accessories[accessory]->services[1]->id = 8;
+        accessories[accessory]->services[1]->primary = true;
+        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_VALVE;
+        
+        if (valve_max_duration == 0) {
+            accessories[accessory]->services[1]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[1]->characteristics[0] = ch0;
+            accessories[accessory]->services[1]->characteristics[1] = ch1;
+            accessories[accessory]->services[1]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(VALVE_TYPE, valve_type, .getter_ex=hkc_getter);
+            
+        } else {
+            ch2 = NEW_HOMEKIT_CHARACTERISTIC(SET_DURATION, 900, .max_value=(float[]) {valve_max_duration}, .getter_ex=hkc_getter, .setter_ex=hkc_setter);
+            ch3 = NEW_HOMEKIT_CHARACTERISTIC(REMAINING_DURATION, 0, .max_value=(float[]) {valve_max_duration}, .getter_ex=hkc_getter);
+            
+            ch_group->ch2 = ch2;
+            ch_group->ch3 = ch3;
+            
+            accessories[accessory]->services[1]->characteristics = calloc(6, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[1]->characteristics[0] = ch0;
+            accessories[accessory]->services[1]->characteristics[1] = ch1;
+            accessories[accessory]->services[1]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(VALVE_TYPE, valve_type, .getter_ex=hkc_getter);
+            accessories[accessory]->services[1]->characteristics[3] = ch2;
+            accessories[accessory]->services[1]->characteristics[4] = ch3;
+            
+            ch2->value.int_value = (uint32_t) set_initial_state(accessory, 2, cJSON_Parse(INIT_STATE_LAST_STR), ch2, CH_TYPE_INT32, 900);
+            
+            sdk_os_timer_setfn(&ch_group->timer, valve_timer_worker, ch0);
+        }
+        
+        buttons_setup(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), button_valve, ch0);
+
+        const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
+        
+        uint8_t initial_state = 0;
+        if (cJSON_GetObjectItem(json_context, INITIAL_STATE) != NULL) {
+            initial_state = (uint8_t) cJSON_GetObjectItem(json_context, INITIAL_STATE)->valuedouble;
+        }
+        
+        if (initial_state != INIT_STATE_FIXED_INPUT) {
+            buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), button_valve_1, ch0);
+            buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), button_valve_0, ch0);
+            
+            hkc_valve_setter(ch0, HOMEKIT_BOOL((bool) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_BOOL, 0)));
+        } else {
+            if (buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), button_valve_1, ch0)) {
+                button_valve_1(0, ch0);
+            }
+            if (buttons_setup(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), button_valve_0, ch0)) {
+                button_valve_0(0, ch0);
+            }
+        }
+        
+        return new_accessory_count;
     }
     
     // Accessory Builder
@@ -1166,6 +1402,9 @@ void normal_mode_init() {
             
         } else if (acc_type >= ACC_TYPE_CONTACT_SENSOR && acc_type < ACC_TYPE_WATER_VALVE) {
             acc_count = new_sensor(acc_count, json_accessory, acc_type);
+            
+        } else if (acc_type == ACC_TYPE_WATER_VALVE) {
+            acc_count = new_water_valve(acc_count, json_accessory);
             
         } else {    // acc_type == ACC_TYPE_SWITCH || acc_type == ACC_TYPE_OUTLET
             acc_count = new_switch(acc_count, json_accessory, acc_type);
