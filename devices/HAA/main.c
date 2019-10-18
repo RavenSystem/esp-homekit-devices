@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.3.0
+ * v0.3.1
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.3.0"
-#define FIRMWARE_VERSION_OCTAL          000300      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.3.1"
+#define FIRMWARE_VERSION_OCTAL          000301      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -1319,7 +1319,12 @@ void normal_mode_init() {
             accessories[accessory]->services[1]->characteristics[3] = ch2;
             accessories[accessory]->services[1]->characteristics[4] = ch3;
             
-            ch2->value.int_value = (uint32_t) set_initial_state(accessory, 2, cJSON_Parse(INIT_STATE_LAST_STR), ch2, CH_TYPE_INT32, 900);
+            const uint32_t initial_time = (uint32_t) set_initial_state(accessory, 2, cJSON_Parse(INIT_STATE_LAST_STR), ch2, CH_TYPE_INT32, 900);
+            if (initial_time > valve_max_duration) {
+                ch2->value.int_value = valve_max_duration;
+            } else {
+                ch2->value.int_value = initial_time;
+            }
             
             sdk_os_timer_setfn(&ch_group->timer, valve_timer_worker, ch0);
         }
