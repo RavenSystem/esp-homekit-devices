@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.3.2
+ * v0.3.3
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.3.2"
-#define FIRMWARE_VERSION_OCTAL          000302      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.3.3"
+#define FIRMWARE_VERSION_OCTAL          000303      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -91,11 +91,19 @@
 #define PIN_GPIO                        "g"
 #define INITIAL_STATE                   "s"
 #define KILL_SWITCH                     "k"
+
 #define VALVE_SYSTEM_TYPE               "w"
 #define VALVE_MAX_DURATION              "d"
 #define VALVE_DEFAULT_MAX_DURATION      3600
 
-#define MAX_ACTIONS                     2
+#define THERMOSTAT_TYPE                 "w"
+#define THERMOSTAT_MIN_TEMP             "m"
+#define THERMOSTAT_MAX_TEMP             "x"
+#define THERMOSTAT_DEADBAND             "d"
+#define THERMOSTAT_POLL_PERIOD          "j"
+
+#define MAX_ACTIONS                     3
+#define COPY_ACTIONS                    "a"
 
 #define ACCESSORY_TYPE                  "t"
 #define ACC_TYPE_SWITCH                 1
@@ -111,6 +119,7 @@
 #define ACC_TYPE_FILTER_CHANGE_SENSOR   11
 #define ACC_TYPE_MOTION_SENSOR          12
 #define ACC_TYPE_WATER_VALVE            20
+#define ACC_TYPE_THERMOSTAT             21
 
 #ifndef HAA_MAX_ACCESSORIES
 #define HAA_MAX_ACCESSORIES             4           // Max number of accessories before use a bridge
@@ -1288,6 +1297,108 @@ void normal_mode_init() {
         return new_accessory_count;
     }
     
+    /*
+    uint8_t new_thermostat(uint8_t accessory, cJSON *json_context) {
+        new_accessory(accessory, 3);
+        
+        uint8_t th_type = 0;
+        if (cJSON_GetObjectItem(json_context, THERMOSTAT_TYPE) != NULL) {
+            th_type = (uint8_t) cJSON_GetObjectItem(json_context, THERMOSTAT_TYPE)->valuedouble;
+        }
+        
+        uint32_t valve_max_duration = VALVE_DEFAULT_MAX_DURATION;
+        if (cJSON_GetObjectItem(json_context, VALVE_MAX_DURATION) != NULL) {
+            valve_max_duration = (uint32_t) cJSON_GetObjectItem(json_context, VALVE_MAX_DURATION)->valuedouble;
+        }
+        
+        homekit_characteristic_t current_temperature = HOMEKIT_CHARACTERISTIC_(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200});
+        homekit_characteristic_t target_temperature  = HOMEKIT_CHARACTERISTIC_(TARGET_TEMPERATURE, 23, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(update_th_state));
+        homekit_characteristic_t units = HOMEKIT_CHARACTERISTIC_(TEMPERATURE_DISPLAY_UNITS, 0);
+        homekit_characteristic_t current_humidity = HOMEKIT_CHARACTERISTIC_(CURRENT_RELATIVE_HUMIDITY, 0);
+        homekit_characteristic_t current_state = HOMEKIT_CHARACTERISTIC_(CURRENT_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .valid_values={.count=3, .values=(uint8_t[]) {0, 1, 2}});
+        homekit_characteristic_t target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .valid_values={.count=3, .values=(uint8_t[]) {0, 1, 2}}, .getter_ex=hkc_general_getter, .setter=th_target);
+        homekit_characteristic_t heater_current_state = HOMEKIT_CHARACTERISTIC_(CURRENT_HEATING_COOLING_STATE, 0, .max_value=(float[]) {1}, .valid_values={.count=2, .values=(uint8_t[]) {0, 1}});
+        homekit_characteristic_t heater_target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_COOLING_STATE, 0, .max_value=(float[]) {1}, .valid_values={.count=2, .values=(uint8_t[]) {0, 1}}, .getter_ex=hkc_general_getter, .setter=th_target);
+        homekit_characteristic_t cooler_current_state = HOMEKIT_CHARACTERISTIC_(CURRENT_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .min_step = (float[]) {2}, .valid_values={.count=2, .values=(uint8_t[]) {0, 2}});
+        homekit_characteristic_t cooler_target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .min_step = (float[]) {2}, .valid_values={.count=2, .values=(uint8_t[]) {0, 2}}, .getter_ex=hkc_general_getter, .setter=th_target);
+        
+        
+        
+        
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .getter_ex=hkc_getter, .setter_ex=hkc_valve_setter, .context=json_context);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(IN_USE, 0, .getter_ex=hkc_getter, .context=json_context);
+        homekit_characteristic_t *ch2;
+        homekit_characteristic_t *ch3;
+        
+        ch_group_t *ch_group = malloc(sizeof(ch_group_t));
+        memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->ch0 = ch0;
+        ch_group->ch1 = ch1;
+        ch_group->next = ch_groups;
+        ch_groups = ch_group;
+        
+        accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
+        accessories[accessory]->services[1]->id = 8;
+        accessories[accessory]->services[1]->primary = true;
+        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_VALVE;
+        
+        if (valve_max_duration == 0) {
+            accessories[accessory]->services[1]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[1]->characteristics[0] = ch0;
+            accessories[accessory]->services[1]->characteristics[1] = ch1;
+            accessories[accessory]->services[1]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(VALVE_TYPE, valve_type, .getter_ex=hkc_getter);
+            
+        } else {
+            ch2 = NEW_HOMEKIT_CHARACTERISTIC(SET_DURATION, 900, .max_value=(float[]) {valve_max_duration}, .getter_ex=hkc_getter, .setter_ex=hkc_setter);
+            ch3 = NEW_HOMEKIT_CHARACTERISTIC(REMAINING_DURATION, 0, .max_value=(float[]) {valve_max_duration}, .getter_ex=hkc_getter);
+            
+            ch_group->ch2 = ch2;
+            ch_group->ch3 = ch3;
+            
+            accessories[accessory]->services[1]->characteristics = calloc(6, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[1]->characteristics[0] = ch0;
+            accessories[accessory]->services[1]->characteristics[1] = ch1;
+            accessories[accessory]->services[1]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(VALVE_TYPE, valve_type, .getter_ex=hkc_getter);
+            accessories[accessory]->services[1]->characteristics[3] = ch2;
+            accessories[accessory]->services[1]->characteristics[4] = ch3;
+            
+            const uint32_t initial_time = (uint32_t) set_initial_state(accessory, 2, cJSON_Parse(INIT_STATE_LAST_STR), ch2, CH_TYPE_INT32, 900);
+            if (initial_time > valve_max_duration) {
+                ch2->value.int_value = valve_max_duration;
+            } else {
+                ch2->value.int_value = initial_time;
+            }
+            
+            sdk_os_timer_setfn(&ch_group->timer, valve_timer_worker, ch0);
+        }
+        
+        diginput_register(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), diginput, ch0, TYPE_VALVE);
+
+        const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
+        
+        uint8_t initial_state = 0;
+        if (cJSON_GetObjectItem(json_context, INITIAL_STATE) != NULL) {
+            initial_state = (uint8_t) cJSON_GetObjectItem(json_context, INITIAL_STATE)->valuedouble;
+        }
+        
+        if (initial_state != INIT_STATE_FIXED_INPUT) {
+            diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_VALVE);
+            diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_VALVE);
+            
+            hkc_valve_setter(ch0, HOMEKIT_BOOL((bool) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_BOOL, 0)));
+        } else {
+            if (diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_VALVE)) {
+                diginput_1(0, ch0, TYPE_VALVE);
+            }
+            if (diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_VALVE)) {
+                diginput_0(0, ch0, TYPE_VALVE);
+            }
+        }
+        
+        return new_accessory_count;
+    }
+    */
+    
     // Accessory Builder
     uint8_t acc_count = 0;
     
@@ -1343,7 +1454,10 @@ void normal_mode_init() {
             
         } else if (acc_type == ACC_TYPE_WATER_VALVE) {
             acc_count = new_water_valve(acc_count, json_accessory);
-            
+        /*
+        } else if (acc_type == ACC_TYPE_THERMOSTAT) {
+            acc_count = new_thermostat(acc_count, json_accessory);
+        */
         } else {    // acc_type == ACC_TYPE_SWITCH || acc_type == ACC_TYPE_OUTLET
             acc_count = new_switch(acc_count, json_accessory, acc_type);
         }
@@ -1365,6 +1479,8 @@ void normal_mode_init() {
     printf("HAA >\n");
     FREEHEAP();
     printf("HAA > ---------------------\n\n");
+    
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
     
     wifi_config_init("HAA", NULL, run_homekit_server);
 }
