@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.3.3
+ * v0.3.4
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.3.3"
-#define FIRMWARE_VERSION_OCTAL          000303      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.3.4"
+#define FIRMWARE_VERSION_OCTAL          000304      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -1462,6 +1462,7 @@ void normal_mode_init() {
             acc_count = new_switch(acc_count, json_accessory, acc_type);
         }
         
+        vTaskDelay(100 / portTICK_PERIOD_MS);
     }
     
     sdk_os_timer_setfn(&save_states_timer, save_states, NULL);
@@ -1479,8 +1480,6 @@ void normal_mode_init() {
     printf("HAA >\n");
     FREEHEAP();
     printf("HAA > ---------------------\n\n");
-    
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
     
     wifi_config_init("HAA", NULL, run_homekit_server);
 }
