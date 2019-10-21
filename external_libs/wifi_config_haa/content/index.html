@@ -7,13 +7,13 @@ h3 { margin: 1em 0rem .5em; }
 body .container {width: 15em; margin: 0 auto; padding: 1em;}
 label {display: block;}
 textarea, input[type=text], input[type=password], input[type=submit] {
-    width: 100%;
-    box-sizing: border-box;
-    border-radius: 0.5rem;
-    padding: 0.6em;
+width: 100%;
+box-sizing: border-box;
+border-radius: 0.5rem;
+padding: 0.6em;
 }
 textarea, input[type=text], input[type=password]{
-    border: 2px solid grey
+border: 2px solid grey
 }
 input[type=checkbox] {transform: scale(1.8);}
 textarea {width: 100%; box-sizing: border-box;}
@@ -27,8 +27,8 @@ cursor: pointer;
 -webkit-appearance: none;
 }
 input[type=submit]#refresh {
-    background-color: rgba(229, 229, 235, 1);
-    color: black;
+background-color: rgba(229, 229, 235, 1);
+color: black;
 }
 input[type=submit]#join {background-color: rgba(255, 204, 0, 1);}
 input[type=submit][disabled] {
@@ -55,12 +55,30 @@ padding-left: 1.1em;
 label.required::before {content: "*"; color: red;}
 </style></head>
 <body><div class="container">
-<h1>Home Accessory Architect v0.3.0</h1>
+<h1>Home Accessory Architect v0.3.4</h1>
 <form action="/settings" method="get">
-    <input type="submit" id="refresh" value="⟲ Refresh Page" />
+<input type="submit" id="refresh" value="⟲ Refresh Page" />
 </form>
-<h3>WIFI Networks</h3>
 <form action="/settings" method="post">
+<input type="submit" id="join" value="Save" />
+<h3>HAA Settings</h3>
+<div class="conf">
+<label for="conf">JSON</label>
+<textarea id="conf" name="conf"><!-- part HTML_SETTINGS_MIDDLE --></textarea>
+<br>
+<label>
+<input type="checkbox" name="reset" value="y"> Reset HomeKit ID
+</label>
+<!-- part HTML_SETTINGS_OTA -->
+<label>
+<input type="checkbox" name="ota" value="y"> OTA Update
+</label>
+<label>
+<input type="checkbox" name="autoota" value="y" <!-- part HTML_SETTINGS_AUTOOTA -->> Auto OTA Updates
+</label>
+<!-- part HTML_SETTINGS_POSTOTA -->
+</div>
+<h3>WIFI Networks</h3>
 <div class="nonetworks" style="display: none;">
 No networks found
 </div>
@@ -80,27 +98,6 @@ No networks found
 <label class="required" for="password">Password</label>
 <input type="password" id="password" name="password" />
 </div>
- 
-<h3>HAA Settings</h3>
-<div class="conf">
-<!-- part HTML_SETTINGS_MIDDLE -->
-<label class="required" for="conf">JSON</label>
-<textarea id="conf" name="conf" required >
-</textarea>
-<br>
-<label>
-<input type="checkbox" name="reset" value="y"> Reset HomeKit ID
-</label>
-<!-- part HTML_SETTINGS_OTA -->
-<label>
-<input type="checkbox" name="ota" value="y"> OTA Update
-</label>
-<!-- part HTML_SETTINGS_AUTOOTA -->
-<label>
-<input type="checkbox" name="autoota" value="y"> Auto OTA Updates
-</label>
-</div>
-<input type="submit" id="join" value="Save" />
 </form>
 <br><br>
 <center>by Jos&eacute; A. Jim&eacute;nez Campos</center>
@@ -117,28 +114,6 @@ function enable(e) { e.disabled = ''; }
 function disable(e) { e.disabled = 'disabled'; }
 function show(e) { e.style.display = 'block'; }
 function hide(e) { e.style.display = 'none'; }
- 
-var validate = function () {
-var f = enable;
-if (ssid_block.classList.contains('required') && ssid_field.value == '') {
-f = disable;
-}
-if (password_block.classList.contains('required') && password_field.value == '') {
-f = disable;
-}
-if (c.value.length < 2) {
-f = disable;
-}
-f(join_button);
-}
-let s = ssid_field;
-let p = password_field;
-let c = document.getElementById('conf');
-s.onchange = s.onkeydown = s.onpaste = s.oninput =
-c.onchange = c.onkeydown = c.onpaste = c.oninput =
-p.onchange = p.onkeydown = p.onpaste = p.oninput = validate
-validate()
- 
 function selectNetwork(e) {
 let nets = document.querySelectorAll('ul.networks li');
 for (var i=0; i<nets.length; i++) {
@@ -157,8 +132,7 @@ hide(ssid_block);
 hide(password_block);
 disable(password_field);
 password_field.value = '';
-password_block.classList.remove('required')
-validate();
+enable(join_button);
 }
 }
 nets = document.querySelectorAll('ul.networks li.secure');
@@ -170,8 +144,8 @@ ssid_field.value = this.innerText;
 hide(ssid_block);
 enable(password_field);
 show(password_block);
+disable(join_button);
 password_block.classList.add('required');
-validate();
 }
 }
 nets = document.querySelectorAll('ul.networks li.other');
@@ -180,14 +154,15 @@ nets[i].onclick = function(event) {
 event.preventDefault();
 if (this.classList.contains('selected'))
 return;
+
 selectNetwork(this);
 ssid_field.value = "";
 show(ssid_block);
 show(password_block);
 enable(ssid_field);
 enable(password_field);
+disable(join_button);
 password_block.classList.remove('required');
-validate();
 }
 }
 if (document.querySelectorAll('ul.networks li').length == 1) {
@@ -197,5 +172,17 @@ show(ssid_block);
 show(password_block);
 password_block.classList.remove('required');
 }
+let s = ssid_field;
+let p = password_field;
+s.onchange = s.onkeydown = s.onpaste = s.oninput =
+p.onchange = p.onkeydown = p.onpaste = p.oninput = function(event) {
+var f = enable;
+if (ssid_block.classList.contains('required') && ssid_field.value == '') {
+f = disable;
+}
+if (password_block.classList.contains('required') && password_field.value == '') {
+f = disable;
+}
+f(join_button);
+}
 </script></body></html>
- 
