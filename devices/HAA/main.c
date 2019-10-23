@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.4.0
+ * v0.4.1
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.4.0"
-#define FIRMWARE_VERSION_OCTAL          000400      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.4.1"
+#define FIRMWARE_VERSION_OCTAL          000401      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -609,7 +609,7 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
             temp_deadband = (float) cJSON_GetObjectItem(json_context, THERMOSTAT_DEADBAND)->valuedouble;
         }
         
-        switch (ch->value.int_value) {
+        switch (ch_group->ch5->value.int_value) {
             case THERMOSTAT_MODE_HEATER:
                 if (ch_group->ch4->value.int_value == THERMOSTAT_MODE_OFF) {
                     if (ch_group->ch0->value.float_value < (ch_group->ch2->value.float_value - temp_deadband)) {
