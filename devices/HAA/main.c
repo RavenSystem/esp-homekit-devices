@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.3.4
+ * v0.4.0
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.3.4"
-#define FIRMWARE_VERSION_OCTAL          000304      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.4.0"
+#define FIRMWARE_VERSION_OCTAL          000400      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -83,6 +83,8 @@
 #define FIXED_BUTTONS_ARRAY_0           "f0"
 #define FIXED_BUTTONS_ARRAY_1           "f1"
 #define FIXED_BUTTONS_ARRAY_2           "f2"
+#define FIXED_BUTTONS_ARRAY_3           "f3"
+#define FIXED_BUTTONS_ARRAY_4           "f4"
 #define BUTTON_PRESS_TYPE               "t"
 #define PULLUP_RESISTOR                 "p"
 #define VALUE                           "v"
@@ -97,12 +99,34 @@
 #define VALVE_DEFAULT_MAX_DURATION      3600
 
 #define THERMOSTAT_TYPE                 "w"
+#define THERMOSTAT_TYPE_HEATER          1
+#define THERMOSTAT_TYPE_COOLER          2
+#define THERMOSTAT_TYPE_HEATERCOOLER    3
 #define THERMOSTAT_MIN_TEMP             "m"
+#define THERMOSTAT_DEFAULT_MIN_TEMP     10
 #define THERMOSTAT_MAX_TEMP             "x"
+#define THERMOSTAT_DEFAULT_MAX_TEMP     38
 #define THERMOSTAT_DEADBAND             "d"
 #define THERMOSTAT_POLL_PERIOD          "j"
+#define THERMOSTAT_DEFAULT_POLL_PERIOD  30
+#define THERMOSTAT_MODE_OFF             0
+#define THERMOSTAT_MODE_HEATER          1
+#define THERMOSTAT_MODE_COOLER          2
+#define THERMOSTAT_ACTION_TOTAL_OFF     0
+#define THERMOSTAT_ACTION_HEATER_OFF    1
+#define THERMOSTAT_ACTION_COOLER_OFF    2
+#define THERMOSTAT_ACTION_HEATER_ON     3
+#define THERMOSTAT_ACTION_COOLER_ON     4
+#define THERMOSTAT_ACTION_SENSOR_ERROR  5
+#define THERMOSTAT_TEMP_UP              0
+#define THERMOSTAT_TEMP_DOWN            1
 
-#define MAX_ACTIONS                     3
+#define TEMPERATURE_SENSOR_GPIO         "g"
+#define TEMPERATURE_SENSOR_TYPE         "n"
+#define TEMPERATURE_OFFSET              "z"
+#define HUMIDITY_OFFSET                 "h"
+
+#define MAX_ACTIONS                     5
 #define COPY_ACTIONS                    "a"
 
 #define ACCESSORY_TYPE                  "t"
@@ -151,12 +175,14 @@ typedef struct _ch_group {
     homekit_characteristic_t *ch1;
     homekit_characteristic_t *ch2;
     homekit_characteristic_t *ch3;
-    //homekit_characteristic_t *ch4;
-    //homekit_characteristic_t *ch5;
+    homekit_characteristic_t *ch4;
+    homekit_characteristic_t *ch5;
     homekit_characteristic_t *ch_child;
     homekit_characteristic_t *ch_sec;
     
-    ETSTimer timer;
+    ETSTimer *timer;
+    
+    float saved_float;
     
     struct _ch_group *next;
 } ch_group_t;
@@ -179,8 +205,8 @@ ch_group_t *ch_group_find(homekit_characteristic_t *ch) {
            ch_group->ch1 != ch &&
            ch_group->ch2 != ch &&
            ch_group->ch3 != ch &&
-           //ch_group->ch4 != ch &&
-           //ch_group->ch5 != ch &&
+           ch_group->ch4 != ch &&
+           ch_group->ch5 != ch &&
            ch_group->ch_child != ch &&
            ch_group->ch_sec != ch) {
         ch_group = ch_group->next;
@@ -295,6 +321,16 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
     
     if (cJSON_GetObjectItem(json_context, action) != NULL) {
         cJSON *actions = cJSON_GetObjectItem(json_context, action);
+        
+        // Copy actions
+        if(cJSON_GetObjectItem(actions, COPY_ACTIONS) != NULL) {
+            const uint8_t new_action = (uint8_t) cJSON_GetObjectItem(actions, COPY_ACTIONS)->valuedouble;
+            itoa(new_action, action, 10);
+            
+            if (cJSON_GetObjectItem(json_context, action) != NULL) {
+                actions = cJSON_GetObjectItem(json_context, action);
+            }
+        }
         
         // Digital outputs
         cJSON *json_relays = cJSON_GetObjectItem(actions, DIGITAL_OUTPUTS_ARRAY);
@@ -531,10 +567,10 @@ void hkc_valve_setter(homekit_characteristic_t *ch, const homekit_value_t value)
         if (ch_group->ch3) {
             if (value.int_value == 0) {
                 ch_group->ch3->value.int_value = 0;
-                sdk_os_timer_disarm(&ch_group->timer);
+                sdk_os_timer_disarm(ch_group->timer);
             } else {
                 ch_group->ch3->value = ch_group->ch2->value;
-                sdk_os_timer_arm(&ch_group->timer, 1000, 1);
+                sdk_os_timer_arm(ch_group->timer, 1000, 1);
             }
             
             homekit_characteristic_notify(ch_group->ch3, ch_group->ch3->value);
@@ -551,9 +587,248 @@ void valve_timer_worker(void *args) {
     //homekit_characteristic_notify(ch_group->ch3, ch_group->ch3->value);   // Is it necessary??
     
     if (ch_group->ch3->value.int_value == 0) {
-        sdk_os_timer_disarm(&ch_group->timer);
+        sdk_os_timer_disarm(ch_group->timer);
         
         hkc_valve_setter(ch, HOMEKIT_UINT8(0));
+    }
+}
+
+// --- THERMOSTAT
+void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
+    ch_group_t *ch_group = ch_group_find(ch);
+    if (ch_group->ch_sec && !ch_group->ch_sec->value.bool_value) {
+        homekit_characteristic_notify(ch, ch->value);
+        
+    } else {
+        ch->value = value;
+        homekit_characteristic_notify(ch, ch->value);
+        cJSON *json_context = ch->context;
+        
+        float temp_deadband = 0;
+        if (cJSON_GetObjectItem(json_context, THERMOSTAT_DEADBAND) != NULL) {
+            temp_deadband = (float) cJSON_GetObjectItem(json_context, THERMOSTAT_DEADBAND)->valuedouble;
+        }
+        
+        switch (ch->value.int_value) {
+            case THERMOSTAT_MODE_HEATER:
+                if (ch_group->ch4->value.int_value == THERMOSTAT_MODE_OFF) {
+                    if (ch_group->ch0->value.float_value < (ch_group->ch2->value.float_value - temp_deadband)) {
+                        ch_group->ch4->value.int_value = THERMOSTAT_MODE_HEATER;
+                        do_actions(json_context, THERMOSTAT_ACTION_HEATER_ON);
+                    }
+                } else if (ch_group->ch0->value.float_value >= ch_group->ch2->value.float_value) {
+                    ch_group->ch4->value.int_value = THERMOSTAT_MODE_OFF;
+                    do_actions(json_context, THERMOSTAT_ACTION_HEATER_OFF);
+                }
+                break;
+            
+            case THERMOSTAT_MODE_COOLER:
+                if (ch_group->ch4->value.int_value == THERMOSTAT_MODE_OFF) {
+                    if (ch_group->ch0->value.float_value > (ch_group->ch2->value.float_value + temp_deadband)) {
+                        ch_group->ch4->value.int_value = THERMOSTAT_MODE_COOLER;
+                        do_actions(json_context, THERMOSTAT_ACTION_COOLER_ON);
+                    }
+                } else if (ch_group->ch0->value.float_value <= ch_group->ch2->value.float_value) {
+                    ch_group->ch4->value.int_value = THERMOSTAT_MODE_OFF;
+                    do_actions(json_context, THERMOSTAT_ACTION_COOLER_OFF);
+                }
+                break;
+            
+            default:    // case THERMOSTAT_MODE_OFF:
+                if (ch_group->ch4->value.int_value != THERMOSTAT_MODE_OFF) {
+                    ch_group->ch4->value.int_value = THERMOSTAT_MODE_OFF;
+                    do_actions(json_context, THERMOSTAT_ACTION_TOTAL_OFF);
+                }
+                break;
+        }
+        
+        homekit_characteristic_notify(ch_group->ch4, ch_group->ch4->value);
+        
+        save_states_callback();
+    }
+}
+
+void hkc_th_target_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
+    led_blink(1);
+    printf("HAA > Setter TH\n");
+    
+    setup_mode_toggle_upcount();
+    
+    update_th(ch, value);
+}
+
+void th_input(const uint8_t gpio, void *args, const uint8_t type) {
+    homekit_characteristic_t *ch = args;
+    ch_group_t *ch_group = ch_group_find(ch);
+    if (!(ch_group->ch_child && !ch_group->ch_child->value.bool_value)) {
+        uint8_t state = type;
+        
+        if (type == 5) {
+            state = ch->value.int_value + 1;
+            
+            cJSON *json_context = ch->context;
+            
+            uint8_t th_type = THERMOSTAT_TYPE_HEATER;
+            if (cJSON_GetObjectItem(json_context, THERMOSTAT_TYPE) != NULL) {
+                th_type = (uint8_t) cJSON_GetObjectItem(json_context, THERMOSTAT_TYPE)->valuedouble;
+            }
+
+            switch (th_type) {
+                case THERMOSTAT_TYPE_HEATER:
+                    if (state == 2) {
+                        state = 0;
+                    }
+                    break;
+                    
+                case THERMOSTAT_TYPE_COOLER:
+                    if (state == 1) {
+                        state = 2;
+                    } else {
+                        state = 0;
+                    }
+                    break;
+                    
+                default:    // case THERMOSTAT_TYPE_HEATERCOOLER:
+                    break;
+            }
+        }
+        
+        hkc_th_target_setter(ch, HOMEKIT_UINT8(state));
+    }
+}
+
+void th_input_temp(const uint8_t gpio, void *args, const uint8_t type) {
+    homekit_characteristic_t *ch = args;
+    ch_group_t *ch_group = ch_group_find(ch);
+    if (!(ch_group->ch_child && !ch_group->ch_child->value.bool_value)) {
+        cJSON *json_context = ch->context;
+        
+        float th_min_temp = THERMOSTAT_DEFAULT_MIN_TEMP;
+        if (cJSON_GetObjectItem(json_context, THERMOSTAT_MIN_TEMP) != NULL) {
+            th_min_temp = (float) cJSON_GetObjectItem(json_context, THERMOSTAT_MIN_TEMP)->valuedouble;
+        }
+        
+        if (th_min_temp < -100) {
+            th_min_temp = -100;
+        }
+        
+        float th_max_temp = THERMOSTAT_DEFAULT_MAX_TEMP;
+        if (cJSON_GetObjectItem(json_context, THERMOSTAT_MAX_TEMP) != NULL) {
+            th_max_temp = (float) cJSON_GetObjectItem(json_context, THERMOSTAT_MAX_TEMP)->valuedouble;
+        }
+        
+        if (th_max_temp > 200) {
+            th_max_temp = 200;
+        }
+        
+        float set_temp = ch->value.float_value;
+        if (type == THERMOSTAT_TEMP_UP) {
+            set_temp += 0.5;
+            if (set_temp > th_max_temp) {
+                set_temp = th_max_temp;
+            }
+        } else {    // type == THERMOSTAT_TEMP_DOWN
+            set_temp -= 0.5;
+            if (set_temp < th_min_temp) {
+                set_temp = th_min_temp;
+            }
+        }
+        
+        ch->value.float_value = set_temp;
+        
+        update_th(ch, ch->value);
+    }
+}
+
+// --- TEMPERATURE
+void temperature_timer_worker(void *args) {
+    homekit_characteristic_t *ch = args;
+    ch_group_t *ch_group = ch_group_find(ch);
+    
+    cJSON *json_context = ch->context;
+    
+    const uint8_t sensor_gpio = (uint8_t) cJSON_GetObjectItem(json_context, TEMPERATURE_SENSOR_GPIO)->valuedouble;
+    
+    uint8_t sensor_type = 2;
+    if (cJSON_GetObjectItem(json_context, TEMPERATURE_SENSOR_TYPE) != NULL) {
+        sensor_type = (uint8_t) cJSON_GetObjectItem(json_context, TEMPERATURE_SENSOR_TYPE)->valuedouble;
+    }
+    
+    float temp_offset = 0;
+    if (cJSON_GetObjectItem(json_context, TEMPERATURE_OFFSET) != NULL) {
+        temp_offset = (float) cJSON_GetObjectItem(json_context, TEMPERATURE_OFFSET)->valuedouble;
+    }
+    
+    float hum_offset = 0;
+    if (cJSON_GetObjectItem(json_context, HUMIDITY_OFFSET) != NULL) {
+        hum_offset = (float) cJSON_GetObjectItem(json_context, HUMIDITY_OFFSET)->valuedouble;
+    }
+    
+    float humidity_value, temperature_value;
+    bool get_temp = false;
+    
+    if (sensor_type != 3) {
+        dht_sensor_type_t current_sensor_type = DHT_TYPE_DHT22; // sensor_type == 2
+        
+        if (sensor_type == 1) {
+            current_sensor_type = DHT_TYPE_DHT11;
+        } else if (sensor_type == 4) {
+            current_sensor_type = DHT_TYPE_SI7021;
+        }
+        
+        get_temp = dht_read_float_data(current_sensor_type, sensor_gpio, &humidity_value, &temperature_value);
+    } else {    // sensor_type == 3
+        ds18b20_addr_t ds18b20_addr[1];
+        
+        if (ds18b20_scan_devices(sensor_gpio, ds18b20_addr, 1) == 1) {
+            float temps[1];
+            ds18b20_measure_and_read_multi(sensor_gpio, ds18b20_addr, 1, temps);
+            temperature_value = temps[0];
+            humidity_value = 0.0;
+            get_temp = true;
+        }
+    }
+    
+    if (get_temp) {
+        temperature_value += temp_offset;
+        if (temperature_value < -100) {
+            temperature_value = -100;
+        } else if (temperature_value > 200) {
+            temperature_value = 200;
+        }
+        
+        if (temperature_value != ch_group->saved_float) {
+            ch_group->saved_float = temperature_value;
+            ch->value = HOMEKIT_FLOAT(temperature_value);
+            
+            if (ch_group->ch5) {
+                update_th(ch, ch->value);
+            } else {
+                homekit_characteristic_notify(ch, ch->value);
+            }
+        }
+        
+        humidity_value += hum_offset;
+        if (humidity_value < 0) {
+            humidity_value = 0;
+        } else if (humidity_value > 100) {
+            humidity_value = 100;
+        }
+
+        ch_group->ch1->value = HOMEKIT_FLOAT(humidity_value);
+        homekit_characteristic_notify(ch_group->ch1, ch_group->ch1->value);
+        
+        printf("HAA > TEMP %g, HUM %g\n", temperature_value, humidity_value);
+    } else {
+        led_blink(5);
+        printf("HAA ! ERROR Sensor\n");
+        
+        if (ch_group->ch5) {
+            ch_group->ch4->value = HOMEKIT_UINT8(THERMOSTAT_MODE_OFF);
+            homekit_characteristic_notify(ch_group->ch4, ch_group->ch4->value);
+            
+            do_actions(json_context, THERMOSTAT_ACTION_SENSOR_ERROR);
+        }
     }
 }
 
@@ -593,7 +868,6 @@ void diginput(const uint8_t gpio, void *args, const uint8_t type) {
 
 void diginput_1(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
-    
     ch_group_t *ch_group = ch_group_find(ch);
     if (!(ch_group->ch_child && !ch_group->ch_child->value.bool_value)) {
         switch (type) {
@@ -620,7 +894,6 @@ void diginput_1(const uint8_t gpio, void *args, const uint8_t type) {
 
 void diginput_0(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
-    
     ch_group_t *ch_group = ch_group_find(ch);
     if (!(ch_group->ch_child && !ch_group->ch_child->value.bool_value)) {
         switch (type) {
@@ -1268,7 +1541,9 @@ void normal_mode_init() {
                 ch2->value.int_value = initial_time;
             }
             
-            sdk_os_timer_setfn(&ch_group->timer, valve_timer_worker, ch0);
+            ch_group->timer = malloc(sizeof(ETSTimer));
+            memset(ch_group->timer, 0, sizeof(*ch_group->timer));
+            sdk_os_timer_setfn(ch_group->timer, valve_timer_worker, ch0);
         }
         
         diginput_register(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), diginput, ch0, TYPE_VALVE);
@@ -1297,83 +1572,106 @@ void normal_mode_init() {
         return new_accessory_count;
     }
     
-    /*
     uint8_t new_thermostat(uint8_t accessory, cJSON *json_context) {
         new_accessory(accessory, 3);
         
-        uint8_t th_type = 0;
+        float th_min_temp = THERMOSTAT_DEFAULT_MIN_TEMP;
+        if (cJSON_GetObjectItem(json_context, THERMOSTAT_MIN_TEMP) != NULL) {
+            th_min_temp = (float) cJSON_GetObjectItem(json_context, THERMOSTAT_MIN_TEMP)->valuedouble;
+        }
+        
+        if (th_min_temp < -100) {
+            th_min_temp = -100;
+        }
+        
+        float th_max_temp = THERMOSTAT_DEFAULT_MAX_TEMP;
+        if (cJSON_GetObjectItem(json_context, THERMOSTAT_MAX_TEMP) != NULL) {
+            th_max_temp = (float) cJSON_GetObjectItem(json_context, THERMOSTAT_MAX_TEMP)->valuedouble;
+        }
+        
+        if (th_max_temp > 200) {
+            th_max_temp = 200;
+        }
+        
+        const float default_target_temp = (th_min_temp + th_max_temp) / 2;
+        
+        uint16_t th_poll_period = THERMOSTAT_DEFAULT_POLL_PERIOD;
+        if (cJSON_GetObjectItem(json_context, THERMOSTAT_POLL_PERIOD) != NULL) {
+            th_poll_period = (uint16_t) cJSON_GetObjectItem(json_context, THERMOSTAT_POLL_PERIOD)->valuedouble;
+        }
+        
+        if (th_poll_period < 3) {
+            th_poll_period = 3;
+        }
+        
+        uint8_t th_type = THERMOSTAT_TYPE_HEATER;
         if (cJSON_GetObjectItem(json_context, THERMOSTAT_TYPE) != NULL) {
             th_type = (uint8_t) cJSON_GetObjectItem(json_context, THERMOSTAT_TYPE)->valuedouble;
         }
         
-        uint32_t valve_max_duration = VALVE_DEFAULT_MAX_DURATION;
-        if (cJSON_GetObjectItem(json_context, VALVE_MAX_DURATION) != NULL) {
-            valve_max_duration = (uint32_t) cJSON_GetObjectItem(json_context, VALVE_MAX_DURATION)->valuedouble;
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200}, .getter_ex=hkc_getter, .context=json_context);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0, .getter_ex=hkc_getter);
+        homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_TEMPERATURE, default_target_temp, .min_value=(float[]) {th_min_temp}, .max_value=(float[]) {th_max_temp}, .getter_ex=hkc_getter, .setter_ex=update_th, .context=json_context);
+        homekit_characteristic_t *ch3 = NEW_HOMEKIT_CHARACTERISTIC(TEMPERATURE_DISPLAY_UNITS, 0, .getter_ex=hkc_getter, .setter_ex=hkc_setter);
+        
+        
+        homekit_characteristic_t *ch4, *ch5;
+        
+        switch (th_type) {
+            case THERMOSTAT_TYPE_COOLER:
+                ch4 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .min_step = (float[]) {2}, .valid_values={.count=2, .values=(uint8_t[]) {0, 2}}, .getter_ex=hkc_getter);
+                ch5 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .min_step = (float[]) {2}, .valid_values={.count=2, .values=(uint8_t[]) {0, 2}}, .getter_ex=hkc_getter, .setter_ex=hkc_th_target_setter, .context=json_context);
+                break;
+                
+            case THERMOSTAT_TYPE_HEATERCOOLER:
+                ch4 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .valid_values={.count=3, .values=(uint8_t[]) {0, 1, 2}}, .getter_ex=hkc_getter);
+                ch5 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .valid_values={.count=3, .values=(uint8_t[]) {0, 1, 2}}, .getter_ex=hkc_getter, .setter_ex=hkc_th_target_setter, .context=json_context);
+                break;
+                
+            default:        // case THERMOSTAT_TYPE_HEATER:
+                ch4 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_HEATING_COOLING_STATE, 0, .max_value=(float[]) {1}, .valid_values={.count=2, .values=(uint8_t[]) {0, 1}}, .getter_ex=hkc_getter);
+                ch5 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATING_COOLING_STATE, 0, .max_value=(float[]) {1}, .valid_values={.count=2, .values=(uint8_t[]) {0, 1}}, .getter_ex=hkc_getter, .setter_ex=hkc_th_target_setter, .context=json_context);
+                break;
         }
-        
-        homekit_characteristic_t current_temperature = HOMEKIT_CHARACTERISTIC_(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200});
-        homekit_characteristic_t target_temperature  = HOMEKIT_CHARACTERISTIC_(TARGET_TEMPERATURE, 23, .callback=HOMEKIT_CHARACTERISTIC_CALLBACK(update_th_state));
-        homekit_characteristic_t units = HOMEKIT_CHARACTERISTIC_(TEMPERATURE_DISPLAY_UNITS, 0);
-        homekit_characteristic_t current_humidity = HOMEKIT_CHARACTERISTIC_(CURRENT_RELATIVE_HUMIDITY, 0);
-        homekit_characteristic_t current_state = HOMEKIT_CHARACTERISTIC_(CURRENT_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .valid_values={.count=3, .values=(uint8_t[]) {0, 1, 2}});
-        homekit_characteristic_t target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .valid_values={.count=3, .values=(uint8_t[]) {0, 1, 2}}, .getter_ex=hkc_general_getter, .setter=th_target);
-        homekit_characteristic_t heater_current_state = HOMEKIT_CHARACTERISTIC_(CURRENT_HEATING_COOLING_STATE, 0, .max_value=(float[]) {1}, .valid_values={.count=2, .values=(uint8_t[]) {0, 1}});
-        homekit_characteristic_t heater_target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_COOLING_STATE, 0, .max_value=(float[]) {1}, .valid_values={.count=2, .values=(uint8_t[]) {0, 1}}, .getter_ex=hkc_general_getter, .setter=th_target);
-        homekit_characteristic_t cooler_current_state = HOMEKIT_CHARACTERISTIC_(CURRENT_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .min_step = (float[]) {2}, .valid_values={.count=2, .values=(uint8_t[]) {0, 2}});
-        homekit_characteristic_t cooler_target_state = HOMEKIT_CHARACTERISTIC_(TARGET_HEATING_COOLING_STATE, 0, .max_value=(float[]) {2}, .min_step = (float[]) {2}, .valid_values={.count=2, .values=(uint8_t[]) {0, 2}}, .getter_ex=hkc_general_getter, .setter=th_target);
-        
-        
-        
-        
-        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .getter_ex=hkc_getter, .setter_ex=hkc_valve_setter, .context=json_context);
-        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(IN_USE, 0, .getter_ex=hkc_getter, .context=json_context);
-        homekit_characteristic_t *ch2;
-        homekit_characteristic_t *ch3;
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
         ch_group->ch0 = ch0;
         ch_group->ch1 = ch1;
+        ch_group->ch2 = ch2;
+        ch_group->ch3 = ch3;
+        ch_group->ch4 = ch4;
+        ch_group->ch5 = ch5;
         ch_group->next = ch_groups;
         ch_groups = ch_group;
         
         accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
         accessories[accessory]->services[1]->id = 8;
         accessories[accessory]->services[1]->primary = true;
-        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_VALVE;
+        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_THERMOSTAT;
+        accessories[accessory]->services[1]->characteristics = calloc(7, sizeof(homekit_characteristic_t*));
+        accessories[accessory]->services[1]->characteristics[0] = ch0;
+        accessories[accessory]->services[1]->characteristics[1] = ch1;
+        accessories[accessory]->services[1]->characteristics[2] = ch2;
+        accessories[accessory]->services[1]->characteristics[3] = ch3;
+        accessories[accessory]->services[1]->characteristics[4] = ch4;
+        accessories[accessory]->services[1]->characteristics[5] = ch5;
+            
+        ch_group->timer = malloc(sizeof(ETSTimer));
+        memset(ch_group->timer, 0, sizeof(*ch_group->timer));
+        sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch0);
         
-        if (valve_max_duration == 0) {
-            accessories[accessory]->services[1]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
-            accessories[accessory]->services[1]->characteristics[0] = ch0;
-            accessories[accessory]->services[1]->characteristics[1] = ch1;
-            accessories[accessory]->services[1]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(VALVE_TYPE, valve_type, .getter_ex=hkc_getter);
-            
+        const float initial_target_temp = set_initial_state(accessory, 2, cJSON_Parse(INIT_STATE_LAST_STR), ch2, CH_TYPE_FLOAT, (th_min_temp + th_max_temp) / 2);
+        if (initial_target_temp > th_max_temp || initial_target_temp < th_min_temp) {
+            ch2->value.float_value = default_target_temp;
         } else {
-            ch2 = NEW_HOMEKIT_CHARACTERISTIC(SET_DURATION, 900, .max_value=(float[]) {valve_max_duration}, .getter_ex=hkc_getter, .setter_ex=hkc_setter);
-            ch3 = NEW_HOMEKIT_CHARACTERISTIC(REMAINING_DURATION, 0, .max_value=(float[]) {valve_max_duration}, .getter_ex=hkc_getter);
-            
-            ch_group->ch2 = ch2;
-            ch_group->ch3 = ch3;
-            
-            accessories[accessory]->services[1]->characteristics = calloc(6, sizeof(homekit_characteristic_t*));
-            accessories[accessory]->services[1]->characteristics[0] = ch0;
-            accessories[accessory]->services[1]->characteristics[1] = ch1;
-            accessories[accessory]->services[1]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(VALVE_TYPE, valve_type, .getter_ex=hkc_getter);
-            accessories[accessory]->services[1]->characteristics[3] = ch2;
-            accessories[accessory]->services[1]->characteristics[4] = ch3;
-            
-            const uint32_t initial_time = (uint32_t) set_initial_state(accessory, 2, cJSON_Parse(INIT_STATE_LAST_STR), ch2, CH_TYPE_INT32, 900);
-            if (initial_time > valve_max_duration) {
-                ch2->value.int_value = valve_max_duration;
-            } else {
-                ch2->value.int_value = initial_time;
-            }
-            
-            sdk_os_timer_setfn(&ch_group->timer, valve_timer_worker, ch0);
+            ch2->value.float_value = initial_target_temp;
         }
         
-        diginput_register(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), diginput, ch0, TYPE_VALVE);
-
+        diginput_register(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), th_input, ch5, 5);
+        diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_3), th_input_temp, ch2, THERMOSTAT_TEMP_UP);
+        diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_4), th_input_temp, ch2, THERMOSTAT_TEMP_DOWN);
+        
         const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         
         uint8_t initial_state = 0;
@@ -1382,22 +1680,32 @@ void normal_mode_init() {
         }
         
         if (initial_state != INIT_STATE_FIXED_INPUT) {
-            diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_VALVE);
-            diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_VALVE);
-            
-            hkc_valve_setter(ch0, HOMEKIT_BOOL((bool) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_BOOL, 0)));
-        } else {
-            if (diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_VALVE)) {
-                diginput_1(0, ch0, TYPE_VALVE);
+            if (th_type != THERMOSTAT_TYPE_HEATER) {
+                diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_2), th_input, ch5, THERMOSTAT_MODE_COOLER);
             }
-            if (diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_VALVE)) {
-                diginput_0(0, ch0, TYPE_VALVE);
+            if (th_type != THERMOSTAT_TYPE_COOLER) {
+                diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), th_input, ch5, THERMOSTAT_MODE_HEATER);
+            }
+            diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), th_input, ch5, THERMOSTAT_MODE_OFF);
+            
+            update_th(ch5, HOMEKIT_UINT8((uint8_t) set_initial_state(accessory, 5, json_context, ch5, CH_TYPE_INT8, THERMOSTAT_MODE_OFF)));
+        } else {
+            if (th_type != THERMOSTAT_TYPE_HEATER && diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_2), th_input, ch5, THERMOSTAT_MODE_COOLER)) {
+                th_input(0, ch5, THERMOSTAT_MODE_COOLER);
+            }
+            if (th_type != THERMOSTAT_TYPE_COOLER && diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), th_input, ch5, THERMOSTAT_MODE_HEATER)) {
+                th_input(0, ch5, THERMOSTAT_MODE_HEATER);
+            }
+            if (diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), th_input, ch5, THERMOSTAT_MODE_OFF)) {
+                th_input(0, ch5, THERMOSTAT_MODE_OFF);
             }
         }
         
+        temperature_timer_worker(ch0);
+        sdk_os_timer_arm(ch_group->timer, th_poll_period * 1000, 1);
+        
         return new_accessory_count;
     }
-    */
     
     // Accessory Builder
     uint8_t acc_count = 0;
@@ -1454,10 +1762,10 @@ void normal_mode_init() {
             
         } else if (acc_type == ACC_TYPE_WATER_VALVE) {
             acc_count = new_water_valve(acc_count, json_accessory);
-        /*
+        
         } else if (acc_type == ACC_TYPE_THERMOSTAT) {
             acc_count = new_thermostat(acc_count, json_accessory);
-        */
+        
         } else {    // acc_type == ACC_TYPE_SWITCH || acc_type == ACC_TYPE_OUTLET
             acc_count = new_switch(acc_count, json_accessory, acc_type);
         }
