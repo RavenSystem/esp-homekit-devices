@@ -686,10 +686,8 @@ static void wifi_config_softap_start() {
 static void wifi_config_softap_stop() {
     dhcpserver_stop();
     dns_stop();
-    http_stop();
     sdk_wifi_set_opmode(STATION_MODE);
 }
-
 
 static void wifi_config_sta_connect_timeout_callback(void *arg) {
     if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
@@ -698,24 +696,12 @@ static void wifi_config_sta_connect_timeout_callback(void *arg) {
         sdk_os_timer_disarm(&context->sta_connect_timeout);
         
         wifi_config_softap_stop();
+        http_stop();
         if (context->on_wifi_ready)
             context->on_wifi_ready();
         wifi_config_context_free(context);
         context = NULL;
-        return;
     }
-
-    /*
-    if ((xTaskGetTickCount() - context->connect_start_time) * portTICK_PERIOD_MS < WIFI_CONFIG_CONNECT_TIMEOUT) {
-        // Still have time, continue trying
-        return;
-    }
-
-    sdk_os_timer_disarm(&context->sta_connect_timeout);
-    DEBUG("Timeout connecting to WiFi network, starting config AP");
-    // Not connected to station, launch configuration AP
-    wifi_config_softap_start();
-     */
 }
 
 static void auto_ota_run() {
@@ -786,11 +772,11 @@ static int wifi_config_station_connect() {
 
     context->connect_start_time = xTaskGetTickCount();
     sdk_os_timer_setfn(&context->sta_connect_timeout, wifi_config_sta_connect_timeout_callback, context);
-    sdk_os_timer_arm(&context->sta_connect_timeout, 500, 1);
+    wifi_config_sta_connect_timeout_callback(context);
+    sdk_os_timer_arm(&context->sta_connect_timeout, 800, 1);
 
     return 0;
 }
-
 
 void wifi_config_init(const char *ssid_prefix, const char *password, void (*on_wifi_ready)()) {
     INFO("Initializing WiFi config");

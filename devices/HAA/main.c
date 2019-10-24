@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.4.1
+ * v0.4.2
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.4.1"
-#define FIRMWARE_VERSION_OCTAL          000401      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.4.2"
+#define FIRMWARE_VERSION_OCTAL          000402      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -600,13 +600,20 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
         homekit_characteristic_notify(ch, ch->value);
         
     } else {
+        led_blink(1);
+        printf("HAA > Setter TH\n");
+        
         ch->value = value;
-        homekit_characteristic_notify(ch, ch->value);
+        
         cJSON *json_context = ch->context;
         
         float temp_deadband = 0;
         if (cJSON_GetObjectItem(json_context, THERMOSTAT_DEADBAND) != NULL) {
             temp_deadband = (float) cJSON_GetObjectItem(json_context, THERMOSTAT_DEADBAND)->valuedouble;
+        }
+        
+        if (ch != ch_group->ch4) {
+            homekit_characteristic_notify(ch, ch->value);
         }
         
         switch (ch_group->ch5->value.int_value) {
@@ -649,9 +656,6 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
 }
 
 void hkc_th_target_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
-    led_blink(1);
-    printf("HAA > Setter TH\n");
-    
     setup_mode_toggle_upcount();
     
     update_th(ch, value);

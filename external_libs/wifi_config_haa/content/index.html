@@ -1,66 +1,37 @@
-<!-- part HTML_SETTINGS_HEADER --><!DOCTYPE html>
-<html>
-<head><title>HAA</title><style type="text/css">
-html, input, textarea {font-size: 38px; font-family: Arial, Helvetica, sans-serif;}
-h1 { font-size: 150%; text-align: center; }
-body .container {width: 15em; margin: 0 auto; padding: 1em;}
-label {display: block;}
-input[type=text], input[type=password] {width: 100%; box-sizing: border-box;}
+<!-- part HTML_SETTINGS_HEADER --><!DOCTYPE html><html><head><title>HAA</title><style type="text/css">
+html,input,textarea{font-size:38px;font-family:Arial,Helvetica,sans-serif;}
+h1{font-size:120%;text-align:center;}
+body .container{width:22em;margin:0 auto;padding:0.5em;}
+label{display:block;}
+input[type=text],input[type=password]{width:100%;box-sizing:border-box;}
 input[type=checkbox] {transform: scale(1.8);}
 textarea {width: 100%; box-sizing: border-box;}
-input[type=submit] {
-width: 100%;
-border: 1px solid black;
-text-decoration: none;
-padding: 0.25em 5em;
-color: white;
-background-color: #4caf50;
-cursor: pointer;
--webkit-appearance: none;
--webkit-border-radius: 0;
-}
-input[type=submit]#refresh {background-color: #44bbe3;}
-input[type=submit]#join {background-color: #4caf50;}
-input[type=submit][disabled] {
-color: #aaaaaa;
-background-color: #eeeeee !important;
-}
-.networks {list-style: none; margin: 1em 0; padding: 0;}
-.networks li {
-cursor: pointer;
-padding: 0.25em;
-margin-bottom: 0.25em;
-white-space: nowrap;
-overflow: hidden;
-text-overflow: ellipsis;
-position: relative;
-padding-left: 1.1em;
-}
-.networks li.secure::before {content: "🔒"; position: absolute; left: 0;}
-.networks li.selected {font-weight: bold; background-color: #ddd}
-.networks li:hover {background-color: #eee;}
-.networks li.other {border-top: 2px solid #aaa; text-align: center;}
-.nonetworks {text-align: center; margin: 1em 0;}
-.field {margin-bottom: 0.5em;}
-.field.required label::before {content: "*"; color: red;}
-</style></head>
-<body><div class="container">
-    <h1>Home Accessory Architect v0.4.1</h1>
-<form action="/settings" method="get">
-<input type="submit" id="refresh" value="⟲ Refresh" />
-</form>
+input[type=submit],input[type=button]{width: 100%;border:1px solid black;text-decoration:none;padding:0.25em 5em;color:white;background-color:#4caf50;cursor:pointer;-webkit-appearance: none;-webkit-border-radius:0;}
+input[type=button]#refresh{background-color: #44bbe3;}
+input[type=submit]#join{background-color: #4caf50;}
+input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
+.networks{list-style:none;margin:1em 0;padding:0;}
+.networks li{cursor:pointer;padding:0.25em;margin-bottom:0.25em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;position:relative;padding-left:1.1em;}
+.networks li.secure::before{content:"🔒";position:absolute;left:0;}
+.networks li.selected{font-weight:bold;background-color:#ddd}
+.networks li:hover{background-color:#eee;}
+.networks li.other{border-top:2px solid #aaa;text-align:center;}
+.nonetworks{text-align:center;margin:1em 0;}
+.field{margin-bottom:0.5em;}
+.field.required label::before{content:"*";color:red;}
+</style></head><body><div class="container"><h1>Home Accessory Architect v0.4.2</h1>
 <form action="/settings" method="post">
 <div class="field required conf">
-<label for="conf">JSON:</label>
+<label for="conf">JSON Config:</label>
 <textarea id="conf" name="conf">
-<!-- part HTML_SETTINGS_MIDDLE --></textarea>
-<br>
+<!-- part HTML_SETTINGS_MIDDLE --></textarea><br>
 <input type="checkbox" name="reset" value="y"> Reset HomeKit ID<br>
 <!-- part HTML_SETTINGS_OTA --><input type="checkbox" name="ota" value="y"> OTA Update<br>
 <input type="checkbox" name="autoota" value="y" <!-- part HTML_SETTINGS_AUTOOTA -->> Auto OTA Updates<br>
 <!-- part HTML_SETTINGS_POSTOTA --></div>
-<input type="submit" id="join" value="Save" />
-<div class="nonetworks" style="display: none;">
+<input type="submit" id="join" value="Save" /><br><br>
+<input type="button" id="refresh" value="⟲ WiFi Networks" onClick="window.location.reload(true)"/>
+<div class="nonetworks" style="display:none;">
 No networks found
 </div>
 <ul id="networks" class="networks">
@@ -69,11 +40,11 @@ No networks found
 {% endfor %}
 <!-- part HTML_SETTINGS_FOOTER --><li class="other">Enter SSID manually</li>
 </ul>
-<div class="field required ssid" style="display: none;">
+<div class="field required ssid" style="display:none;">
 <label for="ssid">SSID:</label>
 <input type="text" id="ssid" name="ssid" />
 </div>
-<div class="field required password" style="display: none;">
+<div class="field required password" style="display:none;">
 <label for="password">Password:</label>
 <input type="password" id="password" name="password" />
 </div>
@@ -145,10 +116,6 @@ password_block.classList.remove('required');
 }
 if (document.querySelectorAll('ul.networks li').length == 1) {
 show(document.querySelector('.nonetworks'));
-hide(networks_block);
-show(ssid_block);
-show(password_block);
-password_block.classList.remove('required');
 }
 let s = ssid_field;
 let p = password_field;
