@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.4.2"
-#define FIRMWARE_VERSION_OCTAL          000402      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.4.3"
+#define FIRMWARE_VERSION_OCTAL          000403      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -377,6 +377,7 @@ void hkc_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
 }
 
 void hkc_setter_with_setup(homekit_characteristic_t *ch, const homekit_value_t value) {
+    printf("HAA > Setter\n");
     ch->value = value;
     homekit_characteristic_notify(ch, ch->value);
     
@@ -397,10 +398,8 @@ void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
         printf("HAA > Setter ON\n");
         
         ch->value = value;
-        homekit_characteristic_notify(ch, ch->value);
         
         cJSON *json_context = ch->context;
-        
         do_actions(json_context, (uint8_t) ch->value.bool_value);
         
         if (ch->value.bool_value && cJSON_GetObjectItem(json_context, AUTOSWITCH_TIME) != NULL) {
@@ -414,8 +413,9 @@ void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
             }
         }
         
-        setup_mode_toggle_upcount();
+        homekit_characteristic_notify(ch, ch->value);
         
+        setup_mode_toggle_upcount();
         save_states_callback();
     }
 }
@@ -431,12 +431,9 @@ void hkc_lock_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
         printf("HAA > Setter LOCK\n");
         
         ch->value = value;
-        homekit_characteristic_notify(ch, ch->value);
         ch_group->ch0->value = value;
-        homekit_characteristic_notify(ch_group->ch0, ch_group->ch0->value);
         
         cJSON *json_context = ch->context;
-        
         do_actions(json_context, (uint8_t) ch->value.int_value);
         
         if (ch->value.int_value == 0 && cJSON_GetObjectItem(json_context, AUTOSWITCH_TIME) != NULL) {
@@ -450,8 +447,10 @@ void hkc_lock_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
             }
         }
         
-        setup_mode_toggle_upcount();
+        homekit_characteristic_notify(ch, ch->value);
+        homekit_characteristic_notify(ch_group->ch0, ch_group->ch0->value);
         
+        setup_mode_toggle_upcount();
         save_states_callback();
     }
 }
@@ -462,9 +461,10 @@ void button_event(const uint8_t gpio, void *args, const uint8_t event_type) {
     
     ch_group_t *ch_group = ch_group_find(ch);
     if (!(ch_group->ch_child && !ch_group->ch_child->value.bool_value)) {
-        homekit_characteristic_notify(ch, HOMEKIT_UINT8(event_type));
         led_blink(event_type + 1);
         printf("HAA > Setter EVENT %i\n", event_type);
+        
+        homekit_characteristic_notify(ch, HOMEKIT_UINT8(event_type));
         
         setup_mode_toggle_upcount();
     }
@@ -487,10 +487,7 @@ void sensor_1(const uint8_t gpio, void *args, const uint8_t type) {
             ch->value = HOMEKIT_BOOL(true);
         }
         
-        homekit_characteristic_notify(ch, ch->value);
-        
         cJSON *json_context = ch->context;
-        
         do_actions(json_context, 1);
         
         if (cJSON_GetObjectItem(json_context, AUTOSWITCH_TIME) != NULL) {
@@ -503,6 +500,8 @@ void sensor_1(const uint8_t gpio, void *args, const uint8_t type) {
                 xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", configMINIMAL_STACK_SIZE, autooff_setter_params, 1, NULL);
             }
         }
+        
+        homekit_characteristic_notify(ch, ch->value);
     }
 }
 
@@ -522,11 +521,10 @@ void sensor_0(const uint8_t gpio, void *args, const uint8_t type) {
             ch->value = HOMEKIT_BOOL(false);
         }
         
-        homekit_characteristic_notify(ch, ch->value);
-        
         cJSON *json_context = ch->context;
-        
         do_actions(json_context, 0);
+        
+        homekit_characteristic_notify(ch, ch->value);
     }
 }
 
@@ -541,12 +539,9 @@ void hkc_valve_setter(homekit_characteristic_t *ch, const homekit_value_t value)
         printf("HAA > Setter VALVE\n");
         
         ch->value = value;
-        homekit_characteristic_notify(ch, ch->value);
         ch_group->ch1->value = value;
-        homekit_characteristic_notify(ch_group->ch1, ch_group->ch1->value);
         
         cJSON *json_context = ch->context;
-        
         do_actions(json_context, (uint8_t) ch->value.int_value);
         
         if (ch->value.int_value == 0 && cJSON_GetObjectItem(json_context, AUTOSWITCH_TIME) != NULL) {
@@ -560,8 +555,10 @@ void hkc_valve_setter(homekit_characteristic_t *ch, const homekit_value_t value)
             }
         }
         
-        setup_mode_toggle_upcount();
+        homekit_characteristic_notify(ch, ch->value);
+        homekit_characteristic_notify(ch_group->ch1, ch_group->ch1->value);
         
+        setup_mode_toggle_upcount();
         save_states_callback();
         
         if (ch_group->ch3) {
@@ -580,7 +577,6 @@ void hkc_valve_setter(homekit_characteristic_t *ch, const homekit_value_t value)
 
 void valve_timer_worker(void *args) {
     homekit_characteristic_t *ch = args;
-    
     ch_group_t *ch_group = ch_group_find(ch);
     
     ch_group->ch3->value.int_value--;
@@ -610,10 +606,6 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
         float temp_deadband = 0;
         if (cJSON_GetObjectItem(json_context, THERMOSTAT_DEADBAND) != NULL) {
             temp_deadband = (float) cJSON_GetObjectItem(json_context, THERMOSTAT_DEADBAND)->valuedouble;
-        }
-        
-        if (ch != ch_group->ch4) {
-            homekit_characteristic_notify(ch, ch->value);
         }
         
         switch (ch_group->ch5->value.int_value) {
@@ -647,6 +639,10 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
                     do_actions(json_context, THERMOSTAT_ACTION_TOTAL_OFF);
                 }
                 break;
+        }
+        
+        if (ch != ch_group->ch4) {
+            homekit_characteristic_notify(ch, ch->value);
         }
         
         homekit_characteristic_notify(ch_group->ch4, ch_group->ch4->value);
@@ -829,9 +825,10 @@ void temperature_timer_worker(void *args) {
         
         if (ch_group->ch5) {
             ch_group->ch4->value = HOMEKIT_UINT8(THERMOSTAT_MODE_OFF);
-            homekit_characteristic_notify(ch_group->ch4, ch_group->ch4->value);
             
             do_actions(json_context, THERMOSTAT_ACTION_SENSOR_ERROR);
+            
+            homekit_characteristic_notify(ch_group->ch4, ch_group->ch4->value);
         }
     }
 }
