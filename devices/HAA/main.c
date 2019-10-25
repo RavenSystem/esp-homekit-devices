@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.4.2
+ * v0.5.0
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.4.3"
-#define FIRMWARE_VERSION_OCTAL          000403      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.5.0"
+#define FIRMWARE_VERSION_OCTAL          000500      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -144,6 +144,9 @@
 #define ACC_TYPE_MOTION_SENSOR          12
 #define ACC_TYPE_WATER_VALVE            20
 #define ACC_TYPE_THERMOSTAT             21
+#define ACC_TYPE_TEMP_SENSOR            22
+#define ACC_TYPE_HUM_SENSOR             23
+#define ACC_TYPE_TH_SENSOR              24
 
 #ifndef HAA_MAX_ACCESSORIES
 #define HAA_MAX_ACCESSORIES             4           // Max number of accessories before use a bridge
@@ -182,7 +185,8 @@ typedef struct _ch_group {
     
     ETSTimer *timer;
     
-    float saved_float;
+    float saved_float0;
+    float saved_float1;
     
     struct _ch_group *next;
 } ch_group_t;
@@ -790,33 +794,40 @@ void temperature_timer_worker(void *args) {
     }
     
     if (get_temp) {
-        temperature_value += temp_offset;
-        if (temperature_value < -100) {
-            temperature_value = -100;
-        } else if (temperature_value > 200) {
-            temperature_value = 200;
-        }
-        
-        if (temperature_value != ch_group->saved_float) {
-            ch_group->saved_float = temperature_value;
-            ch->value = HOMEKIT_FLOAT(temperature_value);
+        if (ch_group->ch0) {
+            temperature_value += temp_offset;
+            if (temperature_value < -100) {
+                temperature_value = -100;
+            } else if (temperature_value > 200) {
+                temperature_value = 200;
+            }
             
-            if (ch_group->ch5) {
-                update_th(ch, ch->value);
-            } else {
-                homekit_characteristic_notify(ch, ch->value);
+            if (temperature_value != ch_group->saved_float0) {
+                ch_group->saved_float0 = temperature_value;
+                ch_group->ch0->value = HOMEKIT_FLOAT(temperature_value);
+                
+                if (ch_group->ch5) {
+                    update_th(ch_group->ch0, ch_group->ch0->value);
+                } else {
+                    homekit_characteristic_notify(ch_group->ch0, ch_group->ch0->value);
+                }
             }
         }
         
-        humidity_value += hum_offset;
-        if (humidity_value < 0) {
-            humidity_value = 0;
-        } else if (humidity_value > 100) {
-            humidity_value = 100;
-        }
+        if (ch_group->ch1) {
+            humidity_value += hum_offset;
+            if (humidity_value < 0) {
+                humidity_value = 0;
+            } else if (humidity_value > 100) {
+                humidity_value = 100;
+            }
 
-        ch_group->ch1->value = HOMEKIT_FLOAT(humidity_value);
-        homekit_characteristic_notify(ch_group->ch1, ch_group->ch1->value);
+            if (humidity_value != ch_group->saved_float1) {
+                ch_group->saved_float1 = humidity_value;
+                ch_group->ch1->value = HOMEKIT_FLOAT(humidity_value);
+                homekit_characteristic_notify(ch_group->ch1, ch_group->ch1->value);
+            }
+        }
         
         printf("HAA > TEMP %g, HUM %g\n", temperature_value, humidity_value);
     } else {
@@ -1643,6 +1654,8 @@ void normal_mode_init() {
         ch_group->ch3 = ch3;
         ch_group->ch4 = ch4;
         ch_group->ch5 = ch5;
+        ch_group->saved_float0 = 0;
+        ch_group->saved_float1 = 0;
         ch_group->next = ch_groups;
         ch_groups = ch_group;
         
@@ -1708,6 +1721,130 @@ void normal_mode_init() {
         return new_accessory_count;
     }
     
+    uint8_t new_temp_sensor(uint8_t accessory, cJSON *json_context) {
+        new_accessory(accessory, 3);
+        
+        uint16_t th_poll_period = THERMOSTAT_DEFAULT_POLL_PERIOD;
+        if (cJSON_GetObjectItem(json_context, THERMOSTAT_POLL_PERIOD) != NULL) {
+            th_poll_period = (uint16_t) cJSON_GetObjectItem(json_context, THERMOSTAT_POLL_PERIOD)->valuedouble;
+        }
+        
+        if (th_poll_period < 3) {
+            th_poll_period = 3;
+        }
+        
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200}, .getter_ex=hkc_getter, .context=json_context);
+        
+        ch_group_t *ch_group = malloc(sizeof(ch_group_t));
+        memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->ch0 = ch0;
+        ch_group->saved_float0 = 0;
+        ch_group->next = ch_groups;
+        ch_groups = ch_group;
+        
+        accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
+        accessories[accessory]->services[1]->id = 8;
+        accessories[accessory]->services[1]->primary = true;
+        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_TEMPERATURE_SENSOR;
+        accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
+        accessories[accessory]->services[1]->characteristics[0] = ch0;
+            
+        ch_group->timer = malloc(sizeof(ETSTimer));
+        memset(ch_group->timer, 0, sizeof(*ch_group->timer));
+        sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch0);
+        
+        temperature_timer_worker(ch0);
+        sdk_os_timer_arm(ch_group->timer, th_poll_period * 1000, 1);
+        
+        return accessory + 1;
+    }
+    
+    uint8_t new_hum_sensor(uint8_t accessory, cJSON *json_context) {
+        new_accessory(accessory, 3);
+        
+        uint16_t th_poll_period = THERMOSTAT_DEFAULT_POLL_PERIOD;
+        if (cJSON_GetObjectItem(json_context, THERMOSTAT_POLL_PERIOD) != NULL) {
+            th_poll_period = (uint16_t) cJSON_GetObjectItem(json_context, THERMOSTAT_POLL_PERIOD)->valuedouble;
+        }
+        
+        if (th_poll_period < 3) {
+            th_poll_period = 3;
+        }
+        
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0, .getter_ex=hkc_getter, .context=json_context);
+        
+        ch_group_t *ch_group = malloc(sizeof(ch_group_t));
+        memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->ch1 = ch1;
+        ch_group->saved_float1 = 0;
+        ch_group->next = ch_groups;
+        ch_groups = ch_group;
+        
+        accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
+        accessories[accessory]->services[1]->id = 8;
+        accessories[accessory]->services[1]->primary = true;
+        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_HUMIDITY_SENSOR;
+        accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
+        accessories[accessory]->services[1]->characteristics[0] = ch1;
+            
+        ch_group->timer = malloc(sizeof(ETSTimer));
+        memset(ch_group->timer, 0, sizeof(*ch_group->timer));
+        sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch1);
+        
+        temperature_timer_worker(ch1);
+        sdk_os_timer_arm(ch_group->timer, th_poll_period * 1000, 1);
+        
+        return accessory + 1;
+    }
+    
+    uint8_t new_th_sensor(uint8_t accessory, cJSON *json_context) {
+        new_accessory(accessory, 4);
+        
+        uint16_t th_poll_period = THERMOSTAT_DEFAULT_POLL_PERIOD;
+        if (cJSON_GetObjectItem(json_context, THERMOSTAT_POLL_PERIOD) != NULL) {
+            th_poll_period = (uint16_t) cJSON_GetObjectItem(json_context, THERMOSTAT_POLL_PERIOD)->valuedouble;
+        }
+        
+        if (th_poll_period < 3) {
+            th_poll_period = 3;
+        }
+        
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200}, .getter_ex=hkc_getter, .context=json_context);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0, .getter_ex=hkc_getter, .context=json_context);
+        
+        ch_group_t *ch_group = malloc(sizeof(ch_group_t));
+        memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->ch0 = ch0;
+        ch_group->ch1 = ch1;
+        ch_group->saved_float0 = 0;
+        ch_group->saved_float1 = 0;
+        ch_group->next = ch_groups;
+        ch_groups = ch_group;
+        
+        accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
+        accessories[accessory]->services[1]->id = 8;
+        accessories[accessory]->services[1]->primary = true;
+        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_TEMPERATURE_SENSOR;
+        accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
+        accessories[accessory]->services[1]->characteristics[0] = ch0;
+        
+        accessories[accessory]->services[2] = calloc(1, sizeof(homekit_service_t));
+        accessories[accessory]->services[2]->id = 11;
+        accessories[accessory]->services[2]->primary = false;
+        accessories[accessory]->services[2]->type = HOMEKIT_SERVICE_HUMIDITY_SENSOR;
+        accessories[accessory]->services[2]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
+        accessories[accessory]->services[2]->characteristics[0] = ch1;
+            
+        ch_group->timer = malloc(sizeof(ETSTimer));
+        memset(ch_group->timer, 0, sizeof(*ch_group->timer));
+        sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch0);
+        
+        temperature_timer_worker(ch0);
+        sdk_os_timer_arm(ch_group->timer, th_poll_period * 1000, 1);
+        
+        return accessory + 2;
+    }
+    
     // Accessory Builder
     uint8_t acc_count = 0;
     
@@ -1766,6 +1903,15 @@ void normal_mode_init() {
         
         } else if (acc_type == ACC_TYPE_THERMOSTAT) {
             acc_count = new_thermostat(acc_count, json_accessory);
+            
+        } else if (acc_type == ACC_TYPE_TEMP_SENSOR) {
+            acc_count = new_temp_sensor(acc_count, json_accessory);
+            
+        } else if (acc_type == ACC_TYPE_HUM_SENSOR) {
+            acc_count = new_hum_sensor(acc_count, json_accessory);
+            
+        } else if (acc_type == ACC_TYPE_TH_SENSOR) {
+            acc_count = new_th_sensor(acc_count, json_accessory);
         
         } else {    // acc_type == ACC_TYPE_SWITCH || acc_type == ACC_TYPE_OUTLET
             acc_count = new_switch(acc_count, json_accessory, acc_type);
