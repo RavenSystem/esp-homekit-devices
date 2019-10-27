@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.5.0
+ * v0.5.1
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -43,8 +43,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.5.0"
-#define FIRMWARE_VERSION_OCTAL          000500      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.5.1"
+#define FIRMWARE_VERSION_OCTAL          000501      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -195,7 +195,7 @@ uint8_t setup_mode_toggle_counter = 0, led_gpio = 255;
 uint16_t setup_mode_time = 0;
 ETSTimer setup_mode_toggle_timer, save_states_timer;
 bool used_gpio[17];
-bool led_inverted = false;
+bool led_inverted = true ;
 bool enable_homekit_server = true;
 
 last_state_t *last_states = NULL;
@@ -1842,7 +1842,7 @@ void normal_mode_init() {
         temperature_timer_worker(ch0);
         sdk_os_timer_arm(ch_group->timer, th_poll_period * 1000, 1);
         
-        return accessory + 2;
+        return accessory + 1;
     }
     
     // Accessory Builder
