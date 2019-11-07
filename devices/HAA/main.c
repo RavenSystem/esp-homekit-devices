@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.5.2
+ * v0.6.0
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -28,6 +28,7 @@
 #include <rboot-api.h>
 #include <sysparam.h>
 //#include <task.h>
+#include <math.h>
 
 //#include <etstimer.h>
 #include <esplibs/libmain.h>
@@ -37,14 +38,16 @@
 #include <wifi_config.h>
 #include <adv_button.h>
 
+#include <multipwm/multipwm.h>
+
 #include <dht/dht.h>
 #include <ds18b20/ds18b20.h>
 
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.5.2"
-#define FIRMWARE_VERSION_OCTAL          000502      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.6.0"
+#define FIRMWARE_VERSION_OCTAL          000600      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -58,6 +61,7 @@
 #define TYPE_SENSOR                     2
 #define TYPE_SENSOR_BOOL                3
 #define TYPE_VALVE                      4
+#define TYPE_LIGHTBULB                  5
 
 // Button Events
 #define SINGLEPRESS_EVENT               0
@@ -126,6 +130,16 @@
 #define TEMPERATURE_OFFSET              "z"
 #define HUMIDITY_OFFSET                 "h"
 
+#define LIGHTBULB_PWM_GPIO_R            "r"
+#define LIGHTBULB_PWM_GPIO_G            "g"
+#define LIGHTBULB_PWM_GPIO_B            "v"
+#define LIGHTBULB_PWM_GPIO_W            "w"
+#define PWM_RGBW_SCALE                  65535
+#define RGBW_DELAY                      15
+#define RGBW_SET_DELAY                  500
+#define LIGHTBULB_BRIGHTNESS_UP         0
+#define LIGHTBULB_BRIGHTNESS_DOWN       1
+
 #define MAX_ACTIONS                     5
 #define COPY_ACTIONS                    "a"
 
@@ -147,6 +161,7 @@
 #define ACC_TYPE_TEMP_SENSOR            22
 #define ACC_TYPE_HUM_SENSOR             23
 #define ACC_TYPE_TH_SENSOR              24
+#define ACC_TYPE_LIGHTBULB              30
 
 #ifndef HAA_MAX_ACCESSORIES
 #define HAA_MAX_ACCESSORIES             4           // Max number of accessories before use a bridge
@@ -191,15 +206,43 @@ typedef struct _ch_group {
     struct _ch_group *next;
 } ch_group_t;
 
+typedef struct _lightbulb_group {
+    homekit_characteristic_t *ch0;
+    
+    uint8_t pwm_first_channel;
+    uint8_t gpio_r;
+    uint8_t gpio_g;
+    uint8_t gpio_b;
+    uint8_t gpio_w;
+    
+    uint16_t current_r;
+    uint16_t current_g;
+    uint16_t current_b;
+    uint16_t current_w;
+    
+    uint16_t target_r;
+    uint16_t target_g;
+    uint16_t target_b;
+    uint16_t target_w;
+    
+    struct _lightbulb_group *next;
+} lightbulb_group_t;
+
 uint8_t setup_mode_toggle_counter = 0, led_gpio = 255;
 uint16_t setup_mode_time = 0;
 ETSTimer setup_mode_toggle_timer, save_states_timer;
 bool used_gpio[17];
-bool led_inverted = true ;
+bool led_inverted = true;
 bool enable_homekit_server = true;
+
+bool setpwm_is_running = false;
+bool setpwm_bool_semaphore = false;
+ETSTimer *pwm_timer;
+pwm_info_t *pwm_info;
 
 last_state_t *last_states = NULL;
 ch_group_t *ch_groups = NULL;
+lightbulb_group_t *lightbulb_groups = NULL;
 
 ch_group_t *ch_group_find(homekit_characteristic_t *ch) {
     ch_group_t *ch_group = ch_groups;
@@ -217,6 +260,17 @@ ch_group_t *ch_group_find(homekit_characteristic_t *ch) {
     }
 
     return ch_group;
+}
+
+lightbulb_group_t *lightbulb_group_find(homekit_characteristic_t *ch) {
+    lightbulb_group_t *lightbulb_group = lightbulb_groups;
+    
+    while (lightbulb_group &&
+           lightbulb_group->ch0 != ch) {
+        lightbulb_group = lightbulb_group->next;
+    }
+
+    return lightbulb_group;
 }
 
 void led_task(void *pvParameters) {
@@ -844,6 +898,185 @@ void temperature_timer_worker(void *args) {
     }
 }
 
+// --- LIGHTBULBS
+//http://blog.saikoled.com/post/44677718712/how-to-convert-from-hsi-to-rgb-white
+void hsi2rgbw(float h, float s, float i, lightbulb_group_t *lightbulb_group) {
+    while (h < 0) {
+        h += 360.0F;
+        
+    }
+    while (h >= 360) {
+        h -= 360.0F;
+        
+    }
+    
+    h = 3.14159F * h / 180.0F;
+    s /= 100.0F;
+    i /= 100.0F;
+    s = s > 0 ? (s < 1 ? s : 1) : 0;
+    i = i > 0 ? (i < 1 ? i : 1) : 0;
+    
+    if (h < 2.09439) {
+        lightbulb_group->target_r = PWM_RGBW_SCALE * i / 3 * (1 + s * cos(h) / cos(1.047196667 - h));
+        lightbulb_group->target_g = PWM_RGBW_SCALE * i / 3 * (1 + s * (1 - cos(h) / cos(1.047196667 - h)));
+        lightbulb_group->target_b = PWM_RGBW_SCALE * i / 3 * (1 - s);
+        lightbulb_group->target_w = PWM_RGBW_SCALE * i * (1 - s);
+    } else if (h < 4.188787) {
+        h = h - 2.09439;
+        lightbulb_group->target_g = PWM_RGBW_SCALE * i / 3 * (1 + s * cos(h) / cos(1.047196667 - h));
+        lightbulb_group->target_b = PWM_RGBW_SCALE * i / 3 * (1 + s * (1 - cos(h) / cos(1.047196667 - h)));
+        lightbulb_group->target_r = PWM_RGBW_SCALE * i / 3 * (1 - s);
+        lightbulb_group->target_w = PWM_RGBW_SCALE * i * (1 - s);
+    } else {
+        h = h - 4.188787;
+        lightbulb_group->target_b = PWM_RGBW_SCALE * i / 3 * (1 + s * cos(h) / cos(1.047196667 - h));
+        lightbulb_group->target_r = PWM_RGBW_SCALE * i / 3 * (1 + s * (1 - cos(h) / cos(1.047196667 - h)));
+        lightbulb_group->target_g = PWM_RGBW_SCALE * i / 3 * (1 - s);
+        lightbulb_group->target_w = PWM_RGBW_SCALE * i * (1 - s);
+    }
+}
+
+void rgbw_set_timer_worker() {
+    if (!setpwm_bool_semaphore) {
+        setpwm_bool_semaphore = true;
+        
+        uint8_t channels_to_set = pwm_info->channels;
+        lightbulb_group_t *lightbulb_group = lightbulb_groups;
+        while (lightbulb_group) {
+            if (lightbulb_group->gpio_r != 255 && abs(lightbulb_group->target_r - lightbulb_group->current_r) < 16) {
+                lightbulb_group->target_r = lightbulb_group->current_r;
+                channels_to_set--;
+            }
+            
+            if (lightbulb_group->gpio_g != 255 && abs(lightbulb_group->target_g - lightbulb_group->current_g) < 16) {
+                lightbulb_group->target_g = lightbulb_group->current_g;
+                channels_to_set--;
+            }
+            
+            if (lightbulb_group->gpio_b != 255 && abs(lightbulb_group->target_b - lightbulb_group->current_b) < 16) {
+                lightbulb_group->target_b = lightbulb_group->current_b;
+                channels_to_set--;
+            }
+
+            if (lightbulb_group->gpio_w != 255 && abs(lightbulb_group->target_w - lightbulb_group->current_w) < 16) {
+                lightbulb_group->target_w = lightbulb_group->current_w;
+                channels_to_set--;
+            }
+            
+            if (channels_to_set == 0) {
+                printf("HAA > Color established\n");
+                sdk_os_timer_disarm(pwm_timer);
+                setpwm_is_running = false;
+            }
+            
+            lightbulb_group = lightbulb_group->next;
+        }
+        
+        lightbulb_group = lightbulb_groups;
+        multipwm_stop(pwm_info);
+        
+        while (lightbulb_group) {
+            uint8_t pwm_channel = lightbulb_group->pwm_first_channel;
+            if (lightbulb_group->gpio_r != 255) {
+                multipwm_set_duty(pwm_info, pwm_channel, lightbulb_group->current_r);
+                pwm_channel++;
+            }
+            
+            if (lightbulb_group->gpio_g != 255) {
+                multipwm_set_duty(pwm_info, pwm_channel, lightbulb_group->current_g);
+                pwm_channel++;
+            }
+            
+            if (lightbulb_group->gpio_b != 255) {
+                multipwm_set_duty(pwm_info, pwm_channel, lightbulb_group->current_b);
+                pwm_channel++;
+            }
+            
+            if (lightbulb_group->gpio_w != 255) {
+                multipwm_set_duty(pwm_info, pwm_channel, lightbulb_group->current_w);
+            }
+            
+            //printf("HAA > RGBW -> %i, %i, %i, %i\n", lightbulb_group->current_r, lightbulb_group->current_g, lightbulb_group->current_b, lightbulb_group->current_w);
+            
+            lightbulb_group->current_r += (lightbulb_group->target_r - lightbulb_group->current_r) >> 4;
+            lightbulb_group->current_g += (lightbulb_group->target_g - lightbulb_group->current_g) >> 4;
+            lightbulb_group->current_b += (lightbulb_group->target_b - lightbulb_group->current_b) >> 4;
+            lightbulb_group->current_w += (lightbulb_group->target_w - lightbulb_group->current_w) >> 4;
+            
+            lightbulb_group = lightbulb_group->next;
+        }
+        
+        multipwm_start(pwm_info);
+        
+        setpwm_bool_semaphore = false;
+    }
+}
+
+void hkc_rgbw_setter_delayed(void *args) {
+    homekit_characteristic_t *ch = args;
+    ch_group_t *ch_group = ch_group_find(ch);
+    lightbulb_group_t *lightbulb_group = lightbulb_group_find(ch_group->ch0);
+    
+    if (ch_group->ch0->value.bool_value) {
+        if (ch_group->ch2) {    // Many colors
+            hsi2rgbw(ch_group->ch2->value.float_value, ch_group->ch3->value.float_value, ch_group->ch1->value.int_value, lightbulb_group);
+        } else {                // One color dimmer
+            lightbulb_group->target_w = (PWM_RGBW_SCALE / 100) * ch_group->ch1->value.int_value;
+        }
+    } else {
+        lightbulb_group->target_r = 0;
+        lightbulb_group->target_g = 0;
+        lightbulb_group->target_b = 0;
+        lightbulb_group->target_w = 0;
+    }
+    
+    printf("HAA > Target RGBW = %i, %i, %i, %i\n", lightbulb_group->target_r, lightbulb_group->target_g, lightbulb_group->target_b, lightbulb_group->target_w);
+    
+    if (!setpwm_is_running) {
+        sdk_os_timer_arm(pwm_timer, RGBW_DELAY, true);
+        setpwm_is_running = true;
+    }
+    
+    cJSON *json_context = ch_group->ch0->context;
+    do_actions(json_context, (uint8_t) ch_group->ch0->value.bool_value);
+    
+    setup_mode_toggle_upcount();
+    save_states_callback();
+}
+
+void hkc_rgbw_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
+    ch_group_t *ch_group = ch_group_find(ch);
+    if (ch_group->ch_sec && !ch_group->ch_sec->value.bool_value) {
+        homekit_characteristic_notify(ch, ch->value);
+        
+    } else {
+        ch->value = value;
+        sdk_os_timer_arm(ch_group->timer, RGBW_SET_DELAY, false);
+    }
+}
+
+void rgbw_brightness(const uint8_t gpio, void *args, const uint8_t type) {
+    homekit_characteristic_t *ch = args;
+    ch_group_t *ch_group = ch_group_find(ch);
+    if (!(ch_group->ch_child && !ch_group->ch_child->value.bool_value)) {
+        if (type == LIGHTBULB_BRIGHTNESS_UP) {
+            if (ch->value.int_value + 10 < 100) {
+                ch->value.int_value += 10;
+            } else {
+                ch->value.int_value = 100;
+            }
+        } else {    // type == LIGHTBULB_BRIGHTNESS_DOWN
+            if (ch->value.int_value - 10 > 0) {
+                ch->value.int_value -= 10;
+            } else {
+                ch->value.int_value = 0;
+            }
+        }
+        
+        hkc_rgbw_setter(ch, ch->value);
+    }
+}
+
 // --- DIGITAL INPUTS
 void diginput(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
@@ -867,12 +1100,12 @@ void diginput(const uint8_t gpio, void *args, const uint8_t type) {
                 }
                 break;
                 
+            case TYPE_LIGHTBULB:
+                hkc_rgbw_setter(ch, HOMEKIT_BOOL(!ch->value.bool_value));
+                break;
+                
             default:    // case TYPE_ON:
-                if (ch->value.bool_value) {
-                    hkc_on_setter(ch, HOMEKIT_BOOL(false));
-                } else {
-                    hkc_on_setter(ch, HOMEKIT_BOOL(true));
-                }
+                hkc_on_setter(ch, HOMEKIT_BOOL(!ch->value.bool_value));
                 break;
         }
     }
@@ -892,6 +1125,12 @@ void diginput_1(const uint8_t gpio, void *args, const uint8_t type) {
             case TYPE_VALVE:
                 if (ch->value.int_value == 0) {
                     hkc_valve_setter(ch, HOMEKIT_UINT8(1));
+                }
+                break;
+                
+            case TYPE_LIGHTBULB:
+                if (ch->value.bool_value == false) {
+                    hkc_rgbw_setter(ch, HOMEKIT_BOOL(true));
                 }
                 break;
                 
@@ -918,6 +1157,12 @@ void diginput_0(const uint8_t gpio, void *args, const uint8_t type) {
             case TYPE_VALVE:
                 if (ch->value.int_value == 1) {
                     hkc_valve_setter(ch, HOMEKIT_UINT8(0));
+                }
+                break;
+                
+            case TYPE_LIGHTBULB:
+                if (ch->value.bool_value == true) {
+                    hkc_rgbw_setter(ch, HOMEKIT_BOOL(false));
                 }
                 break;
                 
@@ -1845,6 +2090,135 @@ void normal_mode_init() {
         return accessory + 1;
     }
     
+    uint8_t new_lightbulb(uint8_t accessory, cJSON *json_context) {
+        new_accessory(accessory, 3);
+        
+        if (!lightbulb_groups) {
+            pwm_timer = malloc(sizeof(ETSTimer));
+            memset(pwm_timer, 0, sizeof(*pwm_timer));
+            sdk_os_timer_setfn(pwm_timer, rgbw_set_timer_worker, NULL);
+            
+            pwm_info = malloc(sizeof(pwm_info_t));
+            memset(pwm_info, 0, sizeof(*pwm_info));
+            
+            multipwm_init(pwm_info);
+            multipwm_set_freq(pwm_info, PWM_RGBW_SCALE);
+            pwm_info->channels = 0;
+        }
+        
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .getter_ex=hkc_getter, .setter_ex=hkc_rgbw_setter, .context=json_context);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(BRIGHTNESS, 100, .getter_ex=hkc_getter, .setter_ex=hkc_rgbw_setter, .context=json_context);
+        
+        ch_group_t *ch_group = malloc(sizeof(ch_group_t));
+        memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->ch0 = ch0;
+        ch_group->ch1 = ch1;
+        ch_group->next = ch_groups;
+        ch_groups = ch_group;
+        
+        lightbulb_group_t *lightbulb_group = malloc(sizeof(lightbulb_group_t));
+        memset(lightbulb_group, 0, sizeof(*lightbulb_group));
+        lightbulb_group->ch0 = ch0;
+        lightbulb_group->pwm_first_channel = pwm_info->channels;
+        lightbulb_group->gpio_r = 255;
+        lightbulb_group->gpio_g = 255;
+        lightbulb_group->gpio_b = 255;
+        lightbulb_group->gpio_w = 255;
+        lightbulb_group->current_r = 0;
+        lightbulb_group->current_g = 0;
+        lightbulb_group->current_b = 0;
+        lightbulb_group->current_w = 0;
+        lightbulb_group->target_r = 0;
+        lightbulb_group->target_g = 0;
+        lightbulb_group->target_b = 0;
+        lightbulb_group->target_w = 0;
+        lightbulb_group->next = lightbulb_groups;
+        lightbulb_groups = lightbulb_group;
+        
+        if (cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_R) != NULL) {
+            lightbulb_group->gpio_r = (uint8_t) cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_R)->valuedouble;
+            multipwm_set_pin(pwm_info, pwm_info->channels, lightbulb_group->gpio_r);
+            pwm_info->channels++;
+        }
+        
+        if (cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_G) != NULL) {
+            lightbulb_group->gpio_g = (uint8_t) cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_G)->valuedouble;
+            multipwm_set_pin(pwm_info, pwm_info->channels, lightbulb_group->gpio_g);
+            pwm_info->channels++;
+        }
+        
+        if (cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_B) != NULL) {
+            lightbulb_group->gpio_b = (uint8_t) cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_B)->valuedouble;
+            multipwm_set_pin(pwm_info, pwm_info->channels, lightbulb_group->gpio_b);
+            pwm_info->channels++;
+        }
+        
+        if (cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_W) != NULL) {
+            lightbulb_group->gpio_w = (uint8_t) cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_W)->valuedouble;
+            multipwm_set_pin(pwm_info, pwm_info->channels, lightbulb_group->gpio_w);
+            pwm_info->channels++;
+        }
+        
+        accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
+        accessories[accessory]->services[1]->id = 8;
+        accessories[accessory]->services[1]->primary = true;
+        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_LIGHTBULB;
+        
+        if (cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_R) != NULL) {
+            homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(HUE, 0, .getter_ex=hkc_getter, .setter_ex=hkc_rgbw_setter, .context=json_context);
+            homekit_characteristic_t *ch3 = NEW_HOMEKIT_CHARACTERISTIC(SATURATION, 0, .getter_ex=hkc_getter, .setter_ex=hkc_rgbw_setter, .context=json_context);
+            
+            ch_group->ch2 = ch2;
+            ch_group->ch3 = ch3;
+            
+            accessories[accessory]->services[1]->characteristics = calloc(5, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[1]->characteristics[0] = ch0;
+            accessories[accessory]->services[1]->characteristics[1] = ch1;
+            accessories[accessory]->services[1]->characteristics[2] = ch2;
+            accessories[accessory]->services[1]->characteristics[3] = ch3;
+            
+            ch2->value.float_value = set_initial_state(accessory, 2, cJSON_Parse(INIT_STATE_LAST_STR), ch2, CH_TYPE_FLOAT, 0);
+            ch3->value.float_value = set_initial_state(accessory, 3, cJSON_Parse(INIT_STATE_LAST_STR), ch3, CH_TYPE_FLOAT, 0);
+        } else {
+            accessories[accessory]->services[1]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[1]->characteristics[0] = ch0;
+            accessories[accessory]->services[1]->characteristics[1] = ch1;
+        }
+
+        ch1->value.int_value = set_initial_state(accessory, 1, cJSON_Parse(INIT_STATE_LAST_STR), ch1, CH_TYPE_INT8, 100);
+        
+        ch_group->timer = malloc(sizeof(ETSTimer));
+        memset(ch_group->timer, 0, sizeof(*ch_group->timer));
+        sdk_os_timer_setfn(ch_group->timer, hkc_rgbw_setter_delayed, ch0);
+
+        diginput_register(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), diginput, ch0, TYPE_ON);
+        diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_2), rgbw_brightness, ch1, LIGHTBULB_BRIGHTNESS_UP);
+        diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_3), rgbw_brightness, ch1, LIGHTBULB_BRIGHTNESS_DOWN);
+
+        const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
+        
+        uint8_t initial_state = 0;
+        if (cJSON_GetObjectItem(json_context, INITIAL_STATE) != NULL) {
+            initial_state = (uint8_t) cJSON_GetObjectItem(json_context, INITIAL_STATE)->valuedouble;
+        }
+        
+        if (initial_state != INIT_STATE_FIXED_INPUT) {
+            diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_ON);
+            diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_ON);
+            
+            ch0->value = HOMEKIT_BOOL((bool) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_BOOL, 0));
+        } else {
+            if (diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_ON)) {
+                ch0->value = HOMEKIT_BOOL(true);
+            }
+            if (diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_ON)) {
+                ch0->value = HOMEKIT_BOOL(false);
+            }
+        }
+        
+        return new_accessory_count;
+    }
+    
     // Accessory Builder
     uint8_t acc_count = 0;
     
@@ -1912,6 +2286,9 @@ void normal_mode_init() {
             
         } else if (acc_type == ACC_TYPE_TH_SENSOR) {
             acc_count = new_th_sensor(acc_count, json_accessory);
+            
+        } else if (acc_type == ACC_TYPE_LIGHTBULB) {
+            acc_count = new_lightbulb(acc_count, json_accessory);
         
         } else {    // acc_type == ACC_TYPE_SWITCH || acc_type == ACC_TYPE_OUTLET
             acc_count = new_switch(acc_count, json_accessory, acc_type);
@@ -1922,10 +2299,19 @@ void normal_mode_init() {
     
     sdk_os_timer_setfn(&save_states_timer, save_states, NULL);
     
-    // -----
-    
     cJSON_Delete(json_config);
-
+    
+    // --- LIGHTBULBS PWM SET INIT STATE
+    if (lightbulb_groups) {
+        lightbulb_group_t *lightbulb_group = lightbulb_groups;
+        while (lightbulb_group) {
+            hkc_rgbw_setter_delayed(lightbulb_group->ch0);
+            
+            lightbulb_group = lightbulb_group->next;
+        }
+    }
+    
+    // --- HOMEKIT SET CONFIG
     config.accessories = accessories;
     config.password = "021-82-017";
     config.setupId = "JOSE";

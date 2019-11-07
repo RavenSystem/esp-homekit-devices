@@ -4,6 +4,7 @@ EXTRA_COMPONENTS = \
     extras/onewire \
     extras/ds18b20 \
 	extras/dht \
+    extras/multipwm \
 	extras/http-parser \
 	extras/dhcpserver \
 	extras/rboot-ota \
@@ -30,6 +31,8 @@ EXTRA_CFLAGS += -DHOMEKIT_OVERCLOCK_PAIR_SETUP
 #EXTRA_CFLAGS += -DHOMEKIT_DEBUG=1
 
 include $(abspath ../../sdk/esp-open-rtos/common.mk)
+
+LIBS += m
 
 monitor:
 	$(FILTEROUTPUT) --port $(ESPPORT) --baud 115200 --elf $(PROGRAM_OUT)
