@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.6.1
+ * v0.6.2
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.6.1"
-#define FIRMWARE_VERSION_OCTAL          000601      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.6.2"
+#define FIRMWARE_VERSION_OCTAL          000602      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -135,7 +135,8 @@
 #define LIGHTBULB_PWM_GPIO_B            "v"
 #define LIGHTBULB_PWM_GPIO_W            "w"
 #define PWM_RGBW_SCALE                  65535
-#define RGBW_DELAY                      15
+#define RGBW_DELAY                      30
+#define RGBW_STEP                       1024
 #define RGBW_SET_DELAY                  500
 #define LIGHTBULB_BRIGHTNESS_UP         0
 #define LIGHTBULB_BRIGHTNESS_DOWN       1
@@ -942,67 +943,65 @@ void rgbw_set_timer_worker() {
         uint8_t channels_to_set = pwm_info->channels;
         lightbulb_group_t *lightbulb_group = lightbulb_groups;
         while (lightbulb_group) {
-            if (lightbulb_group->pwm_r != 255 && abs(lightbulb_group->target_r - lightbulb_group->current_r) < 16) {
-                lightbulb_group->target_r = lightbulb_group->current_r;
-                channels_to_set--;
+            if (lightbulb_group->pwm_r != 255) {
+                if (lightbulb_group->target_r - lightbulb_group->current_r >= RGBW_STEP) {
+                    lightbulb_group->current_r += RGBW_STEP;
+                } else if (lightbulb_group->current_r - lightbulb_group->target_r >= RGBW_STEP) {
+                    lightbulb_group->current_r -= RGBW_STEP;
+                } else {
+                    lightbulb_group->current_r = lightbulb_group->target_r;
+                    channels_to_set--;
+                }
+                multipwm_set_duty(pwm_info, lightbulb_group->pwm_r, lightbulb_group->current_r);
             }
             
-            if (lightbulb_group->pwm_g != 255 && abs(lightbulb_group->target_g - lightbulb_group->current_g) < 16) {
-                lightbulb_group->target_g = lightbulb_group->current_g;
-                channels_to_set--;
+            if (lightbulb_group->pwm_g != 255) {
+                if (lightbulb_group->target_g - lightbulb_group->current_g >= RGBW_STEP) {
+                    lightbulb_group->current_g += RGBW_STEP;
+                } else if (lightbulb_group->current_g - lightbulb_group->target_g >= RGBW_STEP) {
+                    lightbulb_group->current_g -= RGBW_STEP;
+                } else {
+                    lightbulb_group->current_g = lightbulb_group->target_g;
+                    channels_to_set--;
+                }
+                multipwm_set_duty(pwm_info, lightbulb_group->pwm_g, lightbulb_group->current_g);
             }
             
-            if (lightbulb_group->pwm_b != 255 && abs(lightbulb_group->target_b - lightbulb_group->current_b) < 16) {
-                lightbulb_group->target_b = lightbulb_group->current_b;
-                channels_to_set--;
+            if (lightbulb_group->pwm_b != 255) {
+                if (lightbulb_group->target_b - lightbulb_group->current_b >= RGBW_STEP) {
+                    lightbulb_group->current_b += RGBW_STEP;
+                } else if (lightbulb_group->current_b - lightbulb_group->target_b >= RGBW_STEP) {
+                    lightbulb_group->current_b -= RGBW_STEP;
+                } else {
+                    lightbulb_group->current_b = lightbulb_group->target_b;
+                    channels_to_set--;
+                }
+                multipwm_set_duty(pwm_info, lightbulb_group->pwm_b, lightbulb_group->current_b);
             }
-
-            if (lightbulb_group->pwm_w != 255 && abs(lightbulb_group->target_w - lightbulb_group->current_w) < 16) {
-                lightbulb_group->target_w = lightbulb_group->current_w;
-                channels_to_set--;
+            
+            if (lightbulb_group->pwm_w != 255) {
+                if (lightbulb_group->target_w - lightbulb_group->current_w >= RGBW_STEP) {
+                    lightbulb_group->current_w += RGBW_STEP;
+                } else if (lightbulb_group->current_w - lightbulb_group->target_w >= RGBW_STEP) {
+                    lightbulb_group->current_w -= RGBW_STEP;
+                } else {
+                    lightbulb_group->current_w = lightbulb_group->target_w;
+                    channels_to_set--;
+                }
+                multipwm_set_duty(pwm_info, lightbulb_group->pwm_w, lightbulb_group->current_w);
             }
+            
+            //printf("HAA > RGBW -> %i, %i, %i, %i\n", lightbulb_group->current_r, lightbulb_group->current_g, lightbulb_group->current_b, lightbulb_group->current_w);
             
             if (channels_to_set == 0) {
                 printf("HAA > Color established\n");
                 sdk_os_timer_disarm(pwm_timer);
                 setpwm_is_running = false;
             }
-            
+
             lightbulb_group = lightbulb_group->next;
         }
-        
-        lightbulb_group = lightbulb_groups;
-        multipwm_stop(pwm_info);
-        
-        while (lightbulb_group) {
-            if (lightbulb_group->pwm_r != 255) {
-                multipwm_set_duty(pwm_info, lightbulb_group->pwm_r, lightbulb_group->current_r);
-            }
-            
-            if (lightbulb_group->pwm_g != 255) {
-                multipwm_set_duty(pwm_info, lightbulb_group->pwm_g, lightbulb_group->current_g);
-            }
-            
-            if (lightbulb_group->pwm_b != 255) {
-                multipwm_set_duty(pwm_info, lightbulb_group->pwm_b, lightbulb_group->current_b);
-            }
-            
-            if (lightbulb_group->pwm_w != 255) {
-                multipwm_set_duty(pwm_info, lightbulb_group->pwm_w, lightbulb_group->current_w);
-            }
-            
-            //printf("HAA > RGBW -> %i, %i, %i, %i\n", lightbulb_group->current_r, lightbulb_group->current_g, lightbulb_group->current_b, lightbulb_group->current_w);
-            
-            lightbulb_group->current_r += (lightbulb_group->target_r - lightbulb_group->current_r) >> 4;
-            lightbulb_group->current_g += (lightbulb_group->target_g - lightbulb_group->current_g) >> 4;
-            lightbulb_group->current_b += (lightbulb_group->target_b - lightbulb_group->current_b) >> 4;
-            lightbulb_group->current_w += (lightbulb_group->target_w - lightbulb_group->current_w) >> 4;
-            
-            lightbulb_group = lightbulb_group->next;
-        }
-        
-        multipwm_start(pwm_info);
-        
+
         setpwm_bool_semaphore = false;
     }
 }
@@ -2299,6 +2298,7 @@ void normal_mode_init() {
     // --- LIGHTBULBS INIT
     if (lightbulb_groups) {
         setpwm_bool_semaphore = false;
+        multipwm_start(pwm_info);
         
         lightbulb_group_t *lightbulb_group = lightbulb_groups;
         while (lightbulb_group) {
