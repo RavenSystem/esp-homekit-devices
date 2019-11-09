@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.6.2
+ * v0.6.3
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.6.2"
-#define FIRMWARE_VERSION_OCTAL          000602      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.6.3"
+#define FIRMWARE_VERSION_OCTAL          000603      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -134,10 +134,12 @@
 #define LIGHTBULB_PWM_GPIO_G            "g"
 #define LIGHTBULB_PWM_GPIO_B            "v"
 #define LIGHTBULB_PWM_GPIO_W            "w"
-#define PWM_RGBW_SCALE                  65535
-#define RGBW_DELAY                      30
-#define RGBW_STEP                       1024
-#define RGBW_SET_DELAY                  500
+#define PWM_RGBW_SCALE                  UINT16_MAX
+#define RGBW_PERIOD                     10
+#define RGBW_STEP                       512
+#define RGBW_SET_DELAY                  400
+#define COLOR_TEMP_MIN                  71
+#define COLOR_TEMP_MAX                  400
 #define LIGHTBULB_BRIGHTNESS_UP         0
 #define LIGHTBULB_BRIGHTNESS_DOWN       1
 
@@ -942,6 +944,9 @@ void rgbw_set_timer_worker() {
         
         uint8_t channels_to_set = pwm_info->channels;
         lightbulb_group_t *lightbulb_group = lightbulb_groups;
+        
+        multipwm_stop(pwm_info);
+        
         while (lightbulb_group) {
             if (lightbulb_group->pwm_r != 255) {
                 if (lightbulb_group->target_r - lightbulb_group->current_r >= RGBW_STEP) {
@@ -993,16 +998,22 @@ void rgbw_set_timer_worker() {
             
             //printf("HAA > RGBW -> %i, %i, %i, %i\n", lightbulb_group->current_r, lightbulb_group->current_g, lightbulb_group->current_b, lightbulb_group->current_w);
             
+            
+            lightbulb_group = lightbulb_group->next;
+            
             if (channels_to_set == 0) {
                 printf("HAA > Color established\n");
                 sdk_os_timer_disarm(pwm_timer);
                 setpwm_is_running = false;
+                lightbulb_group = NULL;
             }
-
-            lightbulb_group = lightbulb_group->next;
         }
+        
+        multipwm_start(pwm_info);
 
         setpwm_bool_semaphore = false;
+    } else {
+        printf("HAA ! MISSED Color set\n");
     }
 }
 
@@ -1012,9 +1023,13 @@ void hkc_rgbw_setter_delayed(void *args) {
     lightbulb_group_t *lightbulb_group = lightbulb_group_find(ch_group->ch0);
     
     if (ch_group->ch0->value.bool_value) {
-        if (ch_group->ch2) {    // Many colors
+        if (lightbulb_group->pwm_r != 255) {            // RGB/W
             hsi2rgbw(ch_group->ch2->value.float_value, ch_group->ch3->value.float_value, ch_group->ch1->value.int_value, lightbulb_group);
-        } else {                // One color dimmer
+        } else if (lightbulb_group->pwm_b != 255) {     // Color Temperature
+            uint16_t color_temp = ch_group->ch2->value.int_value - COLOR_TEMP_MIN;
+            printf("HAA > TEMPERATURE: %i\n", color_temp);
+            lightbulb_group->target_w = (PWM_RGBW_SCALE / 100) * ch_group->ch1->value.int_value;    // DELETE ME
+        } else {                                        // One Color Dimmer
             lightbulb_group->target_w = (PWM_RGBW_SCALE / 100) * ch_group->ch1->value.int_value;
         }
     } else {
@@ -1027,7 +1042,7 @@ void hkc_rgbw_setter_delayed(void *args) {
     printf("HAA > Target RGBW = %i, %i, %i, %i\n", lightbulb_group->target_r, lightbulb_group->target_g, lightbulb_group->target_b, lightbulb_group->target_w);
     
     if (!setpwm_is_running) {
-        sdk_os_timer_arm(pwm_timer, RGBW_DELAY, true);
+        sdk_os_timer_arm(pwm_timer, RGBW_PERIOD, true);
         setpwm_is_running = true;
     }
     
@@ -2129,25 +2144,25 @@ void normal_mode_init() {
         lightbulb_group->next = lightbulb_groups;
         lightbulb_groups = lightbulb_group;
 
-        if (cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_R) != NULL) {
+        if (cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_R) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
             lightbulb_group->pwm_r = pwm_info->channels;
             pwm_info->channels++;
             multipwm_set_pin(pwm_info, lightbulb_group->pwm_r, (uint8_t) cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_R)->valuedouble);
         }
 
-        if (cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_G) != NULL) {
+        if (cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_G) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
             lightbulb_group->pwm_g = pwm_info->channels;
             pwm_info->channels++;
             multipwm_set_pin(pwm_info, lightbulb_group->pwm_g, (uint8_t) cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_G)->valuedouble);
         }
 
-        if (cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_B) != NULL) {
+        if (cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_B) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
             lightbulb_group->pwm_b = pwm_info->channels;
             pwm_info->channels++;
             multipwm_set_pin(pwm_info, lightbulb_group->pwm_b, (uint8_t) cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_B)->valuedouble);
         }
 
-        if (cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_W) != NULL) {
+        if (cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_W) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
             lightbulb_group->pwm_w = pwm_info->channels;
             pwm_info->channels++;
             multipwm_set_pin(pwm_info, lightbulb_group->pwm_w, (uint8_t) cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_W)->valuedouble);
@@ -2158,7 +2173,7 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->primary = true;
         accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_LIGHTBULB;
         
-        if (cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_R) != NULL) {
+        if (lightbulb_group->pwm_r != 255) {
             homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(HUE, 0, .getter_ex=hkc_getter, .setter_ex=hkc_rgbw_setter, .context=json_context);
             homekit_characteristic_t *ch3 = NEW_HOMEKIT_CHARACTERISTIC(SATURATION, 0, .getter_ex=hkc_getter, .setter_ex=hkc_rgbw_setter, .context=json_context);
             
@@ -2173,6 +2188,17 @@ void normal_mode_init() {
             
             ch2->value.float_value = set_initial_state(accessory, 2, cJSON_Parse(INIT_STATE_LAST_STR), ch2, CH_TYPE_FLOAT, 0);
             ch3->value.float_value = set_initial_state(accessory, 3, cJSON_Parse(INIT_STATE_LAST_STR), ch3, CH_TYPE_FLOAT, 0);
+        } else if (lightbulb_group->pwm_b != 255) {
+            homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(COLOR_TEMPERATURE, 152, .getter_ex=hkc_getter, .setter_ex=hkc_rgbw_setter, .context=json_context);
+            
+            ch_group->ch2 = ch2;
+            
+            accessories[accessory]->services[1]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[1]->characteristics[0] = ch0;
+            accessories[accessory]->services[1]->characteristics[1] = ch1;
+            accessories[accessory]->services[1]->characteristics[2] = ch2;
+            
+            ch2->value.int_value = set_initial_state(accessory, 2, cJSON_Parse(INIT_STATE_LAST_STR), ch2, CH_TYPE_INT32, 152);
         } else {
             accessories[accessory]->services[1]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[1]->characteristics[0] = ch0;
