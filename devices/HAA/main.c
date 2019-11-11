@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.6.7
+ * v0.6.8
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.6.7"
-#define FIRMWARE_VERSION_OCTAL          000607      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.6.8"
+#define FIRMWARE_VERSION_OCTAL          000610      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -142,6 +142,7 @@
 #define COLOR_TEMP_MAX                  400
 #define LIGHTBULB_BRIGHTNESS_UP         0
 #define LIGHTBULB_BRIGHTNESS_DOWN       1
+#define AUTODIMMER_DELAY                400
 
 #define MAX_ACTIONS                     5
 #define COPY_ACTIONS                    "a"
@@ -221,6 +222,10 @@ typedef struct _lightbulb_group {
     uint16_t target_g;
     uint16_t target_b;
     uint16_t target_w;
+    
+    ETSTimer *timer;
+    uint8_t autodimmer;
+    bool armed_autodimmer;
     
     struct _lightbulb_group *next;
 } lightbulb_group_t;
@@ -1035,6 +1040,7 @@ void hkc_rgbw_setter_delayed(void *args) {
             lightbulb_group->target_w = PWM_RGBW_SCALE * ch_group->ch1->value.int_value / 100;
         }
     } else {
+        lightbulb_group->autodimmer = 0;
         lightbulb_group->target_r = 0;
         lightbulb_group->target_g = 0;
         lightbulb_group->target_b = 0;
@@ -1050,6 +1056,17 @@ void hkc_rgbw_setter_delayed(void *args) {
     
     cJSON *json_context = ch_group->ch0->context;
     do_actions(json_context, (uint8_t) ch_group->ch0->value.bool_value);
+    
+    homekit_characteristic_notify(ch_group->ch0, ch_group->ch0->value);
+    homekit_characteristic_notify(ch_group->ch1, ch_group->ch1->value);
+    
+    if (ch_group->ch2) {
+        homekit_characteristic_notify(ch_group->ch2, ch_group->ch2->value);
+    }
+    
+    if (ch_group->ch3) {
+        homekit_characteristic_notify(ch_group->ch3, ch_group->ch3->value);
+    }
     
     setup_mode_toggle_upcount();
     save_states_callback();
@@ -1088,6 +1105,62 @@ void rgbw_brightness(const uint8_t gpio, void *args, const uint8_t type) {
     }
 }
 
+void autodimmer_task(void *args) {
+    printf("HAA > AUTODimmer started\n");
+    
+    homekit_characteristic_t *ch = args;
+    ch_group_t *ch_group = ch_group_find(ch);
+    lightbulb_group_t *lightbulb_group = lightbulb_group_find(ch_group->ch0);
+    
+    lightbulb_group->autodimmer = 20;
+    while(lightbulb_group->autodimmer > 0) {
+        lightbulb_group->autodimmer--;
+        if (ch_group->ch1->value.int_value < 100) {
+            if (ch_group->ch1->value.int_value + 20 < 100) {
+                ch_group->ch1->value.int_value += 20;
+            } else {
+                ch_group->ch1->value.int_value = 100;
+            }
+        } else {
+            ch_group->ch1->value.int_value = 20;
+        }
+        hkc_rgbw_setter(ch_group->ch1, ch_group->ch1->value);
+        
+        vTaskDelay(1200 / portTICK_PERIOD_MS);
+    }
+    
+    printf("HAA > AUTODimmer stopped\n");
+    
+    vTaskDelete(NULL);
+}
+
+void no_autodimmer_called(void *args) {
+    homekit_characteristic_t *ch0 = args;
+    lightbulb_group_t *lightbulb_group = lightbulb_group_find(ch0);
+    lightbulb_group->armed_autodimmer = false;
+    ch0->value.bool_value = !ch0->value.bool_value;
+    hkc_rgbw_setter(ch0, ch0->value);
+}
+
+void autodimmer_call(homekit_characteristic_t *ch0, const homekit_value_t value) {
+    lightbulb_group_t *lightbulb_group = lightbulb_group_find(ch0);
+    if (value.bool_value && lightbulb_group->autodimmer == 0) {
+        hkc_rgbw_setter(ch0, value);
+    } else if (lightbulb_group->autodimmer > 0) {
+        lightbulb_group->autodimmer = 0;
+    } else {
+        lightbulb_group->autodimmer = 0;
+        if (lightbulb_group->armed_autodimmer) {
+            lightbulb_group->armed_autodimmer = false;
+            sdk_os_timer_disarm(lightbulb_group->timer);
+            xTaskCreate(autodimmer_task, "autodimmer_task", configMINIMAL_STACK_SIZE, (void*) ch0, 1, NULL);
+        } else {
+            sdk_os_timer_arm(lightbulb_group->timer, AUTODIMMER_DELAY, 0);
+            lightbulb_group->armed_autodimmer = true;
+        }
+    }
+}
+
 // --- DIGITAL INPUTS
 void diginput(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
@@ -1112,7 +1185,7 @@ void diginput(const uint8_t gpio, void *args, const uint8_t type) {
                 break;
                 
             case TYPE_LIGHTBULB:
-                hkc_rgbw_setter(ch, HOMEKIT_BOOL(!ch->value.bool_value));
+                autodimmer_call(ch, HOMEKIT_BOOL(!ch->value.bool_value));
                 break;
                 
             default:    // case TYPE_ON:
@@ -1141,7 +1214,7 @@ void diginput_1(const uint8_t gpio, void *args, const uint8_t type) {
                 
             case TYPE_LIGHTBULB:
                 if (ch->value.bool_value == false) {
-                    hkc_rgbw_setter(ch, HOMEKIT_BOOL(true));
+                    autodimmer_call(ch, HOMEKIT_BOOL(true));
                 }
                 break;
                 
@@ -1173,7 +1246,7 @@ void diginput_0(const uint8_t gpio, void *args, const uint8_t type) {
                 
             case TYPE_LIGHTBULB:
                 if (ch->value.bool_value == true) {
-                    hkc_rgbw_setter(ch, HOMEKIT_BOOL(false));
+                    autodimmer_call(ch, HOMEKIT_BOOL(false));
                 }
                 break;
                 
@@ -2138,6 +2211,8 @@ void normal_mode_init() {
         lightbulb_group->target_g = 0;
         lightbulb_group->target_b = 0;
         lightbulb_group->target_w = 0;
+        lightbulb_group->autodimmer = 0;
+        lightbulb_group->armed_autodimmer = false;
         lightbulb_group->next = lightbulb_groups;
         lightbulb_groups = lightbulb_group;
 
@@ -2232,6 +2307,10 @@ void normal_mode_init() {
                 ch0->value = HOMEKIT_BOOL(false);
             }
         }
+        
+        lightbulb_group->timer = malloc(sizeof(ETSTimer));
+        memset(lightbulb_group->timer, 0, sizeof(*lightbulb_group->timer));
+        sdk_os_timer_setfn(lightbulb_group->timer, no_autodimmer_called, ch0);
         
         return new_accessory_count;
     }
