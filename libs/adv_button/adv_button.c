@@ -26,43 +26,47 @@
 #include <esplibs/libmain.h>
 #include "adv_button.h"
 
-#define DISABLE_TIME                80
+#ifndef ADV_BUTTON_MAX_EVAL
+#define ADV_BUTTON_MAX_EVAL         10
+#endif
+
 #define DOUBLEPRESS_TIME            400
-#define LONGPRESS_TIME              410
+#define LONGPRESS_TIME              (DOUBLEPRESS_TIME + 10)
 #define VERYLONGPRESS_TIME          1500
 #define HOLDPRESS_TIME              10000
 
-#define BUTTON_EVAL_DELAY_MAX       210
 #define BUTTON_EVAL_DELAY_MIN       10
+#define BUTTON_EVAL_DELAY_MAX       (BUTTON_EVAL_DELAY_MIN + 200)
 
 #define DISABLE_PRESS_COUNT         200
+
+#define EVALUATE_MID                (ADV_BUTTON_MAX_EVAL >> 1)
+#define DISABLE_TIME                (ADV_BUTTON_MAX_EVAL * 10)
+#define MIN(x, y)                   (((x) < (y)) ? (x) : (y))
+#define MAX(x, y)                   (((x) > (y)) ? (x) : (y))
+
+typedef struct _adv_button_callback_fn {
+    button_callback_fn callback;
+    void *args;
+    uint8_t param;
+    
+    struct _adv_button_callback_fn *next;
+} adv_button_callback_fn_t;
 
 typedef struct _adv_button {
     uint8_t gpio;
     bool inverted;
     
-    button_callback_fn singlepress0_callback_fn;
-    button_callback_fn singlepress_callback_fn;
-    button_callback_fn doublepress_callback_fn;
-    button_callback_fn longpress_callback_fn;
-    button_callback_fn verylongpress_callback_fn;
-    button_callback_fn holdpress_callback_fn;
-    
-    void *singlepress_args;
-    void *doublepress_args;
-    void *longpress_args;
-    void *verylongpress_args;
-    void *holdpress_args;
-    
-    uint8_t singlepress_param;
-    uint8_t doublepress_param;
-    uint8_t longpress_param;
-    uint8_t verylongpress_param;
-    uint8_t holdpress_param;
+    adv_button_callback_fn_t *singlepress0_callback_fn;
+    adv_button_callback_fn_t *singlepress_callback_fn;
+    adv_button_callback_fn_t *doublepress_callback_fn;
+    adv_button_callback_fn_t *longpress_callback_fn;
+    adv_button_callback_fn_t *verylongpress_callback_fn;
+    adv_button_callback_fn_t *holdpress_callback_fn;
     
     bool state;
     bool old_state;
-    volatile uint16_t value;
+    volatile uint8_t value;
 
     uint8_t press_count;
     ETSTimer press_timer;
@@ -89,6 +93,15 @@ static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
     return button;
 }
 
+static void adv_button_run_callback_fn(adv_button_callback_fn_t *callbacks, const uint8_t gpio) {
+    adv_button_callback_fn_t *adv_button_callback_fn = callbacks;
+    
+    while (adv_button_callback_fn) {
+        adv_button_callback_fn->callback(gpio, adv_button_callback_fn->args, adv_button_callback_fn->param);
+        adv_button_callback_fn = adv_button_callback_fn->next;
+    }
+}
+
 void adv_button_set_evaluate_delay(const uint8_t new_delay) {
     if (new_delay < BUTTON_EVAL_DELAY_MIN) {
         button_evaluate_delay = BUTTON_EVAL_DELAY_MIN;
@@ -109,7 +122,7 @@ IRAM static void push_down(const uint8_t used_gpio) {
     if (now - disable_time > DISABLE_TIME / portTICK_PERIOD_MS) {
         adv_button_t *button = button_find_by_gpio(used_gpio);
         if (button->singlepress0_callback_fn) {
-            button->singlepress0_callback_fn(used_gpio, button->holdpress_args, button->holdpress_param);
+            adv_button_run_callback_fn(button->singlepress0_callback_fn, button->gpio);
         } else {
             sdk_os_timer_arm(&button->hold_timer, HOLDPRESS_TIME, 0);
         }
@@ -133,19 +146,19 @@ IRAM static void push_up(const uint8_t used_gpio) {
             // Very Long button pressed
             button->press_count = 0;
             if (button->verylongpress_callback_fn) {
-                button->verylongpress_callback_fn(used_gpio, button->verylongpress_args, button->verylongpress_param);
+                adv_button_run_callback_fn(button->verylongpress_callback_fn, button->gpio);
             } else if (button->longpress_callback_fn) {
-                button->longpress_callback_fn(used_gpio, button->longpress_args, button->longpress_param);
+                adv_button_run_callback_fn(button->longpress_callback_fn, button->gpio);
             } else {
-                button->singlepress_callback_fn(used_gpio, button->singlepress_args, button->singlepress_param);
+                adv_button_run_callback_fn(button->singlepress_callback_fn, button->gpio);
             }
         } else if (now - button->last_event_time > LONGPRESS_TIME / portTICK_PERIOD_MS) {
             // Long button pressed
             button->press_count = 0;
             if (button->longpress_callback_fn) {
-                button->longpress_callback_fn(used_gpio, button->longpress_args, button->longpress_param);
+                adv_button_run_callback_fn(button->longpress_callback_fn, button->gpio);
             } else {
-                button->singlepress_callback_fn(used_gpio, button->singlepress_args, button->singlepress_param);
+                adv_button_run_callback_fn(button->singlepress_callback_fn, button->gpio);
             }
         } else if (button->doublepress_callback_fn) {
             button->press_count++;
@@ -153,25 +166,21 @@ IRAM static void push_up(const uint8_t used_gpio) {
                 // Double button pressed
                 sdk_os_timer_disarm(&button->press_timer);
                 button->press_count = 0;
-                button->doublepress_callback_fn(used_gpio, button->doublepress_args, button->doublepress_param);
+                adv_button_run_callback_fn(button->doublepress_callback_fn, button->gpio);
             } else {
                 sdk_os_timer_arm(&button->press_timer, DOUBLEPRESS_TIME, 0);
             }
         } else {
-            button->singlepress_callback_fn(used_gpio, button->singlepress_args, button->singlepress_param);
+            adv_button_run_callback_fn(button->singlepress_callback_fn, button->gpio);
         }
     }
-}
-
-static void no_function_callback(const uint8_t gpio, void *args, const uint8_t param) {
-    printf("!!! AdvButton: No function defined\n");
 }
 
 static void adv_button_single_callback(void *arg) {
     adv_button_t *button = arg;
     // Single button pressed
     button->press_count = 0;
-    button->singlepress_callback_fn(button->gpio, button->singlepress_args, button->singlepress_param);
+    adv_button_run_callback_fn(button->singlepress_callback_fn, button->gpio);
 }
 
 static void adv_button_hold_callback(void *arg) {
@@ -180,29 +189,29 @@ static void adv_button_hold_callback(void *arg) {
     // Hold button pressed
     button->press_count = DISABLE_PRESS_COUNT;
     
-    if (button->holdpress_callback_fn) {
-        button->holdpress_callback_fn(button->gpio, button->holdpress_args, button->holdpress_param);
-    } else {
-        no_function_callback(button->gpio, NULL, 0);
-    }
+    adv_button_run_callback_fn(button->holdpress_callback_fn, button->gpio);
 }
 
-#define maxvalue_unsigned(x) ((1 << (8 * sizeof(x))) - 1)
-IRAM static void button_evaluate_fn() {        // Based on https://github.com/pcsaito/esp-homekit-demo/blob/LPFToggle/examples/sonoff_basic_toggle/toggle.c
+IRAM static void button_evaluate_fn() {
     if (!button_evaluate_is_working) {
         button_evaluate_is_working = true;
         adv_button_t *button = buttons;
         
         while (button) {
-            button->value += ((gpio_read(button->gpio) * maxvalue_unsigned(button->value)) - button->value) >> 3;
-            button->state = (button->value > (maxvalue_unsigned(button->value) >> 1));
+            if (gpio_read(button->gpio)) {
+                button->value = MIN(button->value++, ADV_BUTTON_MAX_EVAL);
+            } else {
+                button->value = MAX(button->value--, 0);
+            }
+            
+            button->state = (button->value > EVALUATE_MID);
             
             if (button->state != button->old_state) {
                 button->old_state = button->state;
                 
-                if (gpio_read(button->gpio) ^ button->inverted) {   // 1
+                if (gpio_read(button->gpio) ^ button->inverted) {   // 1 HIGH
                     push_up(button->gpio);
-                } else {                                            // 0
+                } else {                                            // 0 LOW
                     push_down(button->gpio);
                 }
             }
@@ -242,12 +251,10 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
         button->state = gpio_read(button->gpio);
         
         button->old_state = button->state;
-        button->value = 32767;      // Max value of uint16_t / 2
+        button->value = EVALUATE_MID;
         
         sdk_os_timer_setfn(&button->hold_timer, adv_button_hold_callback, button);
         sdk_os_timer_setfn(&button->press_timer, adv_button_single_callback, button);
-        
-        button->singlepress_callback_fn = no_function_callback;
         
         return 0;
     }
@@ -259,50 +266,43 @@ int adv_button_register_callback_fn(const uint8_t gpio, const button_callback_fn
     adv_button_t *button = button_find_by_gpio(gpio);
     
     if (button) {
+        adv_button_callback_fn_t *adv_button_callback_fn;
+        adv_button_callback_fn = malloc(sizeof(adv_button_callback_fn_t));
+        memset(adv_button_callback_fn, 0, sizeof(*adv_button_callback_fn));
+        
+        adv_button_callback_fn->callback = callback;
+        adv_button_callback_fn->args = args;
+        adv_button_callback_fn->param = param;
+        
         switch (button_callback_type) {
-            case 0:
-                button->singlepress0_callback_fn = callback;
-                button->holdpress_callback_fn = NULL;
-                button->holdpress_args = args;
-                button->holdpress_param = param;
-                break;
-            case 1:
-                if (callback) {
-                    button->singlepress_callback_fn = callback;
-                    button->singlepress_args = args;
-                    button->singlepress_param = param;
-                } else {
-                    button->singlepress_callback_fn = no_function_callback;
-                }
+            case INVSINGLEPRESS_TYPE:
+                adv_button_callback_fn->next = button->singlepress0_callback_fn;
+                button->singlepress0_callback_fn = adv_button_callback_fn;
                 break;
                 
-            case 2:
-                button->doublepress_callback_fn = callback;
-                button->doublepress_args = args;
-                button->doublepress_param = param;
+            case DOUBLEPRESS_TYPE:
+                adv_button_callback_fn->next = button->doublepress_callback_fn;
+                button->doublepress_callback_fn = adv_button_callback_fn;
                 break;
                 
-            case 3:
-                button->longpress_callback_fn = callback;
-                button->longpress_args = args;
-                button->longpress_param = param;
+            case LONGPRESS_TYPE:
+                adv_button_callback_fn->next = button->longpress_callback_fn;
+                button->longpress_callback_fn = adv_button_callback_fn;
                 break;
                 
-            case 4:
-                button->verylongpress_callback_fn = callback;
-                button->verylongpress_args = args;
-                button->verylongpress_param = param;
+            case VERYLONGPRESS_TYPE:
+                adv_button_callback_fn->next = button->verylongpress_callback_fn;
+                button->verylongpress_callback_fn = adv_button_callback_fn;
                 break;
                 
-            case 5:
-                button->holdpress_callback_fn = callback;
-                button->singlepress0_callback_fn = NULL;
-                button->holdpress_args = args;
-                button->holdpress_param = param;
+            case HOLDPRESS_TYPE:
+                adv_button_callback_fn->next = button->holdpress_callback_fn;
+                button->holdpress_callback_fn = adv_button_callback_fn;
                 break;
                 
-            default:
-                return -2;
+            default:    // case SINGLEPRESS_TYPE:
+                adv_button_callback_fn->next = button->singlepress_callback_fn;
+                button->singlepress_callback_fn = adv_button_callback_fn;
                 break;
         }
         
@@ -316,12 +316,22 @@ void adv_button_destroy(const uint8_t gpio) {
     if (buttons) {
         adv_button_t *button = NULL;
         if (buttons->gpio == gpio) {
+            
+            if (button->gpio != 0) {
+                gpio_disable(button->gpio);
+            }
+            
             button = buttons;
             buttons = buttons->next;
         } else {
             adv_button_t *b = buttons;
             while (b->next) {
                 if (b->next->gpio == gpio) {
+                    
+                    if (b->next->gpio != 0) {
+                        gpio_disable(b->next->gpio);
+                    }
+                    
                     button = b->next;
                     b->next = b->next->next;
                     break;
@@ -329,13 +339,6 @@ void adv_button_destroy(const uint8_t gpio) {
             }
         }
 
-        if (button) {
-            gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, NULL);
-            if (button->gpio != 0) {
-                gpio_disable(button->gpio);
-            }
-        }
-        
         if (!buttons) {
             sdk_os_timer_disarm(&button_evaluate_timer);
         }

@@ -24,6 +24,13 @@
 #ifndef __ADVANCED_BUTTON__
 #define __ADVANCED_BUTTON__
 
+#define INVSINGLEPRESS_TYPE         0
+#define SINGLEPRESS_TYPE            1
+#define DOUBLEPRESS_TYPE            2
+#define LONGPRESS_TYPE              3
+#define VERYLONGPRESS_TYPE          4
+#define HOLDPRESS_TYPE              5
+
 typedef void (*button_callback_fn)(uint8_t gpio, void *args, uint8_t param);
 
 void adv_button_set_evaluate_delay(const uint8_t new_delay);

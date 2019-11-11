@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.6.6
+ * v0.6.7
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.6.6"
-#define FIRMWARE_VERSION_OCTAL          000606      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.6.7"
+#define FIRMWARE_VERSION_OCTAL          000607      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -137,7 +137,7 @@
 #define PWM_RGBW_SCALE                  (UINT16_MAX - 1)
 #define RGBW_PERIOD                     10
 #define RGBW_STEP                       1024
-#define RGBW_SET_DELAY                  400
+#define RGBW_SET_DELAY                  100
 #define COLOR_TEMP_MIN                  71
 #define COLOR_TEMP_MAX                  400
 #define LIGHTBULB_BRIGHTNESS_UP         0
@@ -1022,10 +1022,15 @@ void hkc_rgbw_setter_delayed(void *args) {
     if (ch_group->ch0->value.bool_value) {
         if (lightbulb_group->pwm_r != 255) {            // RGB/W
             hsi2rgbw(ch_group->ch2->value.float_value, ch_group->ch3->value.float_value, ch_group->ch1->value.int_value, lightbulb_group);
-        } else if (lightbulb_group->pwm_b != 255) {     // Color Temperature
-            uint16_t color_temp = ch_group->ch2->value.int_value - COLOR_TEMP_MIN;
-            printf("HAA > TEMPERATURE: %i\n", color_temp);
-            //lightbulb_group->target_w = PWM_RGBW_SCALE * ch_group->ch1->value.int_value / 100;    // DELETE ME
+        } else if (lightbulb_group->pwm_b != 255) {     // Custom Color Temperature
+            uint16_t target_color = 0;
+            if (ch_group->ch2->value.int_value >= COLOR_TEMP_MAX - 5) {
+                target_color = PWM_RGBW_SCALE;
+            } else if (ch_group->ch2->value.int_value > COLOR_TEMP_MIN + 1) { // Conversion based on @seritos curve
+                target_color = PWM_RGBW_SCALE * (((0.09 + sqrt(0.18 + (0.1352 * (ch_group->ch2->value.int_value - COLOR_TEMP_MIN - 1)))) / 0.0676) - 1) / 100;
+            }
+            lightbulb_group->target_w = target_color * ch_group->ch1->value.int_value / 100;
+            lightbulb_group->target_b = (PWM_RGBW_SCALE - target_color) * ch_group->ch1->value.int_value / 100;
         } else {                                        // One Color Dimmer
             lightbulb_group->target_w = PWM_RGBW_SCALE * ch_group->ch1->value.int_value / 100;
         }
