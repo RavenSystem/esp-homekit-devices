@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.6.10
+ * v0.6.11
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.6.10"
-#define FIRMWARE_VERSION_OCTAL          000612      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.6.11"
+#define FIRMWARE_VERSION_OCTAL          000613      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -581,7 +581,7 @@ void sensor_1(const uint8_t gpio, void *args, const uint8_t type) {
             }
         }
         
-        hkc_group_notify(ch);
+        homekit_characteristic_notify(ch, ch->value);
     }
 }
 
@@ -604,7 +604,7 @@ void sensor_0(const uint8_t gpio, void *args, const uint8_t type) {
         cJSON *json_context = ch->context;
         do_actions(json_context, 0);
         
-        hkc_group_notify(ch);
+        homekit_characteristic_notify(ch, ch->value);
     }
 }
 
