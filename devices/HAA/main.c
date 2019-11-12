@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.6.8
+ * v0.6.9
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.6.8"
-#define FIRMWARE_VERSION_OCTAL          000610      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.6.9"
+#define FIRMWARE_VERSION_OCTAL          000611      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -223,7 +223,7 @@ typedef struct _lightbulb_group {
     uint16_t target_b;
     uint16_t target_w;
     
-    ETSTimer *timer;
+    ETSTimer autodimmer_timer;
     uint8_t autodimmer;
     bool armed_autodimmer;
     
@@ -424,6 +424,26 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
     free(action);
 }
 
+void hkc_group_notify(homekit_characteristic_t *ch) {
+    ch_group_t *ch_group = ch_group_find(ch);
+    homekit_characteristic_notify(ch_group->ch0, ch_group->ch0->value);
+    if (ch_group->ch1) {
+        homekit_characteristic_notify(ch_group->ch1, ch_group->ch1->value);
+        if (ch_group->ch2) {
+            homekit_characteristic_notify(ch_group->ch2, ch_group->ch2->value);
+            if (ch_group->ch3) {
+                homekit_characteristic_notify(ch_group->ch3, ch_group->ch3->value);
+                if (ch_group->ch4) {
+                    homekit_characteristic_notify(ch_group->ch4, ch_group->ch4->value);
+                    if (ch_group->ch5) {
+                        homekit_characteristic_notify(ch_group->ch5, ch_group->ch5->value);
+                    }
+                }
+            }
+        }
+    }
+}
+
 homekit_value_t hkc_getter(const homekit_characteristic_t *ch) {
     printf("HAA > Getter\n");
     return ch->value;
@@ -432,18 +452,15 @@ homekit_value_t hkc_getter(const homekit_characteristic_t *ch) {
 void hkc_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
     printf("HAA > Setter\n");
     ch->value = value;
-    homekit_characteristic_notify(ch, ch->value);
+    hkc_group_notify(ch);
     
     save_states_callback();
 }
 
 void hkc_setter_with_setup(homekit_characteristic_t *ch, const homekit_value_t value) {
-    printf("HAA > Setter\n");
-    ch->value = value;
-    homekit_characteristic_notify(ch, ch->value);
+    hkc_setter(ch, value);
     
     setup_mode_toggle_upcount();
-    save_states_callback();
 }
 
 void hkc_autooff_setter_task(void *pvParameters);
@@ -451,10 +468,7 @@ void hkc_autooff_setter_task(void *pvParameters);
 // --- ON
 void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch);
-    if (ch_group->ch_sec && !ch_group->ch_sec->value.bool_value) {
-        homekit_characteristic_notify(ch, ch->value);
-        
-    } else {
+    if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         led_blink(1);
         printf("HAA > Setter ON\n");
         
@@ -474,20 +488,19 @@ void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
             }
         }
         
-        homekit_characteristic_notify(ch, ch->value);
+        
         
         setup_mode_toggle_upcount();
         save_states_callback();
     }
+    
+    hkc_group_notify(ch_group->ch0);
 }
 
 // --- LOCK MECHANISM
 void hkc_lock_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch);
-    if (ch_group->ch_sec && !ch_group->ch_sec->value.bool_value) {
-        homekit_characteristic_notify(ch, ch->value);
-        
-    } else {
+    if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         led_blink(1);
         printf("HAA > Setter LOCK\n");
         
@@ -508,12 +521,11 @@ void hkc_lock_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
             }
         }
         
-        homekit_characteristic_notify(ch, ch->value);
-        homekit_characteristic_notify(ch_group->ch0, ch_group->ch0->value);
-        
         setup_mode_toggle_upcount();
         save_states_callback();
     }
+    
+    hkc_group_notify(ch_group->ch0);
 }
 
 // --- BUTTON EVENT
@@ -521,7 +533,7 @@ void button_event(const uint8_t gpio, void *args, const uint8_t event_type) {
     homekit_characteristic_t *ch = args;
     
     ch_group_t *ch_group = ch_group_find(ch);
-    if (!(ch_group->ch_child && !ch_group->ch_child->value.bool_value)) {
+    if (!ch_group->ch_child || ch_group->ch_child->value.bool_value) {
         led_blink(event_type + 1);
         printf("HAA > Setter EVENT %i\n", event_type);
         
@@ -562,7 +574,7 @@ void sensor_1(const uint8_t gpio, void *args, const uint8_t type) {
             }
         }
         
-        homekit_characteristic_notify(ch, ch->value);
+        hkc_group_notify(ch);
     }
 }
 
@@ -585,17 +597,14 @@ void sensor_0(const uint8_t gpio, void *args, const uint8_t type) {
         cJSON *json_context = ch->context;
         do_actions(json_context, 0);
         
-        homekit_characteristic_notify(ch, ch->value);
+        hkc_group_notify(ch);
     }
 }
 
 // --- WATER VALVE
 void hkc_valve_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch);
-    if (ch_group->ch_sec && !ch_group->ch_sec->value.bool_value) {
-        homekit_characteristic_notify(ch, ch->value);
-        
-    } else {
+    if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         led_blink(1);
         printf("HAA > Setter VALVE\n");
         
@@ -616,9 +625,6 @@ void hkc_valve_setter(homekit_characteristic_t *ch, const homekit_value_t value)
             }
         }
         
-        homekit_characteristic_notify(ch, ch->value);
-        homekit_characteristic_notify(ch_group->ch1, ch_group->ch1->value);
-        
         setup_mode_toggle_upcount();
         save_states_callback();
         
@@ -630,10 +636,10 @@ void hkc_valve_setter(homekit_characteristic_t *ch, const homekit_value_t value)
                 ch_group->ch3->value = ch_group->ch2->value;
                 sdk_os_timer_arm(ch_group->timer, 1000, 1);
             }
-            
-            homekit_characteristic_notify(ch_group->ch3, ch_group->ch3->value);
         }
     }
+    
+    hkc_group_notify(ch_group->ch0);
 }
 
 void valve_timer_worker(void *args) {
@@ -653,10 +659,7 @@ void valve_timer_worker(void *args) {
 // --- THERMOSTAT
 void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch);
-    if (ch_group->ch_sec && !ch_group->ch_sec->value.bool_value) {
-        homekit_characteristic_notify(ch, ch->value);
-        
-    } else {
+    if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         led_blink(1);
         printf("HAA > Setter TH\n");
         
@@ -702,14 +705,10 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
                 break;
         }
         
-        if (ch != ch_group->ch4) {
-            homekit_characteristic_notify(ch, ch->value);
-        }
-        
-        homekit_characteristic_notify(ch_group->ch4, ch_group->ch4->value);
-        
         save_states_callback();
     }
+    
+    hkc_group_notify(ch_group->ch0);
 }
 
 void hkc_th_target_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
@@ -721,7 +720,7 @@ void hkc_th_target_setter(homekit_characteristic_t *ch, const homekit_value_t va
 void th_input(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
     ch_group_t *ch_group = ch_group_find(ch);
-    if (!(ch_group->ch_child && !ch_group->ch_child->value.bool_value)) {
+    if (!ch_group->ch_child || ch_group->ch_child->value.bool_value) {
         uint8_t state = type;
         
         if (type == 5) {
@@ -761,7 +760,7 @@ void th_input(const uint8_t gpio, void *args, const uint8_t type) {
 void th_input_temp(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
     ch_group_t *ch_group = ch_group_find(ch);
-    if (!(ch_group->ch_child && !ch_group->ch_child->value.bool_value)) {
+    if (!ch_group->ch_child || ch_group->ch_child->value.bool_value) {
         cJSON *json_context = ch->context;
         
         float th_min_temp = THERMOSTAT_DEFAULT_MIN_TEMP;
@@ -865,8 +864,6 @@ void temperature_timer_worker(void *args) {
                 
                 if (ch_group->ch5) {
                     update_th(ch_group->ch0, ch_group->ch0->value);
-                } else {
-                    homekit_characteristic_notify(ch_group->ch0, ch_group->ch0->value);
                 }
             }
         }
@@ -882,7 +879,6 @@ void temperature_timer_worker(void *args) {
             if (humidity_value != ch_group->saved_float1) {
                 ch_group->saved_float1 = humidity_value;
                 ch_group->ch1->value = HOMEKIT_FLOAT(humidity_value);
-                homekit_characteristic_notify(ch_group->ch1, ch_group->ch1->value);
             }
         }
         
@@ -895,10 +891,10 @@ void temperature_timer_worker(void *args) {
             ch_group->ch4->value = HOMEKIT_UINT8(THERMOSTAT_MODE_OFF);
             
             do_actions(json_context, THERMOSTAT_ACTION_SENSOR_ERROR);
-            
-            homekit_characteristic_notify(ch_group->ch4, ch_group->ch4->value);
         }
     }
+    
+    hkc_group_notify(ch_group->ch0);
 }
 
 // --- LIGHTBULBS
@@ -1057,16 +1053,7 @@ void hkc_rgbw_setter_delayed(void *args) {
     cJSON *json_context = ch_group->ch0->context;
     do_actions(json_context, (uint8_t) ch_group->ch0->value.bool_value);
     
-    homekit_characteristic_notify(ch_group->ch0, ch_group->ch0->value);
-    homekit_characteristic_notify(ch_group->ch1, ch_group->ch1->value);
-    
-    if (ch_group->ch2) {
-        homekit_characteristic_notify(ch_group->ch2, ch_group->ch2->value);
-    }
-    
-    if (ch_group->ch3) {
-        homekit_characteristic_notify(ch_group->ch3, ch_group->ch3->value);
-    }
+    hkc_group_notify(ch_group->ch0);
     
     setup_mode_toggle_upcount();
     save_states_callback();
@@ -1075,7 +1062,7 @@ void hkc_rgbw_setter_delayed(void *args) {
 void hkc_rgbw_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch);
     if (ch_group->ch_sec && !ch_group->ch_sec->value.bool_value) {
-        homekit_characteristic_notify(ch, ch->value);
+        hkc_group_notify(ch_group->ch0);
         
     } else {
         ch->value = value;
@@ -1152,10 +1139,10 @@ void autodimmer_call(homekit_characteristic_t *ch0, const homekit_value_t value)
         lightbulb_group->autodimmer = 0;
         if (lightbulb_group->armed_autodimmer) {
             lightbulb_group->armed_autodimmer = false;
-            sdk_os_timer_disarm(lightbulb_group->timer);
+            sdk_os_timer_disarm(&lightbulb_group->autodimmer_timer);
             xTaskCreate(autodimmer_task, "autodimmer_task", configMINIMAL_STACK_SIZE, (void*) ch0, 1, NULL);
         } else {
-            sdk_os_timer_arm(lightbulb_group->timer, AUTODIMMER_DELAY, 0);
+            sdk_os_timer_arm(&lightbulb_group->autodimmer_timer, AUTODIMMER_DELAY, 0);
             lightbulb_group->armed_autodimmer = true;
         }
     }
@@ -1166,7 +1153,7 @@ void diginput(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
     
     ch_group_t *ch_group = ch_group_find(ch);
-    if (!(ch_group->ch_child && !ch_group->ch_child->value.bool_value)) {
+    if (!ch_group->ch_child || ch_group->ch_child->value.bool_value) {
         switch (type) {
             case TYPE_LOCK:
                 if (ch->value.int_value == 1) {
@@ -1198,7 +1185,7 @@ void diginput(const uint8_t gpio, void *args, const uint8_t type) {
 void diginput_1(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
     ch_group_t *ch_group = ch_group_find(ch);
-    if (!(ch_group->ch_child && !ch_group->ch_child->value.bool_value)) {
+    if (!ch_group->ch_child || ch_group->ch_child->value.bool_value) {
         switch (type) {
             case TYPE_LOCK:
                 if (ch->value.int_value == 0) {
@@ -1230,7 +1217,7 @@ void diginput_1(const uint8_t gpio, void *args, const uint8_t type) {
 void diginput_0(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
     ch_group_t *ch_group = ch_group_find(ch);
-    if (!(ch_group->ch_child && !ch_group->ch_child->value.bool_value)) {
+    if (!ch_group->ch_child || ch_group->ch_child->value.bool_value) {
         switch (type) {
             case TYPE_LOCK:
                 if (ch->value.int_value == 1) {
@@ -1593,7 +1580,7 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->characteristics[0] = ch;
         
         ch->value.bool_value = (bool) set_initial_state(accessory, 0, json_context, ch, CH_TYPE_BOOL, 0);
-        homekit_characteristic_notify(ch, ch->value);
+        //homekit_characteristic_notify(ch, ch->value);
         
         return ch;
     }
@@ -2308,9 +2295,7 @@ void normal_mode_init() {
             }
         }
         
-        lightbulb_group->timer = malloc(sizeof(ETSTimer));
-        memset(lightbulb_group->timer, 0, sizeof(*lightbulb_group->timer));
-        sdk_os_timer_setfn(lightbulb_group->timer, no_autodimmer_called, ch0);
+        sdk_os_timer_setfn(&lightbulb_group->autodimmer_timer, no_autodimmer_called, ch0);
         
         return new_accessory_count;
     }
