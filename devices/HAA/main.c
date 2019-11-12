@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.6.9
+ * v0.6.10
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.6.9"
-#define FIRMWARE_VERSION_OCTAL          000611      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.6.10"
+#define FIRMWARE_VERSION_OCTAL          000612      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -441,6 +441,13 @@ void hkc_group_notify(homekit_characteristic_t *ch) {
                 }
             }
         }
+    }
+    
+    if (ch_group->ch_child) {
+        homekit_characteristic_notify(ch_group->ch_child, ch_group->ch_child->value);
+    }
+    if (ch_group->ch_sec) {
+        homekit_characteristic_notify(ch_group->ch_sec, ch_group->ch_sec->value);
     }
 }
 
@@ -1580,7 +1587,6 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->characteristics[0] = ch;
         
         ch->value.bool_value = (bool) set_initial_state(accessory, 0, json_context, ch, CH_TYPE_BOOL, 0);
-        //homekit_characteristic_notify(ch, ch->value);
         
         return ch;
     }
@@ -1631,10 +1637,14 @@ void normal_mode_init() {
             accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[1]->characteristics[0] = ch0;
         } else {    // acc_type == ACC_TYPE_OUTLET
+            homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(OUTLET_IN_USE, true, .getter_ex=hkc_getter, .context=json_context);
+            
             accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_OUTLET;
             accessories[accessory]->services[1]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[1]->characteristics[0] = ch0;
-            accessories[accessory]->services[1]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(OUTLET_IN_USE, true, .getter_ex=hkc_getter, .context=json_context);
+            accessories[accessory]->services[1]->characteristics[1] = ch1;
+            
+            ch_group->ch1 = ch1;
         }
         
         diginput_register(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), diginput, ch0, TYPE_ON);
