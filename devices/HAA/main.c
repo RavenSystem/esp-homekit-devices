@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.6.13
+ * v0.6.14
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.6.13"
-#define FIRMWARE_VERSION_OCTAL          000615      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.6.14"
+#define FIRMWARE_VERSION_OCTAL          000616      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -176,6 +176,8 @@
 #define ACC_TYPE_HUM_SENSOR             23
 #define ACC_TYPE_TH_SENSOR              24
 #define ACC_TYPE_LIGHTBULB              30
+
+#define SETUP_MODE_ACTIVATE_COUNT       8
 
 #ifndef HAA_MAX_ACCESSORIES
 #define HAA_MAX_ACCESSORIES             4           // Max number of accessories before use a bridge
@@ -340,7 +342,7 @@ void setup_mode_toggle_upcount() {
 }
 
 void setup_mode_toggle() {
-    if (setup_mode_toggle_counter > 10) {
+    if (setup_mode_toggle_counter >= SETUP_MODE_ACTIVATE_COUNT) {
         setup_mode_call(0, NULL, 0);
     }
     
@@ -2224,6 +2226,7 @@ void normal_mode_init() {
             
             multipwm_init(pwm_info);
             multipwm_set_freq(pwm_info, pwm_freq);
+            pwm_freq--;
             pwm_info->channels = 0;
         }
         
