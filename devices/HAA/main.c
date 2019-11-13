@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.6.11
+ * v0.6.12
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.6.11"
-#define FIRMWARE_VERSION_OCTAL          000613      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.6.12"
+#define FIRMWARE_VERSION_OCTAL          000614      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -137,7 +137,7 @@
 #define PWM_RGBW_SCALE                  (UINT16_MAX - 1)
 #define RGBW_PERIOD                     10
 #define RGBW_STEP                       1024
-#define RGBW_SET_DELAY                  100
+#define RGBW_SET_DELAY                  350
 #define COLOR_TEMP_MIN                  71
 #define COLOR_TEMP_MAX                  400
 #define LIGHTBULB_BRIGHTNESS_UP         0
@@ -922,23 +922,46 @@ void hsi2rgbw(float h, float s, float i, lightbulb_group_t *lightbulb_group) {
     s = s > 0 ? (s < 1 ? s : 1) : 0;
     i = i > 0 ? (i < 1 ? i : 1) : 0;
     
-    if (h < 2.09439) {
-        lightbulb_group->target_r = PWM_RGBW_SCALE * i / 3 * (1 + s * cos(h) / cos(1.047196667 - h));
-        lightbulb_group->target_g = PWM_RGBW_SCALE * i / 3 * (1 + s * (1 - cos(h) / cos(1.047196667 - h)));
-        lightbulb_group->target_b = PWM_RGBW_SCALE * i / 3 * (1 - s);
-        lightbulb_group->target_w = PWM_RGBW_SCALE * i * (1 - s);
-    } else if (h < 4.188787) {
-        h = h - 2.09439;
-        lightbulb_group->target_g = PWM_RGBW_SCALE * i / 3 * (1 + s * cos(h) / cos(1.047196667 - h));
-        lightbulb_group->target_b = PWM_RGBW_SCALE * i / 3 * (1 + s * (1 - cos(h) / cos(1.047196667 - h)));
-        lightbulb_group->target_r = PWM_RGBW_SCALE * i / 3 * (1 - s);
-        lightbulb_group->target_w = PWM_RGBW_SCALE * i * (1 - s);
+    const float cos_h = cos(h);
+    const float cos_1047_h = cos(1.047196667 - h);
+    
+    if (lightbulb_group->pwm_w == 255) {
+        // RGB
+        if (h < 2.09439) {
+            lightbulb_group->target_r = PWM_RGBW_SCALE * i / 3 * (1 + s * cos_h / cos_1047_h);
+            lightbulb_group->target_g = PWM_RGBW_SCALE * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
+            lightbulb_group->target_b = PWM_RGBW_SCALE * i / 3 * (1 - s);
+        } else if (h < 4.188787) {
+            h = h - 2.09439;
+            lightbulb_group->target_g = PWM_RGBW_SCALE * i / 3 * (1 + s * cos_h / cos_1047_h);
+            lightbulb_group->target_b = PWM_RGBW_SCALE * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
+            lightbulb_group->target_r = PWM_RGBW_SCALE * i / 3 * (1 - s);
+        } else {
+            h = h - 4.188787;
+            lightbulb_group->target_b = PWM_RGBW_SCALE * i / 3 * (1 + s * cos_h / cos_1047_h);
+            lightbulb_group->target_r = PWM_RGBW_SCALE * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
+            lightbulb_group->target_g = PWM_RGBW_SCALE * i / 3 * (1 - s);
+        }
     } else {
-        h = h - 4.188787;
-        lightbulb_group->target_b = PWM_RGBW_SCALE * i / 3 * (1 + s * cos(h) / cos(1.047196667 - h));
-        lightbulb_group->target_r = PWM_RGBW_SCALE * i / 3 * (1 + s * (1 - cos(h) / cos(1.047196667 - h)));
-        lightbulb_group->target_g = PWM_RGBW_SCALE * i / 3 * (1 - s);
-        lightbulb_group->target_w = PWM_RGBW_SCALE * i * (1 - s);
+        // RGBW
+        if (h < 2.09439) {
+            lightbulb_group->target_r = s * PWM_RGBW_SCALE * i / 3 * (1 + cos_h / cos_1047_h);
+            lightbulb_group->target_g = s * PWM_RGBW_SCALE * i / 3 * (1 + (1 - cos_h / cos_1047_h));
+            lightbulb_group->target_b = 0;
+            lightbulb_group->target_w = PWM_RGBW_SCALE * (1 - s) * i;
+        } else if (h < 4.188787) {
+            h = h - 2.09439;
+            lightbulb_group->target_g = s * PWM_RGBW_SCALE * i / 3 * (1 + cos_h / cos_1047_h);
+            lightbulb_group->target_b = s * PWM_RGBW_SCALE * i / 3 * (1 + (1 - cos_h / cos_1047_h));
+            lightbulb_group->target_r = 0;
+            lightbulb_group->target_w = PWM_RGBW_SCALE * (1 - s) * i;
+        } else {
+            h = h - 4.188787;
+            lightbulb_group->target_b = s * PWM_RGBW_SCALE * i / 3 * (1 + cos_h / cos_1047_h);
+            lightbulb_group->target_r = s * PWM_RGBW_SCALE * i / 3 * (1 + (1 - cos_h / cos_1047_h));
+            lightbulb_group->target_g = 0;
+            lightbulb_group->target_w = PWM_RGBW_SCALE * (1 - s) * i;
+        }
     }
 }
 
