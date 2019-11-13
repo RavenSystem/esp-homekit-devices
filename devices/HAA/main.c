@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.6.12
+ * v0.6.13
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.6.12"
-#define FIRMWARE_VERSION_OCTAL          000614      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.6.13"
+#define FIRMWARE_VERSION_OCTAL          000615      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -81,6 +81,8 @@
 #define STATUS_LED_GPIO                 "l"
 #define INVERTED                        "i"
 #define BUTTON_FILTER                   "f"
+#define PWM_FREQ                        "q"
+#define PWM_FREQ_DEFAULT                800
 #define ENABLE_HOMEKIT_SERVER           "h"
 #define ACCESSORIES                     "a"
 #define BUTTONS_ARRAY                   "b"
@@ -134,15 +136,23 @@
 #define LIGHTBULB_PWM_GPIO_G            "g"
 #define LIGHTBULB_PWM_GPIO_B            "v"
 #define LIGHTBULB_PWM_GPIO_W            "w"
-#define PWM_RGBW_SCALE                  (UINT16_MAX - 1)
-#define RGBW_PERIOD                     10
-#define RGBW_STEP                       1024
-#define RGBW_SET_DELAY                  350
+#define LIGHTBULB_FACTOR_R              "fr"
+#define LIGHTBULB_FACTOR_G              "fg"
+#define LIGHTBULB_FACTOR_B              "fv"
+#define LIGHTBULB_FACTOR_W              "fw"
+#define RGBW_PERIOD                     12
+#define RGBW_STEP                       "p"
+#define RGBW_STEP_DEFAULT               1024
+#define RGBW_SET_DELAY                  120
 #define COLOR_TEMP_MIN                  71
 #define COLOR_TEMP_MAX                  400
 #define LIGHTBULB_BRIGHTNESS_UP         0
 #define LIGHTBULB_BRIGHTNESS_DOWN       1
 #define AUTODIMMER_DELAY                400
+#define AUTODIMMER_TASK_DELAY           "d"
+#define AUTODIMMER_TASK_DELAY_DEFAULT   1000
+#define AUTODIMMER_TASK_STEP            "e"
+#define AUTODIMMER_TASK_STEP_DEFAULT    10
 
 #define MAX_ACTIONS                     5
 #define COPY_ACTIONS                    "a"
@@ -223,9 +233,18 @@ typedef struct _lightbulb_group {
     uint16_t target_b;
     uint16_t target_w;
     
+    float factor_r;
+    float factor_g;
+    float factor_b;
+    float factor_w;
+    
+    uint16_t step;
+    
     ETSTimer autodimmer_timer;
     uint8_t autodimmer;
     bool armed_autodimmer;
+    uint16_t autodimmer_task_delay;
+    uint8_t autodimmer_task_step;
     
     struct _lightbulb_group *next;
 } lightbulb_group_t;
@@ -242,6 +261,7 @@ bool setpwm_bool_semaphore = true;
 ETSTimer *pwm_timer;
 pwm_info_t *pwm_info;
 uint16_t multipwm_duty[MULTIPWM_MAX_CHANNELS];
+uint16_t pwm_freq = PWM_FREQ_DEFAULT;
 
 last_state_t *last_states = NULL;
 ch_group_t *ch_groups = NULL;
@@ -909,14 +929,12 @@ void temperature_timer_worker(void *args) {
 void hsi2rgbw(float h, float s, float i, lightbulb_group_t *lightbulb_group) {
     while (h < 0) {
         h += 360.0F;
-        
     }
     while (h >= 360) {
         h -= 360.0F;
-        
     }
     
-    h = 3.14159F * h / 180.0F;
+    h = 3.141592653F * h / 180.0F;
     s /= 100.0F;
     i /= 100.0F;
     s = s > 0 ? (s < 1 ? s : 1) : 0;
@@ -925,44 +943,29 @@ void hsi2rgbw(float h, float s, float i, lightbulb_group_t *lightbulb_group) {
     const float cos_h = cos(h);
     const float cos_1047_h = cos(1.047196667 - h);
     
-    if (lightbulb_group->pwm_w == 255) {
-        // RGB
-        if (h < 2.09439) {
-            lightbulb_group->target_r = PWM_RGBW_SCALE * i / 3 * (1 + s * cos_h / cos_1047_h);
-            lightbulb_group->target_g = PWM_RGBW_SCALE * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
-            lightbulb_group->target_b = PWM_RGBW_SCALE * i / 3 * (1 - s);
-        } else if (h < 4.188787) {
-            h = h - 2.09439;
-            lightbulb_group->target_g = PWM_RGBW_SCALE * i / 3 * (1 + s * cos_h / cos_1047_h);
-            lightbulb_group->target_b = PWM_RGBW_SCALE * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
-            lightbulb_group->target_r = PWM_RGBW_SCALE * i / 3 * (1 - s);
-        } else {
-            h = h - 4.188787;
-            lightbulb_group->target_b = PWM_RGBW_SCALE * i / 3 * (1 + s * cos_h / cos_1047_h);
-            lightbulb_group->target_r = PWM_RGBW_SCALE * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
-            lightbulb_group->target_g = PWM_RGBW_SCALE * i / 3 * (1 - s);
-        }
+    uint32_t r, g, b;
+    
+    if (h < 2.094393334) {
+        r = lightbulb_group->factor_r * pwm_freq * i / 3 * (1 + s * cos_h / cos_1047_h);
+        g = lightbulb_group->factor_g * pwm_freq * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
+        b = lightbulb_group->factor_b * pwm_freq * i / 3 * (1 - s);
+    } else if (h < 4.188786668) {
+        h = h - 2.094393334;
+        g = lightbulb_group->factor_g * pwm_freq * i / 3 * (1 + s * cos_h / cos_1047_h);
+        b = lightbulb_group->factor_b * pwm_freq * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
+        r = lightbulb_group->factor_r * pwm_freq * i / 3 * (1 - s);
     } else {
-        // RGBW
-        if (h < 2.09439) {
-            lightbulb_group->target_r = s * PWM_RGBW_SCALE * i / 3 * (1 + cos_h / cos_1047_h);
-            lightbulb_group->target_g = s * PWM_RGBW_SCALE * i / 3 * (1 + (1 - cos_h / cos_1047_h));
-            lightbulb_group->target_b = 0;
-            lightbulb_group->target_w = PWM_RGBW_SCALE * (1 - s) * i;
-        } else if (h < 4.188787) {
-            h = h - 2.09439;
-            lightbulb_group->target_g = s * PWM_RGBW_SCALE * i / 3 * (1 + cos_h / cos_1047_h);
-            lightbulb_group->target_b = s * PWM_RGBW_SCALE * i / 3 * (1 + (1 - cos_h / cos_1047_h));
-            lightbulb_group->target_r = 0;
-            lightbulb_group->target_w = PWM_RGBW_SCALE * (1 - s) * i;
-        } else {
-            h = h - 4.188787;
-            lightbulb_group->target_b = s * PWM_RGBW_SCALE * i / 3 * (1 + cos_h / cos_1047_h);
-            lightbulb_group->target_r = s * PWM_RGBW_SCALE * i / 3 * (1 + (1 - cos_h / cos_1047_h));
-            lightbulb_group->target_g = 0;
-            lightbulb_group->target_w = PWM_RGBW_SCALE * (1 - s) * i;
-        }
+        h = h - 4.188786668;
+        b = lightbulb_group->factor_b * pwm_freq * i / 3 * (1 + s * cos_h / cos_1047_h);
+        r = lightbulb_group->factor_r * pwm_freq * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
+        g = lightbulb_group->factor_g * pwm_freq * i / 3 * (1 - s);
     }
+    const uint32_t w = lightbulb_group->factor_w * pwm_freq * i * (1 - s);
+    
+    lightbulb_group->target_r = ((r > pwm_freq) ? pwm_freq : r);
+    lightbulb_group->target_g = ((g > pwm_freq) ? pwm_freq : g);
+    lightbulb_group->target_b = ((b > pwm_freq) ? pwm_freq : b);
+    lightbulb_group->target_w = ((w > pwm_freq) ? pwm_freq : w);
 }
 
 void multipwm_set_all() {
@@ -982,10 +985,10 @@ void rgbw_set_timer_worker() {
         
         while (lightbulb_group) {
             if (lightbulb_group->pwm_r != 255) {
-                if (lightbulb_group->target_r - multipwm_duty[lightbulb_group->pwm_r] >= RGBW_STEP) {
-                    multipwm_duty[lightbulb_group->pwm_r] += RGBW_STEP;
-                } else if (multipwm_duty[lightbulb_group->pwm_r] - lightbulb_group->target_r >= RGBW_STEP) {
-                    multipwm_duty[lightbulb_group->pwm_r] -= RGBW_STEP;
+                if (lightbulb_group->target_r - multipwm_duty[lightbulb_group->pwm_r] >= lightbulb_group->step) {
+                    multipwm_duty[lightbulb_group->pwm_r] += lightbulb_group->step;
+                } else if (multipwm_duty[lightbulb_group->pwm_r] - lightbulb_group->target_r >= lightbulb_group->step) {
+                    multipwm_duty[lightbulb_group->pwm_r] -= lightbulb_group->step;
                 } else {
                     multipwm_duty[lightbulb_group->pwm_r] = lightbulb_group->target_r;
                     channels_to_set--;
@@ -993,10 +996,10 @@ void rgbw_set_timer_worker() {
             }
             
             if (lightbulb_group->pwm_g != 255) {
-                if (lightbulb_group->target_g - multipwm_duty[lightbulb_group->pwm_g] >= RGBW_STEP) {
-                    multipwm_duty[lightbulb_group->pwm_g] += RGBW_STEP;
-                } else if (multipwm_duty[lightbulb_group->pwm_g] - lightbulb_group->target_g >= RGBW_STEP) {
-                    multipwm_duty[lightbulb_group->pwm_g] -= RGBW_STEP;
+                if (lightbulb_group->target_g - multipwm_duty[lightbulb_group->pwm_g] >= lightbulb_group->step) {
+                    multipwm_duty[lightbulb_group->pwm_g] += lightbulb_group->step;
+                } else if (multipwm_duty[lightbulb_group->pwm_g] - lightbulb_group->target_g >= lightbulb_group->step) {
+                    multipwm_duty[lightbulb_group->pwm_g] -= lightbulb_group->step;
                 } else {
                     multipwm_duty[lightbulb_group->pwm_g] = lightbulb_group->target_g;
                     channels_to_set--;
@@ -1004,10 +1007,10 @@ void rgbw_set_timer_worker() {
             }
             
             if (lightbulb_group->pwm_b != 255) {
-                if (lightbulb_group->target_b - multipwm_duty[lightbulb_group->pwm_b] >= RGBW_STEP) {
-                    multipwm_duty[lightbulb_group->pwm_b] += RGBW_STEP;
-                } else if (multipwm_duty[lightbulb_group->pwm_b] - lightbulb_group->target_b >= RGBW_STEP) {
-                    multipwm_duty[lightbulb_group->pwm_b] -= RGBW_STEP;
+                if (lightbulb_group->target_b - multipwm_duty[lightbulb_group->pwm_b] >= lightbulb_group->step) {
+                    multipwm_duty[lightbulb_group->pwm_b] += lightbulb_group->step;
+                } else if (multipwm_duty[lightbulb_group->pwm_b] - lightbulb_group->target_b >= lightbulb_group->step) {
+                    multipwm_duty[lightbulb_group->pwm_b] -= lightbulb_group->step;
                 } else {
                     multipwm_duty[lightbulb_group->pwm_b] = lightbulb_group->target_b;
                     channels_to_set--;
@@ -1015,10 +1018,10 @@ void rgbw_set_timer_worker() {
             }
             
             if (lightbulb_group->pwm_w != 255) {
-                if (lightbulb_group->target_w - multipwm_duty[lightbulb_group->pwm_w] >= RGBW_STEP) {
-                    multipwm_duty[lightbulb_group->pwm_w] += RGBW_STEP;
-                } else if (multipwm_duty[lightbulb_group->pwm_w] - lightbulb_group->target_w >= RGBW_STEP) {
-                    multipwm_duty[lightbulb_group->pwm_w] -= RGBW_STEP;
+                if (lightbulb_group->target_w - multipwm_duty[lightbulb_group->pwm_w] >= lightbulb_group->step) {
+                    multipwm_duty[lightbulb_group->pwm_w] += lightbulb_group->step;
+                } else if (multipwm_duty[lightbulb_group->pwm_w] - lightbulb_group->target_w >= lightbulb_group->step) {
+                    multipwm_duty[lightbulb_group->pwm_w] -= lightbulb_group->step;
                 } else {
                     multipwm_duty[lightbulb_group->pwm_w] = lightbulb_group->target_w;
                     channels_to_set--;
@@ -1056,14 +1059,17 @@ void hkc_rgbw_setter_delayed(void *args) {
         } else if (lightbulb_group->pwm_b != 255) {     // Custom Color Temperature
             uint16_t target_color = 0;
             if (ch_group->ch2->value.int_value >= COLOR_TEMP_MAX - 5) {
-                target_color = PWM_RGBW_SCALE;
+                target_color = pwm_freq;
             } else if (ch_group->ch2->value.int_value > COLOR_TEMP_MIN + 1) { // Conversion based on @seritos curve
-                target_color = PWM_RGBW_SCALE * (((0.09 + sqrt(0.18 + (0.1352 * (ch_group->ch2->value.int_value - COLOR_TEMP_MIN - 1)))) / 0.0676) - 1) / 100;
+                target_color = pwm_freq * (((0.09 + sqrt(0.18 + (0.1352 * (ch_group->ch2->value.int_value - COLOR_TEMP_MIN - 1)))) / 0.0676) - 1) / 100;
             }
-            lightbulb_group->target_w = target_color * ch_group->ch1->value.int_value / 100;
-            lightbulb_group->target_b = (PWM_RGBW_SCALE - target_color) * ch_group->ch1->value.int_value / 100;
+            const uint32_t w = lightbulb_group->factor_w * target_color * ch_group->ch1->value.int_value / 100;
+            const uint32_t b = lightbulb_group->factor_b * (pwm_freq - target_color) * ch_group->ch1->value.int_value / 100;
+            lightbulb_group->target_w = ((w > pwm_freq) ? pwm_freq : w);
+            lightbulb_group->target_b = ((b > pwm_freq) ? pwm_freq : b);
         } else {                                        // One Color Dimmer
-            lightbulb_group->target_w = PWM_RGBW_SCALE * ch_group->ch1->value.int_value / 100;
+            const uint32_t w = lightbulb_group->factor_w * pwm_freq * ch_group->ch1->value.int_value / 100;
+            lightbulb_group->target_w = ((w > pwm_freq) ? pwm_freq : w);
         }
     } else {
         lightbulb_group->autodimmer = 0;
@@ -1129,21 +1135,25 @@ void autodimmer_task(void *args) {
     ch_group_t *ch_group = ch_group_find(ch);
     lightbulb_group_t *lightbulb_group = lightbulb_group_find(ch_group->ch0);
     
-    lightbulb_group->autodimmer = 20;
+    lightbulb_group->autodimmer = 4 * 100 / lightbulb_group->autodimmer_task_step;
     while(lightbulb_group->autodimmer > 0) {
         lightbulb_group->autodimmer--;
         if (ch_group->ch1->value.int_value < 100) {
-            if (ch_group->ch1->value.int_value + 20 < 100) {
-                ch_group->ch1->value.int_value += 20;
+            if (ch_group->ch1->value.int_value + lightbulb_group->autodimmer_task_step < 100) {
+                ch_group->ch1->value.int_value += lightbulb_group->autodimmer_task_step;
             } else {
                 ch_group->ch1->value.int_value = 100;
             }
         } else {
-            ch_group->ch1->value.int_value = 20;
+            ch_group->ch1->value.int_value = lightbulb_group->autodimmer_task_step;
         }
         hkc_rgbw_setter(ch_group->ch1, ch_group->ch1->value);
         
-        vTaskDelay(1200 / portTICK_PERIOD_MS);
+        vTaskDelay(lightbulb_group->autodimmer_task_delay);
+        
+        if (ch_group->ch1->value.int_value == 100) {    // Double wait when brightness is 100%
+            vTaskDelay(lightbulb_group->autodimmer_task_delay);
+        }
     }
     
     printf("HAA > AUTODimmer stopped\n");
@@ -1517,6 +1527,12 @@ void normal_mode_init() {
         uint8_t button_filter_value = (uint8_t) cJSON_GetObjectItem(json_config, BUTTON_FILTER)->valuedouble;
         adv_button_set_evaluate_delay(button_filter_value);
         printf("HAA > Button filter set to %i\n", button_filter_value);
+    }
+    
+    // PWM Frequency
+    if (cJSON_GetObjectItem(json_config, PWM_FREQ) != NULL) {
+        pwm_freq = (uint16_t) cJSON_GetObjectItem(json_config, PWM_FREQ)->valuedouble;
+        printf("HAA > PWM Frequency set to %i\n", pwm_freq);
     }
     
     // Allowed Setup Mode Time
@@ -2207,6 +2223,7 @@ void normal_mode_init() {
             memset(pwm_info, 0, sizeof(*pwm_info));
             
             multipwm_init(pwm_info);
+            multipwm_set_freq(pwm_info, pwm_freq);
             pwm_info->channels = 0;
         }
         
@@ -2231,8 +2248,15 @@ void normal_mode_init() {
         lightbulb_group->target_g = 0;
         lightbulb_group->target_b = 0;
         lightbulb_group->target_w = 0;
+        lightbulb_group->factor_r = 1;
+        lightbulb_group->factor_g = 1;
+        lightbulb_group->factor_b = 1;
+        lightbulb_group->factor_w = 1;
+        lightbulb_group->step = RGBW_STEP_DEFAULT;
         lightbulb_group->autodimmer = 0;
         lightbulb_group->armed_autodimmer = false;
+        lightbulb_group->autodimmer_task_delay = AUTODIMMER_TASK_DELAY_DEFAULT;
+        lightbulb_group->autodimmer_task_step = AUTODIMMER_TASK_STEP_DEFAULT;
         lightbulb_group->next = lightbulb_groups;
         lightbulb_groups = lightbulb_group;
 
@@ -2241,11 +2265,19 @@ void normal_mode_init() {
             pwm_info->channels++;
             multipwm_set_pin(pwm_info, lightbulb_group->pwm_r, (uint8_t) cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_R)->valuedouble);
         }
+        
+        if (cJSON_GetObjectItem(json_context, LIGHTBULB_FACTOR_R) != NULL) {
+            lightbulb_group->factor_r = (float) cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_R)->valuedouble;
+        }
 
         if (cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_G) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
             lightbulb_group->pwm_g = pwm_info->channels;
             pwm_info->channels++;
             multipwm_set_pin(pwm_info, lightbulb_group->pwm_g, (uint8_t) cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_G)->valuedouble);
+        }
+        
+        if (cJSON_GetObjectItem(json_context, LIGHTBULB_FACTOR_G) != NULL) {
+            lightbulb_group->factor_g = (float) cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_G)->valuedouble;
         }
 
         if (cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_B) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
@@ -2253,11 +2285,31 @@ void normal_mode_init() {
             pwm_info->channels++;
             multipwm_set_pin(pwm_info, lightbulb_group->pwm_b, (uint8_t) cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_B)->valuedouble);
         }
+        
+        if (cJSON_GetObjectItem(json_context, LIGHTBULB_FACTOR_B) != NULL) {
+            lightbulb_group->factor_b = (float) cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_B)->valuedouble;
+        }
 
         if (cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_W) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
             lightbulb_group->pwm_w = pwm_info->channels;
             pwm_info->channels++;
             multipwm_set_pin(pwm_info, lightbulb_group->pwm_w, (uint8_t) cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_W)->valuedouble);
+        }
+        
+        if (cJSON_GetObjectItem(json_context, LIGHTBULB_FACTOR_W) != NULL) {
+            lightbulb_group->factor_w = (float) cJSON_GetObjectItem(json_context, LIGHTBULB_PWM_GPIO_W)->valuedouble;
+        }
+        
+        if (cJSON_GetObjectItem(json_context, RGBW_STEP) != NULL) {
+            lightbulb_group->step = (uint16_t) cJSON_GetObjectItem(json_context, RGBW_STEP)->valuedouble;
+        }
+        
+        if (cJSON_GetObjectItem(json_context, AUTODIMMER_TASK_DELAY) != NULL) {
+            lightbulb_group->autodimmer_task_delay = ((uint16_t) cJSON_GetObjectItem(json_context, AUTODIMMER_TASK_DELAY)->valuedouble) / portTICK_PERIOD_MS;
+        }
+        
+        if (cJSON_GetObjectItem(json_context, AUTODIMMER_TASK_STEP) != NULL) {
+            lightbulb_group->autodimmer_task_step = (uint8_t) cJSON_GetObjectItem(json_context, AUTODIMMER_TASK_STEP)->valuedouble;
         }
 
         accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
