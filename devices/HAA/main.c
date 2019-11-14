@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.6.14
+ * v0.6.15
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.6.14"
-#define FIRMWARE_VERSION_OCTAL          000616      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.6.15"
+#define FIRMWARE_VERSION_OCTAL          000617      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -82,7 +82,7 @@
 #define INVERTED                        "i"
 #define BUTTON_FILTER                   "f"
 #define PWM_FREQ                        "q"
-#define PWM_FREQ_DEFAULT                800
+#define PWM_FREQ_DEFAULT                300
 #define ENABLE_HOMEKIT_SERVER           "h"
 #define ACCESSORIES                     "a"
 #define BUTTONS_ARRAY                   "b"
@@ -143,12 +143,13 @@
 #define RGBW_PERIOD                     12
 #define RGBW_STEP                       "p"
 #define RGBW_STEP_DEFAULT               1024
-#define RGBW_SET_DELAY                  120
+#define RGBW_SET_DELAY                  350
+#define PWM_SCALE                       (UINT16_MAX - 1)
 #define COLOR_TEMP_MIN                  71
 #define COLOR_TEMP_MAX                  400
 #define LIGHTBULB_BRIGHTNESS_UP         0
 #define LIGHTBULB_BRIGHTNESS_DOWN       1
-#define AUTODIMMER_DELAY                400
+#define AUTODIMMER_DELAY                500
 #define AUTODIMMER_TASK_DELAY           "d"
 #define AUTODIMMER_TASK_DELAY_DEFAULT   1000
 #define AUTODIMMER_TASK_STEP            "e"
@@ -271,7 +272,6 @@ lightbulb_group_t *lightbulb_groups = NULL;
 
 ch_group_t *ch_group_find(homekit_characteristic_t *ch) {
     ch_group_t *ch_group = ch_groups;
-    
     while (ch_group &&
            ch_group->ch0 != ch &&
            ch_group->ch1 != ch &&
@@ -289,7 +289,6 @@ ch_group_t *ch_group_find(homekit_characteristic_t *ch) {
 
 lightbulb_group_t *lightbulb_group_find(homekit_characteristic_t *ch) {
     lightbulb_group_t *lightbulb_group = lightbulb_groups;
-    
     while (lightbulb_group &&
            lightbulb_group->ch0 != ch) {
         lightbulb_group = lightbulb_group->next;
@@ -338,7 +337,7 @@ void setup_mode_call(const uint8_t gpio, void *args, const uint8_t param) {
 
 void setup_mode_toggle_upcount() {
     setup_mode_toggle_counter++;
-    sdk_os_timer_arm(&setup_mode_toggle_timer, 1000, 0);
+    sdk_os_timer_arm(&setup_mode_toggle_timer, 1400, 0);
 }
 
 void setup_mode_toggle() {
@@ -948,26 +947,26 @@ void hsi2rgbw(float h, float s, float i, lightbulb_group_t *lightbulb_group) {
     uint32_t r, g, b;
     
     if (h < 2.094393334) {
-        r = lightbulb_group->factor_r * pwm_freq * i / 3 * (1 + s * cos_h / cos_1047_h);
-        g = lightbulb_group->factor_g * pwm_freq * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
-        b = lightbulb_group->factor_b * pwm_freq * i / 3 * (1 - s);
+        r = lightbulb_group->factor_r * PWM_SCALE * i / 3 * (1 + s * cos_h / cos_1047_h);
+        g = lightbulb_group->factor_g * PWM_SCALE * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
+        b = lightbulb_group->factor_b * PWM_SCALE * i / 3 * (1 - s);
     } else if (h < 4.188786668) {
         h = h - 2.094393334;
-        g = lightbulb_group->factor_g * pwm_freq * i / 3 * (1 + s * cos_h / cos_1047_h);
-        b = lightbulb_group->factor_b * pwm_freq * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
-        r = lightbulb_group->factor_r * pwm_freq * i / 3 * (1 - s);
+        g = lightbulb_group->factor_g * PWM_SCALE * i / 3 * (1 + s * cos_h / cos_1047_h);
+        b = lightbulb_group->factor_b * PWM_SCALE * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
+        r = lightbulb_group->factor_r * PWM_SCALE * i / 3 * (1 - s);
     } else {
         h = h - 4.188786668;
-        b = lightbulb_group->factor_b * pwm_freq * i / 3 * (1 + s * cos_h / cos_1047_h);
-        r = lightbulb_group->factor_r * pwm_freq * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
-        g = lightbulb_group->factor_g * pwm_freq * i / 3 * (1 - s);
+        b = lightbulb_group->factor_b * PWM_SCALE * i / 3 * (1 + s * cos_h / cos_1047_h);
+        r = lightbulb_group->factor_r * PWM_SCALE * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
+        g = lightbulb_group->factor_g * PWM_SCALE * i / 3 * (1 - s);
     }
-    const uint32_t w = lightbulb_group->factor_w * pwm_freq * i * (1 - s);
+    const uint32_t w = lightbulb_group->factor_w * PWM_SCALE * i * (1 - s);
     
-    lightbulb_group->target_r = ((r > pwm_freq) ? pwm_freq : r);
-    lightbulb_group->target_g = ((g > pwm_freq) ? pwm_freq : g);
-    lightbulb_group->target_b = ((b > pwm_freq) ? pwm_freq : b);
-    lightbulb_group->target_w = ((w > pwm_freq) ? pwm_freq : w);
+    lightbulb_group->target_r = ((r > PWM_SCALE) ? PWM_SCALE : r);
+    lightbulb_group->target_g = ((g > PWM_SCALE) ? PWM_SCALE : g);
+    lightbulb_group->target_b = ((b > PWM_SCALE) ? PWM_SCALE : b);
+    lightbulb_group->target_w = ((w > PWM_SCALE) ? PWM_SCALE : w);
 }
 
 void multipwm_set_all() {
@@ -1061,17 +1060,17 @@ void hkc_rgbw_setter_delayed(void *args) {
         } else if (lightbulb_group->pwm_b != 255) {     // Custom Color Temperature
             uint16_t target_color = 0;
             if (ch_group->ch2->value.int_value >= COLOR_TEMP_MAX - 5) {
-                target_color = pwm_freq;
+                target_color = PWM_SCALE;
             } else if (ch_group->ch2->value.int_value > COLOR_TEMP_MIN + 1) { // Conversion based on @seritos curve
-                target_color = pwm_freq * (((0.09 + sqrt(0.18 + (0.1352 * (ch_group->ch2->value.int_value - COLOR_TEMP_MIN - 1)))) / 0.0676) - 1) / 100;
+                target_color = PWM_SCALE * (((0.09 + sqrt(0.18 + (0.1352 * (ch_group->ch2->value.int_value - COLOR_TEMP_MIN - 1)))) / 0.0676) - 1) / 100;
             }
             const uint32_t w = lightbulb_group->factor_w * target_color * ch_group->ch1->value.int_value / 100;
-            const uint32_t b = lightbulb_group->factor_b * (pwm_freq - target_color) * ch_group->ch1->value.int_value / 100;
-            lightbulb_group->target_w = ((w > pwm_freq) ? pwm_freq : w);
-            lightbulb_group->target_b = ((b > pwm_freq) ? pwm_freq : b);
+            const uint32_t b = lightbulb_group->factor_b * (PWM_SCALE - target_color) * ch_group->ch1->value.int_value / 100;
+            lightbulb_group->target_w = ((w > PWM_SCALE) ? PWM_SCALE : w);
+            lightbulb_group->target_b = ((b > PWM_SCALE) ? PWM_SCALE : b);
         } else {                                        // One Color Dimmer
-            const uint32_t w = lightbulb_group->factor_w * pwm_freq * ch_group->ch1->value.int_value / 100;
-            lightbulb_group->target_w = ((w > pwm_freq) ? pwm_freq : w);
+            const uint32_t w = lightbulb_group->factor_w * PWM_SCALE * ch_group->ch1->value.int_value / 100;
+            lightbulb_group->target_w = ((w > PWM_SCALE) ? PWM_SCALE : w);
         }
     } else {
         lightbulb_group->autodimmer = 0;
@@ -2226,7 +2225,6 @@ void normal_mode_init() {
             
             multipwm_init(pwm_info);
             multipwm_set_freq(pwm_info, pwm_freq);
-            pwm_freq--;
             pwm_info->channels = 0;
         }
         
@@ -2308,7 +2306,7 @@ void normal_mode_init() {
         }
         
         if (cJSON_GetObjectItem(json_context, AUTODIMMER_TASK_DELAY) != NULL) {
-            lightbulb_group->autodimmer_task_delay = ((uint16_t) cJSON_GetObjectItem(json_context, AUTODIMMER_TASK_DELAY)->valuedouble) / portTICK_PERIOD_MS;
+            lightbulb_group->autodimmer_task_delay = cJSON_GetObjectItem(json_context, AUTODIMMER_TASK_DELAY)->valuedouble * (1000 / portTICK_PERIOD_MS);
         }
         
         if (cJSON_GetObjectItem(json_context, AUTODIMMER_TASK_STEP) != NULL) {
