@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.6.15
+ * v0.6.16
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.6.15"
-#define FIRMWARE_VERSION_OCTAL          000617      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.6.16"
+#define FIRMWARE_VERSION_OCTAL          000620      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -82,7 +82,6 @@
 #define INVERTED                        "i"
 #define BUTTON_FILTER                   "f"
 #define PWM_FREQ                        "q"
-#define PWM_FREQ_DEFAULT                300
 #define ENABLE_HOMEKIT_SERVER           "h"
 #define ACCESSORIES                     "a"
 #define BUTTONS_ARRAY                   "b"
@@ -140,10 +139,10 @@
 #define LIGHTBULB_FACTOR_G              "fg"
 #define LIGHTBULB_FACTOR_B              "fv"
 #define LIGHTBULB_FACTOR_W              "fw"
-#define RGBW_PERIOD                     12
+#define RGBW_PERIOD                     10
 #define RGBW_STEP                       "p"
 #define RGBW_STEP_DEFAULT               1024
-#define RGBW_SET_DELAY                  350
+#define RGBW_SET_DELAY                  111
 #define PWM_SCALE                       (UINT16_MAX - 1)
 #define COLOR_TEMP_MIN                  71
 #define COLOR_TEMP_MAX                  400
@@ -264,7 +263,7 @@ bool setpwm_bool_semaphore = true;
 ETSTimer *pwm_timer;
 pwm_info_t *pwm_info;
 uint16_t multipwm_duty[MULTIPWM_MAX_CHANNELS];
-uint16_t pwm_freq = PWM_FREQ_DEFAULT;
+uint16_t pwm_freq = 0;
 
 last_state_t *last_states = NULL;
 ch_group_t *ch_groups = NULL;
@@ -2224,7 +2223,9 @@ void normal_mode_init() {
             memset(pwm_info, 0, sizeof(*pwm_info));
             
             multipwm_init(pwm_info);
-            multipwm_set_freq(pwm_info, pwm_freq);
+            if (pwm_freq > 0) {
+                multipwm_set_freq(pwm_info, pwm_freq);
+            }
             pwm_info->channels = 0;
         }
         
