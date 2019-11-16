@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.6.16
+ * v0.6.17
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.6.16"
-#define FIRMWARE_VERSION_OCTAL          000620      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.6.17"
+#define FIRMWARE_VERSION_OCTAL          000621      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -177,6 +177,7 @@
 #define ACC_TYPE_TH_SENSOR              24
 #define ACC_TYPE_LIGHTBULB              30
 
+#define EXIT_EMERGENCY_SETUP_MODE_TIME  3000
 #define SETUP_MODE_ACTIVATE_COUNT       8
 
 #ifndef HAA_MAX_ACCESSORIES
@@ -254,6 +255,7 @@ typedef struct _lightbulb_group {
 uint8_t setup_mode_toggle_counter = 0, led_gpio = 255;
 uint16_t setup_mode_time = 0;
 ETSTimer setup_mode_toggle_timer, save_states_timer;
+ETSTimer *emergency_setup_mode_timer;
 bool used_gpio[17];
 bool led_inverted = true;
 bool enable_homekit_server = true;
@@ -318,6 +320,7 @@ void led_blink(const int blinks) {
 // -----
 
 void setup_mode_task() {
+    sdk_os_timer_disarm(emergency_setup_mode_timer);
     sysparam_set_bool("setup", true);
     vTaskDelay(3000 / portTICK_PERIOD_MS);
     sdk_system_restart();
@@ -345,6 +348,12 @@ void setup_mode_toggle() {
     }
     
     setup_mode_toggle_counter = 0;
+}
+
+void exit_emergency_setup_mode() {
+    printf("HAA > Disarming Emergency Setup Mode\n");
+    sysparam_set_bool("setup", false);
+    free(emergency_setup_mode_timer);
 }
 
 // -----
@@ -565,6 +574,9 @@ void button_event(const uint8_t gpio, void *args, const uint8_t event_type) {
         printf("HAA > Setter EVENT %i\n", event_type);
         
         homekit_characteristic_notify(ch, HOMEKIT_UINT8(event_type));
+        
+        cJSON *json_context = ch->context;
+        do_actions(json_context, event_type);
         
         setup_mode_toggle_upcount();
     }
@@ -1077,6 +1089,9 @@ void hkc_rgbw_setter_delayed(void *args) {
         lightbulb_group->target_g = 0;
         lightbulb_group->target_b = 0;
         lightbulb_group->target_w = 0;
+        
+        setup_mode_toggle_upcount();
+        setup_mode_toggle_upcount();
     }
     
     printf("HAA > Target RGBW = %i, %i, %i, %i\n", lightbulb_group->target_r, lightbulb_group->target_g, lightbulb_group->target_b, lightbulb_group->target_w);
@@ -1091,7 +1106,6 @@ void hkc_rgbw_setter_delayed(void *args) {
     
     hkc_group_notify(ch_group->ch0);
     
-    setup_mode_toggle_upcount();
     save_states_callback();
 }
 
@@ -1342,6 +1356,14 @@ void run_homekit_server() {
 }
 
 void normal_mode_init() {
+    // Arming emergency Setup Mode
+    sysparam_set_bool("setup", true);
+    emergency_setup_mode_timer = malloc(sizeof(ETSTimer));
+    memset(emergency_setup_mode_timer, 0, sizeof(*emergency_setup_mode_timer));
+    sdk_os_timer_setfn(emergency_setup_mode_timer, exit_emergency_setup_mode, NULL);
+    sdk_os_timer_arm(emergency_setup_mode_timer, EXIT_EMERGENCY_SETUP_MODE_TIME, 0);
+    
+    // Filling Used GPIO Array
     for (uint8_t g=0; g<17; g++) {
         used_gpio[g] = false;
     }
@@ -1376,6 +1398,8 @@ void normal_mode_init() {
         
         return;
     }
+    
+    
     
     // Buttons GPIO Setup function
     bool diginput_register(cJSON *json_buttons, void *callback, homekit_characteristic_t *hk_ch, const uint8_t param) {
@@ -1715,7 +1739,7 @@ void normal_mode_init() {
     uint8_t new_button_event(uint8_t accessory, cJSON *json_context) {
         new_accessory(accessory, 3);
         
-        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(PROGRAMMABLE_SWITCH_EVENT, 0);
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(PROGRAMMABLE_SWITCH_EVENT, 0, .context=json_context);
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));

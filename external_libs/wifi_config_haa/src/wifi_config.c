@@ -724,7 +724,7 @@ static int wifi_config_station_connect() {
     bool haa_setup = false;
     status = sysparam_get_bool("setup", &haa_setup);
     
-    if (status == SYSPARAM_OK && haa_setup == true) {
+    if (status == SYSPARAM_OK && haa_setup == true && !context->on_wifi_ready) {
         INFO("HAA Setup mode");
         sysparam_set_bool("setup", false);
 
