@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.6.17
+ * v0.6.18
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.6.17"
-#define FIRMWARE_VERSION_OCTAL          000621      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.6.18"
+#define FIRMWARE_VERSION_OCTAL          000622      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -320,7 +320,6 @@ void led_blink(const int blinks) {
 // -----
 
 void setup_mode_task() {
-    sdk_os_timer_disarm(emergency_setup_mode_timer);
     sysparam_set_bool("setup", true);
     vTaskDelay(3000 / portTICK_PERIOD_MS);
     sdk_system_restart();
@@ -339,7 +338,7 @@ void setup_mode_call(const uint8_t gpio, void *args, const uint8_t param) {
 
 void setup_mode_toggle_upcount() {
     setup_mode_toggle_counter++;
-    sdk_os_timer_arm(&setup_mode_toggle_timer, 1400, 0);
+    sdk_os_timer_arm(&setup_mode_toggle_timer, 1000, 0);
 }
 
 void setup_mode_toggle() {
@@ -1066,6 +1065,13 @@ void hkc_rgbw_setter_delayed(void *args) {
     lightbulb_group_t *lightbulb_group = lightbulb_group_find(ch_group->ch0);
     
     if (ch_group->ch0->value.bool_value) {
+        if (lightbulb_group->target_r == 0 &&
+            lightbulb_group->target_g == 0 &&
+            lightbulb_group->target_b == 0 &&
+            lightbulb_group->target_w == 0) {
+            setup_mode_toggle_upcount();
+        }
+        
         if (lightbulb_group->pwm_r != 255) {            // RGB/W
             hsi2rgbw(ch_group->ch2->value.float_value, ch_group->ch3->value.float_value, ch_group->ch1->value.int_value, lightbulb_group);
         } else if (lightbulb_group->pwm_b != 255) {     // Custom Color Temperature
@@ -1090,7 +1096,6 @@ void hkc_rgbw_setter_delayed(void *args) {
         lightbulb_group->target_b = 0;
         lightbulb_group->target_w = 0;
         
-        setup_mode_toggle_upcount();
         setup_mode_toggle_upcount();
     }
     
