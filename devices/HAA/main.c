@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.7.0
+ * v0.7.1
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.7.0"
-#define FIRMWARE_VERSION_OCTAL          000700      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.7.1"
+#define FIRMWARE_VERSION_OCTAL          000701      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -111,7 +111,7 @@
 #define THERMOSTAT_TYPE_COOLER          2
 #define THERMOSTAT_TYPE_HEATERCOOLER    3
 #define THERMOSTAT_MIN_TEMP             "m"
-#define THERMOSTAT_DEFAULT_MIN_TEMP     15
+#define THERMOSTAT_DEFAULT_MIN_TEMP     10
 #define THERMOSTAT_MAX_TEMP             "x"
 #define THERMOSTAT_DEFAULT_MAX_TEMP     38
 #define THERMOSTAT_DEADBAND             "d"
@@ -2089,7 +2089,7 @@ void normal_mode_init() {
         
         // HomeKit Characteristics
         homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200}, .getter_ex=hkc_getter, .context=json_context);
-        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, false, .getter_ex=hkc_getter, .setter_ex=update_th, .context=json_context);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, false, .getter_ex=hkc_getter, .setter_ex=hkc_th_target_setter, .context=json_context);
         homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(TEMPERATURE_DISPLAY_UNITS, 0, .getter_ex=hkc_getter, .setter_ex=hkc_setter);
         homekit_characteristic_t *ch3 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_HEATER_COOLER_STATE, 0, .getter_ex=hkc_getter);
         homekit_characteristic_t *ch5 = NEW_HOMEKIT_CHARACTERISTIC(HEATING_THRESHOLD_TEMPERATURE, default_target_temp -1, .min_value=(float[]) {th_min_temp}, .max_value=(float[]) {th_max_temp}, .getter_ex=hkc_getter, .setter_ex=update_th, .context=json_context);
@@ -2127,20 +2127,20 @@ void normal_mode_init() {
         
         switch (th_type) {
             case THERMOSTAT_TYPE_COOLER:
-                ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_COOLER, .min_value=(float[]) {THERMOSTAT_TARGET_MODE_COOLER}, .max_value=(float[]) {THERMOSTAT_TARGET_MODE_COOLER}, .valid_values={.count=1, .values=(uint8_t[]) {THERMOSTAT_TARGET_MODE_COOLER}}, .getter_ex=hkc_getter, .setter_ex=hkc_th_target_setter, .context=json_context);
+                ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_COOLER, .min_value=(float[]) {THERMOSTAT_TARGET_MODE_COOLER}, .max_value=(float[]) {THERMOSTAT_TARGET_MODE_COOLER}, .valid_values={.count=1, .values=(uint8_t[]) {THERMOSTAT_TARGET_MODE_COOLER}}, .getter_ex=hkc_getter, .context=json_context);
                 
                 accessories[accessory]->services[1]->characteristics[5] = ch6;
                 break;
                 
             case THERMOSTAT_TYPE_HEATERCOOLER:
-                ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_AUTO, .getter_ex=hkc_getter, .setter_ex=hkc_th_target_setter, .context=json_context);
+                ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_AUTO, .getter_ex=hkc_getter, .setter_ex=update_th, .context=json_context);
                 
                 accessories[accessory]->services[1]->characteristics[5] = ch5;
                 accessories[accessory]->services[1]->characteristics[6] = ch6;
                 break;
                 
             default:        // case THERMOSTAT_TYPE_HEATER:
-                ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_HEATER, .min_value=(float[]) {THERMOSTAT_TARGET_MODE_HEATER}, .max_value=(float[]) {THERMOSTAT_TARGET_MODE_HEATER}, .valid_values={.count=1, .values=(uint8_t[]) {THERMOSTAT_TARGET_MODE_HEATER}}, .getter_ex=hkc_getter, .setter_ex=hkc_th_target_setter, .context=json_context);
+                ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_HEATER, .min_value=(float[]) {THERMOSTAT_TARGET_MODE_HEATER}, .max_value=(float[]) {THERMOSTAT_TARGET_MODE_HEATER}, .valid_values={.count=1, .values=(uint8_t[]) {THERMOSTAT_TARGET_MODE_HEATER}}, .getter_ex=hkc_getter, .context=json_context);
 
                 accessories[accessory]->services[1]->characteristics[5] = ch5;
                 break;
