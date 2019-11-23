@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.7.3
+ * v0.7.4
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.7.3"
-#define FIRMWARE_VERSION_OCTAL          000703      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.7.4"
+#define FIRMWARE_VERSION_OCTAL          000704      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -184,7 +184,7 @@
 #define ACC_TYPE_TH_SENSOR              24
 #define ACC_TYPE_LIGHTBULB              30
 
-#define ACC_CREATION_DELAY              60
+#define ACC_CREATION_DELAY              50
 #define EXIT_EMERGENCY_SETUP_MODE_TIME  2400
 #define SETUP_MODE_ACTIVATE_COUNT       8
 
@@ -214,6 +214,8 @@ typedef struct _last_state {
 } last_state_t;
 
 typedef struct _ch_group {
+    uint8_t accessory;
+    
     homekit_characteristic_t *ch0;
     homekit_characteristic_t *ch1;
     homekit_characteristic_t *ch2;
@@ -730,15 +732,11 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
         }
         
         if (ch_group->ch1->value.bool_value) {
-            if (ch_group->ch3->value.int_value == THERMOSTAT_MODE_OFF) {
-                ch_group->ch3->value.int_value = THERMOSTAT_MODE_IDLE;
-            }
-            
             const float mid_target_temp = (ch_group->ch5->value.float_value + ch_group->ch6->value.float_value) / 2;
             
             switch (ch_group->ch4->value.int_value) {
                 case THERMOSTAT_TARGET_MODE_HEATER:
-                    if (ch_group->ch3->value.int_value == THERMOSTAT_MODE_IDLE) {
+                    if (ch_group->ch3->value.int_value <= THERMOSTAT_MODE_IDLE) {
                         if (ch_group->ch0->value.float_value < (ch_group->ch5->value.float_value - temp_deadband)) {
                             ch_group->ch3->value.int_value = THERMOSTAT_MODE_HEATER;
                             do_actions(json_context, THERMOSTAT_ACTION_HEATER_ON);
@@ -750,7 +748,7 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
                     break;
                 
                 case THERMOSTAT_TARGET_MODE_COOLER:
-                    if (ch_group->ch3->value.int_value == THERMOSTAT_MODE_IDLE) {
+                    if (ch_group->ch3->value.int_value <= THERMOSTAT_MODE_IDLE) {
                         if (ch_group->ch0->value.float_value > (ch_group->ch6->value.float_value + temp_deadband)) {
                             ch_group->ch3->value.int_value = THERMOSTAT_MODE_COOLER;
                             do_actions(json_context, THERMOSTAT_ACTION_COOLER_ON);
@@ -777,7 +775,7 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
                             }
                             break;
                             
-                        default:    // case THERMOSTAT_MODE_IDLE:
+                        default:    // cases THERMOSTAT_MODE_IDLE, THERMOSTAT_MODE_OFF:
                             if (ch_group->ch0->value.float_value < ch_group->ch5->value.float_value) {
                                 ch_group->ch3->value.int_value = THERMOSTAT_MODE_HEATER;
                                 do_actions(json_context, THERMOSTAT_ACTION_HEATER_ON);
@@ -1422,6 +1420,30 @@ void identify(homekit_value_t _value) {
 
 // ---------
 
+void delayed_sensor_starter_task(void *args) {
+    printf("HAA > Starting delayed sensor\n");
+    homekit_characteristic_t *ch = args;
+    ch_group_t *ch_group = ch_group_find(ch);
+    
+    cJSON *json_context = ch->context;
+    
+    uint16_t th_poll_period = THERMOSTAT_DEFAULT_POLL_PERIOD;
+    if (cJSON_GetObjectItem(json_context, THERMOSTAT_POLL_PERIOD) != NULL) {
+        th_poll_period = (uint16_t) cJSON_GetObjectItem(json_context, THERMOSTAT_POLL_PERIOD)->valuedouble;
+    }
+    
+    if (th_poll_period < 3) {
+        th_poll_period = 3;
+    }
+    
+    vTaskDelay(ch_group->accessory * (3000 / portTICK_PERIOD_MS));
+    
+    temperature_timer_worker(ch);
+    sdk_os_timer_arm(ch_group->timer, th_poll_period * 1000, 1);
+    
+    vTaskDelete(NULL);
+}
+
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, NULL);
 homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, NULL);
 homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, "RavenSystem");
@@ -1769,6 +1791,7 @@ void normal_mode_init() {
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->accessory = accessory;
         ch_group->ch0 = ch0;
         ch_group->next = ch_groups;
         ch_groups = ch_group;
@@ -1825,6 +1848,7 @@ void normal_mode_init() {
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->accessory = accessory;
         ch_group->ch0 = ch0;
         ch_group->next = ch_groups;
         ch_groups = ch_group;
@@ -1853,6 +1877,7 @@ void normal_mode_init() {
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->accessory = accessory;
         ch_group->ch0 = ch0;
         ch_group->ch1 = ch1;
         ch_group->next = ch_groups;
@@ -1987,6 +2012,7 @@ void normal_mode_init() {
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->accessory = accessory;
         ch_group->ch0 = ch0;
         ch_group->ch1 = ch1;
         ch_group->next = ch_groups;
@@ -2158,6 +2184,7 @@ void normal_mode_init() {
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->accessory = accessory;
         ch_group->ch0 = ch0;
         ch_group->ch1 = ch1;
         ch_group->ch2 = ch2;
@@ -2176,8 +2203,7 @@ void normal_mode_init() {
         
         const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         
-        temperature_timer_worker(ch0);
-        sdk_os_timer_arm(ch_group->timer, th_poll_period * 1000, 1);
+        xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", configMINIMAL_STACK_SIZE, ch0, 1, NULL);
         
         diginput_register(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), th_input, ch1, 9);
         diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_3), th_input_temp, ch0, THERMOSTAT_TEMP_UP);
@@ -2229,6 +2255,7 @@ void normal_mode_init() {
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->accessory = accessory;
         ch_group->ch0 = ch0;
         ch_group->saved_float0 = 0;
         ch_group->next = ch_groups;
@@ -2245,8 +2272,7 @@ void normal_mode_init() {
         memset(ch_group->timer, 0, sizeof(*ch_group->timer));
         sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch0);
         
-        temperature_timer_worker(ch0);
-        sdk_os_timer_arm(ch_group->timer, th_poll_period * 1000, 1);
+        xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", configMINIMAL_STACK_SIZE, ch0, 1, NULL);
         
         return accessory + 1;
     }
@@ -2254,19 +2280,11 @@ void normal_mode_init() {
     uint8_t new_hum_sensor(uint8_t accessory, cJSON *json_context) {
         new_accessory(accessory, 3);
         
-        uint16_t th_poll_period = THERMOSTAT_DEFAULT_POLL_PERIOD;
-        if (cJSON_GetObjectItem(json_context, THERMOSTAT_POLL_PERIOD) != NULL) {
-            th_poll_period = (uint16_t) cJSON_GetObjectItem(json_context, THERMOSTAT_POLL_PERIOD)->valuedouble;
-        }
-        
-        if (th_poll_period < 3) {
-            th_poll_period = 3;
-        }
-        
         homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0, .getter_ex=hkc_getter, .context=json_context);
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->accessory = accessory;
         ch_group->ch1 = ch1;
         ch_group->saved_float1 = 0;
         ch_group->next = ch_groups;
@@ -2283,8 +2301,7 @@ void normal_mode_init() {
         memset(ch_group->timer, 0, sizeof(*ch_group->timer));
         sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch1);
         
-        temperature_timer_worker(ch1);
-        sdk_os_timer_arm(ch_group->timer, th_poll_period * 1000, 1);
+        xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", configMINIMAL_STACK_SIZE, ch1, 1, NULL);
         
         return accessory + 1;
     }
@@ -2306,6 +2323,7 @@ void normal_mode_init() {
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->accessory = accessory;
         ch_group->ch0 = ch0;
         ch_group->ch1 = ch1;
         ch_group->saved_float0 = 0;
@@ -2331,8 +2349,7 @@ void normal_mode_init() {
         memset(ch_group->timer, 0, sizeof(*ch_group->timer));
         sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch0);
         
-        temperature_timer_worker(ch0);
-        sdk_os_timer_arm(ch_group->timer, th_poll_period * 1000, 1);
+        xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", configMINIMAL_STACK_SIZE, ch0, 1, NULL);
         
         return accessory + 1;
     }
@@ -2361,6 +2378,7 @@ void normal_mode_init() {
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->accessory = accessory;
         ch_group->ch0 = ch0;
         ch_group->ch1 = ch1;
         ch_group->next = ch_groups;
