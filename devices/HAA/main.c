@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.7.2
+ * v0.7.3
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.7.2"
-#define FIRMWARE_VERSION_OCTAL          000702      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.7.3"
+#define FIRMWARE_VERSION_OCTAL          000703      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -184,7 +184,8 @@
 #define ACC_TYPE_TH_SENSOR              24
 #define ACC_TYPE_LIGHTBULB              30
 
-#define EXIT_EMERGENCY_SETUP_MODE_TIME  3000
+#define ACC_CREATION_DELAY              60
+#define EXIT_EMERGENCY_SETUP_MODE_TIME  2400
 #define SETUP_MODE_ACTIVATE_COUNT       8
 
 #ifndef HAA_MAX_ACCESSORIES
@@ -263,7 +264,6 @@ typedef struct _lightbulb_group {
 uint8_t setup_mode_toggle_counter = 0, led_gpio = 255;
 uint16_t setup_mode_time = 0;
 ETSTimer setup_mode_toggle_timer, save_states_timer;
-ETSTimer *emergency_setup_mode_timer;
 bool used_gpio[17];
 bool led_inverted = true;
 bool enable_homekit_server = true;
@@ -329,8 +329,9 @@ void led_blink(const int blinks) {
 // -----
 
 void setup_mode_task() {
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
     sysparam_set_bool("setup", true);
-    vTaskDelay(3000 / portTICK_PERIOD_MS);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
     sdk_system_restart();
 }
 
@@ -358,10 +359,13 @@ void setup_mode_toggle() {
     setup_mode_toggle_counter = 0;
 }
 
-void exit_emergency_setup_mode() {
+void exit_emergency_setup_mode_task() {
+    vTaskDelay(EXIT_EMERGENCY_SETUP_MODE_TIME / portTICK_PERIOD_MS);
+    
     printf("HAA > Disarming Emergency Setup Mode\n");
     sysparam_set_bool("setup", false);
-    free(emergency_setup_mode_timer);
+
+    vTaskDelete(NULL);
 }
 
 // -----
@@ -1439,10 +1443,7 @@ void run_homekit_server() {
 void normal_mode_init() {
     // Arming emergency Setup Mode
     sysparam_set_bool("setup", true);
-    emergency_setup_mode_timer = malloc(sizeof(ETSTimer));
-    memset(emergency_setup_mode_timer, 0, sizeof(*emergency_setup_mode_timer));
-    sdk_os_timer_setfn(emergency_setup_mode_timer, exit_emergency_setup_mode, NULL);
-    sdk_os_timer_arm(emergency_setup_mode_timer, EXIT_EMERGENCY_SETUP_MODE_TIME, 0);
+    xTaskCreate(exit_emergency_setup_mode_task, "exit_emergency_setup_mode_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
     
     // Filling Used GPIO Array
     for (uint8_t g=0; g<17; g++) {
@@ -2282,8 +2283,6 @@ void normal_mode_init() {
         memset(ch_group->timer, 0, sizeof(*ch_group->timer));
         sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch1);
         
-        vTaskDelay(3100 / portTICK_PERIOD_MS);
-        
         temperature_timer_worker(ch1);
         sdk_os_timer_arm(ch_group->timer, th_poll_period * 1000, 1);
         
@@ -2590,7 +2589,7 @@ void normal_mode_init() {
             acc_count = new_switch(acc_count, json_accessory, acc_type);
         }
         
-        vTaskDelay(100 / portTICK_PERIOD_MS);
+        vTaskDelay(ACC_CREATION_DELAY / portTICK_PERIOD_MS);
     }
     
     sdk_os_timer_setfn(&save_states_timer, save_states, NULL);
