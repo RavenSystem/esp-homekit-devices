@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.7.5
+ * v0.7.6
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.7.5"
-#define FIRMWARE_VERSION_OCTAL          000705      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.7.6"
+#define FIRMWARE_VERSION_OCTAL          000706      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -187,7 +187,7 @@
 #define ACC_TYPE_TH_SENSOR              24
 #define ACC_TYPE_LIGHTBULB              30
 
-#define ACC_CREATION_DELAY              50
+#define ACC_CREATION_DELAY              40
 #define EXIT_EMERGENCY_SETUP_MODE_TIME  2400
 #define SETUP_MODE_ACTIVATE_COUNT       8
 
@@ -629,7 +629,7 @@ void hkc_valve_setter(homekit_characteristic_t *ch, const homekit_value_t value)
             cJSON *json_context = ch->context;
             do_actions(json_context, (uint8_t) ch->value.int_value);
             
-            if (ch->value.int_value == 0 && cJSON_GetObjectItem(json_context, AUTOSWITCH_TIME) != NULL) {
+            if (ch->value.int_value == 1 && cJSON_GetObjectItem(json_context, AUTOSWITCH_TIME) != NULL) {
                 const double autoswitch_time = cJSON_GetObjectItem(json_context, AUTOSWITCH_TIME)->valuedouble;
                 if (autoswitch_time > 0) {
                     autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
@@ -1928,12 +1928,14 @@ void normal_mode_init() {
             diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_ON);
             diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_ON);
             
-            hkc_on_setter(ch0, HOMEKIT_BOOL((bool) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_BOOL, 0)));
+            ch0->value.bool_value = !((bool) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_BOOL, 0));
+            hkc_on_setter(ch0, HOMEKIT_BOOL(!ch0->value.bool_value));
         } else {
             if (diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_ON)) {
                 diginput_1(0, ch0, TYPE_ON);
             }
             if (diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_ON)) {
+                ch0->value = HOMEKIT_BOOL(true);
                 diginput_0(0, ch0, TYPE_ON);
             }
         }
@@ -2008,12 +2010,14 @@ void normal_mode_init() {
             diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch1, TYPE_LOCK);
             diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch1, TYPE_LOCK);
             
-            hkc_lock_setter(ch1, HOMEKIT_UINT8((uint8_t) set_initial_state(accessory, 0, json_context, ch1, CH_TYPE_INT8, 1)));
+            ch1->value.int_value = !((uint8_t) set_initial_state(accessory, 0, json_context, ch1, CH_TYPE_INT8, 1));
+            hkc_lock_setter(ch1, HOMEKIT_UINT8(!ch1->value.int_value));
         } else {
             if (diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch1, TYPE_LOCK)) {
                 diginput_1(0, ch1, TYPE_LOCK);
             }
             if (diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch1, TYPE_LOCK)) {
+                ch1->value = HOMEKIT_UINT8(0);
                 diginput_0(0, ch1, TYPE_LOCK);
             }
         }
@@ -2184,12 +2188,14 @@ void normal_mode_init() {
             diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_VALVE);
             diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_VALVE);
             
-            hkc_valve_setter(ch0, HOMEKIT_BOOL((bool) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_BOOL, 0)));
+            ch0->value.int_value = !((uint8_t) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_INT8, 1));
+            hkc_valve_setter(ch0, HOMEKIT_UINT8(!ch0->value.int_value));
         } else {
             if (diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_VALVE)) {
                 diginput_1(0, ch0, TYPE_VALVE);
             }
             if (diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_VALVE)) {
+                ch0->value = HOMEKIT_UINT8(1);
                 diginput_0(0, ch0, TYPE_VALVE);
             }
         }
@@ -2342,12 +2348,14 @@ void normal_mode_init() {
             diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), th_input, ch0, 1);
             diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), th_input, ch0, 0);
             
-            update_th(ch1, HOMEKIT_BOOL((bool) set_initial_state(accessory, 1, json_context, ch1, CH_TYPE_BOOL, false)));
+            ch1->value.bool_value = !((bool) set_initial_state(accessory, 1, json_context, ch1, CH_TYPE_BOOL, false));
+            update_th(ch1, HOMEKIT_BOOL(!ch1->value.bool_value));
         } else {
             if (diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), th_input, ch0, 1)) {
                 th_input(0, ch1, 1);
             }
             if (diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), th_input, ch0, 0)) {
+                ch1->value = HOMEKIT_BOOL(true);
                 th_input(0, ch1, 0);
             }
         }
@@ -2723,7 +2731,7 @@ void normal_mode_init() {
             acc_count = new_switch(acc_count, json_accessory, acc_type);
         }
         
-        //vTaskDelay(ACC_CREATION_DELAY / portTICK_PERIOD_MS);
+        vTaskDelay(ACC_CREATION_DELAY / portTICK_PERIOD_MS);
     }
     
     cJSON_Delete(json_config);
