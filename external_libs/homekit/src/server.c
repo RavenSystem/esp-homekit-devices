@@ -64,7 +64,6 @@ typedef enum {
     HOMEKIT_ENDPOINT_GET_CHARACTERISTICS,
     HOMEKIT_ENDPOINT_UPDATE_CHARACTERISTICS,
     HOMEKIT_ENDPOINT_PAIRINGS,
-    HOMEKIT_ENDPOINT_RESET,
     HOMEKIT_ENDPOINT_RESOURCE,
 } homekit_endpoint_t;
 
@@ -2852,8 +2851,6 @@ int homekit_server_on_url(http_parser *parser, const char *data, size_t length) 
             context->endpoint = HOMEKIT_ENDPOINT_PAIR_VERIFY;
         } else if (!strncmp(data, "/pairings", length)) {
             context->endpoint = HOMEKIT_ENDPOINT_PAIRINGS;
-        } else if (!strncmp(data, "/reset", length)) {
-            context->endpoint = HOMEKIT_ENDPOINT_RESET;
         } else if (!strncmp(data, "/resource", length)) {
             context->endpoint = HOMEKIT_ENDPOINT_RESOURCE;
         }
@@ -2882,6 +2879,8 @@ int homekit_server_on_body(http_parser *parser, const char *data, size_t length)
     return 0;
 }
 
+static bool allow_insecure_connections = false;
+
 int homekit_server_on_message_complete(http_parser *parser) {
     client_context_t *context = parser->data;
 
@@ -2895,31 +2894,39 @@ int homekit_server_on_message_complete(http_parser *parser) {
             break;
         }
         case HOMEKIT_ENDPOINT_IDENTIFY: {
-            homekit_server_on_identify(context);
+            if (context->encrypted || allow_insecure_connections) {
+                homekit_server_on_identify(context);
+            }
             break;
         }
         case HOMEKIT_ENDPOINT_GET_ACCESSORIES: {
-            homekit_server_on_get_accessories(context);
+            if (context->encrypted || allow_insecure_connections) {
+                homekit_server_on_get_accessories(context);
+            }
             break;
         }
         case HOMEKIT_ENDPOINT_GET_CHARACTERISTICS: {
-            homekit_server_on_get_characteristics(context);
+            if (context->encrypted || allow_insecure_connections) {
+                homekit_server_on_get_characteristics(context);
+            }
             break;
         }
         case HOMEKIT_ENDPOINT_UPDATE_CHARACTERISTICS: {
-            homekit_server_on_update_characteristics(context, (const byte *)context->body, context->body_length);
+            if (context->encrypted || allow_insecure_connections) {
+                homekit_server_on_update_characteristics(context, (const byte *)context->body, context->body_length);
+            }
             break;
         }
         case HOMEKIT_ENDPOINT_PAIRINGS: {
-            homekit_server_on_pairings(context, (const byte *)context->body, context->body_length);
-            break;
-        }
-        case HOMEKIT_ENDPOINT_RESET: {
-            homekit_server_on_reset(context);
+            if (context->encrypted || allow_insecure_connections) {
+                homekit_server_on_pairings(context, (const byte *)context->body, context->body_length);
+            }
             break;
         }
         case HOMEKIT_ENDPOINT_RESOURCE: {
-            homekit_server_on_resource(context);
+            if (context->encrypted || allow_insecure_connections) {
+                homekit_server_on_resource(context);
+            }
             break;
         }
         case HOMEKIT_ENDPOINT_UNKNOWN: {
@@ -3067,7 +3074,17 @@ client_context_t *homekit_server_accept_client(homekit_server_t *server) {
         return NULL;
     }
 
-    INFO("Got new client connection: %d", s);
+    char address_buffer[INET_ADDRSTRLEN];
+
+     struct sockaddr_in addr;
+    socklen_t addr_len = sizeof(addr);
+    if (getpeername(s, (struct sockaddr *)&addr, &addr_len) == 0) {
+        inet_ntop(AF_INET, &addr.sin_addr, address_buffer, sizeof(address_buffer));
+    } else {
+        strcpy(address_buffer, "?.?.?.?");
+    }
+    
+    INFO("Got new client connection: %d from %s", s, address_buffer);
 
     const struct timeval rcvtimeout = { 10, 0 }; /* 10 second timeout */
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
@@ -3421,6 +3438,10 @@ void homekit_server_init(homekit_server_config_t *config) {
                   "invalid setup ID format");
             return;
         }
+    }
+    
+    if (config->insecure) {
+        allow_insecure_connections = config->insecure;
     }
 
     homekit_accessories_init(config->accessories);

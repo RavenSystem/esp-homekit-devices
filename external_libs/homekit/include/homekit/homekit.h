@@ -39,6 +39,8 @@ typedef struct {
     // Setup ID in format "XXXX" (where X is digit or latin capital letter)
     // Used for pairing using QR code
     char *setupId;
+    
+    bool insecure;
 
     // Callback for "POST /resource" to get snapshot image from camera
     void (*on_resource)(const char *body, size_t body_size);
