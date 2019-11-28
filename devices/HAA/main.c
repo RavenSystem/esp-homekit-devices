@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.7.6
+ * v0.7.7
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.7.6"
-#define FIRMWARE_VERSION_OCTAL          000706      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.7.7"
+#define FIRMWARE_VERSION_OCTAL          000707      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -1839,7 +1839,7 @@ void normal_mode_init() {
         accessories[accessory]->services[0]->characteristics[5] = &identify_function;
     }
     
-    homekit_characteristic_t *new_kill_switch(const uint8_t accessory, cJSON *json_context) {
+    homekit_characteristic_t *new_kill_switch(const uint8_t accessory) {
         new_accessory(accessory, 3);
         
         homekit_characteristic_t *ch = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .getter_ex=hkc_getter, .setter_ex=hkc_setter_with_setup);
@@ -1851,7 +1851,7 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
         accessories[accessory]->services[1]->characteristics[0] = ch;
         
-        ch->value.bool_value = (bool) set_initial_state(accessory, 0, json_context, ch, CH_TYPE_BOOL, 0);
+        ch->value.bool_value = (bool) set_initial_state(accessory, 0, cJSON_Parse(INIT_STATE_LAST_STR), ch, CH_TYPE_BOOL, 0);
         
         return ch;
     }
@@ -1862,19 +1862,19 @@ void normal_mode_init() {
             
             if (kill_switch == 1) {
                 printf("HAA > Enable Secure Switch\n");
-                ch_group->ch_sec = new_kill_switch(accessory, json_context);
+                ch_group->ch_sec = new_kill_switch(accessory);
                 return accessory + 1;
                 
             } else if (kill_switch == 2) {
                 printf("HAA > Enable Kids Switch\n");
-                ch_group->ch_child = new_kill_switch(accessory, json_context);
+                ch_group->ch_child = new_kill_switch(accessory);
                 return accessory + 1;
                 
             } else if (kill_switch == 3) {
                 printf("HAA > Enable Secure Switch\n");
-                ch_group->ch_sec = new_kill_switch(accessory, json_context);
+                ch_group->ch_sec = new_kill_switch(accessory);
                 printf("HAA > Enable Kids Switch\n");
-                ch_group->ch_child = new_kill_switch(accessory + 1, json_context);
+                ch_group->ch_child = new_kill_switch(accessory + 1);
                 return accessory + 2;
             }
         }
@@ -1916,8 +1916,6 @@ void normal_mode_init() {
         }
         
         diginput_register(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), diginput, ch0, TYPE_ON);
-
-        const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         
         uint8_t initial_state = 0;
         if (cJSON_GetObjectItem(json_context, INITIAL_STATE) != NULL) {
@@ -1940,6 +1938,7 @@ void normal_mode_init() {
             }
         }
         
+        const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         return new_accessory_count;
     }
     
@@ -1969,7 +1968,6 @@ void normal_mode_init() {
         diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_2), button_event, ch0, LONGPRESS_EVENT);
         
         const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
-        
         return new_accessory_count;
     }
     
@@ -1999,8 +1997,6 @@ void normal_mode_init() {
         
         diginput_register(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), diginput, ch1, TYPE_LOCK);
         
-        const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
-        
         uint8_t initial_state = 0;
         if (cJSON_GetObjectItem(json_context, INITIAL_STATE) != NULL) {
             initial_state = (uint8_t) cJSON_GetObjectItem(json_context, INITIAL_STATE)->valuedouble;
@@ -2022,6 +2018,7 @@ void normal_mode_init() {
             }
         }
         
+        const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         return new_accessory_count;
     }
     
@@ -2176,8 +2173,6 @@ void normal_mode_init() {
         }
         
         diginput_register(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), diginput, ch0, TYPE_VALVE);
-
-        const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         
         uint8_t initial_state = 0;
         if (cJSON_GetObjectItem(json_context, INITIAL_STATE) != NULL) {
@@ -2200,6 +2195,7 @@ void normal_mode_init() {
             }
         }
         
+        const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         return new_accessory_count;
     }
     
@@ -2323,8 +2319,6 @@ void normal_mode_init() {
         memset(ch_group->timer, 0, sizeof(*ch_group->timer));
         sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch0);
         
-        const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
-        
         xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", configMINIMAL_STACK_SIZE, ch0, 1, NULL);
         
         diginput_register(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), th_input, ch1, 9);
@@ -2360,6 +2354,7 @@ void normal_mode_init() {
             }
         }
         
+        const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         return new_accessory_count;
     }
     
@@ -2630,8 +2625,6 @@ void normal_mode_init() {
         diginput_register(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), diginput, ch0, TYPE_LIGHTBULB);
         diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_2), rgbw_brightness, ch1, LIGHTBULB_BRIGHTNESS_UP);
         diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_3), rgbw_brightness, ch1, LIGHTBULB_BRIGHTNESS_DOWN);
-
-        const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         
         uint8_t initial_state = 0;
         if (cJSON_GetObjectItem(json_context, INITIAL_STATE) != NULL) {
@@ -2654,6 +2647,7 @@ void normal_mode_init() {
         
         sdk_os_timer_setfn(&lightbulb_group->autodimmer_timer, no_autodimmer_called, ch0);
         
+        const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         return new_accessory_count;
     }
     
