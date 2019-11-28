@@ -33,7 +33,7 @@
 #define DOUBLEPRESS_TIME            400
 #define LONGPRESS_TIME              (DOUBLEPRESS_TIME + 10)
 #define VERYLONGPRESS_TIME          1500
-#define HOLDPRESS_TIME              10000
+#define HOLDPRESS_TIME              8000
 
 #define BUTTON_EVAL_DELAY_MIN       10
 #define BUTTON_EVAL_DELAY_MAX       (BUTTON_EVAL_DELAY_MIN + 200)
