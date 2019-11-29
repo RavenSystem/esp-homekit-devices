@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.7.7
+ * v0.7.8
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.7.7"
-#define FIRMWARE_VERSION_OCTAL          000707      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.7.8"
+#define FIRMWARE_VERSION_OCTAL          000710      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -500,10 +500,33 @@ void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
             
             setup_mode_toggle_upcount();
             save_states_callback();
+            
+            if (ch_group->ch2) {
+                if (value.bool_value) {
+                    ch_group->ch2->value = ch_group->ch1->value;
+                    sdk_os_timer_arm(ch_group->timer, 1000, 1);
+                } else {
+                    ch_group->ch2->value.int_value = 0;
+                    sdk_os_timer_disarm(ch_group->timer);
+                }
+            }
         }
     }
     
     hkc_group_notify(ch_group->ch0);
+}
+
+void on_timer_worker(void *args) {
+    homekit_characteristic_t *ch = args;
+    ch_group_t *ch_group = ch_group_find(ch);
+    
+    ch_group->ch2->value.int_value--;
+    
+    if (ch_group->ch2->value.int_value == 0) {
+        sdk_os_timer_disarm(ch_group->timer);
+        
+        hkc_on_setter(ch, HOMEKIT_BOOL(false));
+    }
 }
 
 // --- LOCK MECHANISM
@@ -663,7 +686,6 @@ void valve_timer_worker(void *args) {
     ch_group_t *ch_group = ch_group_find(ch);
     
     ch_group->ch3->value.int_value--;
-    //homekit_characteristic_notify(ch_group->ch3, ch_group->ch3->value);   // Is it necessary??
     
     if (ch_group->ch3->value.int_value == 0) {
         sdk_os_timer_disarm(ch_group->timer);
@@ -1887,6 +1909,13 @@ void normal_mode_init() {
         
         homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .getter_ex=hkc_getter, .setter_ex=hkc_on_setter, .context=json_context);
         
+        uint32_t max_duration = 0;
+        if (cJSON_GetObjectItem(json_context, VALVE_MAX_DURATION) != NULL) {
+            max_duration = (uint32_t) cJSON_GetObjectItem(json_context, VALVE_MAX_DURATION)->valuedouble;
+        }
+        
+        homekit_characteristic_t *ch1, *ch2;
+        
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
         ch_group->accessory = accessory_numerator;
@@ -1902,18 +1931,45 @@ void normal_mode_init() {
         
         if (acc_type == ACC_TYPE_SWITCH) {
             accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_SWITCH;
-            accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
-            accessories[accessory]->services[1]->characteristics[0] = ch0;
+            
+            if (max_duration == 0) {
+                accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
+                
+            } else {
+                accessories[accessory]->services[1]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
+                
+                ch1 = NEW_HOMEKIT_CHARACTERISTIC(SET_DURATION, max_duration, .max_value=(float[]) {max_duration}, .getter_ex=hkc_getter, .setter_ex=hkc_setter);
+                ch2 = NEW_HOMEKIT_CHARACTERISTIC(REMAINING_DURATION, 0, .max_value=(float[]) {max_duration}, .getter_ex=hkc_getter);
+                
+                ch_group->ch1 = ch1;
+                ch_group->ch2 = ch2;
+                
+                accessories[accessory]->services[1]->characteristics[1] = ch1;
+                accessories[accessory]->services[1]->characteristics[2] = ch2;
+                
+                const uint32_t initial_time = (uint32_t) set_initial_state(accessory, 1, cJSON_Parse(INIT_STATE_LAST_STR), ch1, CH_TYPE_INT32, 900);
+                if (initial_time > max_duration) {
+                    ch1->value.int_value = max_duration;
+                } else {
+                    ch1->value.int_value = initial_time;
+                }
+                
+                ch_group->timer = malloc(sizeof(ETSTimer));
+                memset(ch_group->timer, 0, sizeof(*ch_group->timer));
+                sdk_os_timer_setfn(ch_group->timer, on_timer_worker, ch0);
+            }
+
         } else {    // acc_type == ACC_TYPE_OUTLET
             homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(OUTLET_IN_USE, true, .getter_ex=hkc_getter, .context=json_context);
             
             accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_OUTLET;
             accessories[accessory]->services[1]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
-            accessories[accessory]->services[1]->characteristics[0] = ch0;
             accessories[accessory]->services[1]->characteristics[1] = ch1;
             
             ch_group->ch1 = ch1;
         }
+        
+        accessories[accessory]->services[1]->characteristics[0] = ch0;
         
         diginput_register(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), diginput, ch0, TYPE_ON);
         
@@ -2122,8 +2178,7 @@ void normal_mode_init() {
         
         homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .getter_ex=hkc_getter, .setter_ex=hkc_valve_setter, .context=json_context);
         homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(IN_USE, 0, .getter_ex=hkc_getter, .context=json_context);
-        homekit_characteristic_t *ch2;
-        homekit_characteristic_t *ch3;
+        homekit_characteristic_t *ch2, *ch3;
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
@@ -2142,21 +2197,14 @@ void normal_mode_init() {
         
         if (valve_max_duration == 0) {
             accessories[accessory]->services[1]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
-            accessories[accessory]->services[1]->characteristics[0] = ch0;
-            accessories[accessory]->services[1]->characteristics[1] = ch1;
-            accessories[accessory]->services[1]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(VALVE_TYPE, valve_type, .getter_ex=hkc_getter);
-            
         } else {
-            ch2 = NEW_HOMEKIT_CHARACTERISTIC(SET_DURATION, 900, .max_value=(float[]) {valve_max_duration}, .getter_ex=hkc_getter, .setter_ex=hkc_setter);
+            ch2 = NEW_HOMEKIT_CHARACTERISTIC(SET_DURATION, valve_max_duration, .max_value=(float[]) {valve_max_duration}, .getter_ex=hkc_getter, .setter_ex=hkc_setter);
             ch3 = NEW_HOMEKIT_CHARACTERISTIC(REMAINING_DURATION, 0, .max_value=(float[]) {valve_max_duration}, .getter_ex=hkc_getter);
             
             ch_group->ch2 = ch2;
             ch_group->ch3 = ch3;
             
             accessories[accessory]->services[1]->characteristics = calloc(6, sizeof(homekit_characteristic_t*));
-            accessories[accessory]->services[1]->characteristics[0] = ch0;
-            accessories[accessory]->services[1]->characteristics[1] = ch1;
-            accessories[accessory]->services[1]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(VALVE_TYPE, valve_type, .getter_ex=hkc_getter);
             accessories[accessory]->services[1]->characteristics[3] = ch2;
             accessories[accessory]->services[1]->characteristics[4] = ch3;
             
@@ -2172,6 +2220,10 @@ void normal_mode_init() {
             sdk_os_timer_setfn(ch_group->timer, valve_timer_worker, ch0);
         }
         
+        accessories[accessory]->services[1]->characteristics[0] = ch0;
+        accessories[accessory]->services[1]->characteristics[1] = ch1;
+        accessories[accessory]->services[1]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(VALVE_TYPE, valve_type, .getter_ex=hkc_getter);
+        
         diginput_register(cJSON_GetObjectItem(json_context, BUTTONS_ARRAY), diginput, ch0, TYPE_VALVE);
         
         uint8_t initial_state = 0;
@@ -2183,7 +2235,7 @@ void normal_mode_init() {
             diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_VALVE);
             diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_VALVE);
             
-            ch0->value.int_value = !((uint8_t) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_INT8, 1));
+            ch0->value.int_value = !((uint8_t) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_INT8, 0));
             hkc_valve_setter(ch0, HOMEKIT_UINT8(!ch0->value.int_value));
         } else {
             if (diginput_register(cJSON_GetObjectItem(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_VALVE)) {
