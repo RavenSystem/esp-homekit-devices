@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.7.9
+ * v0.7.10
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                "0.7.9"
-#define FIRMWARE_VERSION_OCTAL          000711      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                "0.7.10"
+#define FIRMWARE_VERSION_OCTAL          000712      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                    0
@@ -195,6 +195,10 @@
 #ifndef HAA_MAX_ACCESSORIES
 #define HAA_MAX_ACCESSORIES             4           // Max number of accessories before using a bridge
 #endif
+
+#define DEBUG(message, ...)             printf("HAA > %s: " message "\n", __func__, ##__VA_ARGS__);
+#define INFO(message, ...)              printf("HAA > " message "\n", ##__VA_ARGS__);
+#define ERROR(message, ...)             printf("HAA ! " message "\n", ##__VA_ARGS__);
 
 #define FREEHEAP()                      printf("HAA > Free Heap: %d\n", xPortGetFreeHeapSize())
 
@@ -351,13 +355,13 @@ void setup_mode_task() {
 }
 
 void setup_mode_call(const uint8_t gpio, void *args, const uint8_t param) {
-    printf("HAA > Checking setup mode call\n");
+    INFO("Checking setup mode call");
     
     if (setup_mode_time == 0 || xTaskGetTickCountFromISR() < setup_mode_time * 1000 / portTICK_PERIOD_MS) {
         led_blink(4);
         xTaskCreate(setup_mode_task, "setup_mode_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
     } else {
-        printf("HAA ! Setup mode not allowed after %i secs since boot. Repower device and try again\n", setup_mode_time);
+        ERROR("Setup mode not allowed after %i secs since boot. Repower device and try again", setup_mode_time);
     }
 }
 
@@ -377,7 +381,7 @@ void setup_mode_toggle() {
 void exit_emergency_setup_mode_task() {
     vTaskDelay(EXIT_EMERGENCY_SETUP_MODE_TIME / portTICK_PERIOD_MS);
     
-    printf("HAA > Disarming Emergency Setup Mode\n");
+    INFO("Disarming Emergency Setup Mode");
     sysparam_set_bool("setup", false);
 
     vTaskDelete(NULL);
@@ -385,7 +389,7 @@ void exit_emergency_setup_mode_task() {
 
 // -----
 void save_states() {
-    printf("HAA > Saving states\n");
+    INFO("Saving states");
     last_state_t *last_state = last_states;
     sysparam_status_t status;
     
@@ -409,7 +413,7 @@ void save_states() {
         }
         
         if (status != SYSPARAM_OK) {
-            printf("HAA ! Flash error saving states\n");
+            ERROR("Flash error saving states");
         }
         
         last_state = last_state->next;
@@ -454,12 +458,12 @@ void hkc_group_notify(homekit_characteristic_t *ch) {
 }
 
 homekit_value_t hkc_getter(const homekit_characteristic_t *ch) {
-    printf("HAA > Getter\n");
+    INFO("Getter");
     return ch->value;
 }
 
 void hkc_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
-    printf("HAA > Setter\n");
+    INFO("Setter");
     ch->value = value;
     hkc_group_notify(ch);
     
@@ -481,7 +485,7 @@ void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         if (ch->value.bool_value != value.bool_value) {
             led_blink(1);
-            printf("HAA > Setter ON\n");
+            INFO("Setter ON");
             
             ch->value = value;
             
@@ -536,7 +540,7 @@ void hkc_lock_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            printf("HAA > Setter LOCK\n");
+            INFO("Setter LOCK");
             
             ch->value = value;
             ch_group->ch0->value = value;
@@ -570,7 +574,7 @@ void button_event(const uint8_t gpio, void *args, const uint8_t event_type) {
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_child || ch_group->ch_child->value.bool_value) {
         led_blink(event_type + 1);
-        printf("HAA > Setter EVENT %i\n", event_type);
+        INFO("Setter EVENT %i", event_type);
         
         homekit_characteristic_notify(ch, HOMEKIT_UINT8(event_type));
         
@@ -590,7 +594,7 @@ void sensor_1(const uint8_t gpio, void *args, const uint8_t type) {
         (type == TYPE_SENSOR_BOOL &&
         ch->value.bool_value == false)) {
         led_blink(1);
-        printf("HAA > Sensor activated\n");
+        INFO("Sensor ON");
         
         if (type == TYPE_SENSOR) {
             ch->value = HOMEKIT_UINT8(1);
@@ -624,7 +628,7 @@ void sensor_0(const uint8_t gpio, void *args, const uint8_t type) {
         (type == TYPE_SENSOR_BOOL &&
         ch->value.bool_value == true)) {
         led_blink(1);
-        printf("HAA > Sensor deactivated\n");
+        INFO("Sensor OFF");
         
         if (type == TYPE_SENSOR) {
             ch->value = HOMEKIT_UINT8(0);
@@ -645,7 +649,7 @@ void hkc_valve_setter(homekit_characteristic_t *ch, const homekit_value_t value)
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            printf("HAA > Setter VALVE\n");
+            INFO("Setter VALVE");
             
             ch->value = value;
             ch_group->ch1->value = value;
@@ -700,7 +704,7 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         led_blink(1);
-        printf("HAA > Setter TH\n");
+        INFO("Setter TH");
         
         ch->value = value;
         
@@ -972,10 +976,10 @@ void temperature_timer_worker(void *args) {
             }
         }
         
-        printf("HAA > TEMP %g, HUM %g\n", temperature_value, humidity_value);
+        INFO("TEMP %g, HUM %g", temperature_value, humidity_value);
     } else {
         led_blink(5);
-        printf("HAA ! ERROR Sensor\n");
+        ERROR("ERROR Sensor");
         
         if (ch_group->ch5) {
             ch_group->ch3->value = HOMEKIT_UINT8(THERMOSTAT_MODE_OFF);
@@ -1095,12 +1099,12 @@ void rgbw_set_timer_worker() {
                 }
             }
             
-            //printf("HAA > RGBW -> %i, %i, %i, %i\n", multipwm_duty[lightbulb_group->pwm_r], multipwm_duty[lightbulb_group->pwm_g], multipwm_duty[lightbulb_group->pwm_g], multipwm_duty[lightbulb_group->pwm_w]);
+            //INFO("RGBW -> %i, %i, %i, %i", multipwm_duty[lightbulb_group->pwm_r], multipwm_duty[lightbulb_group->pwm_g], multipwm_duty[lightbulb_group->pwm_g], multipwm_duty[lightbulb_group->pwm_w]);
             
             lightbulb_group = lightbulb_group->next;
             
             if (channels_to_set == 0) {
-                printf("HAA > Color established\n");
+                INFO("Color established");
                 sdk_os_timer_disarm(pwm_timer);
                 setpwm_is_running = false;
                 lightbulb_group = NULL;
@@ -1111,7 +1115,7 @@ void rgbw_set_timer_worker() {
 
         setpwm_bool_semaphore = false;
     } else {
-        printf("HAA ! MISSED Color set\n");
+        ERROR("MISSED Color set");
     }
 }
 
@@ -1155,7 +1159,7 @@ void hkc_rgbw_setter_delayed(void *args) {
         setup_mode_toggle_upcount();
     }
     
-    printf("HAA > Target RGBW = %i, %i, %i, %i\n", lightbulb_group->target_r, lightbulb_group->target_g, lightbulb_group->target_b, lightbulb_group->target_w);
+    INFO("Target RGBW = %i, %i, %i, %i", lightbulb_group->target_r, lightbulb_group->target_g, lightbulb_group->target_b, lightbulb_group->target_w);
     
     if (!setpwm_is_running) {
         sdk_os_timer_arm(pwm_timer, RGBW_PERIOD, true);
@@ -1204,7 +1208,7 @@ void rgbw_brightness(const uint8_t gpio, void *args, const uint8_t type) {
 }
 
 void autodimmer_task(void *args) {
-    printf("HAA > AUTODimmer started\n");
+    INFO("AUTODimmer started");
     
     homekit_characteristic_t *ch = args;
     ch_group_t *ch_group = ch_group_find(ch);
@@ -1231,7 +1235,7 @@ void autodimmer_task(void *args) {
         }
     }
     
-    printf("HAA > AUTODimmer stopped\n");
+    INFO("AUTODimmer stopped");
     
     vTaskDelete(NULL);
 }
@@ -1246,7 +1250,7 @@ void no_autodimmer_called(void *args) {
 
 void autodimmer_call(homekit_characteristic_t *ch0, const homekit_value_t value) {
     lightbulb_group_t *lightbulb_group = lightbulb_group_find(ch0);
-    if (value.bool_value && lightbulb_group->autodimmer == 0) {
+    if (lightbulb_group->autodimmer_task_step == 0 || (value.bool_value && lightbulb_group->autodimmer == 0)) {
         hkc_rgbw_setter(ch0, value);
     } else if (lightbulb_group->autodimmer > 0) {
         lightbulb_group->autodimmer = 0;
@@ -1397,7 +1401,7 @@ void autoswitch_task(void *pvParameters) {
     vTaskDelay(autoswitch_params->time * 1000 / portTICK_PERIOD_MS);
     
     gpio_write(autoswitch_params->gpio, autoswitch_params->value);
-    printf("HAA > Autoswitch digital output GPIO %i -> %i\n", autoswitch_params->gpio, autoswitch_params->value);
+    INFO("Autoswitch digital output GPIO %i -> %i", autoswitch_params->gpio, autoswitch_params->value);
     
     free(autoswitch_params);
     vTaskDelete(NULL);
@@ -1433,7 +1437,7 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
             }
 
             gpio_write(gpio, value);
-            printf("HAA > Digital output GPIO %i -> %i\n", gpio, value);
+            INFO("Digital output GPIO %i -> %i", gpio, value);
             
             if (cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME) != NULL) {
                 const double autoswitch_time = cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME)->valuedouble;
@@ -1513,7 +1517,7 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                         break;
                 }
                 
-                printf("HAA > Accessory Manager %i -> %.2f\n", accessory, value);
+                INFO("Accessory Manager %i -> %.2f", accessory, value);
             }
         }
     }
@@ -1524,13 +1528,13 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
 // --- IDENTIFY
 void identify(homekit_value_t _value) {
     led_blink(6);
-    printf("HAA > Identifying\n");
+    INFO("Identifying");
 }
 
 // ---------
 
 void delayed_sensor_starter_task(void *args) {
-    printf("HAA > Starting delayed sensor\n");
+    INFO("Starting delayed sensor");
     homekit_characteristic_t *ch = args;
     ch_group_t *ch_group = ch_group_find(ch);
     
@@ -1564,7 +1568,7 @@ homekit_server_config_t config;
 
 void run_homekit_server() {
     if (enable_homekit_server) {
-        printf("HAA > Starting HK Server\n");
+        INFO("Start HK Server");
 
         homekit_server_init(&config);
     }
@@ -1572,29 +1576,13 @@ void run_homekit_server() {
     led_blink(6);
 }
 
+void printf_header() {
+    printf("\n\n\n");
+    INFO("Home Accessory Architect v%s", FIRMWARE_VERSION);
+    INFO("Developed by José Antonio Jiménez Campos (@RavenSystem)\n");
+}
+
 void normal_mode_init() {
-    // Arming emergency Setup Mode
-    sysparam_set_bool("setup", true);
-    xTaskCreate(exit_emergency_setup_mode_task, "exit_emergency_setup_mode_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
-    
-    // Filling Used GPIO Array
-    for (uint8_t g=0; g<17; g++) {
-        used_gpio[g] = false;
-    }
-    
-    sdk_os_timer_setfn(&setup_mode_toggle_timer, setup_mode_toggle, NULL);
-    
-    uint8_t macaddr[6];
-    sdk_wifi_get_macaddr(STATION_IF, macaddr);
-    
-    char *name_value = malloc(11);
-    snprintf(name_value, 11, "HAA-%02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
-    name.value = HOMEKIT_STRING(name_value);
-    
-    char *serial_value = malloc(13);
-    snprintf(serial_value, 13, "%02X%02X%02X%02X%02X%02X", macaddr[0], macaddr[1], macaddr[2], macaddr[3], macaddr[4], macaddr[5]);
-    serial.value = HOMEKIT_STRING(serial_value);
-    
     char *txt_config = NULL;
     sysparam_get_string("haa_conf", &txt_config);
     
@@ -1605,14 +1593,13 @@ void normal_mode_init() {
     
     if (total_accessories == 0) {
         uart_set_baud(0, 115200);
-        printf("HAA ! ERROR: Invalid JSON\n");
+        ERROR("Invalid JSON");
         xTaskCreate(setup_mode_task, "setup_mode_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
         
         free(txt_config);
         
         return;
     }
-    
     
     // Buttons GPIO Setup function
     bool diginput_register(cJSON *json_buttons, void *callback, homekit_characteristic_t *hk_ch, const uint8_t param) {
@@ -1643,7 +1630,7 @@ void normal_mode_init() {
             }
             adv_button_register_callback_fn(gpio, callback, button_type, (void*) hk_ch, param);
             
-            printf("HAA > Enable button GPIO %i, type=%i, inverted=%i\n", gpio, button_type, inverted);
+            INFO("Digital input GPIO: %i, type: %i, inv: %i", gpio, button_type, inverted);
              
             if (gpio_read(gpio) == button_type) {
                 run_at_launch = true;
@@ -1656,7 +1643,7 @@ void normal_mode_init() {
     // Initial state function
     float set_initial_state(const uint8_t accessory, const uint8_t ch_number, cJSON *json_context, homekit_characteristic_t *ch, const uint8_t ch_type, const float default_value) {
         float state = default_value;
-        printf("HAA > Setting initial state\n");
+        INFO("Setting initial state");
         if (cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
             const uint8_t initial_state = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE)->valuedouble;
             if (initial_state < INIT_STATE_LAST) {
@@ -1719,10 +1706,10 @@ void normal_mode_init() {
                 }
                 
                 if (status != SYSPARAM_OK) {
-                    printf("HAA ! No previous state found\n");
+                    ERROR("No previous state found");
                 }
                 
-                printf("HAA > Init state = %.2f\n", state);
+                INFO("Init state = %.2f", state);
                 
             }
         }
@@ -1736,11 +1723,10 @@ void normal_mode_init() {
     if (cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT) != NULL &&
         cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT)->valuedouble == 1) {
         uart_set_baud(0, 115200);
-        printf("\n\nHAA > Home Accessory Architect\nHAA > Developed by José Antonio Jiménez Campos (@RavenSystem)\nHAA > Version: %s\n\n", FIRMWARE_VERSION);
-        printf("HAA > Running in NORMAL mode...\n\n");
-        printf("HAA > JSON: %s\n\n", txt_config);
-        printf("HAA > -- PROCESSING JSON --\n");
-        printf("HAA > Enable UART log output\n");
+        printf_header();
+        INFO("NORMAL MODE");
+        INFO("JSON: %s", txt_config);
+        INFO("-- PROCESSING JSON --");
     }
 
     free(txt_config);
@@ -1751,7 +1737,7 @@ void normal_mode_init() {
         uint8_t custom_hostname_len = strlen(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring) + 1;
         custom_hostname = malloc(custom_hostname_len);
         snprintf(custom_hostname, custom_hostname_len, "%s", cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring);
-        printf("HAA > Hostname: %s\n", custom_hostname);
+        INFO("Hostname: %s", custom_hostname);
     }
     
     // Status LED
@@ -1765,39 +1751,39 @@ void normal_mode_init() {
         gpio_enable(led_gpio, GPIO_OUTPUT);
         used_gpio[led_gpio] = true;
         gpio_write(led_gpio, false ^ led_inverted);
-        printf("HAA > Enable LED GPIO %i, inverted=%i\n", led_gpio, led_inverted);
+        INFO("Status LED GPIO: %i, inv: %i", led_gpio, led_inverted);
     }
     
     // Button filter
     if (cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER) != NULL) {
         uint8_t button_filter_value = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER)->valuedouble;
         adv_button_set_evaluate_delay(button_filter_value);
-        printf("HAA > Button filter set to %i\n", button_filter_value);
+        INFO("Button filter: %i", button_filter_value);
     }
     
     // PWM Frequency
     if (cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ) != NULL) {
         pwm_freq = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ)->valuedouble;
-        printf("HAA > PWM Frequency set to %i\n", pwm_freq);
+        INFO("PWM Frequency: %i", pwm_freq);
     }
     
     // Allowed Setup Mode Time
     if (cJSON_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME) != NULL) {
         setup_mode_time = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME)->valuedouble;
-        printf("HAA > Setup mode time set to %i secs\n", setup_mode_time);
+        INFO("Setup mode time: %i secs", setup_mode_time);
     }
     
     // Run HomeKit Server
     if (cJSON_GetObjectItemCaseSensitive(json_config, ENABLE_HOMEKIT_SERVER) != NULL) {
         enable_homekit_server = (bool) cJSON_GetObjectItemCaseSensitive(json_config, ENABLE_HOMEKIT_SERVER)->valuedouble;
-        printf("HAA > Run HomeKit Server set to %i\n", enable_homekit_server);
+        INFO("Run HomeKit Server: %i", enable_homekit_server);
     }
     
     // Allow unsecure connections
     if (cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS) != NULL) {
         bool allow_insecure = (bool) cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS)->valuedouble;
         config.insecure = allow_insecure;
-        printf("HAA > Allow unsecure connections set to %i\n", allow_insecure);
+        INFO("Unsecure connections: %i", allow_insecure);
     }
     
     // Buttons to enter setup mode
@@ -1893,19 +1879,19 @@ void normal_mode_init() {
             const uint8_t kill_switch = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, KILL_SWITCH)->valuedouble;
             
             if (kill_switch == 1) {
-                printf("HAA > Enable Secure Switch\n");
+                INFO("Secure Switch");
                 ch_group->ch_sec = new_kill_switch(accessory);
                 return accessory + 1;
                 
             } else if (kill_switch == 2) {
-                printf("HAA > Enable Kids Switch\n");
+                INFO("Kids Switch");
                 ch_group->ch_child = new_kill_switch(accessory);
                 return accessory + 1;
                 
             } else if (kill_switch == 3) {
-                printf("HAA > Enable Secure Switch\n");
+                INFO("Secure Switch");
                 ch_group->ch_sec = new_kill_switch(accessory);
-                printf("HAA > Enable Kids Switch\n");
+                INFO("Kids Switch");
                 ch_group->ch_child = new_kill_switch(accessory + 1);
                 return accessory + 2;
             }
@@ -2538,7 +2524,7 @@ void normal_mode_init() {
         new_accessory(accessory, 3);
         
         if (!lightbulb_groups) {
-            printf("HAA > PWM Init\n");
+            INFO("PWM Init");
             pwm_timer = malloc(sizeof(ETSTimer));
             memset(pwm_timer, 0, sizeof(*pwm_timer));
             sdk_os_timer_setfn(pwm_timer, rgbw_set_timer_worker, NULL);
@@ -2717,13 +2703,14 @@ void normal_mode_init() {
     
     // Accessory Builder
     if (bridge_needed) {
-        printf("HAA >\nHAA > BRIDGE CREATED\n");
+        INFO("BRIDGE CREATED");
         new_accessory(0, 2);
         acc_count++;
     }
     
     for(uint8_t i=0; i<total_accessories; i++) {
-        printf("HAA >\nHAA > ACCESSORY %i\n", accessory_numerator);
+        INFO("");
+        INFO("ACCESSORY %i", accessory_numerator);
         
         uint8_t acc_type = ACC_TYPE_SWITCH;
         if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE) != NULL) {
@@ -2747,7 +2734,7 @@ void normal_mode_init() {
                         if (!used_gpio[gpio]) {
                             gpio_enable(gpio, GPIO_OUTPUT);
                             used_gpio[gpio] = true;
-                            printf("HAA > Enable digital output GPIO %i\n", gpio);
+                            INFO("Digital output GPIO: %i", gpio);
                         }
                     }
                 }
@@ -2755,7 +2742,7 @@ void normal_mode_init() {
         }
         
         // Creating HomeKit Accessory
-        printf("HAA > Accessory type = %i\n", acc_type);
+        INFO("Type: %i", acc_type);
         if (acc_type == ACC_TYPE_BUTTON) {
             acc_count = new_button_event(acc_count, json_accessory);
             
@@ -2811,26 +2798,48 @@ void normal_mode_init() {
     config.category = homekit_accessory_category_other;
     config.config_number = FIRMWARE_VERSION_OCTAL;
     
-    printf("HAA >\n");
+    INFO("");
     FREEHEAP();
-    printf("HAA > ---------------------\n\n");
+    INFO("---------------------\n");
     
     wifi_config_init("HAA", NULL, run_homekit_server, custom_hostname);
 }
 
 void user_init(void) {
-    sysparam_status_t status;
+    uint8_t macaddr[6];
+    sdk_wifi_get_macaddr(STATION_IF, macaddr);
+    
+    char *name_value = malloc(11);
+    snprintf(name_value, 11, "HAA-%02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
+    name.value = HOMEKIT_STRING(name_value);
+    
     bool haa_setup = false;
     
     //sysparam_set_bool("setup", true);    // Force to enter always in setup mode. Only for tests. Keep comment for releases
     
-    status = sysparam_get_bool("setup", &haa_setup);
-    if (status == SYSPARAM_OK && haa_setup == true) {
+    sysparam_get_bool("setup", &haa_setup);
+    if (haa_setup) {
         uart_set_baud(0, 115200);
-        printf("\n\nHAA > Home Accessory Architect\nHAA > Developed by José Antonio Jiménez Campos (@RavenSystem)\nHAA > Version: %s\n\n", FIRMWARE_VERSION);
-        printf("HAA > Running in SETUP mode...\n");
-        wifi_config_init("HAA", NULL, NULL, NULL);
+        printf_header();
+        INFO("SETUP MODE");
+        wifi_config_init("HAA", NULL, NULL, name.value.string_value);
+        
     } else {
+        // Arming emergency Setup Mode
+        sysparam_set_bool("setup", true);
+        xTaskCreate(exit_emergency_setup_mode_task, "exit_emergency_setup_mode_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+        
+        // Filling Used GPIO Array
+        for (uint8_t g=0; g<17; g++) {
+            used_gpio[g] = false;
+        }
+        
+        sdk_os_timer_setfn(&setup_mode_toggle_timer, setup_mode_toggle, NULL);
+        
+        char *serial_value = malloc(13);
+        snprintf(serial_value, 13, "%02X%02X%02X%02X%02X%02X", macaddr[0], macaddr[1], macaddr[2], macaddr[3], macaddr[4], macaddr[5]);
+        serial.value = HOMEKIT_STRING(serial_value);
+        
         normal_mode_init();
     }
 }
