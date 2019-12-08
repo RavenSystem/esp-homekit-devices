@@ -267,12 +267,11 @@ static void wifi_config_server_on_settings_update(client_t *client) {
     }
     
     // Remove sated states
-    char *saved_state_id = malloc(4);
+    char saved_state_id[5];
     for (uint16_t int_saved_state_id=100; int_saved_state_id<=3099; int_saved_state_id++) {
         itoa(int_saved_state_id, saved_state_id, 10);
         sysparam_set_data(saved_state_id, NULL, 0, false);
     }
-    free(saved_state_id);
     
     form_param_t *conf_param = form_params_find(form, "conf");
     form_param_t *reset_param = form_params_find(form, "reset");
@@ -627,8 +626,6 @@ static void wifi_config_context_free(wifi_config_context_t *context) {
 
 
 static void wifi_config_softap_start() {
-    INFO("Start AP");
-
     sdk_wifi_set_opmode(STATIONAP_MODE);
 
     uint8_t macaddr[6];
