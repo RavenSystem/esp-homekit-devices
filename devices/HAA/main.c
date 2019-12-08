@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.8.0
+ * v0.8.1
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                    "0.8.0"
-#define FIRMWARE_VERSION_OCTAL              001000      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "0.8.1"
+#define FIRMWARE_VERSION_OCTAL              001001      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        0
@@ -175,7 +175,7 @@
 #define GARAGE_DOOR_WORKING_TIME            "d"
 #define GARAGE_DOOR_DEFAULT_WORKING_TIME    30
 
-#define MAX_ACTIONS                         12   // from 0 to ...
+#define MAX_ACTIONS                         10   // from 0 to ...
 #define COPY_ACTIONS                        "a"
 
 #define ACCESSORY_TYPE                      "t"
@@ -1285,34 +1285,6 @@ void autodimmer_call(homekit_characteristic_t *ch0, const homekit_value_t value)
 }
 
 // --- GARAGE DOOR
-void garage_door_sensor(const uint8_t gpio, void *args, const uint8_t type) {
-    homekit_characteristic_t *ch = args;
-    ch_group_t *ch_group = ch_group_find(ch);
-    
-    led_blink(1);
-    INFO("Garage Door sensor: %i", type);
-    
-    ch->value.int_value = type;
-    
-    if (type > 1) {
-        ch_group->ch1->value.int_value = type - 2;
-        sdk_os_timer_arm(ch_group->timer, 1000, 1);
-    } else {
-        ch_group->ch1->value.int_value = type;
-        sdk_os_timer_disarm(ch_group->timer);
-        if (type == 0) {
-            ch_group->num0 = ch_group->num1;
-        } else {
-            ch_group->num0 = 0;
-        }
-    }
-    
-    hkc_group_notify(ch);
-    
-    cJSON *json_context = ch->context;
-    do_actions(json_context, (uint8_t) type + 4);
-}
-
 void garage_door_obstruction(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
     ch_group_t *ch_group = ch_group_find(ch);
@@ -1333,13 +1305,45 @@ void garage_door_obstruction(const uint8_t gpio, void *args, const uint8_t type)
     do_actions(json_context, (uint8_t) type + 8);
 }
 
+void garage_door_sensor(const uint8_t gpio, void *args, const uint8_t type) {
+    homekit_characteristic_t *ch = args;
+    ch_group_t *ch_group = ch_group_find(ch);
+    
+    led_blink(1);
+    INFO("Garage Door sensor: %i", type);
+    
+    ch->value.int_value = type;
+    
+    if (type > 1) {
+        ch_group->ch1->value.int_value = type - 2;
+        sdk_os_timer_arm(ch_group->timer, 1000, 1);
+    } else {
+        ch_group->ch1->value.int_value = type;
+        sdk_os_timer_disarm(ch_group->timer);
+        if (type == 0) {
+            ch_group->num0 = ch_group->num1;
+        } else {
+            ch_group->num0 = 0;
+        }
+        
+        if (ch_group->ch2->value.bool_value) {
+            garage_door_obstruction(0, ch, 0);
+        }
+    }
+    
+    hkc_group_notify(ch);
+    
+    cJSON *json_context = ch->context;
+    do_actions(json_context, (uint8_t) type + 4);
+}
+
 void garage_door_stop(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch0 = args;
     
     ch0->value.int_value = GARAGE_DOOR_STOPPED;
     
     cJSON *json_context = ch0->context;
-    do_actions(json_context, 12);
+    do_actions(json_context, 10);
     
     hkc_group_notify(ch0);
 }
@@ -1359,6 +1363,7 @@ void hkc_garage_door_setter(homekit_characteristic_t *ch1, const homekit_value_t
             ch1->value = value;
 
             cJSON *json_context = ch1->context;
+            do_actions(json_context, (uint8_t) ch_group->ch0->value.int_value);
             
             if (value.int_value == GARAGE_DOOR_OPENED && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4) == NULL) {
                 garage_door_sensor(0, ch_group->ch0, GARAGE_DOOR_OPENING);
@@ -1366,8 +1371,6 @@ void hkc_garage_door_setter(homekit_characteristic_t *ch1, const homekit_value_t
                 garage_door_sensor(0, ch_group->ch0, GARAGE_DOOR_CLOSING);
             }
             
-            do_actions(json_context, (uint8_t) ch_group->ch0->value.int_value);
-
             setup_mode_toggle_upcount();
         }
     }
