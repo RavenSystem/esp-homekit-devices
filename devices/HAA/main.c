@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.8.1
+ * v0.8.2
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                    "0.8.1"
-#define FIRMWARE_VERSION_OCTAL              001001      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "0.8.2"
+#define FIRMWARE_VERSION_OCTAL              001002      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        0
@@ -1028,24 +1028,21 @@ void hsi2rgbw(float h, float s, float i, lightbulb_group_t *lightbulb_group) {
     s = s > 0 ? (s < 1 ? s : 1) : 0;
     i = i > 0 ? (i < 1 ? i : 1) : 0;
     
-    const float cos_h = cos(h);
-    const float cos_1047_h = cos(1.047196667 - h);
-    
     uint32_t r, g, b;
     
     if (h < 2.094393334) {
-        r = lightbulb_group->factor_r * PWM_SCALE * i / 3 * (1 + s * cos_h / cos_1047_h);
-        g = lightbulb_group->factor_g * PWM_SCALE * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
+        r = lightbulb_group->factor_r * PWM_SCALE * i / 3 * (1 + s * cos(h) / cos(1.047196667 - h));
+        g = lightbulb_group->factor_g * PWM_SCALE * i / 3 * (1 + s * (1 - cos(h) / cos(1.047196667 - h)));
         b = lightbulb_group->factor_b * PWM_SCALE * i / 3 * (1 - s);
     } else if (h < 4.188786668) {
         h = h - 2.094393334;
-        g = lightbulb_group->factor_g * PWM_SCALE * i / 3 * (1 + s * cos_h / cos_1047_h);
-        b = lightbulb_group->factor_b * PWM_SCALE * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
+        g = lightbulb_group->factor_g * PWM_SCALE * i / 3 * (1 + s * cos(h) / cos(1.047196667 - h));
+        b = lightbulb_group->factor_b * PWM_SCALE * i / 3 * (1 + s * (1 - cos(h) / cos(1.047196667 - h)));
         r = lightbulb_group->factor_r * PWM_SCALE * i / 3 * (1 - s);
     } else {
         h = h - 4.188786668;
-        b = lightbulb_group->factor_b * PWM_SCALE * i / 3 * (1 + s * cos_h / cos_1047_h);
-        r = lightbulb_group->factor_r * PWM_SCALE * i / 3 * (1 + s * (1 - cos_h / cos_1047_h));
+        b = lightbulb_group->factor_b * PWM_SCALE * i / 3 * (1 + s * cos(h) / cos(1.047196667 - h));
+        r = lightbulb_group->factor_r * PWM_SCALE * i / 3 * (1 + s * (1 - cos(h) / cos(1.047196667 - h)));
         g = lightbulb_group->factor_g * PWM_SCALE * i / 3 * (1 - s);
     }
     const uint32_t w = lightbulb_group->factor_w * PWM_SCALE * i * (1 - s);
@@ -1285,6 +1282,20 @@ void autodimmer_call(homekit_characteristic_t *ch0, const homekit_value_t value)
 }
 
 // --- GARAGE DOOR
+void garage_door_stop(const uint8_t gpio, void *args, const uint8_t type) {
+    homekit_characteristic_t *ch0 = args;
+    ch_group_t *ch_group = ch_group_find(ch0);
+    
+    ch0->value.int_value = GARAGE_DOOR_STOPPED;
+    
+    sdk_os_timer_disarm(ch_group->timer);
+    
+    cJSON *json_context = ch0->context;
+    do_actions(json_context, 10);
+    
+    hkc_group_notify(ch0);
+}
+
 void garage_door_obstruction(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
     ch_group_t *ch_group = ch_group_find(ch);
@@ -1294,15 +1305,14 @@ void garage_door_obstruction(const uint8_t gpio, void *args, const uint8_t type)
     
     ch_group->ch2->value.bool_value = (bool) type;
     
-    if (type) {
-        ch_group->ch0->value.int_value = GARAGE_DOOR_STOPPED;
-        sdk_os_timer_disarm(ch_group->timer);
+    if ((bool) type) {
+        garage_door_stop(0, ch_group->ch0, 0);
     }
     
     hkc_group_notify(ch);
     
     cJSON *json_context = ch->context;
-    do_actions(json_context, (uint8_t) type + 8);
+    do_actions(json_context, type + 8);
 }
 
 void garage_door_sensor(const uint8_t gpio, void *args, const uint8_t type) {
@@ -1334,23 +1344,12 @@ void garage_door_sensor(const uint8_t gpio, void *args, const uint8_t type) {
     hkc_group_notify(ch);
     
     cJSON *json_context = ch->context;
-    do_actions(json_context, (uint8_t) type + 4);
-}
-
-void garage_door_stop(const uint8_t gpio, void *args, const uint8_t type) {
-    homekit_characteristic_t *ch0 = args;
-    
-    ch0->value.int_value = GARAGE_DOOR_STOPPED;
-    
-    cJSON *json_context = ch0->context;
-    do_actions(json_context, 10);
-    
-    hkc_group_notify(ch0);
+    do_actions(json_context, type + 4);
 }
 
 void hkc_garage_door_setter(homekit_characteristic_t *ch1, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch1);
-    if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
+    if (!ch_group->ch2->value.bool_value && (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value)) {
         uint8_t current_door_state = ch_group->ch0->value.int_value;
         if (current_door_state > 1) {
             current_door_state -= 2;
@@ -1676,8 +1675,10 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                     case ACC_TYPE_GARAGE_DOOR:
                         if (value < 2) {
                             hkc_garage_door_setter(ch_group->ch1, HOMEKIT_UINT8((uint8_t) value));
-                        } else {
+                        } else if (value == 2) {
                             garage_door_stop(0, ch_group->ch0, 0);
+                        } else {
+                            garage_door_obstruction(0, ch_group->ch0, value - 3);
                         }
                         break;
                         
