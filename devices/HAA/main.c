@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.8.2
+ * v0.8.3
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -24,7 +24,7 @@
 //#include <esp8266.h>
 //#include <FreeRTOS.h>
 //#include <espressif/esp_wifi.h>
-//#include <espressif/esp_common.h>
+#include <espressif/esp_common.h>
 #include <rboot-api.h>
 #include <sysparam.h>
 //#include <task.h>
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                    "0.8.2"
-#define FIRMWARE_VERSION_OCTAL              001002      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "0.8.3"
+#define FIRMWARE_VERSION_OCTAL              001003      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        0
@@ -174,6 +174,7 @@
 #define GARAGE_DOOR_STOPPED                 4
 #define GARAGE_DOOR_WORKING_TIME            "d"
 #define GARAGE_DOOR_DEFAULT_WORKING_TIME    30
+#define GARAGE_DOOR_TIME_MARGIN             3
 
 #define MAX_ACTIONS                         10   // from 0 to ...
 #define COPY_ACTIONS                        "a"
@@ -199,19 +200,24 @@
 #define ACC_TYPE_LIGHTBULB                  30
 #define ACC_TYPE_GARAGE_DOOR                40
 
-#define ACC_CREATION_DELAY                  40
+#define ACC_CREATION_DELAY                  30
 #define EXIT_EMERGENCY_SETUP_MODE_TIME      2400
 #define SETUP_MODE_ACTIVATE_COUNT           8
 
-#ifndef HAA_MAX_ACCESSORIES
-#define HAA_MAX_ACCESSORIES                 4   // Max number of accessories before using a bridge
-#endif
+#define ACCESSORIES_WITHOUT_BRIDGE          4   // Max number of accessories before using a bridge
 
 #define DEBUG(message, ...)                 printf("HAA > %s: " message "\n", __func__, ##__VA_ARGS__);
 #define INFO(message, ...)                  printf("HAA > " message "\n", ##__VA_ARGS__);
 #define ERROR(message, ...)                 printf("HAA ! " message "\n", ##__VA_ARGS__);
 
 #define FREEHEAP()                          printf("HAA > Free Heap: %d\n", xPortGetFreeHeapSize())
+
+#ifdef HAA_DEBUG
+ETSTimer free_heap_timer;
+void free_heap_watchdog() {
+    FREEHEAP();
+}
+#endif
 
 typedef struct _autoswitch_params {
     uint8_t gpio;
@@ -283,7 +289,8 @@ typedef struct _lightbulb_group {
     struct _lightbulb_group *next;
 } lightbulb_group_t;
 
-uint8_t setup_mode_toggle_counter = 0, led_gpio = 255;
+int8_t setup_mode_toggle_counter = INT8_MIN;
+uint8_t led_gpio = 255;
 uint16_t setup_mode_time = 0;
 ETSTimer setup_mode_toggle_timer, save_states_timer;
 bool used_gpio[18];
@@ -1331,9 +1338,9 @@ void garage_door_sensor(const uint8_t gpio, void *args, const uint8_t type) {
         ch_group->ch1->value.int_value = type;
         sdk_os_timer_disarm(ch_group->timer);
         if (type == 0) {
-            ch_group->num0 = ch_group->num1;
+            ch_group->num0 = ch_group->num1 - GARAGE_DOOR_TIME_MARGIN;
         } else {
-            ch_group->num0 = 0;
+            ch_group->num0 = GARAGE_DOOR_TIME_MARGIN;
         }
         
         if (ch_group->ch2->value.bool_value) {
@@ -1386,27 +1393,25 @@ void garage_door_timer_worker(void *args) {
     if (ch->value.int_value == GARAGE_DOOR_OPENING) {
         ch_group->num0++;
 
-        if (ch_group->num0 >= ch_group->num1) {
+        if (ch_group->num0 >= ch_group->num1 - GARAGE_DOOR_TIME_MARGIN && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2) == NULL) {
             sdk_os_timer_disarm(ch_group->timer);
+            garage_door_sensor(0, ch, GARAGE_DOOR_OPENED);
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2) == NULL) {
-                garage_door_sensor(0, ch, GARAGE_DOOR_OPENED);
-            } else {
-                garage_door_obstruction(0, ch, 1);
-            }
+        } else if (ch_group->num0 >= ch_group->num1 && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2) != NULL) {
+            sdk_os_timer_disarm(ch_group->timer);
+            garage_door_obstruction(0, ch, 1);
         }
         
     } else {    // GARAGE_DOOR_CLOSING
         ch_group->num0--;
-
-        if (ch_group->num0 <= 0) {
+        
+        if (ch_group->num0 <= GARAGE_DOOR_TIME_MARGIN && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3) == NULL) {
             sdk_os_timer_disarm(ch_group->timer);
+            garage_door_sensor(0, ch, GARAGE_DOOR_CLOSED);
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3) == NULL) {
-                garage_door_sensor(0, ch, GARAGE_DOOR_CLOSED);
-            } else {
-                garage_door_obstruction(0, ch, 1);
-            }
+        } else if (ch_group->num0 <= 0 && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3) != NULL) {
+            sdk_os_timer_disarm(ch_group->timer);
+            garage_door_obstruction(0, ch, 1);
         }
     }
 }
@@ -1998,7 +2003,7 @@ void normal_mode_init() {
         }
     }
     
-    if (total_accessories > HAA_MAX_ACCESSORIES || bridge_needed) {
+    if (total_accessories > ACCESSORIES_WITHOUT_BRIDGE || bridge_needed) {
         // Bridge needed
         bridge_needed = true;
         hk_total_ac += 1;
@@ -2900,7 +2905,7 @@ void normal_mode_init() {
         ch_group->ch0 = ch0;
         ch_group->ch1 = ch1;
         ch_group->ch2 = ch2;
-        ch_group->num0 = 0;
+        ch_group->num0 = GARAGE_DOOR_TIME_MARGIN;
         ch_group->num1 = GARAGE_DOOR_DEFAULT_WORKING_TIME;
         ch_group->next = ch_groups;
         ch_groups = ch_group;
@@ -2910,7 +2915,7 @@ void normal_mode_init() {
         sdk_os_timer_setfn(ch_group->timer, garage_door_timer_worker, ch0);
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_WORKING_TIME) != NULL) {
-            ch_group->num1 = cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_WORKING_TIME)->valuedouble + 1;
+            ch_group->num1 = cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_WORKING_TIME)->valuedouble + (GARAGE_DOOR_TIME_MARGIN * 2);
         }
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch1, TYPE_GARAGE_DOOR);
@@ -2926,7 +2931,7 @@ void normal_mode_init() {
         }
         
         if (ch0->value.int_value == 0) {
-            ch_group->num0 = ch_group->num1;
+            ch_group->num0 = ch_group->num1 - GARAGE_DOOR_TIME_MARGIN;
         }
 
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), garage_door_sensor, ch0, GARAGE_DOOR_CLOSED)) {
@@ -3030,6 +3035,8 @@ void normal_mode_init() {
             acc_count = new_switch(acc_count, json_accessory, acc_type);
         }
         
+        setup_mode_toggle_counter = INT8_MIN;
+        
         vTaskDelay(ACC_CREATION_DELAY / portTICK_PERIOD_MS);
     }
     
@@ -3058,10 +3065,19 @@ void normal_mode_init() {
     FREEHEAP();
     INFO("---------------------\n");
     
+    setup_mode_toggle_counter = 0;
+    
     wifi_config_init("HAA", NULL, run_homekit_server, custom_hostname);
 }
 
 void user_init(void) {
+#ifdef HAA_DEBUG
+    sdk_os_timer_setfn(&free_heap_timer, free_heap_watchdog, NULL);
+    sdk_os_timer_arm(&free_heap_timer, 2000, 1);
+#endif
+    
+    sdk_wifi_station_disconnect();
+    
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     
