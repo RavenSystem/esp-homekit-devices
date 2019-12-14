@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.8.5
+ * v0.8.6
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                    "0.8.5"
-#define FIRMWARE_VERSION_OCTAL              001005      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "0.8.6"
+#define FIRMWARE_VERSION_OCTAL              001006      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        0
@@ -1293,7 +1293,7 @@ void garage_door_stop(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch0 = args;
     ch_group_t *ch_group = ch_group_find(ch0);
     
-    if (ch0->value.int_value > 1) {
+    if (ch0->value.int_value == GARAGE_DOOR_OPENING || ch0->value.int_value == GARAGE_DOOR_CLOSING) {
         led_blink(1);
         INFO("GD stop");
         
