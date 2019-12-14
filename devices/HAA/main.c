@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.8.3
+ * v0.8.4
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                    "0.8.3"
-#define FIRMWARE_VERSION_OCTAL              001003      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "0.8.4"
+#define FIRMWARE_VERSION_OCTAL              001004      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        0
@@ -1295,8 +1295,11 @@ void garage_door_stop(const uint8_t gpio, void *args, const uint8_t type) {
     
     ch0->value.int_value = GARAGE_DOOR_STOPPED;
     
-    sdk_os_timer_disarm(ch_group->timer);
+    led_blink(1);
+    INFO("GD stop");
     
+    sdk_os_timer_disarm(ch_group->timer);
+
     cJSON *json_context = ch0->context;
     do_actions(json_context, 10);
     
@@ -1308,13 +1311,9 @@ void garage_door_obstruction(const uint8_t gpio, void *args, const uint8_t type)
     ch_group_t *ch_group = ch_group_find(ch);
     
     led_blink(1);
-    INFO("Garage Door obstruction: %i", type);
+    INFO("GD obstruction: %i", type);
     
     ch_group->ch2->value.bool_value = (bool) type;
-    
-    if ((bool) type) {
-        garage_door_stop(0, ch_group->ch0, 0);
-    }
     
     hkc_group_notify(ch);
     
@@ -1327,7 +1326,7 @@ void garage_door_sensor(const uint8_t gpio, void *args, const uint8_t type) {
     ch_group_t *ch_group = ch_group_find(ch);
     
     led_blink(1);
-    INFO("Garage Door sensor: %i", type);
+    INFO("GD sensor: %i", type);
     
     ch->value.int_value = type;
     
@@ -1337,6 +1336,7 @@ void garage_door_sensor(const uint8_t gpio, void *args, const uint8_t type) {
     } else {
         ch_group->ch1->value.int_value = type;
         sdk_os_timer_disarm(ch_group->timer);
+        
         if (type == 0) {
             ch_group->num0 = ch_group->num1 - GARAGE_DOOR_TIME_MARGIN;
         } else {
@@ -1358,13 +1358,15 @@ void hkc_garage_door_setter(homekit_characteristic_t *ch1, const homekit_value_t
     ch_group_t *ch_group = ch_group_find(ch1);
     if (!ch_group->ch2->value.bool_value && (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value)) {
         uint8_t current_door_state = ch_group->ch0->value.int_value;
-        if (current_door_state > 1) {
+        if (current_door_state == GARAGE_DOOR_STOPPED) {
+            current_door_state = ch_group->ch1->value.int_value;
+        } else if (current_door_state > 1) {
             current_door_state -= 2;
         }
         
         if (value.int_value != current_door_state) {
             led_blink(1);
-            INFO("Setter Garage Door");
+            INFO("Setter GD");
             
             ch1->value = value;
 
