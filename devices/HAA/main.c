@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.8.6
+ * v0.8.7
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -10,7 +10,7 @@
  * You may obtain a copy of the License at
  * 
  * http://www.apache.org/licenses/LICENSE-2.0
- 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                    "0.8.6"
-#define FIRMWARE_VERSION_OCTAL              001006      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "0.8.7"
+#define FIRMWARE_VERSION_OCTAL              001007      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        0
@@ -174,10 +174,16 @@
 #define GARAGE_DOOR_STOPPED                 4
 #define GARAGE_DOOR_WORKING_TIME            "d"
 #define GARAGE_DOOR_DEFAULT_WORKING_TIME    30
-#define GARAGE_DOOR_TIME_MARGIN             3
+#define GARAGE_DOOR_TIME_MARGIN             "e"
+#define GARAGE_DOOR_DEFAULT_TIME_MARGIN     0
 
 #define MAX_ACTIONS                         10   // from 0 to ...
 #define COPY_ACTIONS                        "a"
+#define SYSTEM_ACTIONS_ARRAY                "s"
+#define SYSTEM_ACTION                       "a"
+#define SYSTEM_ACTION_REBOOT                0
+#define SYSTEM_ACTION_SETUP_MODE            1
+#define SYSTEM_ACTION_OTA_UPDATE            2
 
 #define ACCESSORY_TYPE                      "t"
 #define ACC_TYPE_SWITCH                     1
@@ -202,7 +208,8 @@
 
 #define ACC_CREATION_DELAY                  30
 #define EXIT_EMERGENCY_SETUP_MODE_TIME      2400
-#define SETUP_MODE_ACTIVATE_COUNT           8
+#define SETUP_MODE_ACTIVATE_COUNT           "z"
+#define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   8
 
 #define ACCESSORIES_WITHOUT_BRIDGE          4   // Max number of accessories before using a bridge
 
@@ -254,6 +261,7 @@ typedef struct _ch_group {
     
     float num0;
     float num1;
+    float num2;
     
     ETSTimer *timer;
     
@@ -290,9 +298,11 @@ typedef struct _lightbulb_group {
 } lightbulb_group_t;
 
 int8_t setup_mode_toggle_counter = INT8_MIN;
+int8_t setup_mode_toggle_counter_max = SETUP_MODE_DEFAULT_ACTIVATE_COUNT;
 uint8_t led_gpio = 255;
 uint16_t setup_mode_time = 0;
-ETSTimer setup_mode_toggle_timer, save_states_timer;
+ETSTimer *setup_mode_toggle_timer;
+ETSTimer save_states_timer;
 bool used_gpio[18];
 bool led_inverted = true;
 bool enable_homekit_server = true;
@@ -390,12 +400,14 @@ void setup_mode_call(const uint8_t gpio, void *args, const uint8_t param) {
 }
 
 void setup_mode_toggle_upcount() {
-    setup_mode_toggle_counter++;
-    sdk_os_timer_arm(&setup_mode_toggle_timer, 1000, 0);
+    if (setup_mode_toggle_counter_max > 0) {
+        setup_mode_toggle_counter++;
+        sdk_os_timer_arm(setup_mode_toggle_timer, 1000, 0);
+    }
 }
 
 void setup_mode_toggle() {
-    if (setup_mode_toggle_counter >= SETUP_MODE_ACTIVATE_COUNT) {
+    if (setup_mode_toggle_counter >= setup_mode_toggle_counter_max) {
         setup_mode_call(0, NULL, 0);
     }
     
@@ -1340,9 +1352,9 @@ void garage_door_sensor(const uint8_t gpio, void *args, const uint8_t type) {
         sdk_os_timer_disarm(ch_group->timer);
         
         if (type == 0) {
-            ch_group->num0 = ch_group->num1 - GARAGE_DOOR_TIME_MARGIN;
+            ch_group->num0 = ch_group->num1 - ch_group->num2;
         } else {
-            ch_group->num0 = GARAGE_DOOR_TIME_MARGIN;
+            ch_group->num0 = ch_group->num2;
         }
         
         if (ch_group->ch2->value.bool_value) {
@@ -1397,7 +1409,7 @@ void garage_door_timer_worker(void *args) {
     if (ch->value.int_value == GARAGE_DOOR_OPENING) {
         ch_group->num0++;
 
-        if (ch_group->num0 >= ch_group->num1 - GARAGE_DOOR_TIME_MARGIN && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2) == NULL) {
+        if (ch_group->num0 >= ch_group->num1 - ch_group->num2 && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2) == NULL) {
             sdk_os_timer_disarm(ch_group->timer);
             garage_door_sensor(0, ch, GARAGE_DOOR_OPENED);
             
@@ -1409,7 +1421,7 @@ void garage_door_timer_worker(void *args) {
     } else {    // GARAGE_DOOR_CLOSING
         ch_group->num0--;
         
-        if (ch_group->num0 <= GARAGE_DOOR_TIME_MARGIN && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3) == NULL) {
+        if (ch_group->num0 <= ch_group->num2 && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3) == NULL) {
             sdk_os_timer_disarm(ch_group->timer);
             garage_door_sensor(0, ch, GARAGE_DOOR_CLOSED);
             
@@ -1703,6 +1715,37 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                 INFO("Accessory Manager %i -> %.2f", accessory, value);
             }
         }
+        
+        // System actions
+        cJSON *json_system_actions = cJSON_GetObjectItemCaseSensitive(actions, SYSTEM_ACTIONS_ARRAY);
+        for(uint8_t i=0; i<cJSON_GetArraySize(json_system_actions); i++) {
+            cJSON *json_system_action = cJSON_GetArrayItem(json_system_actions, i);
+            
+            const uint8_t system_action = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_system_action, SYSTEM_ACTION)->valuedouble;
+
+            INFO("System Action %i", system_action);
+            
+            char *ota = NULL;
+            
+            switch (system_action) {
+                case SYSTEM_ACTION_SETUP_MODE:
+                    setup_mode_call(0, NULL, 0);
+                    break;
+                    
+                case SYSTEM_ACTION_OTA_UPDATE:
+                    if (sysparam_get_string("ota_repo", &ota)) {
+                        rboot_set_temp_rom(1);
+                        vTaskDelay(50 / portTICK_PERIOD_MS);
+                        sdk_system_restart();
+                    }
+                    break;
+                    
+                default:    // case SYSTEM_ACTION_REBOOT:
+                    sdk_system_restart();
+                    break;
+            }
+        }
+        
     }
 }
 
@@ -1965,6 +2008,18 @@ void normal_mode_init() {
         bool allow_insecure = (bool) cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS)->valuedouble;
         config.insecure = allow_insecure;
         INFO("Unsecure connections: %i", allow_insecure);
+    }
+    
+    // Times to toggle quickly an accessory status to enter setup mode
+    if (cJSON_GetObjectItemCaseSensitive(json_config, SETUP_MODE_ACTIVATE_COUNT) != NULL) {
+        setup_mode_toggle_counter_max = (int8_t) cJSON_GetObjectItemCaseSensitive(json_config, SETUP_MODE_ACTIVATE_COUNT)->valuedouble;
+        INFO("Toggles to enter setup mode: %i", setup_mode_toggle_counter_max);
+    }
+    
+    if (setup_mode_toggle_counter_max > 0) {
+        setup_mode_toggle_timer = malloc(sizeof(ETSTimer));
+        memset(setup_mode_toggle_timer, 0, sizeof(*setup_mode_toggle_timer));
+        sdk_os_timer_setfn(setup_mode_toggle_timer, setup_mode_toggle, NULL);
     }
     
     // Buttons to enter setup mode
@@ -2909,8 +2964,9 @@ void normal_mode_init() {
         ch_group->ch0 = ch0;
         ch_group->ch1 = ch1;
         ch_group->ch2 = ch2;
-        ch_group->num0 = GARAGE_DOOR_TIME_MARGIN;
+        ch_group->num0 = GARAGE_DOOR_DEFAULT_TIME_MARGIN;
         ch_group->num1 = GARAGE_DOOR_DEFAULT_WORKING_TIME;
+        ch_group->num2 = GARAGE_DOOR_DEFAULT_TIME_MARGIN;
         ch_group->next = ch_groups;
         ch_groups = ch_group;
         
@@ -2918,8 +2974,12 @@ void normal_mode_init() {
         memset(ch_group->timer, 0, sizeof(*ch_group->timer));
         sdk_os_timer_setfn(ch_group->timer, garage_door_timer_worker, ch0);
         
+        if (cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN) != NULL) {
+            ch_group->num2 = cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN)->valuedouble;
+        }
+        
         if (cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_WORKING_TIME) != NULL) {
-            ch_group->num1 = cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_WORKING_TIME)->valuedouble + (GARAGE_DOOR_TIME_MARGIN * 2);
+            ch_group->num1 = cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_WORKING_TIME)->valuedouble + (ch_group->num2 * 2);
         }
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch1, TYPE_GARAGE_DOOR);
@@ -2935,7 +2995,7 @@ void normal_mode_init() {
         }
         
         if (ch0->value.int_value == 0) {
-            ch_group->num0 = ch_group->num1 - GARAGE_DOOR_TIME_MARGIN;
+            ch_group->num0 = ch_group->num1 - ch_group->num2;
         }
 
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), garage_door_sensor, ch0, GARAGE_DOOR_CLOSED)) {
@@ -3108,8 +3168,6 @@ void user_init(void) {
         for (uint8_t g=0; g<18; g++) {
             used_gpio[g] = false;
         }
-        
-        sdk_os_timer_setfn(&setup_mode_toggle_timer, setup_mode_toggle, NULL);
         
         snprintf(serial_value, 13, "%02X%02X%02X%02X%02X%02X", macaddr[0], macaddr[1], macaddr[2], macaddr[3], macaddr[4], macaddr[5]);
         serial.value = HOMEKIT_STRING(serial_value);
