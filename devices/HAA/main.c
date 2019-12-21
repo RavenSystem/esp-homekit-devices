@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.8.9
+ * v0.8.10
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                    "0.8.9"
-#define FIRMWARE_VERSION_OCTAL              001011      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "0.8.10"
+#define FIRMWARE_VERSION_OCTAL              001012      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        0
@@ -207,7 +207,7 @@
 #define ACC_TYPE_GARAGE_DOOR                40
 
 #define ACC_CREATION_DELAY                  30
-#define EXIT_EMERGENCY_SETUP_MODE_TIME      2400
+#define EXIT_EMERGENCY_SETUP_MODE_TIME      2200
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   8
 
@@ -1815,13 +1815,14 @@ void normal_mode_init() {
     if (total_accessories == 0) {
         uart_set_baud(0, 115200);
         ERROR("Invalid JSON");
-        sysparam_set_bool("setup", true);
         xTaskCreate(reboot_task, "reboot_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
         
         free(txt_config);
         
         return;
     }
+    
+    xTaskCreate(exit_emergency_setup_mode_task, "exit_emergency_setup_mode_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
     
     // Buttons GPIO Setup function
     bool diginput_register(cJSON *json_buttons, void *callback, homekit_characteristic_t *hk_ch, const uint8_t param) {
@@ -3160,7 +3161,6 @@ void user_init(void) {
     } else {
         // Arming emergency Setup Mode
         sysparam_set_bool("setup", true);
-        xTaskCreate(exit_emergency_setup_mode_task, "exit_emergency_setup_mode_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
         
         // Filling Used GPIO Array
         for (uint8_t g=0; g<18; g++) {
