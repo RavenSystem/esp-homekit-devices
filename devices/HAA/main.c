@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.8.10
+ * v0.9.0
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                    "0.8.10"
-#define FIRMWARE_VERSION_OCTAL              001012      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "0.9.0"
+#define FIRMWARE_VERSION_OCTAL              001100      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        0
@@ -63,6 +63,7 @@
 #define TYPE_VALVE                          4
 #define TYPE_LIGHTBULB                      5
 #define TYPE_GARAGE_DOOR                    6
+#define TYPE_WINDOW_COVER                   7
 
 // Button Events
 #define SINGLEPRESS_EVENT                   0
@@ -109,8 +110,9 @@
 #define KILL_SWITCH                         "k"
 
 #define VALVE_SYSTEM_TYPE                   "w"
+#define VALVE_SYSTEM_TYPE_DEFAULT           0
 #define VALVE_MAX_DURATION                  "d"
-#define VALVE_DEFAULT_MAX_DURATION          3600
+#define VALVE_MAX_DURATION_DEFAULT          3600
 
 #define THERMOSTAT_TYPE                     "w"
 #define THERMOSTAT_TYPE_HEATER              1
@@ -172,10 +174,39 @@
 #define GARAGE_DOOR_OPENING                 2
 #define GARAGE_DOOR_CLOSING                 3
 #define GARAGE_DOOR_STOPPED                 4
-#define GARAGE_DOOR_WORKING_TIME            "d"
-#define GARAGE_DOOR_DEFAULT_WORKING_TIME    30
-#define GARAGE_DOOR_TIME_MARGIN             "e"
-#define GARAGE_DOOR_DEFAULT_TIME_MARGIN     0
+#define GARAGE_DOOR_WORKING_TIME_SET        "d"
+#define GARAGE_DOOR_WORKING_TIME_DEFAULT    30
+#define GARAGE_DOOR_TIME_MARGIN_SET         "e"
+#define GARAGE_DOOR_TIME_MARGIN_DEFAULT     0
+#define GARAGE_DOOR_CURRENT_TIME            ch_group->num0
+#define GARAGE_DOOR_WORKING_TIME            ch_group->num1
+#define GARAGE_DOOR_TIME_MARGIN             ch_group->num2
+
+#define WINDOW_COVER_CLOSING                0
+#define WINDOW_COVER_OPENING                1
+#define WINDOW_COVER_STOP                   2
+#define WINDOW_COVER_CLOSING_FROM_MOVING    3
+#define WINDOW_COVER_OPENING_FROM_MOVING    4
+#define WINDOW_COVER_TYPE                   "w"
+#define WINDOW_COVER_TYPE_DEFAULT           0
+#define WINDOW_COVER_TIME_OPEN_SET          "o"
+#define WINDOW_COVER_TIME_OPEN_DEFAULT      15
+#define WINDOW_COVER_TIME_CLOSE_SET         "c"
+#define WINDOW_COVER_TIME_CLOSE_DEFAULT     15
+#define WINDOW_COVER_CORRECTION_SET         "f"
+#define WINDOW_COVER_CORRECTION_DEFAULT     0
+#define WINDOW_COVER_POLL_PERIOD_MS         250
+#define WINDOW_COVER_MARGIN_SYNC            15
+#define WINDOW_COVER_STEP_TIME(x)           ((100.0 / (x)) * (WINDOW_COVER_POLL_PERIOD_MS / 1000.0))
+#define WINDOW_COVER_STEP_TIME_UP           ch_group->num0
+#define WINDOW_COVER_STEP_TIME_DOWN         ch_group->num1
+#define WINDOW_COVER_POSITION               ch_group->num2
+#define WINDOW_COVER_REAL_POSITION          ch_group->num3
+#define WINDOW_COVER_CORRECTION             ch_group->num4
+#define WINDOW_COVER_CH_CURRENT_POSITION    ch_group->ch0
+#define WINDOW_COVER_CH_TARGET_POSITION     ch_group->ch1
+#define WINDOW_COVER_CH_STATE               ch_group->ch2
+#define WINDOW_COVER_CH_OBSTRUCTION         ch_group->ch3
 
 #define MAX_ACTIONS                         10   // from 0 to ...
 #define COPY_ACTIONS                        "a"
@@ -205,11 +236,13 @@
 #define ACC_TYPE_TH_SENSOR                  24
 #define ACC_TYPE_LIGHTBULB                  30
 #define ACC_TYPE_GARAGE_DOOR                40
+#define ACC_TYPE_WINDOW_COVER               45
 
 #define ACC_CREATION_DELAY                  30
 #define EXIT_EMERGENCY_SETUP_MODE_TIME      2200
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   8
+#define SETUP_MODE_TOGGLE_TIME_MS           1050
 
 #define ACCESSORIES_WITHOUT_BRIDGE          4   // Max number of accessories before using a bridge
 
@@ -262,6 +295,8 @@ typedef struct _ch_group {
     float num0;
     float num1;
     float num2;
+    float num3;
+    float num4;
     
     ETSTimer *timer;
     
@@ -400,7 +435,7 @@ void setup_mode_call(const uint8_t gpio, void *args, const uint8_t param) {
 void setup_mode_toggle_upcount() {
     if (setup_mode_toggle_counter_max > 0) {
         setup_mode_toggle_counter++;
-        sdk_os_timer_arm(setup_mode_toggle_timer, 1000, 0);
+        sdk_os_timer_arm(setup_mode_toggle_timer, SETUP_MODE_TOGGLE_TIME_MS, 0);
     }
 }
 
@@ -1350,9 +1385,9 @@ void garage_door_sensor(const uint8_t gpio, void *args, const uint8_t type) {
         sdk_os_timer_disarm(ch_group->timer);
         
         if (type == 0) {
-            ch_group->num0 = ch_group->num1 - ch_group->num2;
+            GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN;
         } else {
-            ch_group->num0 = ch_group->num2;
+            GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_TIME_MARGIN;
         }
         
         if (ch_group->ch2->value.bool_value) {
@@ -1405,32 +1440,220 @@ void garage_door_timer_worker(void *args) {
     cJSON *json_context = ch->context;
 
     if (ch->value.int_value == GARAGE_DOOR_OPENING) {
-        ch_group->num0++;
+        GARAGE_DOOR_CURRENT_TIME++;
 
-        if (ch_group->num0 >= ch_group->num1 - ch_group->num2 && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2) == NULL) {
+        if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2) == NULL) {
             sdk_os_timer_disarm(ch_group->timer);
             garage_door_sensor(0, ch, GARAGE_DOOR_OPENED);
             
-        } else if (ch_group->num0 >= ch_group->num1 && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2) != NULL) {
+        } else if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2) != NULL) {
             sdk_os_timer_disarm(ch_group->timer);
             garage_door_obstruction(0, ch, 1);
         }
         
     } else {    // GARAGE_DOOR_CLOSING
-        ch_group->num0--;
+        GARAGE_DOOR_CURRENT_TIME--;
         
-        if (ch_group->num0 <= ch_group->num2 && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3) == NULL) {
+        if (GARAGE_DOOR_CURRENT_TIME <= GARAGE_DOOR_TIME_MARGIN && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3) == NULL) {
             sdk_os_timer_disarm(ch_group->timer);
             garage_door_sensor(0, ch, GARAGE_DOOR_CLOSED);
             
-        } else if (ch_group->num0 <= 0 && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3) != NULL) {
+        } else if (GARAGE_DOOR_CURRENT_TIME <= 0 && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3) != NULL) {
             sdk_os_timer_disarm(ch_group->timer);
             garage_door_obstruction(0, ch, 1);
         }
     }
 }
 
+// --- WINDOW COVER
+void normalize_position(homekit_characteristic_t *ch) {
+    ch_group_t *ch_group = ch_group_find(ch);
+    
+    if (WINDOW_COVER_POSITION < 0) {
+        WINDOW_COVER_POSITION = 0;
+    } else if (WINDOW_COVER_POSITION > 100) {
+        WINDOW_COVER_POSITION = 100;
+    }
+    
+    if (WINDOW_COVER_REAL_POSITION < 0) {
+        WINDOW_COVER_REAL_POSITION = 0;
+    } else if (WINDOW_COVER_REAL_POSITION > 100) {
+        WINDOW_COVER_REAL_POSITION = 100;
+    }
+}
+
+void window_cover_stop(homekit_characteristic_t *ch) {
+    ch_group_t *ch_group = ch_group_find(ch);
+    
+    led_blink(1);
+    INFO("WC Stopped at %f, real %f", WINDOW_COVER_POSITION, WINDOW_COVER_REAL_POSITION);
+    
+    sdk_os_timer_disarm(ch_group->timer);
+    normalize_position(ch);
+    
+    WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_REAL_POSITION;
+    WINDOW_COVER_CH_TARGET_POSITION->value = WINDOW_COVER_CH_CURRENT_POSITION->value;
+    WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_STOP;
+    
+    cJSON *json_context = ch->context;
+    do_actions(json_context, WINDOW_COVER_STOP);
+    
+    hkc_group_notify(ch_group->ch0);
+    
+    setup_mode_toggle_upcount();
+    
+    save_states_callback();
+}
+
+void hkc_window_cover_setter(homekit_characteristic_t *ch1, const homekit_value_t value) {
+    ch_group_t *ch_group = ch_group_find(ch1);
+    if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
+        led_blink(1);
+        INFO("WC Activated: Current: %i, Target: %i", WINDOW_COVER_CH_CURRENT_POSITION->value.int_value, value.int_value);
+        
+        ch1->value = value;
+
+        normalize_position(ch1);
+        
+        cJSON *json_context = ch1->context;
+        
+        if (value.int_value < WINDOW_COVER_CH_CURRENT_POSITION->value.int_value) {
+            
+            if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_OPENING) {
+                do_actions(json_context, WINDOW_COVER_CLOSING_FROM_MOVING);
+            } else {
+                do_actions(json_context, WINDOW_COVER_CLOSING);
+            }
+            
+            if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
+                sdk_os_timer_arm(ch_group->timer, WINDOW_COVER_POLL_PERIOD_MS, 1);
+            }
+            
+            WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_CLOSING;
+
+        } else if (value.int_value > WINDOW_COVER_CH_CURRENT_POSITION->value.int_value) {
+
+            if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_CLOSING) {
+                do_actions(json_context, WINDOW_COVER_OPENING_FROM_MOVING);
+            } else {
+                do_actions(json_context, WINDOW_COVER_OPENING);
+            }
+            
+            if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
+                sdk_os_timer_arm(ch_group->timer, WINDOW_COVER_POLL_PERIOD_MS, 1);
+            }
+            
+            WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_OPENING;
+
+        } else {
+            window_cover_stop(ch1);
+        }
+    
+    }
+    
+    hkc_group_notify(ch_group->ch0);
+}
+
+void window_cover_timer_worker(void *args) {
+    homekit_characteristic_t *ch0 = args;
+    ch_group_t *ch_group = ch_group_find(ch0);
+    
+    uint8_t margin = 0;     // Used as covering offset to add extra time when target position completely closed or opened
+    if (WINDOW_COVER_CH_TARGET_POSITION->value.int_value == 0 || WINDOW_COVER_CH_TARGET_POSITION->value.int_value == 100) {
+        margin = WINDOW_COVER_MARGIN_SYNC;
+    }
+    
+    void normalize_current_position() {
+        if (WINDOW_COVER_POSITION < 0) {
+            WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = 0;
+        } else if (WINDOW_COVER_POSITION > 100) {
+            WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = 100;
+        } else {
+            if ((WINDOW_COVER_CH_CURRENT_POSITION->value.int_value / 2) != (uint8_t) (WINDOW_COVER_POSITION / 2)) {
+                INFO("WC Moving at %f, real %f", WINDOW_COVER_POSITION, WINDOW_COVER_REAL_POSITION);
+                WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_POSITION;
+                homekit_characteristic_notify(WINDOW_COVER_CH_CURRENT_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
+            } else {
+                WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_POSITION;
+            }
+        }
+    }
+    
+    switch (WINDOW_COVER_CH_STATE->value.int_value) {
+        case WINDOW_COVER_CLOSING:
+            WINDOW_COVER_POSITION -= WINDOW_COVER_STEP_TIME_DOWN;
+            if (WINDOW_COVER_POSITION > 0) {
+                WINDOW_COVER_REAL_POSITION = WINDOW_COVER_POSITION / (1 + ((100 - WINDOW_COVER_POSITION) * WINDOW_COVER_CORRECTION * 0.0002));
+            } else {
+                WINDOW_COVER_REAL_POSITION = WINDOW_COVER_POSITION;
+            }
+            
+            normalize_current_position();
+
+            if ((WINDOW_COVER_CH_TARGET_POSITION->value.int_value - margin) >= WINDOW_COVER_REAL_POSITION) {
+                window_cover_stop(ch0);
+            }
+            break;
+            
+        case WINDOW_COVER_OPENING:
+            WINDOW_COVER_POSITION += WINDOW_COVER_STEP_TIME_UP;
+            if (WINDOW_COVER_POSITION < 100) {
+                WINDOW_COVER_REAL_POSITION = WINDOW_COVER_POSITION / (1 + ((100 - WINDOW_COVER_POSITION) * WINDOW_COVER_CORRECTION * 0.0002));
+            } else {
+                WINDOW_COVER_REAL_POSITION = WINDOW_COVER_POSITION;
+            }
+        
+            normalize_current_position();
+            
+            if ((WINDOW_COVER_CH_TARGET_POSITION->value.int_value + margin) <= WINDOW_COVER_REAL_POSITION) {
+                window_cover_stop(ch0);
+            }
+            break;
+            
+        default:    // case WINDOW_COVER_STOP:
+            window_cover_stop(ch0);
+            break;
+    }
+}
+
 // --- DIGITAL INPUTS
+void window_cover_diginput(const uint8_t gpio, void *args, const uint8_t type) {
+    homekit_characteristic_t *ch1 = args;
+    
+    ch_group_t *ch_group = ch_group_find(ch1);
+    if (!ch_group->ch_child || ch_group->ch_child->value.bool_value) {
+        switch (type) {
+            case WINDOW_COVER_CLOSING:
+                hkc_window_cover_setter(ch1, HOMEKIT_UINT8(0));
+                break;
+                
+            case WINDOW_COVER_OPENING:
+                hkc_window_cover_setter(ch1, HOMEKIT_UINT8(100));
+                break;
+                
+            case (WINDOW_COVER_CLOSING + 3):
+                if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_CLOSING) {
+                    hkc_window_cover_setter(ch1, WINDOW_COVER_CH_CURRENT_POSITION->value);
+                } else {
+                    hkc_window_cover_setter(ch1, HOMEKIT_UINT8(0));
+                }
+                break;
+                
+            case (WINDOW_COVER_OPENING + 3):
+                if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_OPENING) {
+                    hkc_window_cover_setter(ch1, WINDOW_COVER_CH_CURRENT_POSITION->value);
+                } else {
+                    hkc_window_cover_setter(ch1, HOMEKIT_UINT8(100));
+                }
+                break;
+                
+            default:    // case WINDOW_COVER_STOP:
+                hkc_window_cover_setter(ch1, WINDOW_COVER_CH_CURRENT_POSITION->value);
+                break;
+        }
+    }
+}
+
 void diginput(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
     
@@ -1462,6 +1685,14 @@ void diginput(const uint8_t gpio, void *args, const uint8_t type) {
                     hkc_garage_door_setter(ch, HOMEKIT_UINT8(0));
                 } else {
                     hkc_garage_door_setter(ch, HOMEKIT_UINT8(1));
+                }
+                break;
+                
+            case TYPE_WINDOW_COVER:
+                if (ch->value.int_value == 0) {
+                    hkc_window_cover_setter(ch, HOMEKIT_UINT8(100));
+                } else {
+                    hkc_window_cover_setter(ch, HOMEKIT_UINT8(0));
                 }
                 break;
                 
@@ -2402,12 +2633,12 @@ void normal_mode_init() {
     uint8_t new_water_valve(uint8_t accessory, cJSON *json_context) {
         new_accessory(accessory, 3);
         
-        uint8_t valve_type = 0;
+        uint8_t valve_type = VALVE_SYSTEM_TYPE_DEFAULT;
         if (cJSON_GetObjectItemCaseSensitive(json_context, VALVE_SYSTEM_TYPE) != NULL) {
             valve_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, VALVE_SYSTEM_TYPE)->valuedouble;
         }
         
-        uint32_t valve_max_duration = VALVE_DEFAULT_MAX_DURATION;
+        uint32_t valve_max_duration = VALVE_MAX_DURATION_DEFAULT;
         if (cJSON_GetObjectItemCaseSensitive(json_context, VALVE_MAX_DURATION) != NULL) {
             valve_max_duration = (uint32_t) cJSON_GetObjectItemCaseSensitive(json_context, VALVE_MAX_DURATION)->valuedouble;
         }
@@ -2963,9 +3194,9 @@ void normal_mode_init() {
         ch_group->ch0 = ch0;
         ch_group->ch1 = ch1;
         ch_group->ch2 = ch2;
-        ch_group->num0 = GARAGE_DOOR_DEFAULT_TIME_MARGIN;
-        ch_group->num1 = GARAGE_DOOR_DEFAULT_WORKING_TIME;
-        ch_group->num2 = GARAGE_DOOR_DEFAULT_TIME_MARGIN;
+        GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_TIME_MARGIN_DEFAULT;
+        GARAGE_DOOR_WORKING_TIME = GARAGE_DOOR_WORKING_TIME_DEFAULT;
+        GARAGE_DOOR_TIME_MARGIN = GARAGE_DOOR_TIME_MARGIN_DEFAULT;
         ch_group->next = ch_groups;
         ch_groups = ch_group;
         
@@ -2973,12 +3204,12 @@ void normal_mode_init() {
         memset(ch_group->timer, 0, sizeof(*ch_group->timer));
         sdk_os_timer_setfn(ch_group->timer, garage_door_timer_worker, ch0);
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN) != NULL) {
-            ch_group->num2 = cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN)->valuedouble;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN_SET) != NULL) {
+            GARAGE_DOOR_TIME_MARGIN = cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN_SET)->valuedouble;
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_WORKING_TIME) != NULL) {
-            ch_group->num1 = cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_WORKING_TIME)->valuedouble + (ch_group->num2 * 2);
+        if (cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_WORKING_TIME_SET) != NULL) {
+            GARAGE_DOOR_WORKING_TIME = cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_WORKING_TIME_SET)->valuedouble + (GARAGE_DOOR_TIME_MARGIN * 2);
         }
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch1, TYPE_GARAGE_DOOR);
@@ -2994,7 +3225,7 @@ void normal_mode_init() {
         }
         
         if (ch0->value.int_value == 0) {
-            ch_group->num0 = ch_group->num1 - ch_group->num2;
+            GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN;
         }
 
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), garage_door_sensor, ch0, GARAGE_DOOR_CLOSED)) {
@@ -3017,6 +3248,91 @@ void normal_mode_init() {
             garage_door_obstruction(0, ch0, 1);
         }
         
+        const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
+        return new_accessory_count;
+    }
+    
+    uint8_t new_window_cover(uint8_t accessory, cJSON *json_context) {
+        new_accessory(accessory, 3);
+        
+        uint8_t cover_type = WINDOW_COVER_TYPE_DEFAULT;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TYPE) != NULL) {
+            cover_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TYPE)->valuedouble;
+        }
+        
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_POSITION, 0, .getter_ex=hkc_getter, .context=json_context);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_POSITION, 0, .getter_ex=hkc_getter, .setter_ex=hkc_window_cover_setter, .context=json_context);
+        homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(POSITION_STATE, WINDOW_COVER_STOP, .getter_ex=hkc_getter, .context=json_context);
+        homekit_characteristic_t *ch3 = NEW_HOMEKIT_CHARACTERISTIC(OBSTRUCTION_DETECTED, false, .getter_ex=hkc_getter, .context=json_context);
+        
+        accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
+        accessories[accessory]->services[1]->id = 8;
+        accessories[accessory]->services[1]->primary = true;
+        
+        switch (cover_type) {
+            case 1:
+                accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_WINDOW;
+                break;
+                
+            case 2:
+                accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_DOOR;
+                break;
+                
+            default:    // case 0:
+                accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_WINDOW_COVERING;
+                break;
+        }
+
+        accessories[accessory]->services[1]->characteristics = calloc(5, sizeof(homekit_characteristic_t*));
+        accessories[accessory]->services[1]->characteristics[0] = ch0;
+        accessories[accessory]->services[1]->characteristics[1] = ch1;
+        accessories[accessory]->services[1]->characteristics[2] = ch2;
+        accessories[accessory]->services[1]->characteristics[3] = ch3;
+        
+        ch_group_t *ch_group = malloc(sizeof(ch_group_t));
+        memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->accessory = accessory_numerator;
+        accessory_numerator++;
+        ch_group->acc_type = ACC_TYPE_WINDOW_COVER;
+        WINDOW_COVER_CH_CURRENT_POSITION = ch0;
+        WINDOW_COVER_CH_TARGET_POSITION = ch1;
+        WINDOW_COVER_CH_STATE = ch2;
+        WINDOW_COVER_CH_OBSTRUCTION = ch3;
+        WINDOW_COVER_STEP_TIME_UP = WINDOW_COVER_STEP_TIME(WINDOW_COVER_TIME_OPEN_DEFAULT);
+        WINDOW_COVER_STEP_TIME_DOWN = WINDOW_COVER_STEP_TIME(WINDOW_COVER_TIME_CLOSE_DEFAULT);
+        WINDOW_COVER_POSITION = 0;
+        WINDOW_COVER_REAL_POSITION = 0;
+        WINDOW_COVER_CORRECTION = WINDOW_COVER_CORRECTION_DEFAULT;
+        ch_group->next = ch_groups;
+        ch_groups = ch_group;
+        
+        ch_group->timer = malloc(sizeof(ETSTimer));
+        memset(ch_group->timer, 0, sizeof(*ch_group->timer));
+        sdk_os_timer_setfn(ch_group->timer, window_cover_timer_worker, ch0);
+        
+        if (cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_OPEN_SET) != NULL) {
+            WINDOW_COVER_STEP_TIME_UP = WINDOW_COVER_STEP_TIME(cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_OPEN_SET)->valuedouble);
+        }
+        
+        if (cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_CLOSE_SET) != NULL) {
+            WINDOW_COVER_STEP_TIME_DOWN = WINDOW_COVER_STEP_TIME(cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_CLOSE_SET)->valuedouble);
+        }
+        
+        if (cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_CORRECTION_SET) != NULL) {
+            WINDOW_COVER_CORRECTION = cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_CORRECTION_SET)->valuedouble;
+        }
+        
+        WINDOW_COVER_POSITION = (float) set_initial_state(accessory, 0, cJSON_Parse(INIT_STATE_LAST_STR), ch0, CH_TYPE_FLOAT, 0);
+        ch0->value.int_value = (uint8_t) WINDOW_COVER_POSITION;
+        ch1->value.int_value = ch0->value.int_value;
+        
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch1, TYPE_WINDOW_COVER);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), window_cover_diginput, ch1, WINDOW_COVER_CLOSING);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), window_cover_diginput, ch1, WINDOW_COVER_OPENING);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), window_cover_diginput, ch1, WINDOW_COVER_STOP);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), window_cover_diginput, ch1, WINDOW_COVER_CLOSING + 3);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), window_cover_diginput, ch1, WINDOW_COVER_OPENING + 3);
+
         const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         return new_accessory_count;
     }
@@ -3093,6 +3409,9 @@ void normal_mode_init() {
             
         } else if (acc_type == ACC_TYPE_GARAGE_DOOR) {
             acc_count = new_garage_door(acc_count, json_accessory);
+            
+        } else if (acc_type == ACC_TYPE_WINDOW_COVER) {
+            acc_count = new_window_cover(acc_count, json_accessory);
         
         } else {    // acc_type == ACC_TYPE_SWITCH || acc_type == ACC_TYPE_OUTLET
             acc_count = new_switch(acc_count, json_accessory, acc_type);
