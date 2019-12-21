@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.9.0
+ * v0.9.1
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                    "0.9.0"
-#define FIRMWARE_VERSION_OCTAL              001100      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "0.9.1"
+#define FIRMWARE_VERSION_OCTAL              001101      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        0
@@ -425,7 +425,7 @@ void setup_mode_call(const uint8_t gpio, void *args, const uint8_t param) {
     INFO("Checking setup mode call");
     
     if (setup_mode_time == 0 || xTaskGetTickCountFromISR() < setup_mode_time * 1000 / portTICK_PERIOD_MS) {
-        sysparam_set_bool("setup", true);
+        sysparam_set_int8("setup", 1);
         xTaskCreate(reboot_task, "reboot_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
     } else {
         ERROR("Setup mode not allowed after %i secs since boot. Repower device and try again", setup_mode_time);
@@ -451,7 +451,7 @@ void exit_emergency_setup_mode_task() {
     vTaskDelay(EXIT_EMERGENCY_SETUP_MODE_TIME / portTICK_PERIOD_MS);
     
     INFO("Disarming Emergency Setup Mode");
-    sysparam_set_bool("setup", false);
+    sysparam_set_int8("setup", 0);
 
     vTaskDelete(NULL);
 }
@@ -1325,7 +1325,7 @@ void autodimmer_call(homekit_characteristic_t *ch0, const homekit_value_t value)
         if (lightbulb_group->armed_autodimmer) {
             lightbulb_group->armed_autodimmer = false;
             sdk_os_timer_disarm(&lightbulb_group->autodimmer_timer);
-            xTaskCreate(autodimmer_task, "autodimmer_task", configMINIMAL_STACK_SIZE, (void*) ch0, 1, NULL);
+            xTaskCreate(autodimmer_task, "autodimmer_task", configMINIMAL_STACK_SIZE, (void *) ch0, 1, NULL);
         } else {
             sdk_os_timer_arm(&lightbulb_group->autodimmer_timer, AUTODIMMER_DELAY, 0);
             lightbulb_group->armed_autodimmer = true;
@@ -1936,6 +1936,14 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                         hkc_rgbw_setter(ch_group->ch0, HOMEKIT_BOOL((bool) value));
                         break;
                         
+                    case ACC_TYPE_WINDOW_COVER:
+                        if (value < 0 || value > 100) {
+                            hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
+                        } else {
+                            hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, HOMEKIT_UINT8((uint8_t) value));
+                        }
+                        break;
+                        
                     default:    // ON Type ch
                         hkc_on_setter(ch_group->ch0, HOMEKIT_BOOL((bool) value));
                         break;
@@ -2046,6 +2054,7 @@ void normal_mode_init() {
     if (total_accessories == 0) {
         uart_set_baud(0, 115200);
         ERROR("Invalid JSON");
+        sysparam_set_int8("setup", 2);
         xTaskCreate(reboot_task, "reboot_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
         
         free(txt_config);
@@ -2082,7 +2091,7 @@ void normal_mode_init() {
                 adv_button_create(gpio, pullup_resistor, inverted);
                 used_gpio[gpio] = true;
             }
-            adv_button_register_callback_fn(gpio, callback, button_type, (void*) hk_ch, param);
+            adv_button_register_callback_fn(gpio, callback, button_type, (void *) hk_ch, param);
             
             INFO("Digital input GPIO: %i, type: %i, inv: %i", gpio, button_type, inverted);
              
@@ -3466,12 +3475,12 @@ void user_init(void) {
     snprintf(name_value, 11, "HAA-%02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
     name.value = HOMEKIT_STRING(name_value);
     
-    bool haa_setup = false;
+    int8_t haa_setup = 0;
     
-    //sysparam_set_bool("setup", true);    // Force to enter always in setup mode. Only for tests. Keep comment for releases
+    //sysparam_set_int8("setup", 2);    // Force to enter always in setup mode. Only for tests. Keep comment for releases
     
-    sysparam_get_bool("setup", &haa_setup);
-    if (haa_setup) {
+    sysparam_get_int8("setup", &haa_setup);
+    if (haa_setup > 0) {
         uart_set_baud(0, 115200);
         printf_header();
         INFO("SETUP MODE");
@@ -3479,7 +3488,7 @@ void user_init(void) {
         
     } else {
         // Arming emergency Setup Mode
-        sysparam_set_bool("setup", true);
+        sysparam_set_int8("setup", 1);
         
         // Filling Used GPIO Array
         for (uint8_t g=0; g<18; g++) {

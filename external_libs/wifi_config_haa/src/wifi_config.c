@@ -20,8 +20,8 @@
 
 #define WIFI_CONFIG_SERVER_PORT         80
 
-#ifndef AUTO_OTA_TIMEOUT
-#define AUTO_OTA_TIMEOUT                90000
+#ifndef AUTO_REBOOT_TIMEOUT
+#define AUTO_REBOOT_TIMEOUT             90000
 #endif
 
 #define INFO(message, ...)              printf("HAA > " message "\n", ##__VA_ARGS__);
@@ -60,7 +60,7 @@ typedef struct _client {
     size_t body_length;
 } client_t;
 
-ETSTimer auto_ota_timer;
+ETSTimer auto_reboot_timer;
 
 static void wifi_config_station_connect();
 static void wifi_config_softap_start();
@@ -194,7 +194,7 @@ static void wifi_scan_task(void *arg)
 #include "index.html.h"
 
 static void wifi_config_server_on_settings(client_t *client) {
-    sdk_os_timer_disarm(&auto_ota_timer);
+    sdk_os_timer_disarm(&auto_reboot_timer);
     
     static const char http_prologue[] =
         "HTTP/1.1 200 \r\n"
@@ -316,7 +316,7 @@ static void wifi_config_server_on_settings_update(client_t *client) {
         sysparam_set_bool("aota", false);
     }
     
-    sysparam_set_bool("setup", false);
+    sysparam_set_int8("setup", 0);
     
     if (ota_param) {
         rboot_set_temp_rom(1);
@@ -714,10 +714,15 @@ static void wifi_config_sta_connect_timeout_callback(void *arg) {
 }
 
 
-static void auto_ota_run() {
-    INFO("OTA Update");
-    rboot_set_temp_rom(1);
+static void auto_reboot_run() {
+    bool auto_ota = false;
+    sysparam_get_bool("aota", &auto_ota);
+    if (auto_ota) {
+        INFO("OTA Update");
+        rboot_set_temp_rom(1);
+    }
 
+    INFO("Auto Reboot");
     vTaskDelay(2000 / portTICK_PERIOD_MS);
     
     sdk_system_restart();
@@ -755,14 +760,16 @@ static void wifi_config_station_connect() {
         
         if (!context->on_wifi_ready) {
             INFO("HAA Setup");
-            sysparam_set_bool("setup", false);
-
-            sdk_os_timer_setfn(&auto_ota_timer, auto_ota_run, NULL);
             
-            bool auto_ota = false;
-            sysparam_get_bool("aota", &auto_ota);
-            if (auto_ota) {
-                sdk_os_timer_arm(&auto_ota_timer, AUTO_OTA_TIMEOUT, 0);
+            int8_t mode = 0;
+            sysparam_get_int8("setup", &mode);
+            
+            sysparam_set_int8("setup", 0);
+
+            if (mode == 1) {
+                INFO("Enabling auto reboot");
+                sdk_os_timer_setfn(&auto_reboot_timer, auto_reboot_run, NULL);
+                sdk_os_timer_arm(&auto_reboot_timer, AUTO_REBOOT_TIMEOUT, 0);
             }
             
             wifi_config_softap_start();
