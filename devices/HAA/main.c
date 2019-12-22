@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * v0.9.1
+ * v0.9.2
  * 
  * Copyright 2019 José Antonio Jiménez Campos (@RavenSystem)
  *  
@@ -46,8 +46,8 @@
 #include <cJSON.h>
 
 // Version
-#define FIRMWARE_VERSION                    "0.9.1"
-#define FIRMWARE_VERSION_OCTAL              001101      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "0.9.2"
+#define FIRMWARE_VERSION_OCTAL              001102      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        0
@@ -1294,10 +1294,10 @@ void autodimmer_task(void *args) {
         }
         hkc_rgbw_setter(ch_group->ch1, ch_group->ch1->value);
         
-        vTaskDelay(lightbulb_group->autodimmer_task_delay);
+        vTaskDelay(lightbulb_group->autodimmer_task_delay / portTICK_PERIOD_MS);
         
         if (ch_group->ch1->value.int_value == 100) {    // Double wait when brightness is 100%
-            vTaskDelay(lightbulb_group->autodimmer_task_delay);
+            vTaskDelay(lightbulb_group->autodimmer_task_delay / portTICK_PERIOD_MS);
         }
     }
     
