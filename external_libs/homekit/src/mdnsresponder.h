@@ -18,7 +18,11 @@
 
 /* The default maximum reply size, increase as necessary. */
 #ifndef MDNS_RESPONDER_REPLY_SIZE
-#define MDNS_RESPONDER_REPLY_SIZE      1460
+#define MDNS_RESPONDER_REPLY_SIZE       1460
+#endif
+
+#ifndef MDNS_WATCHDOG_PERIOD
+#define MDNS_WATCHDOG_PERIOD            8500   // ms
 #endif
 
 // Starts the mDNS responder task, call first

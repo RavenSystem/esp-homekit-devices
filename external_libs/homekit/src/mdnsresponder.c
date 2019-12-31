@@ -556,7 +556,6 @@ void mdns_announce() {
 #endif
 }
 
-#define MDNS_WATCHDOG_PERIOD    10000   // ms
 static bool mdns_network_down = false;
 static void mdns_wifi_watchdog() {
     if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
