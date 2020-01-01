@@ -972,7 +972,7 @@ void hkc_rgbw_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
     if (ch_group->ch_sec && !ch_group->ch_sec->value.bool_value) {
         hkc_group_notify(ch_group->ch0);
         
-    } else if (ch != ch_group->ch0 || ch->value.bool_value != ch_group->ch0->value.bool_value) {
+    } else if (ch != ch_group->ch0 || value.bool_value != ch_group->ch0->value.bool_value) {
         ch->value = value;
         sdk_os_timer_arm(ch_group->timer, RGBW_SET_DELAY, false);
         
