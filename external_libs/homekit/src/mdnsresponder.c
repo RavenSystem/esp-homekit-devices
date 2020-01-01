@@ -422,11 +422,10 @@ static u8_t* mdns_get_question(u8_t* hdrP, u8_t* qp, char* qStr, uint16_t* qClas
 //---------------------------------------------------------------------------
 static void mdns_announce_netif(struct netif *netif, const ip_addr_t *addr);
 
-static ETSTimer mdns_announce_timer, mdns_wifi_watchdog_timer;
+static ETSTimer mdns_announce_timer;
 
 void mdns_clear() {
     sdk_os_timer_disarm(&mdns_announce_timer);
-    sdk_os_timer_disarm(&mdns_wifi_watchdog_timer);
     
     if (!xSemaphoreTake(gDictMutex, portMAX_DELAY))
         return;
@@ -556,20 +555,6 @@ void mdns_announce() {
 #endif
 }
 
-static bool mdns_network_down = false;
-static void mdns_wifi_watchdog() {
-    if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
-        if (mdns_network_down == true) {
-            mdns_network_down = false;
-            printf(">>> mdns_wifi_watchdog -> reannouncing...\n");
-            mdns_announce();
-        }
-    } else {
-        printf(">>> mdns_wifi_watchdog -> wifi disconnected\n");
-        mdns_network_down = true;
-    }
-}
-
 void mdns_add_facility_work(const char* instanceName,   // Friendly name, need not be unique
                             const char* serviceName,    // Must be "_name", e.g. "_hap" or "_http"
                             const char* addText,        // Must be <key>=<value>
@@ -623,16 +608,12 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
     free(devName);
 
     sdk_os_timer_disarm(&mdns_announce_timer);
-    sdk_os_timer_disarm(&mdns_wifi_watchdog_timer);
     
     mdns_announce();
     
     if (ttl > 0) {
         sdk_os_timer_setfn(&mdns_announce_timer, mdns_announce, NULL);
         sdk_os_timer_arm(&mdns_announce_timer, ttl * 1000, 1);
-        
-        sdk_os_timer_setfn(&mdns_wifi_watchdog_timer, mdns_wifi_watchdog, NULL);
-        sdk_os_timer_arm(&mdns_wifi_watchdog_timer, MDNS_WATCHDOG_PERIOD, 1);
     }
 }
 

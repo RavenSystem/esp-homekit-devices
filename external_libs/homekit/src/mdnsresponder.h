@@ -21,10 +21,6 @@
 #define MDNS_RESPONDER_REPLY_SIZE       1460
 #endif
 
-#ifndef MDNS_WATCHDOG_PERIOD
-#define MDNS_WATCHDOG_PERIOD            8500   // ms
-#endif
-
 // Starts the mDNS responder task, call first
 void mdns_init();
 
@@ -40,6 +36,8 @@ typedef enum {
 
 // Clear all records
 void mdns_clear();
+
+void mdns_announce();
 
 void mdns_add_facility( const char* instanceName,   // Short user-friendly instance name, should NOT include serial number/MAC/etc
                         const char* serviceName,    // Must be registered, _name, (see RFC6335 5.1 & 5.2)

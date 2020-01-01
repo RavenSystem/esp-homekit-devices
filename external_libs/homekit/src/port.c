@@ -72,6 +72,11 @@ void homekit_mdns_configure_finalize() {
            mdns_instance_name, mdns_txt_rec, mdns_port, MDNS_TTL);
 }
 
+
+void homekit_port_mdns_announce() {
+    mdns_announce();
+}
+
 #endif
 
 #ifdef ESP_IDF

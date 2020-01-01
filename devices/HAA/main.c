@@ -58,12 +58,13 @@ void free_heap_watchdog() {
 }
 #endif
 
+uint8_t wifi_status = WIFI_STATUS_CONNECTED;
 int8_t setup_mode_toggle_counter = INT8_MIN;
 int8_t setup_mode_toggle_counter_max = SETUP_MODE_DEFAULT_ACTIVATE_COUNT;
 uint8_t led_gpio = 255;
 uint16_t setup_mode_time = 0;
 ETSTimer *setup_mode_toggle_timer;
-ETSTimer save_states_timer;
+ETSTimer save_states_timer, wifi_watchdog_timer;
 bool used_gpio[17];
 bool led_inverted = true;
 bool enable_homekit_server = true;
@@ -126,9 +127,9 @@ void led_task(void *pvParameters) {
     
     for (uint8_t i=0; i<times; i++) {
         gpio_write(led_gpio, true ^ led_inverted);
-        vTaskDelay(30 / portTICK_PERIOD_MS);
+        vTaskDelay(MS_TO_TICK(30));
         gpio_write(led_gpio, false ^ led_inverted);
-        vTaskDelay(130 / portTICK_PERIOD_MS);
+        vTaskDelay(MS_TO_TICK(130));
     }
     
     vTaskDelete(NULL);
@@ -140,10 +141,33 @@ void led_blink(const int blinks) {
     }
 }
 
+void wifi_watchdog() {
+    if (wifi_status == WIFI_STATUS_DISCONNECTED) {
+        wifi_status = WIFI_STATUS_CONNECTING;
+        INFO("WiFi connecting...");
+        sdk_wifi_station_connect();
+        sdk_wifi_station_set_auto_connect(true);
+        
+    } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+        if (wifi_status == WIFI_STATUS_CONNECTING) {
+            wifi_status = WIFI_STATUS_CONNECTED;
+            INFO("WiFi connected");
+            homekit_mdns_announce();
+        }
+        
+    } else {
+        sdk_wifi_station_disconnect();
+        led_blink(8);
+        INFO("WiFi disconnected");
+
+        wifi_status = WIFI_STATUS_DISCONNECTED;
+    }
+}
+
 // -----
 void reboot_task() {
     led_blink(5);
-    vTaskDelay(3000 / portTICK_PERIOD_MS);
+    vTaskDelay(MS_TO_TICK(2900));
     sdk_system_restart();
 }
 
@@ -174,7 +198,7 @@ void setup_mode_toggle() {
 }
 
 void exit_emergency_setup_mode_task() {
-    vTaskDelay(EXIT_EMERGENCY_SETUP_MODE_TIME / portTICK_PERIOD_MS);
+    vTaskDelay(MS_TO_TICK(EXIT_EMERGENCY_SETUP_MODE_TIME));
     
     INFO("Disarming Emergency Setup Mode");
     sysparam_set_int8("setup", 0);
@@ -1024,10 +1048,10 @@ void autodimmer_task(void *args) {
         }
         hkc_rgbw_setter(ch_group->ch1, ch_group->ch1->value);
         
-        vTaskDelay(lightbulb_group->autodimmer_task_delay / portTICK_PERIOD_MS);
+        vTaskDelay(MS_TO_TICK(lightbulb_group->autodimmer_task_delay));
         
         if (ch_group->ch1->value.int_value == 100) {    // Double wait when brightness is 100%
-            vTaskDelay(lightbulb_group->autodimmer_task_delay / portTICK_PERIOD_MS);
+            vTaskDelay(MS_TO_TICK(lightbulb_group->autodimmer_task_delay));
         }
     }
     
@@ -1513,7 +1537,7 @@ void diginput_0(const uint8_t gpio, void *args, const uint8_t type) {
 void hkc_autooff_setter_task(void *pvParameters) {
     autooff_setter_params_t *autooff_setter_params = pvParameters;
     
-    vTaskDelay(autooff_setter_params->time * 1000 / portTICK_PERIOD_MS);
+    vTaskDelay(MS_TO_TICK(autooff_setter_params->time * 1000));
     
     switch (autooff_setter_params->type) {
         case TYPE_LOCK:
@@ -1542,7 +1566,7 @@ void hkc_autooff_setter_task(void *pvParameters) {
 void autoswitch_task(void *pvParameters) {
     autoswitch_params_t *autoswitch_params = pvParameters;
 
-    vTaskDelay(autoswitch_params->time * 1000 / portTICK_PERIOD_MS);
+    vTaskDelay(MS_TO_TICK(autoswitch_params->time * 1000));
     
     gpio_write(autoswitch_params->gpio, autoswitch_params->value);
     INFO("Autoswitch digital output GPIO %i -> %i", autoswitch_params->gpio, autoswitch_params->value);
@@ -1802,6 +1826,9 @@ void run_homekit_server() {
 
         homekit_server_init(&config);
     }
+    
+    sdk_os_timer_setfn(&wifi_watchdog_timer, wifi_watchdog, NULL);
+    sdk_os_timer_arm(&wifi_watchdog_timer, WIFI_WATCHDOG_POLL_PERIOD_MS, 1);
     
     led_blink(6);
 }
@@ -3029,18 +3056,20 @@ void normal_mode_init() {
             GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN;
         }
 
-        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), garage_door_sensor, ch0, GARAGE_DOOR_CLOSED)) {
-            garage_door_sensor(0, ch0, GARAGE_DOOR_CLOSED);
-        }
+        
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), garage_door_sensor, ch0, GARAGE_DOOR_CLOSING)) {
             garage_door_sensor(0, ch0, GARAGE_DOOR_OPENING);
         }
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), garage_door_sensor, ch0, GARAGE_DOOR_OPENING)) {
             garage_door_sensor(0, ch0, GARAGE_DOOR_OPENING);
         }
+        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), garage_door_sensor, ch0, GARAGE_DOOR_CLOSED)) {
+            garage_door_sensor(0, ch0, GARAGE_DOOR_CLOSED);
+        }
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), garage_door_sensor, ch0, GARAGE_DOOR_OPENED)) {
             garage_door_sensor(0, ch0, GARAGE_DOOR_OPENED);
         }
+        
 
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), garage_door_obstruction, ch0, 0)) {
             garage_door_obstruction(0, ch0, 0);
@@ -3220,7 +3249,7 @@ void normal_mode_init() {
         
         setup_mode_toggle_counter = INT8_MIN;
         
-        vTaskDelay(ACC_CREATION_DELAY / portTICK_PERIOD_MS);
+        vTaskDelay(MS_TO_TICK(ACC_CREATION_DELAY));
     }
     
     cJSON_Delete(json_config);

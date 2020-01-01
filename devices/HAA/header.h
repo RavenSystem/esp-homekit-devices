@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "1.0.1"
-#define FIRMWARE_VERSION_OCTAL              010001      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "1.1.0"
+#define FIRMWARE_VERSION_OCTAL              010100      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        0
@@ -220,6 +220,11 @@
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   8
 #define SETUP_MODE_TOGGLE_TIME_MS           1050
+
+#define WIFI_STATUS_DISCONNECTED            0
+#define WIFI_STATUS_CONNECTING              1
+#define WIFI_STATUS_CONNECTED               2
+#define WIFI_WATCHDOG_POLL_PERIOD_MS        7500
 
 #define ACCESSORIES_WITHOUT_BRIDGE          4   // Max number of accessories before using a bridge
 
