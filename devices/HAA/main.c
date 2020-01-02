@@ -1064,8 +1064,7 @@ void no_autodimmer_called(void *args) {
     homekit_characteristic_t *ch0 = args;
     lightbulb_group_t *lightbulb_group = lightbulb_group_find(ch0);
     lightbulb_group->armed_autodimmer = false;
-    ch0->value.bool_value = !ch0->value.bool_value;
-    hkc_rgbw_setter(ch0, ch0->value);
+    hkc_rgbw_setter(ch0, HOMEKIT_BOOL(false));
 }
 
 void autodimmer_call(homekit_characteristic_t *ch0, const homekit_value_t value) {
@@ -1275,6 +1274,7 @@ void hkc_window_cover_setter(homekit_characteristic_t *ch1, const homekit_value_
             
             if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_OPENING) {
                 do_actions(json_context, WINDOW_COVER_CLOSING_FROM_MOVING);
+                setup_mode_toggle_upcount();
             } else {
                 do_actions(json_context, WINDOW_COVER_CLOSING);
             }
@@ -1289,6 +1289,7 @@ void hkc_window_cover_setter(homekit_characteristic_t *ch1, const homekit_value_
 
             if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_CLOSING) {
                 do_actions(json_context, WINDOW_COVER_OPENING_FROM_MOVING);
+                setup_mode_toggle_upcount();
             } else {
                 do_actions(json_context, WINDOW_COVER_OPENING);
             }
