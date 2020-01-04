@@ -1163,7 +1163,7 @@ void hkc_garage_door_setter(homekit_characteristic_t *ch1, const homekit_value_t
         } else if (current_door_state > 1) {
             current_door_state -= 2;
         }
-        
+
         if (value.int_value != current_door_state) {
             led_blink(1);
             INFO("Setter GD");
@@ -1172,36 +1172,45 @@ void hkc_garage_door_setter(homekit_characteristic_t *ch1, const homekit_value_t
 
             cJSON *json_context = ch1->context;
             do_actions(json_context, (uint8_t) ch_group->ch0->value.int_value);
-            
-            if (value.int_value == GARAGE_DOOR_OPENED && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4) == NULL) {
+   
+            if ((value.int_value == GARAGE_DOOR_OPENED && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4) == NULL) ||
+                       ch_group->ch0->value.int_value == GARAGE_DOOR_CLOSING) {
                 garage_door_sensor(0, ch_group->ch0, GARAGE_DOOR_OPENING);
-            } else if (value.int_value == GARAGE_DOOR_CLOSED && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4) == NULL) {
+            } else if ((value.int_value == GARAGE_DOOR_CLOSED && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5) == NULL) ||
+                       ch_group->ch0->value.int_value == GARAGE_DOOR_OPENING) {
                 garage_door_sensor(0, ch_group->ch0, GARAGE_DOOR_CLOSING);
             }
             
             setup_mode_toggle_upcount();
         }
+
     }
     
     hkc_group_notify(ch_group->ch0);
 }
 
 void garage_door_timer_worker(void *args) {
-    homekit_characteristic_t *ch = args;
-    ch_group_t *ch_group = ch_group_find(ch);
+    homekit_characteristic_t *ch0 = args;
+    ch_group_t *ch_group = ch_group_find(ch0);
     
-    cJSON *json_context = ch->context;
-
-    if (ch->value.int_value == GARAGE_DOOR_OPENING) {
+    cJSON *json_context = ch0->context;
+    
+    void halt_timer() {
+        sdk_os_timer_disarm(ch_group->timer);
+        if (GARAGE_DOOR_TIME_MARGIN > 0) {
+            garage_door_obstruction(0, ch0, 1);
+        }
+    }
+    
+    if (ch0->value.int_value == GARAGE_DOOR_OPENING) {
         GARAGE_DOOR_CURRENT_TIME++;
 
         if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2) == NULL) {
             sdk_os_timer_disarm(ch_group->timer);
-            garage_door_sensor(0, ch, GARAGE_DOOR_OPENED);
+            garage_door_sensor(0, ch0, GARAGE_DOOR_OPENED);
             
         } else if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2) != NULL) {
-            sdk_os_timer_disarm(ch_group->timer);
-            garage_door_obstruction(0, ch, 1);
+            halt_timer();
         }
         
     } else {    // GARAGE_DOOR_CLOSING
@@ -1209,11 +1218,10 @@ void garage_door_timer_worker(void *args) {
         
         if (GARAGE_DOOR_CURRENT_TIME <= GARAGE_DOOR_TIME_MARGIN && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3) == NULL) {
             sdk_os_timer_disarm(ch_group->timer);
-            garage_door_sensor(0, ch, GARAGE_DOOR_CLOSED);
+            garage_door_sensor(0, ch0, GARAGE_DOOR_CLOSED);
             
         } else if (GARAGE_DOOR_CURRENT_TIME <= 0 && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3) != NULL) {
-            sdk_os_timer_disarm(ch_group->timer);
-            garage_door_obstruction(0, ch, 1);
+            halt_timer();
         }
     }
 }
