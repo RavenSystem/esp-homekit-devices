@@ -150,15 +150,20 @@ void wifi_watchdog() {
         
     } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         if (wifi_status == WIFI_STATUS_CONNECTING) {
-            wifi_status = WIFI_STATUS_CONNECTED;
+            wifi_status = WIFI_STATUS_PRECONNECTED;
             INFO("WiFi connected");
+            homekit_mdns_announce();
+            
+        } else if (wifi_status == WIFI_STATUS_PRECONNECTED) {
+            wifi_status = WIFI_STATUS_CONNECTED;
+            INFO("mDNS reannounced");
             homekit_mdns_announce();
         }
         
     } else {
         sdk_wifi_station_disconnect();
         led_blink(8);
-        INFO("WiFi disconnected");
+        ERROR("WiFi disconnected");
 
         wifi_status = WIFI_STATUS_DISCONNECTED;
     }
