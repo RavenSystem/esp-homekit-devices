@@ -756,7 +756,7 @@ static void wifi_config_station_connect() {
         wifi_config_sta_connect_timeout_callback(context);
         
         sdk_os_timer_setfn(&context->sta_connect_timeout, wifi_config_sta_connect_timeout_callback, context);
-        sdk_os_timer_arm(&context->sta_connect_timeout, 333, 1);
+        sdk_os_timer_arm(&context->sta_connect_timeout, 1000, 1);
         
         if (!context->on_wifi_ready) {
             INFO("HAA Setup");

@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "1.1.3"
-#define FIRMWARE_VERSION_OCTAL              010103      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "1.2.0"
+#define FIRMWARE_VERSION_OCTAL              010200      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        0
@@ -133,7 +133,6 @@
 #define RGBW_PERIOD                         10
 #define RGBW_STEP                           "p"
 #define RGBW_STEP_DEFAULT                   1024
-#define RGBW_SET_DELAY                      111
 #define PWM_SCALE                           (UINT16_MAX - 1)
 #define COLOR_TEMP_MIN                      71
 #define COLOR_TEMP_MAX                      400
@@ -165,6 +164,9 @@
 #define WINDOW_COVER_STOP                   2
 #define WINDOW_COVER_CLOSING_FROM_MOVING    3
 #define WINDOW_COVER_OPENING_FROM_MOVING    4
+#define WINDOW_COVER_STOP_FROM_CLOSING      5
+#define WINDOW_COVER_STOP_FROM_OPENING      6
+#define WINDOW_COVER_OBSTRUCTION            7
 #define WINDOW_COVER_TYPE                   "w"
 #define WINDOW_COVER_TYPE_DEFAULT           0
 #define WINDOW_COVER_TIME_OPEN_SET          "o"

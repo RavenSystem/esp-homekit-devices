@@ -935,78 +935,74 @@ void rgbw_set_timer_worker() {
     }
 }
 
-void hkc_rgbw_setter_delayed(void *args) {
-    homekit_characteristic_t *ch = args;
-    ch_group_t *ch_group = ch_group_find(ch);
-    lightbulb_group_t *lightbulb_group = lightbulb_group_find(ch_group->ch0);
-    
-    if (ch_group->ch0->value.bool_value) {
-        if (lightbulb_group->target_r == 0 &&
-            lightbulb_group->target_g == 0 &&
-            lightbulb_group->target_b == 0 &&
-            lightbulb_group->target_w == 0) {
-            setup_mode_toggle_upcount();
-        }
-        
-        if (lightbulb_group->pwm_r != 255) {            // RGB/W
-            hsi2rgbw(ch_group->ch2->value.float_value, ch_group->ch3->value.float_value, ch_group->ch1->value.int_value, lightbulb_group);
-            
-        } else if (lightbulb_group->pwm_b != 255) {     // Custom Color Temperature
-            uint16_t target_color = 0;
-            
-            if (ch_group->ch2->value.int_value >= COLOR_TEMP_MAX - 5) {
-                target_color = PWM_SCALE;
-                
-            } else if (ch_group->ch2->value.int_value > COLOR_TEMP_MIN + 1) { // Conversion based on @seritos curve
-                target_color = PWM_SCALE * (((0.09 + sqrt(0.18 + (0.1352 * (ch_group->ch2->value.int_value - COLOR_TEMP_MIN - 1)))) / 0.0676) - 1) / 100;
-            }
-            
-            const uint32_t w = lightbulb_group->factor_w * target_color * ch_group->ch1->value.int_value / 100;
-            const uint32_t b = lightbulb_group->factor_b * (PWM_SCALE - target_color) * ch_group->ch1->value.int_value / 100;
-            lightbulb_group->target_w = ((w > PWM_SCALE) ? PWM_SCALE : w);
-            lightbulb_group->target_b = ((b > PWM_SCALE) ? PWM_SCALE : b);
-            
-        } else {                                        // One Color Dimmer
-            const uint32_t w = lightbulb_group->factor_w * PWM_SCALE * ch_group->ch1->value.int_value / 100;
-            lightbulb_group->target_w = ((w > PWM_SCALE) ? PWM_SCALE : w);
-        }
-    } else {
-        lightbulb_group->autodimmer = 0;
-        lightbulb_group->target_r = 0;
-        lightbulb_group->target_g = 0;
-        lightbulb_group->target_b = 0;
-        lightbulb_group->target_w = 0;
-        
-        setup_mode_toggle_upcount();
-    }
-    
-    led_blink(1);
-    INFO("Target RGBW = %i, %i, %i, %i", lightbulb_group->target_r, lightbulb_group->target_g, lightbulb_group->target_b, lightbulb_group->target_w);
-    
-    if (!setpwm_is_running) {
-        sdk_os_timer_arm(pwm_timer, RGBW_PERIOD, true);
-        setpwm_is_running = true;
-    }
-    
-    cJSON *json_context = ch_group->ch0->context;
-    do_actions(json_context, (uint8_t) ch_group->ch0->value.bool_value);
-    
-    hkc_group_notify(ch_group->ch0);
-    
-    save_states_callback();
-}
-
 void hkc_rgbw_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch);
     if (ch_group->ch_sec && !ch_group->ch_sec->value.bool_value) {
         hkc_group_notify(ch_group->ch0);
         
     } else if (ch != ch_group->ch0 || value.bool_value != ch_group->ch0->value.bool_value) {
-        ch->value = value;
-        sdk_os_timer_arm(ch_group->timer, RGBW_SET_DELAY, false);
+        ch_group_t *ch_group = ch_group_find(ch);
+        lightbulb_group_t *lightbulb_group = lightbulb_group_find(ch_group->ch0);
         
-    } else {
+        ch->value = value;
+        
+        if (ch_group->ch0->value.bool_value) {
+            if (lightbulb_group->target_r == 0 &&
+                lightbulb_group->target_g == 0 &&
+                lightbulb_group->target_b == 0 &&
+                lightbulb_group->target_w == 0) {
+                setup_mode_toggle_upcount();
+            }
+            
+            if (lightbulb_group->pwm_r != 255) {            // RGB/W
+                hsi2rgbw(ch_group->ch2->value.float_value, ch_group->ch3->value.float_value, ch_group->ch1->value.int_value, lightbulb_group);
+                
+            } else if (lightbulb_group->pwm_b != 255) {     // Custom Color Temperature
+                uint16_t target_color = 0;
+                
+                if (ch_group->ch2->value.int_value >= COLOR_TEMP_MAX - 5) {
+                    target_color = PWM_SCALE;
+                    
+                } else if (ch_group->ch2->value.int_value > COLOR_TEMP_MIN + 1) { // Conversion based on @seritos curve
+                    target_color = PWM_SCALE * (((0.09 + sqrt(0.18 + (0.1352 * (ch_group->ch2->value.int_value - COLOR_TEMP_MIN - 1)))) / 0.0676) - 1) / 100;
+                }
+                
+                const uint32_t w = lightbulb_group->factor_w * target_color * ch_group->ch1->value.int_value / 100;
+                const uint32_t b = lightbulb_group->factor_b * (PWM_SCALE - target_color) * ch_group->ch1->value.int_value / 100;
+                lightbulb_group->target_w = ((w > PWM_SCALE) ? PWM_SCALE : w);
+                lightbulb_group->target_b = ((b > PWM_SCALE) ? PWM_SCALE : b);
+                
+            } else {                                        // One Color Dimmer
+                const uint32_t w = lightbulb_group->factor_w * PWM_SCALE * ch_group->ch1->value.int_value / 100;
+                lightbulb_group->target_w = ((w > PWM_SCALE) ? PWM_SCALE : w);
+            }
+        } else {
+            lightbulb_group->autodimmer = 0;
+            lightbulb_group->target_r = 0;
+            lightbulb_group->target_g = 0;
+            lightbulb_group->target_b = 0;
+            lightbulb_group->target_w = 0;
+            
+            setup_mode_toggle_upcount();
+        }
+        
+        led_blink(1);
+        INFO("Target RGBW = %i, %i, %i, %i", lightbulb_group->target_r, lightbulb_group->target_g, lightbulb_group->target_b, lightbulb_group->target_w);
+        
+        if (!setpwm_is_running) {
+            sdk_os_timer_arm(pwm_timer, RGBW_PERIOD, true);
+            setpwm_is_running = true;
+        }
+        
+        cJSON *json_context = ch_group->ch0->context;
+        do_actions(json_context, (uint8_t) ch_group->ch0->value.bool_value);
+        
         hkc_group_notify(ch_group->ch0);
+        
+        save_states_callback();
+
+    } else {
+        homekit_characteristic_notify(ch_group->ch0, ch_group->ch0->value);
     }
 }
 
@@ -1080,12 +1076,13 @@ void autodimmer_call(homekit_characteristic_t *ch0, const homekit_value_t value)
         lightbulb_group->autodimmer = 0;
     } else {
         lightbulb_group->autodimmer = 0;
+        ch_group_t *ch_group = ch_group_find(ch0);
         if (lightbulb_group->armed_autodimmer) {
             lightbulb_group->armed_autodimmer = false;
-            sdk_os_timer_disarm(lightbulb_group->autodimmer_timer);
+            sdk_os_timer_disarm(ch_group->timer);
             xTaskCreate(autodimmer_task, "autodimmer_task", configMINIMAL_STACK_SIZE, (void *) ch0, 1, NULL);
         } else {
-            sdk_os_timer_arm(lightbulb_group->autodimmer_timer, AUTODIMMER_DELAY, 0);
+            sdk_os_timer_arm(ch_group->timer, AUTODIMMER_DELAY, 0);
             lightbulb_group->armed_autodimmer = true;
         }
     }
@@ -1259,16 +1256,39 @@ void window_cover_stop(homekit_characteristic_t *ch) {
     
     WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_REAL_POSITION;
     WINDOW_COVER_CH_TARGET_POSITION->value = WINDOW_COVER_CH_CURRENT_POSITION->value;
-    WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_STOP;
     
     cJSON *json_context = ch->context;
+
+    if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_CLOSING) {
+        do_actions(json_context, WINDOW_COVER_STOP_FROM_CLOSING);
+    } else if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_OPENING) {
+        do_actions(json_context, WINDOW_COVER_STOP_FROM_OPENING);
+    }
+    
     do_actions(json_context, WINDOW_COVER_STOP);
+    
+    WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_STOP;
     
     hkc_group_notify(ch_group->ch0);
     
     setup_mode_toggle_upcount();
     
     save_states_callback();
+}
+
+void window_cover_obstruction(const uint8_t gpio, void *args, const uint8_t type) {
+    homekit_characteristic_t *ch = args;
+    ch_group_t *ch_group = ch_group_find(ch);
+    
+    led_blink(1);
+    INFO("WC obstruction: %i", type);
+    
+    ch_group->ch3->value.bool_value = (bool) type;
+    
+    hkc_group_notify(ch);
+    
+    cJSON *json_context = ch->context;
+    do_actions(json_context, type + WINDOW_COVER_OBSTRUCTION);
 }
 
 void hkc_window_cover_setter(homekit_characteristic_t *ch1, const homekit_value_t value) {
@@ -1742,7 +1762,9 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                             break;
                             
                         case ACC_TYPE_WINDOW_COVER:
-                            if (value < 0 || value > 100) {
+                            if (value < 0) {
+                                window_cover_obstruction(0, ch_group->ch0, value + 2);
+                            } else if (value > 100) {
                                 hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
                             } else {
                                 hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, HOMEKIT_UINT8((uint8_t) value));
@@ -2961,10 +2983,6 @@ void normal_mode_init() {
         }
 
         ch1->value.int_value = set_initial_state(accessory, 1, cJSON_Parse(INIT_STATE_LAST_STR), ch1, CH_TYPE_INT8, 100);
-        
-        ch_group->timer = malloc(sizeof(ETSTimer));
-        memset(ch_group->timer, 0, sizeof(*ch_group->timer));
-        sdk_os_timer_setfn(ch_group->timer, hkc_rgbw_setter_delayed, ch0);
 
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch0, TYPE_LIGHTBULB);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), rgbw_brightness, ch1, LIGHTBULB_BRIGHTNESS_UP);
@@ -2993,9 +3011,9 @@ void normal_mode_init() {
             cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0) != NULL ||
             cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1) != NULL) {
             if (lightbulb_group->autodimmer_task_step > 0) {
-                lightbulb_group->autodimmer_timer = malloc(sizeof(ETSTimer));
-                memset(lightbulb_group->autodimmer_timer, 0, sizeof(*lightbulb_group->autodimmer_timer));
-                sdk_os_timer_setfn(lightbulb_group->autodimmer_timer, no_autodimmer_called, ch0);
+                ch_group->timer = malloc(sizeof(ETSTimer));
+                memset(ch_group->timer, 0, sizeof(*ch_group->timer));
+                sdk_os_timer_setfn(ch_group->timer, no_autodimmer_called, ch0);
             }
         } else {
             lightbulb_group->autodimmer_task_step = 0;
@@ -3176,6 +3194,13 @@ void normal_mode_init() {
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), window_cover_diginput, ch1, WINDOW_COVER_STOP);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), window_cover_diginput, ch1, WINDOW_COVER_CLOSING + 3);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), window_cover_diginput, ch1, WINDOW_COVER_OPENING + 3);
+        
+        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), window_cover_obstruction, ch0, 0)) {
+            window_cover_obstruction(0, ch0, 0);
+        }
+        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), window_cover_obstruction, ch0, 1)) {
+            window_cover_obstruction(0, ch0, 1);
+        }
 
         const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         return new_accessory_count;
@@ -3274,7 +3299,7 @@ void normal_mode_init() {
         
         lightbulb_group_t *lightbulb_group = lightbulb_groups;
         while (lightbulb_group) {
-            hkc_rgbw_setter_delayed(lightbulb_group->ch0);
+            hkc_rgbw_setter(lightbulb_group->ch0, lightbulb_group->ch0->value);
             
             lightbulb_group = lightbulb_group->next;
         }

@@ -3063,43 +3063,20 @@ void homekit_server_close_client(homekit_server_t *server, client_context_t *con
 }
 
 
-void homekit_server_close_old_duplicated_clients(homekit_server_t *server, struct sockaddr_in addr) {
-    struct sockaddr_in old_addr;
-    socklen_t addr_len = sizeof(addr);
-
-    client_context_t *context = server->clients;
-    while (context) {
-        client_context_t *next = context->next;
-
-        if (getpeername(context->socket , (struct sockaddr *)&old_addr , &addr_len) == 0 &&
-            old_addr.sin_addr.s_addr == addr.sin_addr.s_addr &&
-            old_addr.sin_port != addr.sin_port) {
-            char address_buffer[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, &old_addr.sin_addr, address_buffer, sizeof(address_buffer));
-            INFO("Duplicated connection, closing old connection on %s:%d. New Port: %d", address_buffer, old_addr.sin_port, addr.sin_port);
-            context->disconnect = true;
-            homekit_server_close_client(server, context);
-        }
-
-        context = next;
-    }
-}
-
-
 client_context_t *homekit_server_accept_client(homekit_server_t *server) {
     int s = accept(server->listen_fd, (struct sockaddr *)NULL, (socklen_t *)NULL);
     if (s < 0)
         return NULL;
 
     if (server->nfds > HOMEKIT_MAX_CLIENTS) {
-        INFO("No more room for client connections (max %d)", HOMEKIT_MAX_CLIENTS);
+        INFO("Max client connections reached (%d)", HOMEKIT_MAX_CLIENTS);
         close(s);
         return NULL;
     }
 
     char address_buffer[INET_ADDRSTRLEN];
 
-     struct sockaddr_in addr;
+    struct sockaddr_in addr;
     socklen_t addr_len = sizeof(addr);
     if (getpeername(s, (struct sockaddr *)&addr, &addr_len) == 0) {
         inet_ntop(AF_INET, &addr.sin_addr, address_buffer, sizeof(address_buffer));
@@ -3108,7 +3085,25 @@ client_context_t *homekit_server_accept_client(homekit_server_t *server) {
     }
     
     INFO("Got new client connection: %d from %s, port %d", s, address_buffer, addr.sin_port);
-    homekit_server_close_old_duplicated_clients(server, addr); /* Check and remove any old conection with same IP addr and port */
+    
+    /* Check and remove any old conection with same IP addr and port */
+    struct sockaddr_in old_addr;
+    client_context_t *context = server->clients;
+    while (context) {
+        client_context_t *next = context->next;
+
+        if (getpeername(context->socket, (struct sockaddr *)&old_addr , &addr_len) == 0 &&
+            old_addr.sin_addr.s_addr == addr.sin_addr.s_addr &&
+            old_addr.sin_port != addr.sin_port) {
+            char old_address_buffer[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &old_addr.sin_addr, old_address_buffer, sizeof(old_address_buffer));
+            INFO("Duplicated connection, closing old connection on port %d. New : %d", old_addr.sin_port, addr.sin_port);
+            context->disconnect = true;
+            homekit_server_close_client(server, context);
+        }
+
+        context = next;
+    }
 
     const struct timeval rcvtimeout = { 10, 0 }; /* 10 second timeout */
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
@@ -3125,7 +3120,7 @@ client_context_t *homekit_server_accept_client(homekit_server_t *server) {
     const int maxpkt = 4; /* Drop connection after 4 probes without response */
     setsockopt(s, IPPROTO_TCP, TCP_KEEPCNT, &maxpkt, sizeof(maxpkt));
 
-    client_context_t *context = client_context_new();
+    context = client_context_new();
     context->server = server;
     context->socket = s;
     context->next = server->clients;

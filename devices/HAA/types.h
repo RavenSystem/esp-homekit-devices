@@ -83,7 +83,6 @@ typedef struct _lightbulb_group {
     
     uint16_t step;
     
-    ETSTimer *autodimmer_timer;
     uint8_t autodimmer;
     bool armed_autodimmer;
     uint16_t autodimmer_task_delay;
