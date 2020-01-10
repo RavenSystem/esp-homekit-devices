@@ -870,7 +870,7 @@ void rgbw_set_timer_worker() {
         uint8_t channels_to_set = pwm_info->channels;
         lightbulb_group_t *lightbulb_group = lightbulb_groups;
         
-        while (lightbulb_group) {
+        while (setpwm_is_running && lightbulb_group) {
             if (lightbulb_group->pwm_r != 255) {
                 if (lightbulb_group->target_r - multipwm_duty[lightbulb_group->pwm_r] >= lightbulb_group->step) {
                     multipwm_duty[lightbulb_group->pwm_r] += lightbulb_group->step;
@@ -916,15 +916,14 @@ void rgbw_set_timer_worker() {
             }
             
             //INFO("RGBW -> %i, %i, %i, %i", multipwm_duty[lightbulb_group->pwm_r], multipwm_duty[lightbulb_group->pwm_g], multipwm_duty[lightbulb_group->pwm_g], multipwm_duty[lightbulb_group->pwm_w]);
+
+            if (channels_to_set == 0) {
+                setpwm_is_running = false;
+                sdk_os_timer_disarm(pwm_timer);
+                INFO("Color established");
+            }
             
             lightbulb_group = lightbulb_group->next;
-            
-            if (channels_to_set == 0) {
-                INFO("Color established");
-                sdk_os_timer_disarm(pwm_timer);
-                setpwm_is_running = false;
-                lightbulb_group = NULL;
-            }
         }
         
         multipwm_set_all();
@@ -941,7 +940,6 @@ void hkc_rgbw_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
         hkc_group_notify(ch_group->ch0);
         
     } else if (ch != ch_group->ch0 || value.bool_value != ch_group->ch0->value.bool_value) {
-        ch_group_t *ch_group = ch_group_find(ch);
         lightbulb_group_t *lightbulb_group = lightbulb_group_find(ch_group->ch0);
         
         ch->value = value;
@@ -990,8 +988,8 @@ void hkc_rgbw_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
         INFO("Target RGBW = %i, %i, %i, %i", lightbulb_group->target_r, lightbulb_group->target_g, lightbulb_group->target_b, lightbulb_group->target_w);
         
         if (!setpwm_is_running) {
-            sdk_os_timer_arm(pwm_timer, RGBW_PERIOD, true);
             setpwm_is_running = true;
+            sdk_os_timer_arm(pwm_timer, RGBW_PERIOD, true);
         }
         
         cJSON *json_context = ch_group->ch0->context;
@@ -2007,7 +2005,7 @@ void normal_mode_init() {
                 }
                 
                 if (status != SYSPARAM_OK) {
-                    ERROR("No previous state found");
+                    ERROR("No saved state found");
                 }
                 
                 INFO("Init state = %.2f", state);
@@ -2025,9 +2023,8 @@ void normal_mode_init() {
         cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT)->valuedouble == 1) {
         uart_set_baud(0, 115200);
         printf_header();
-        INFO("NORMAL MODE");
-        INFO("JSON: %s", txt_config);
-        INFO("-- PROCESSING JSON --");
+        INFO("NORMAL MODE\n");
+        INFO("JSON: %s\n", txt_config);
     }
 
     free(txt_config);
@@ -2988,25 +2985,6 @@ void normal_mode_init() {
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), rgbw_brightness, ch1, LIGHTBULB_BRIGHTNESS_UP);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), rgbw_brightness, ch1, LIGHTBULB_BRIGHTNESS_DOWN);
         
-        uint8_t initial_state = 0;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
-            initial_state = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE)->valuedouble;
-        }
-        
-        if (initial_state != INIT_STATE_FIXED_INPUT) {
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_LIGHTBULB);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_LIGHTBULB);
-            
-            ch0->value = HOMEKIT_BOOL((bool) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_BOOL, 0));
-        } else {
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_LIGHTBULB)) {
-                ch0->value = HOMEKIT_BOOL(true);
-            }
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_LIGHTBULB)) {
-                ch0->value = HOMEKIT_BOOL(false);
-            }
-        }
-        
         if (cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY) != NULL ||
             cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0) != NULL ||
             cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1) != NULL) {
@@ -3017,6 +2995,25 @@ void normal_mode_init() {
             }
         } else {
             lightbulb_group->autodimmer_task_step = 0;
+        }
+        
+        uint8_t initial_state = 0;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
+            initial_state = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE)->valuedouble;
+        }
+        
+        if (initial_state != INIT_STATE_FIXED_INPUT) {
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_LIGHTBULB);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_LIGHTBULB);
+            
+            ch0->value.bool_value = !((bool) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_BOOL, 0));
+        } else {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_LIGHTBULB)) {
+                ch0->value = HOMEKIT_BOOL(false);
+            }
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_LIGHTBULB)) {
+                ch0->value = HOMEKIT_BOOL(true);
+            }
         }
         
         const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
@@ -3293,13 +3290,28 @@ void normal_mode_init() {
     
     cJSON_Delete(json_config);
     
+    INFO("\n");
+    
     // --- LIGHTBULBS INIT
     if (lightbulb_groups) {
+        INFO("Init Lightbulbs");
+        
         setpwm_bool_semaphore = false;
         
         lightbulb_group_t *lightbulb_group = lightbulb_groups;
         while (lightbulb_group) {
-            hkc_rgbw_setter(lightbulb_group->ch0, lightbulb_group->ch0->value);
+            ch_group_t *ch_group = ch_group_find(lightbulb_group->ch0);
+            bool kill_switch = false;
+            if (ch_group->ch_sec && !ch_group->ch_sec->value.bool_value) {
+                ch_group->ch_sec->value = HOMEKIT_BOOL(true);
+                kill_switch = true;
+            }
+            
+            hkc_rgbw_setter(lightbulb_group->ch0, HOMEKIT_BOOL(!lightbulb_group->ch0->value.bool_value));
+            
+            if (kill_switch) {
+                ch_group->ch_sec->value = HOMEKIT_BOOL(false);
+            }
             
             lightbulb_group = lightbulb_group->next;
         }
@@ -3313,12 +3325,10 @@ void normal_mode_init() {
     config.category = homekit_accessory_category_other;
     config.config_number = FIRMWARE_VERSION_OCTAL;
     
-    INFO("");
-    FREEHEAP();
-    INFO("---------------------\n");
-    
     setup_mode_toggle_counter = 0;
     
+    FREEHEAP();
+
     wifi_config_init("HAA", NULL, run_homekit_server, custom_hostname);
 }
 
