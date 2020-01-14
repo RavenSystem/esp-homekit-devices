@@ -2054,6 +2054,11 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
     if (!id_param) {
         CLIENT_ERROR(context, "Invalid get characteristics request: missing ID parameter");
         send_json_error_response(context, 400, HAPStatus_InvalidValue);
+        
+#ifdef HOMEKIT_OVERCLOCK_GET_CH
+        sdk_system_restoreclock();
+#endif
+        
         return;
     }
 
@@ -2085,6 +2090,11 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
         if (!dot) {
             send_json_error_response(context, 400, HAPStatus_InvalidValue);
             free(id);
+            
+#ifdef HOMEKIT_OVERCLOCK_GET_CH
+            sdk_system_restoreclock();
+#endif
+            
             return;
         }
 
@@ -2183,6 +2193,11 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
     if (!json) {
         CLIENT_ERROR(context, "Failed to parse request JSON");
         send_json_error_response(context, 400, HAPStatus_InvalidValue);
+        
+#ifdef HOMEKIT_OVERCLOCK_UPDATE_CH
+        sdk_system_restoreclock();
+#endif
+        
         return;
     }
 
@@ -2191,12 +2206,23 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
         CLIENT_ERROR(context, "Failed to parse request: no \"characteristics\" field");
         cJSON_Delete(json);
         send_json_error_response(context, 400, HAPStatus_InvalidValue);
+        
+#ifdef HOMEKIT_OVERCLOCK_UPDATE_CH
+        sdk_system_restoreclock();
+#endif
+                
         return;
     }
+    
     if (characteristics->type != cJSON_Array) {
         CLIENT_ERROR(context, "Failed to parse request: \"characteristics\" field is not an list");
         cJSON_Delete(json);
         send_json_error_response(context, 400, HAPStatus_InvalidValue);
+        
+#ifdef HOMEKIT_OVERCLOCK_UPDATE_CH
+        sdk_system_restoreclock();
+#endif
+                
         return;
     }
 
