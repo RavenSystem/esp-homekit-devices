@@ -17,6 +17,7 @@
  */
 
 //#include <stdio.h>
+#include <unistd.h>
 #include <string.h>
 #include <esp/uart.h>
 //#include <esp8266.h>
@@ -30,6 +31,12 @@
 
 //#include <etstimer.h>
 #include <esplibs/libmain.h>
+
+#include "lwip/err.h"
+#include "lwip/sockets.h"
+#include "lwip/sys.h"
+#include "lwip/netdb.h"
+#include "lwip/dns.h"
 
 #include <homekit/homekit.h>
 #include <homekit/characteristics.h>
@@ -177,13 +184,13 @@ void reboot_task() {
 }
 
 void setup_mode_call(const uint8_t gpio, void *args, const uint8_t param) {
-    INFO("Checking setup mode call");
+    INFO("Setup mode call");
     
     if (setup_mode_time == 0 || xTaskGetTickCountFromISR() < setup_mode_time * 1000 / portTICK_PERIOD_MS) {
         sysparam_set_int8("setup", 1);
         xTaskCreate(reboot_task, "reboot_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
     } else {
-        ERROR("Setup mode not allowed after %i secs since boot. Repower device and try again", setup_mode_time);
+        ERROR("Not allowed after %i secs since boot", setup_mode_time);
     }
 }
 
@@ -237,7 +244,7 @@ void save_states() {
         }
         
         if (status != SYSPARAM_OK) {
-            ERROR("Flash error saving states");
+            ERROR("Flash saving states");
         }
         
         last_state = last_state->next;
@@ -798,7 +805,7 @@ void temperature_timer_worker(void *args) {
         INFO("TEMP %g, HUM %g", temperature_value, humidity_value);
     } else {
         led_blink(5);
-        ERROR("ERROR Sensor");
+        ERROR("Sensor");
         
         if (ch_group->ch5) {
             ch_group->ch3->value = HOMEKIT_UINT8(THERMOSTAT_MODE_OFF);
@@ -920,7 +927,7 @@ void rgbw_set_timer_worker() {
             if (channels_to_set == 0) {
                 setpwm_is_running = false;
                 sdk_os_timer_disarm(pwm_timer);
-                INFO("Color established");
+                INFO("Color fixed");
             }
             
             lightbulb_group = lightbulb_group->next;
@@ -1111,7 +1118,7 @@ void garage_door_obstruction(const uint8_t gpio, void *args, const uint8_t type)
     ch_group_t *ch_group = ch_group_find(ch);
     
     led_blink(1);
-    INFO("GD obstruction: %i", type);
+    INFO("GD obstr: %i", type);
     
     ch_group->ch2->value.bool_value = (bool) type;
     
@@ -1156,7 +1163,7 @@ void garage_door_sensor(const uint8_t gpio, void *args, const uint8_t type) {
 
 void hkc_garage_door_setter(homekit_characteristic_t *ch1, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch1);
-    if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
+    if ((!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) && !ch_group->ch2->value.bool_value) {
         uint8_t current_door_state = ch_group->ch0->value.int_value;
         if (current_door_state == GARAGE_DOOR_STOPPED) {
             current_door_state = ch_group->ch1->value.int_value;
@@ -1279,7 +1286,7 @@ void window_cover_obstruction(const uint8_t gpio, void *args, const uint8_t type
     ch_group_t *ch_group = ch_group_find(ch);
     
     led_blink(1);
-    INFO("WC obstruction: %i", type);
+    INFO("WC obstr: %i", type);
     
     ch_group->ch3->value.bool_value = (bool) type;
     
@@ -1601,7 +1608,7 @@ void autoswitch_task(void *pvParameters) {
     vTaskDelay(MS_TO_TICK(autoswitch_params->time * 1000));
     
     gpio_write(autoswitch_params->gpio, autoswitch_params->value);
-    INFO("Autoswitch digital output GPIO %i -> %i", autoswitch_params->gpio, autoswitch_params->value);
+    INFO("AutoSw digO GPIO %i -> %i", autoswitch_params->gpio, autoswitch_params->value);
     
     free(autoswitch_params);
     vTaskDelete(NULL);
@@ -1637,7 +1644,7 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
             }
 
             gpio_write(gpio, value);
-            INFO("Digital output GPIO %i -> %i", gpio, value);
+            INFO("DigO GPIO %i -> %i", gpio, value);
             
             if (cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME) != NULL) {
                 const double autoswitch_time = cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME)->valuedouble;
@@ -1699,7 +1706,7 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                             break;
                     }
                     
-                    INFO("Kill Switch Manager %i -> %.2f", accessory, value);
+                    INFO("Kill Sw Manager %i -> %.2f", accessory, value);
                     
                 } else {
                     switch (ch_group->acc_type) {
@@ -1781,6 +1788,102 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
             }
         }
         
+        // HTTP GET actions
+        cJSON *json_http_actions = cJSON_GetObjectItemCaseSensitive(actions, HTTP_ACTIONS_ARRAY);
+        for(uint8_t i=0; i<cJSON_GetArraySize(json_http_actions); i++) {
+            cJSON *json_http_action = cJSON_GetArrayItem(json_http_actions, i);
+            
+            char *host = cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_HOST)->valuestring;
+            char *url = "";
+            if (cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_URL) != NULL) {
+                url = cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_URL)->valuestring;
+            }
+            
+            uint16_t port_n = 80;
+            if (cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_PORT) != NULL) {
+                port_n = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_PORT)->valuedouble;
+            }
+            
+            INFO("HTTP Action http://%s:%i/%s", host, port_n, url);
+            
+            const struct addrinfo hints = {
+                .ai_family = AF_UNSPEC,
+                .ai_socktype = SOCK_STREAM,
+            };
+            struct addrinfo *res;
+            
+            char port[5];
+            itoa(port_n, port, 10);
+            
+            if (getaddrinfo(host, port, &hints, &res) == 0) {
+                int s = socket(res->ai_family, res->ai_socktype, 0);
+                if (s >= 0) {
+                    if (connect(s, res->ai_addr, res->ai_addrlen) == 0) {
+                        uint8_t method_n = 0;
+                        if (cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_METHOD) != NULL) {
+                            method_n = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_METHOD)->valuedouble;
+                        }
+                        
+                        uint16_t content_len_n = 0;
+                        
+                        char *method = "GET";
+                        char *method_req = NULL;
+                        char *content = "";
+                        if (method_n > 0) {
+                            if (cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_CONTENT) != NULL) {
+                                content = cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_CONTENT)->valuestring;
+                                content_len_n = strlen(content);
+                            }
+                            
+                            char content_len[4];
+                            itoa(content_len_n, content_len, 10);
+                            method_req = malloc(48);
+                            snprintf(method_req, 48, "Content-type: text/html\r\nContent-length: %s\r\n", content_len);
+                            
+                            if (method_n == 1) {
+                                method = "PUT";
+                            } else if (method_n == 2) {
+                                method = "POST";
+                            }
+                        }
+                        
+                        uint16_t req_len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(host) +  strlen(url) + content_len_n;
+                        
+                        char *req = malloc(req_len);
+                        snprintf(req, req_len, "%s /%s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HAA/"FIRMWARE_VERSION" esp8266\r\nConnection: close\r\n%s\r\n%s",
+                                 method,
+                                 url,
+                                 host,
+                                 (method_req != NULL) ? method_req : "",
+                                 content);
+                        
+                        if (write(s, req, strlen(req)) >= 0) {
+                            INFO("%s", req);
+                            
+                        } else {
+                            ERROR("HTTP");
+                        }
+                        
+                        if (method_req != NULL) {
+                            free(method_req);
+                        }
+                        
+                        free(req);
+                    } else {
+                        ERROR("Connection");
+                    }
+                } else {
+                    ERROR("Socket");
+                }
+                
+                close(s);
+            } else {
+                ERROR("DNS");
+            }
+            
+            freeaddrinfo(res);
+        }
+        
         // System actions
         cJSON *json_system_actions = cJSON_GetObjectItemCaseSensitive(actions, SYSTEM_ACTIONS_ARRAY);
         for(uint8_t i=0; i<cJSON_GetArraySize(json_system_actions); i++) {
@@ -1788,7 +1891,7 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
             
             const uint8_t system_action = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_system_action, SYSTEM_ACTION)->valuedouble;
 
-            INFO("System Action %i", system_action);
+            INFO("Sys Action %i", system_action);
             
             char *ota = NULL;
             
@@ -2032,7 +2135,7 @@ void normal_mode_init() {
     // Custom Hostname
     char *custom_hostname = name.value.string_value;
     if (cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME) != NULL) {
-        uint8_t custom_hostname_len = strlen(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring) + 1;
+        const uint8_t custom_hostname_len = strlen(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring) + 1;
         custom_hostname = malloc(custom_hostname_len);
         snprintf(custom_hostname, custom_hostname_len, "%s", cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring);
         INFO("Hostname: %s", custom_hostname);
@@ -3237,7 +3340,7 @@ void normal_mode_init() {
                         if (!used_gpio[gpio]) {
                             gpio_enable(gpio, GPIO_OUTPUT);
                             used_gpio[gpio] = true;
-                            INFO("Digital output GPIO: %i", gpio);
+                            INFO("DigO GPIO: %i", gpio);
                         }
                     }
                 }
@@ -3294,7 +3397,7 @@ void normal_mode_init() {
     
     // --- LIGHTBULBS INIT
     if (lightbulb_groups) {
-        INFO("Init Lightbulbs");
+        INFO("Init Lights");
         
         setpwm_bool_semaphore = false;
         

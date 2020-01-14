@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "1.2.1"
-#define FIRMWARE_VERSION_OCTAL              010201      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "1.3.0"
+#define FIRMWARE_VERSION_OCTAL              010300      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        0
@@ -75,7 +75,6 @@
 #define BUTTON_PRESS_TYPE                   "t"
 #define PULLUP_RESISTOR                     "p"
 #define VALUE                               "v"
-#define DIGITAL_OUTPUTS_ARRAY               "r"
 #define MANAGE_OTHERS_ACC_ARRAY             "m"
 #define ACCESSORY_INDEX                     "g"
 #define ACCESSORY_INDEX_KILL_SWITCH         "k"
@@ -189,8 +188,15 @@
 
 #define MAX_ACTIONS                         10   // from 0 to ...
 #define COPY_ACTIONS                        "a"
+#define DIGITAL_OUTPUTS_ARRAY               "r"
 #define SYSTEM_ACTIONS_ARRAY                "s"
+#define HTTP_ACTIONS_ARRAY                  "h"
 #define SYSTEM_ACTION                       "a"
+#define HTTP_ACTION_HOST                    "h"
+#define HTTP_ACTION_PORT                    "p"
+#define HTTP_ACTION_URL                     "u"
+#define HTTP_ACTION_METHOD                  "m"
+#define HTTP_ACTION_CONTENT                 "c"
 #define SYSTEM_ACTION_REBOOT                0
 #define SYSTEM_ACTION_SETUP_MODE            1
 #define SYSTEM_ACTION_OTA_UPDATE            2
@@ -233,10 +239,10 @@
 
 #define MS_TO_TICK(x)                       ((x) / portTICK_PERIOD_MS)
 
-#define DEBUG(message, ...)                 printf("HAA > %s: " message "\n", __func__, ##__VA_ARGS__);
-#define INFO(message, ...)                  printf("HAA > " message "\n", ##__VA_ARGS__);
-#define ERROR(message, ...)                 printf("HAA ! " message "\n", ##__VA_ARGS__);
+#define DEBUG(message, ...)                 printf("%s: " message "\n", __func__, ##__VA_ARGS__);
+#define INFO(message, ...)                  printf(message "\n", ##__VA_ARGS__);
+#define ERROR(message, ...)                 printf("! " message "\n", ##__VA_ARGS__);
 
-#define FREEHEAP()                          printf("HAA > Free Heap: %d\n", xPortGetFreeHeapSize())
+#define FREEHEAP()                          printf("Free Heap: %d\n", xPortGetFreeHeapSize())
 
 #endif // __HAA_HEADER_H__

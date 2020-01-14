@@ -24,8 +24,8 @@
 #define AUTO_REBOOT_TIMEOUT             90000
 #endif
 
-#define INFO(message, ...)              printf("HAA > " message "\n", ##__VA_ARGS__);
-#define ERROR(message, ...)             printf("HAA ! " message "\n", ##__VA_ARGS__);
+#define INFO(message, ...)              printf(message "\n", ##__VA_ARGS__);
+#define ERROR(message, ...)             printf("! " message "\n", ##__VA_ARGS__);
 
 
 typedef enum {
@@ -429,13 +429,13 @@ static void http_task(void *arg) {
     serv_addr.sin_port = htons(WIFI_CONFIG_SERVER_PORT);
     int flags;
     if ((flags = lwip_fcntl(listenfd, F_GETFL, 0)) < 0) {
-        ERROR("Failed to get HTTP socket flags");
+        ERROR("Get HTTP socket flags");
         lwip_close(listenfd);
         vTaskDelete(NULL);
         return;
     };
     if (lwip_fcntl(listenfd, F_SETFL, flags | O_NONBLOCK) < 0) {
-        ERROR("Failed to set HTTP socket flags");
+        ERROR("Set HTTP socket flags");
         lwip_close(listenfd);
         vTaskDelete(NULL);
         return;

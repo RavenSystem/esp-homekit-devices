@@ -20,18 +20,6 @@ void homekit_random_fill(uint8_t *data, size_t size) {
     hwrand_fill(data, size);
 }
 
-void homekit_system_restart() {
-    sdk_system_restart();
-}
-
-void homekit_overclock_start() {
-    sdk_system_overclock();
-}
-
-void homekit_overclock_end() {
-    sdk_system_restoreclock();
-}
-
 static char mdns_instance_name[65] = {0};
 static char mdns_txt_rec[128] = {0};
 static int mdns_port = 80;

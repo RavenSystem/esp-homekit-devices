@@ -8,7 +8,7 @@ typedef unsigned char byte;
 
 #ifdef HOMEKIT_DEBUG
 
-#define DEBUG(message, ...) printf(">>> %s: " message "\n", __func__, ##__VA_ARGS__)
+#define DEBUG(message, ...) printf("%s: " message "\n", __func__, ##__VA_ARGS__)
 
 #else
 
@@ -16,8 +16,8 @@ typedef unsigned char byte;
 
 #endif
 
-#define INFO(message, ...) printf(">>> HomeKit: " message "\n", ##__VA_ARGS__)
-#define ERROR(message, ...) printf("!!! HomeKit: " message "\n", ##__VA_ARGS__)
+#define INFO(message, ...) printf(message "\n", ##__VA_ARGS__)
+#define ERROR(message, ...) printf("! " message "\n", ##__VA_ARGS__)
 
 #ifdef ESP_IDF
 

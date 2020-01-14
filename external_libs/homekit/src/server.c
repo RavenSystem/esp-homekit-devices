@@ -17,6 +17,8 @@
 #include <FreeRTOS.h>
 #include <task.h>
 #include <queue.h>
+#include <espressif/esp_common.h>
+#include <esplibs/libmain.h>
 #else
 #error "Unknown target platform"
 #endif
@@ -196,9 +198,9 @@ void server_free(homekit_server_t *server) {
 #define TLV_DEBUG(values)
 #endif
 
-#define CLIENT_DEBUG(client, message, ...) DEBUG("[Client %d] " message, client->socket, ##__VA_ARGS__)
-#define CLIENT_INFO(client, message, ...) INFO("[Client %d] " message, client->socket, ##__VA_ARGS__)
-#define CLIENT_ERROR(client, message, ...) ERROR("[Client %d] " message, client->socket, ##__VA_ARGS__)
+#define CLIENT_DEBUG(client, message, ...) DEBUG("[%d] " message, client->socket, ##__VA_ARGS__)
+#define CLIENT_INFO(client, message, ...) INFO("[%d] " message, client->socket, ##__VA_ARGS__)
+#define CLIENT_ERROR(client, message, ...) ERROR("[%d] " message, client->socket, ##__VA_ARGS__)
 
 void tlv_debug(const tlv_values_t *values) {
     DEBUG("Got following TLV values:");
@@ -532,7 +534,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
         if (v.is_null) {
             // json_string(json, "value"); json_null(json);
         } else if (v.format != ch->format) {
-            ERROR("Characteristic value format is different from characteristic format");
+            ERROR("Ch value format is different from ch format");
         } else {
             switch(v.format) {
                 case homekit_format_bool: {
@@ -1009,7 +1011,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
     DEBUG_HEAP();
 
 #ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
-    homekit_overclock_start();
+    sdk_system_overclock();
 #endif
 
     tlv_values_t *message = tlv_new();
@@ -1019,17 +1021,17 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 
     switch(tlv_get_integer_value(message, TLVType_State, -1)) {
         case 1: {
-            CLIENT_INFO(context, "Pair Setup Step 1/3");
+            CLIENT_INFO(context, "Pair 1/3");
             DEBUG_HEAP();
             if (context->server->paired) {
-                CLIENT_INFO(context, "Refusing to pair: already paired");
+                CLIENT_INFO(context, "Already paired");
                 send_tlv_error_response(context, 2, TLVError_Unavailable);
                 break;
             }
 
             if (context->server->pairing_context) {
                 if (context->server->pairing_context->client != context) {
-                    CLIENT_INFO(context, "Refusing to pair: another pairing in progress");
+                    CLIENT_INFO(context, "Another pairing in progress");
                     send_tlv_error_response(context, 2, TLVError_Busy);
                     break;
                 }
@@ -1073,7 +1075,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             context->server->pairing_context->public_key = malloc(context->server->pairing_context->public_key_size);
             int r = crypto_srp_get_public_key(context->server->pairing_context->srp, context->server->pairing_context->public_key, &context->server->pairing_context->public_key_size);
             if (r) {
-                CLIENT_ERROR(context, "Failed to dump SPR public key (code %d)", r);
+                CLIENT_ERROR(context, "Dump SPR public key (code %d)", r);
 
                 pairing_context_free(context->server->pairing_context);
                 context->server->pairing_context = NULL;
@@ -1088,7 +1090,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             byte *salt = malloc(salt_size);
             r = crypto_srp_get_salt(context->server->pairing_context->srp, salt, &salt_size);
             if (r) {
-                CLIENT_ERROR(context, "Failed to get salt (code %d)", r);
+                CLIENT_ERROR(context, "Get salt (code %d)", r);
 
                 free(salt);
                 pairing_context_free(context->server->pairing_context);
@@ -1109,18 +1111,18 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             break;
         }
         case 3: {
-            CLIENT_INFO(context, "Pair Setup Step 2/3");
+            CLIENT_INFO(context, "Pair 2/3");
             DEBUG_HEAP();
             tlv_t *device_public_key = tlv_get_value(message, TLVType_PublicKey);
             if (!device_public_key) {
-                CLIENT_ERROR(context, "Invalid payload: no device public key");
+                CLIENT_ERROR(context, "Payload: no device public key");
                 send_tlv_error_response(context, 4, TLVError_Authentication);
                 break;
             }
 
             tlv_t *proof = tlv_get_value(message, TLVType_Proof);
             if (!proof) {
-                CLIENT_ERROR(context, "Invalid payload: no device proof");
+                CLIENT_ERROR(context, "Payload: no device proof");
                 send_tlv_error_response(context, 4, TLVError_Authentication);
                 break;
             }
@@ -1134,7 +1136,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 context->server->pairing_context->public_key_size
             );
             if (r) {
-                CLIENT_ERROR(context, "Failed to compute SRP shared secret (code %d)", r);
+                CLIENT_ERROR(context, "Compute SRP shared secret (code %d)", r);
                 send_tlv_error_response(context, 4, TLVError_Authentication);
                 break;
             }
@@ -1147,7 +1149,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             DEBUG_HEAP();
             r = crypto_srp_verify(context->server->pairing_context->srp, proof->value, proof->size);
             if (r) {
-                CLIENT_ERROR(context, "Failed to verify peer's proof (code %d)", r);
+                CLIENT_ERROR(context, "Verify peer's proof (code %d)", r);
                 send_tlv_error_response(context, 4, TLVError_Authentication);
                 break;
             }
@@ -1169,7 +1171,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             break;
         }
         case 5: {
-            CLIENT_INFO(context, "Pair Setup Step 3/3");
+            CLIENT_INFO(context, "Pair 3/3");
             DEBUG_HEAP();
 
             int r;
@@ -1187,14 +1189,14 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 shared_secret, &shared_secret_size
             );
             if (r) {
-                CLIENT_ERROR(context, "Failed to generate shared secret (code %d)", r);
+                CLIENT_ERROR(context, "Generate shared secret (code %d)", r);
                 send_tlv_error_response(context, 6, TLVError_Authentication);
                 break;
             }
 
             tlv_t *tlv_encrypted_data = tlv_get_value(message, TLVType_EncryptedData);
             if (!tlv_encrypted_data) {
-                CLIENT_ERROR(context, "Invalid payload: no encrypted data");
+                CLIENT_ERROR(context, "Payload: no encrypted data");
                 send_tlv_error_response(context, 6, TLVError_Authentication);
                 break;
             }
@@ -1215,7 +1217,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 decrypted_data, &decrypted_data_size
             );
             if (r) {
-                CLIENT_ERROR(context, "Failed to decrypt data (code %d)", r);
+                CLIENT_ERROR(context, "Decrypt data (code %d)", r);
 
                 free(decrypted_data);
 
@@ -1226,7 +1228,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             tlv_values_t *decrypted_message = tlv_new();
             r = tlv_parse(decrypted_data, decrypted_data_size, decrypted_message);
             if (r) {
-                CLIENT_ERROR(context, "Failed to parse decrypted TLV (code %d)", r);
+                CLIENT_ERROR(context, "Parse decrypted TLV (code %d)", r);
 
                 tlv_free(decrypted_message);
                 free(decrypted_data);
@@ -1239,7 +1241,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 
             tlv_t *tlv_device_id = tlv_get_value(decrypted_message, TLVType_Identifier);
             if (!tlv_device_id) {
-                CLIENT_ERROR(context, "Invalid encrypted payload: no device identifier");
+                CLIENT_ERROR(context, "Encrypted payload: no device identifier");
 
                 tlv_free(decrypted_message);
 
@@ -1249,7 +1251,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 
             tlv_t *tlv_device_public_key = tlv_get_value(decrypted_message, TLVType_PublicKey);
             if (!tlv_device_public_key) {
-                CLIENT_ERROR(context, "Invalid encrypted payload: no device public key");
+                CLIENT_ERROR(context, "Encrypted payload: no device public key");
 
                 tlv_free(decrypted_message);
 
@@ -1259,7 +1261,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 
             tlv_t *tlv_device_signature = tlv_get_value(decrypted_message, TLVType_Signature);
             if (!tlv_device_signature) {
-                CLIENT_ERROR(context, "Invalid encrypted payload: no device signature");
+                CLIENT_ERROR(context, "Encrypted payload: no device signature");
 
                 tlv_free(decrypted_message);
 
@@ -1274,7 +1276,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 tlv_device_public_key->value, tlv_device_public_key->size
             );
             if (r) {
-                CLIENT_ERROR(context, "Failed to import device public Key (code %d)", r);
+                CLIENT_ERROR(context, "Import device public Key (code %d)", r);
 
                 crypto_ed25519_free(device_key);
                 tlv_free(decrypted_message);
@@ -1296,7 +1298,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 device_x, &device_x_size
             );
             if (r) {
-                CLIENT_ERROR(context, "Failed to generate DeviceX (code %d)", r);
+                CLIENT_ERROR(context, "Generate DeviceX (code %d)", r);
 
                 crypto_ed25519_free(device_key);
                 tlv_free(decrypted_message);
@@ -1324,7 +1326,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 tlv_device_signature->value, tlv_device_signature->size
             );
             if (r) {
-                CLIENT_ERROR(context, "Failed to generate DeviceX (code %d)", r);
+                CLIENT_ERROR(context, "Generate DeviceX (code %d)", r);
 
                 free(device_info);
                 crypto_ed25519_free(device_key);
@@ -1340,7 +1342,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 
             r = homekit_storage_add_pairing(device_id, device_key, pairing_permissions_admin);
             if (r) {
-                CLIENT_ERROR(context, "Failed to store pairing (code %d)", r);
+                CLIENT_ERROR(context, "Store pairing (code %d)", r);
 
                 free(device_id);
                 crypto_ed25519_free(device_key);
@@ -1365,7 +1367,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             byte *accessory_public_key = malloc(accessory_public_key_size);
             r = crypto_ed25519_export_public_key(context->server->accessory_key, accessory_public_key, &accessory_public_key_size);
             if (r) {
-                CLIENT_ERROR(context, "Failed to export accessory public key (code %d)", r);
+                CLIENT_ERROR(context, "Export accessory public key (code %d)", r);
 
                 free(accessory_public_key);
 
@@ -1388,7 +1390,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 accessory_info, &accessory_x_size
             );
             if (r) {
-                CLIENT_ERROR(context, "Failed to generate AccessoryX (code %d)", r);
+                CLIENT_ERROR(context, "Generate AccessoryX (code %d)", r);
 
                 free(accessory_info);
                 free(accessory_public_key);
@@ -1418,7 +1420,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 accessory_signature, &accessory_signature_size
             );
             if (r) {
-                CLIENT_ERROR(context, "Failed to generate accessory signature (code %d)", r);
+                CLIENT_ERROR(context, "Generate accessory signature (code %d)", r);
 
                 free(accessory_signature);
                 free(accessory_public_key);
@@ -1449,7 +1451,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             byte *response_data = malloc(response_data_size);
             r = tlv_format(response_message, response_data, &response_data_size);
             if (r) {
-                CLIENT_ERROR(context, "Failed to format TLV response (code %d)", r);
+                CLIENT_ERROR(context, "Format TLV response (code %d)", r);
 
                 free(response_data);
                 tlv_free(response_message);
@@ -1478,7 +1480,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             free(response_data);
 
             if (r) {
-                CLIENT_ERROR(context, "Failed to encrypt response data (code %d)", r);
+                CLIENT_ERROR(context, "Encrypt response data (code %d)", r);
 
                 free(encrypted_response_data);
 
@@ -1514,7 +1516,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
     tlv_free(message);
 
 #ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
-    homekit_overclock_end();
+    sdk_system_restoreclock();
 #endif
 }
 
@@ -1523,7 +1525,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
     DEBUG_HEAP();
 
 #ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
-    homekit_overclock_start();
+    sdk_system_overclock();
 #endif
 
     tlv_values_t *message = tlv_new();
@@ -1535,7 +1537,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
 
     switch(tlv_get_integer_value(message, TLVType_State, -1)) {
         case 1: {
-            CLIENT_INFO(context, "Pair Verify Step 1/2");
+            CLIENT_INFO(context, "Verify 1/2");
 
             CLIENT_DEBUG(context, "Importing device Curve25519 public key");
             tlv_t *tlv_device_public_key = tlv_get_value(message, TLVType_PublicKey);
@@ -1550,7 +1552,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
                 tlv_device_public_key->value, tlv_device_public_key->size
             );
             if (r) {
-                CLIENT_ERROR(context, "Failed to import device Curve25519 public key (code %d)", r);
+                CLIENT_ERROR(context, "Import device Curve25519 public key (code %d)", r);
                 crypto_curve25519_free(device_key);
                 send_tlv_error_response(context, 2, TLVError_Unknown);
                 break;
@@ -1559,7 +1561,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             CLIENT_DEBUG(context, "Generating accessory Curve25519 key");
             curve25519_key *my_key = crypto_curve25519_generate();
             if (!my_key) {
-                CLIENT_ERROR(context, "Failed to generate accessory Curve25519 key");
+                CLIENT_ERROR(context, "Generate accessory Curve25519 key");
                 crypto_curve25519_free(device_key);
                 send_tlv_error_response(context, 2, TLVError_Unknown);
                 break;
@@ -1572,7 +1574,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             byte *my_key_public = malloc(my_key_public_size);
             r = crypto_curve25519_export_public(my_key, my_key_public, &my_key_public_size);
             if (r) {
-                CLIENT_ERROR(context, "Failed to export accessory Curve25519 public key (code %d)", r);
+                CLIENT_ERROR(context, "Export accessory Curve25519 public key (code %d)", r);
                 free(my_key_public);
                 crypto_curve25519_free(my_key);
                 crypto_curve25519_free(device_key);
@@ -1590,7 +1592,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             crypto_curve25519_free(device_key);
 
             if (r) {
-                CLIENT_ERROR(context, "Failed to generate Curve25519 shared secret (code %d)", r);
+                CLIENT_ERROR(context, "Generate Curve25519 shared secret (code %d)", r);
                 free(shared_secret);
                 free(my_key_public);
                 send_tlv_error_response(context, 2, TLVError_Unknown);
@@ -1624,7 +1626,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             );
             free(accessory_info);
             if (r) {
-                CLIENT_ERROR(context, "Failed to generate signature (code %d)", r);
+                CLIENT_ERROR(context, "Generate signature (code %d)", r);
                 free(accessory_signature);
                 free(shared_secret);
                 free(my_key_public);
@@ -1648,7 +1650,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             tlv_free(sub_response);
 
             if (r) {
-                CLIENT_ERROR(context, "Failed to format sub-TLV message (code %d)", r);
+                CLIENT_ERROR(context, "Format sub-TLV message (code %d)", r);
                 free(sub_response_data);
                 free(shared_secret);
                 free(my_key_public);
@@ -1675,7 +1677,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
                 session_key, &session_key_size
             );
             if (r) {
-                CLIENT_ERROR(context, "Failed to derive session key (code %d)", r);
+                CLIENT_ERROR(context, "Derive session key (code %d)", r);
                 free(session_key);
                 free(sub_response_data);
                 free(shared_secret);
@@ -1701,7 +1703,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             free(sub_response_data);
 
             if (r) {
-                CLIENT_ERROR(context, "Failed to encrypt sub response data (code %d)", r);
+                CLIENT_ERROR(context, "Encrypt sub response data (code %d)", r);
                 free(encrypted_response_data);
                 free(session_key);
                 free(shared_secret);
@@ -1742,17 +1744,17 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             break;
         }
         case 3: {
-            CLIENT_INFO(context, "Pair Verify Step 2/2");
+            CLIENT_INFO(context, "Verify 2/2");
 
             if (!context->verify_context) {
-                CLIENT_ERROR(context, "Failed to verify: no state 1 data");
+                CLIENT_ERROR(context, "Verify: no state 1 data");
                 send_tlv_error_response(context, 4, TLVError_Authentication);
                 break;
             }
 
             tlv_t *tlv_encrypted_data = tlv_get_value(message, TLVType_EncryptedData);
             if (!tlv_encrypted_data) {
-                CLIENT_ERROR(context, "Failed to verify: no encrypted data");
+                CLIENT_ERROR(context, "Verify: no encrypted data");
 
                 pair_verify_context_free(context->verify_context);
                 context->verify_context = NULL;
@@ -1776,7 +1778,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
                 decrypted_data, &decrypted_data_size
             );
             if (r) {
-                CLIENT_ERROR(context, "Failed to decrypt data (code %d)", r);
+                CLIENT_ERROR(context, "Decrypt data (code %d)", r);
 
                 free(decrypted_data);
                 pair_verify_context_free(context->verify_context);
@@ -1791,7 +1793,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             free(decrypted_data);
 
             if (r) {
-                CLIENT_ERROR(context, "Failed to parse decrypted TLV (code %d)", r);
+                CLIENT_ERROR(context, "Parse decrypted TLV (code %d)", r);
 
                 tlv_free(decrypted_message);
                 pair_verify_context_free(context->verify_context);
@@ -1803,7 +1805,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
 
             tlv_t *tlv_device_id = tlv_get_value(decrypted_message, TLVType_Identifier);
             if (!tlv_device_id) {
-                CLIENT_ERROR(context, "Invalid encrypted payload: no device identifier");
+                CLIENT_ERROR(context, "Encrypted payload: no device identifier");
 
                 tlv_free(decrypted_message);
                 pair_verify_context_free(context->verify_context);
@@ -1815,7 +1817,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
 
             tlv_t *tlv_device_signature = tlv_get_value(decrypted_message, TLVType_Signature);
             if (!tlv_device_signature) {
-                CLIENT_ERROR(context, "Invalid encrypted payload: no device identifier");
+                CLIENT_ERROR(context, "Encrypted payload: no device identifier");
 
                 tlv_free(decrypted_message);
                 pair_verify_context_free(context->verify_context);
@@ -1870,7 +1872,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             tlv_free(decrypted_message);
 
             if (r) {
-                CLIENT_ERROR(context, "Failed to verify device signature (code %d)", r);
+                CLIENT_ERROR(context, "Verify device signature (code %d)", r);
 
                 pair_verify_context_free(context->verify_context);
                 context->verify_context = NULL;
@@ -1892,7 +1894,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             );
 
             if (r) {
-                CLIENT_ERROR(context, "Failed to derive read encryption key (code %d)", r);
+                CLIENT_ERROR(context, "Derive read encryption key (code %d)", r);
 
                 free(context->read_key);
                 context->read_key = NULL;
@@ -1917,7 +1919,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             context->verify_context = NULL;
 
             if (r) {
-                CLIENT_ERROR(context, "Failed to derive write encryption key (code %d)", r);
+                CLIENT_ERROR(context, "Derive write encryption key (code %d)", r);
 
                 free(context->write_key);
                 context->write_key = NULL;
@@ -1939,7 +1941,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
 
             HOMEKIT_NOTIFY_EVENT(context->server, HOMEKIT_EVENT_CLIENT_VERIFIED);
 
-            CLIENT_INFO(context, "Verification successful, secure session established");
+            CLIENT_INFO(context, "Verification OK");
 
             break;
         }
@@ -1952,7 +1954,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
     tlv_free(message);
 
 #ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
-    homekit_overclock_end();
+    sdk_system_restoreclock();
 #endif
 }
 
@@ -1961,6 +1963,10 @@ void homekit_server_on_get_accessories(client_context_t *context) {
     CLIENT_INFO(context, "Get Accessories");
     DEBUG_HEAP();
 
+#ifdef HOMEKIT_OVERCLOCK_GET_ACC
+    sdk_system_overclock();
+#endif
+    
     client_send(context, json_200_response_headers, sizeof(json_200_response_headers)-1);
 
     json_stream *json = json_new(1024, client_send_chunk, context);
@@ -2022,14 +2028,22 @@ void homekit_server_on_get_accessories(client_context_t *context) {
 
     json_flush(json);
     json_free(json);
-
+    
     client_send_chunk(NULL, 0, context);
+
+#ifdef HOMEKIT_OVERCLOCK_GET_ACC
+    sdk_system_restoreclock();
+#endif
 }
 
 void homekit_server_on_get_characteristics(client_context_t *context) {
     CLIENT_INFO(context, "Get Characteristics");
     DEBUG_HEAP();
 
+#ifdef HOMEKIT_OVERCLOCK_GET_CH
+    sdk_system_overclock();
+#endif
+    
     query_param_t *qp = context->endpoint_params;
     while (qp) {
         CLIENT_DEBUG(context, "Query paramter %s = %s", qp->name, qp->value);
@@ -2146,14 +2160,22 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
     json_free(json);
 
     client_send_chunk(NULL, 0, context);
-
+    
     free(id);
+    
+#ifdef HOMEKIT_OVERCLOCK_GET_CH
+    sdk_system_restoreclock();
+#endif
 }
 
 void homekit_server_on_update_characteristics(client_context_t *context, const byte *data, size_t size) {
     CLIENT_INFO(context, "Update Characteristics");
     DEBUG_HEAP();
 
+#ifdef HOMEKIT_OVERCLOCK_UPDATE_CH
+    sdk_system_overclock();
+#endif
+    
     char *data1 = strndup((char *)data, size);
     cJSON *json = cJSON_Parse(data1);
     free(data1);
@@ -2452,7 +2474,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                 context->current_characteristic = ch;
                 context->current_value = &h_value;
 
-                homekit_characteristic_notify(ch, h_value);
+                //homekit_characteristic_notify(ch, h_value);
 
                 context->current_characteristic = NULL;
                 context->current_value = NULL;
@@ -2530,6 +2552,10 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 
     free(statuses);
     cJSON_Delete(json);
+    
+#ifdef HOMEKIT_OVERCLOCK_UPDATE_CH
+    sdk_system_restoreclock();
+#endif
 }
 
 void homekit_server_on_pairings(client_context_t *context, const byte *data, size_t size) {
@@ -2804,7 +2830,7 @@ void homekit_server_on_reset(client_context_t *context) {
 
     vTaskDelay(3000 / portTICK_PERIOD_MS);
 
-    homekit_system_restart();
+    sdk_system_restart();
 }
 
 void homekit_server_on_resource(client_context_t *context) {
@@ -2965,13 +2991,14 @@ static void homekit_client_process(client_context_t *context) {
         context->data_size-context->data_available
     );
     if (data_len == 0) {
+        CLIENT_ERROR(context, "Disconnecting");
         context->disconnect = true;
         return;
     }
 
     if (data_len < 0) {
         if (errno != EAGAIN) {
-            CLIENT_ERROR(context, "Error reading data from socket (code %d). Disconnecting", errno);
+            CLIENT_ERROR(context, "Reading data from socket (code %d). Disconnecting", errno);
             context->disconnect = true;
         }
         return;
@@ -3028,7 +3055,7 @@ static void homekit_client_process(client_context_t *context) {
 
 
 void homekit_server_close_client(homekit_server_t *server, client_context_t *context) {
-    CLIENT_INFO(context, "Closing client connection");
+    CLIENT_INFO(context, "Closing connection");
 
     FD_CLR(context->socket, &server->fds);
     // TODO: recalc server->max_fd ?
@@ -3084,7 +3111,7 @@ client_context_t *homekit_server_accept_client(homekit_server_t *server) {
         strcpy(address_buffer, "?.?.?.?");
     }
     
-    INFO("Got new client connection: %d from %s, port %d", s, address_buffer, addr.sin_port);
+    INFO("[%d] New %s:%d", s, address_buffer, addr.sin_port);
     
     /* Check and remove any old conection with same IP addr and port */
     struct sockaddr_in old_addr;
@@ -3097,9 +3124,9 @@ client_context_t *homekit_server_accept_client(homekit_server_t *server) {
             old_addr.sin_port != addr.sin_port) {
             char old_address_buffer[INET_ADDRSTRLEN];
             inet_ntop(AF_INET, &old_addr.sin_addr, old_address_buffer, sizeof(old_address_buffer));
-            INFO("Duplicated connection, closing old connection on port %d. New : %d", old_addr.sin_port, addr.sin_port);
+            INFO("[%d] Duplicated connection, closing old on port %d", s, old_addr.sin_port);
             context->disconnect = true;
-            homekit_server_close_client(server, context);
+            //homekit_server_close_client(server, context);
         }
 
         context = next;
@@ -3244,7 +3271,7 @@ static void homekit_run_server(homekit_server_t *server)
         fd_set read_fds;
         memcpy(&read_fds, &server->fds, sizeof(read_fds));
 
-        struct timeval timeout = { 1, 0 }; /* 1 second timeout */
+        struct timeval timeout = { 3, 0 }; /* 3 second timeout */
         int triggered_nfds = select(server->max_fd + 1, &read_fds, NULL, NULL, &timeout);
         if (triggered_nfds > 0) {
             if (FD_ISSET(server->listen_fd, &read_fds)) {
