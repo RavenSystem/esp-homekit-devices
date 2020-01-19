@@ -27,15 +27,6 @@ typedef struct {
 
     int config_number;
 
-    // Password in format "111-23-456".
-    // If password is not specified, a random password
-    // will be used. In that case, a password_callback
-    // field must contain pointer to a function that should
-    // somehow communicate password to the user (e.g. display
-    // it on a screen if accessory has one).
-    char *password;
-    void (*password_callback)(const char *password);
-
     // Setup ID in format "XXXX" (where X is digit or latin capital letter)
     // Used for pairing using QR code
     char *setupId;

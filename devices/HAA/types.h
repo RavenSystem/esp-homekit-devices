@@ -91,4 +91,25 @@ typedef struct _lightbulb_group {
     struct _lightbulb_group *next;
 } lightbulb_group_t;
 
+typedef void (*ping_callback_fn)(uint8_t gpio, void *args, uint8_t param);
+
+typedef struct _ping_input_callback_fn {
+    ping_callback_fn callback;
+    homekit_characteristic_t *ch;
+    uint8_t param;
+    
+    struct _ping_input_callback_fn *next;
+} ping_input_callback_fn_t;
+
+typedef struct _ping_input {
+    char *host;
+    bool last_response;
+    uint8_t fails;
+    
+    ping_input_callback_fn_t *callback_0;
+    ping_input_callback_fn_t *callback_1;
+    
+    struct _ping_input *next;
+} ping_input_t;
+
 #endif // __HAA_TYPES_H__

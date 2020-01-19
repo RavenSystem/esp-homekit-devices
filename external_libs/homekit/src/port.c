@@ -9,7 +9,7 @@
 #include "mdnsresponder.h"
 
 #ifndef MDNS_TTL
-#define MDNS_TTL 4500
+#define MDNS_TTL 2500
 #endif
 
 uint32_t homekit_random() {

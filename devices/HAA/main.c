@@ -42,6 +42,7 @@
 #include <homekit/characteristics.h>
 #include <wifi_config.h>
 #include <adv_button.h>
+#include <ping.h>
 
 #include <multipwm/multipwm.h>
 
@@ -60,10 +61,10 @@ void free_heap_watchdog() {
     uint32_t new_free_heap = xPortGetFreeHeapSize();
     if (new_free_heap != free_heap) {
         free_heap = new_free_heap;
-        printf("HAA > Free Heap: %d\n", free_heap);
+        INFO("Free Heap: %d", free_heap);
     }
 }
-#endif
+#endif  // HAA_DEBUG
 
 uint8_t wifi_status = WIFI_STATUS_CONNECTED;
 int8_t setup_mode_toggle_counter = INT8_MIN;
@@ -90,6 +91,7 @@ char serial_value[13];
 last_state_t *last_states = NULL;
 ch_group_t *ch_groups = NULL;
 lightbulb_group_t *lightbulb_groups = NULL;
+ping_input_t *ping_inputs = NULL;
 
 ch_group_t *ch_group_find(homekit_characteristic_t *ch) {
     ch_group_t *ch_group = ch_groups;
@@ -173,6 +175,97 @@ void wifi_watchdog() {
         ERROR("WiFi disconnected");
 
         wifi_status = WIFI_STATUS_DISCONNECTED;
+    }
+}
+
+ping_input_t *ping_input_find_by_host(char *host) {
+    ping_input_t *ping_input = ping_inputs;
+    while (ping_input &&
+           strcmp(ping_input->host, host) != 0) {
+        ping_input = ping_input->next;
+    }
+
+    return ping_input;
+}
+
+void ping_task() {
+    void ping_input_run_callback_fn(ping_input_callback_fn_t *callbacks) {
+        ping_input_callback_fn_t *ping_input_callback_fn = callbacks;
+        
+        while (ping_input_callback_fn) {
+            ping_input_callback_fn->callback(0, ping_input_callback_fn->ch, ping_input_callback_fn->param);
+            ping_input_callback_fn = ping_input_callback_fn->next;
+        }
+    }
+    
+    for (;;) {
+        vTaskDelay(MS_TO_TICK(5000));
+        
+        ping_input_t *ping_input = ping_inputs;
+        while (ping_input) {
+            ip_addr_t target_ip;
+            const struct addrinfo hints = {
+                .ai_family = AF_UNSPEC,
+                .ai_socktype = SOCK_RAW
+                
+            };
+            struct addrinfo *res;
+
+            int err = getaddrinfo(ping_input->host, NULL, &hints, &res);
+
+            if (err != 0 || res == NULL) {
+                if (ping_input->last_response) {
+                    ping_input->fails++;
+                    if (ping_input->fails == 3) {
+                        ping_input->fails = 0;
+                        ping_input->last_response = false;
+                        ping_input_run_callback_fn(ping_input->callback_0);
+                    }
+                } else {
+                    ping_input->fails = 0;
+                }
+                
+            } else {
+                struct sockaddr *sa = res->ai_addr;
+                if (sa->sa_family == AF_INET) {
+                    struct in_addr ipv4_inaddr = ((struct sockaddr_in*) sa)->sin_addr;
+                    memcpy(&target_ip, &ipv4_inaddr, sizeof(target_ip));
+                }
+#if LWIP_IPV6
+                if (sa->sa_family == AF_INET6) {
+                    struct in_addr ipv6_inaddr = ((struct sockaddr_in6 *)sa)->sin6_addr;
+                    memcpy(&target_ip, &ipv6_inaddr, sizeof(target_ip));
+                }
+#endif
+                bool ping_result = ping(target_ip);
+                if (ping_result && !ping_input->last_response) {
+                    ping_input->last_response = true;
+                    ping_input->fails = 0;
+                    INFO("Ping %s", ping_input->host);
+                    ping_input_run_callback_fn(ping_input->callback_1);
+
+                } else if (!ping_result && ping_input->last_response) {
+                    ping_input->fails++;
+                    if (ping_input->fails == 3) {
+                        ping_input->last_response = false;
+                        ping_input->fails = 0;
+                        ERROR("Ping %s", ping_input->host);
+                        ping_input_run_callback_fn(ping_input->callback_0);
+                    }
+                    
+                } else {
+                    ping_input->fails = 0;
+                }
+            }
+            
+            if (res) {
+                freeaddrinfo(res);
+            }
+            
+            ping_input = ping_input->next;
+            
+            vTaskDelay(MS_TO_TICK(50));
+        }
     }
 }
 
@@ -1966,6 +2059,10 @@ void run_homekit_server() {
     
     sdk_os_timer_setfn(&wifi_watchdog_timer, wifi_watchdog, NULL);
     sdk_os_timer_arm(&wifi_watchdog_timer, WIFI_WATCHDOG_POLL_PERIOD_MS, 1);
+
+    if (ping_inputs) {
+        xTaskCreate(ping_task, "ping_task", configMINIMAL_STACK_SIZE * 2, NULL, 1, NULL);
+    }
     
     led_blink(6);
 }
@@ -2042,10 +2139,53 @@ void normal_mode_init() {
         return run_at_launch;
     }
     
+    // Ping Setup function
+    void ping_register(cJSON *json_pings, void *callback, homekit_characteristic_t *ch, const uint8_t param) {
+        for(uint8_t j=0; j<cJSON_GetArraySize(json_pings); j++) {
+            ping_input_t *ping_input = ping_input_find_by_host(cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_HOST)->valuestring);
+            
+            if (!ping_input) {
+                ping_input = malloc(sizeof(ping_input_t));
+                memset(ping_input, 0, sizeof(*ping_input));
+                
+                ping_input->host = cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_HOST)->valuestring;
+                ping_input->last_response = false;
+                ping_input->fails = 0;
+                
+                ping_input->next = ping_inputs;
+                ping_inputs = ping_input;
+            }
+            
+            bool response_type = true;
+            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_RESPONSE_TYPE) != NULL &&
+                cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_RESPONSE_TYPE)->valuedouble == 0) {
+                response_type = false;
+            }
+            
+            ping_input_callback_fn_t *ping_input_callback_fn;
+            ping_input_callback_fn = malloc(sizeof(ping_input_callback_fn_t));
+            memset(ping_input_callback_fn, 0, sizeof(*ping_input_callback_fn));
+            
+            ping_input_callback_fn->callback = callback;
+            ping_input_callback_fn->ch = ch;
+            ping_input_callback_fn->param = param;
+            
+            if (response_type) {
+                ping_input_callback_fn->next = ping_input->callback_1;
+                ping_input->callback_1 = ping_input_callback_fn;
+            } else {
+                ping_input_callback_fn->next = ping_input->callback_0;
+                ping_input->callback_0 = ping_input_callback_fn;
+            }
+            
+            INFO("Ping input: %s, res: %i", ping_input->host, response_type);
+        }
+    }
+    
     // Initial state function
     float set_initial_state(const uint8_t accessory, const uint8_t ch_number, cJSON *json_context, homekit_characteristic_t *ch, const uint8_t ch_type, const float default_value) {
         float state = default_value;
-        INFO("Setting initial state");
+        INFO("Set init state");
         if (cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
             const uint8_t initial_state = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE)->valuedouble;
             if (initial_state < INIT_STATE_LAST) {
@@ -2386,6 +2526,9 @@ void normal_mode_init() {
         }
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch0, TYPE_ON);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch0, TYPE_ON);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput_1, ch0, TYPE_ON);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput_0, ch0, TYPE_ON);
         
         uint8_t initial_state = 0;
         if (cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
@@ -2436,6 +2579,9 @@ void normal_mode_init() {
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), button_event, ch0, SINGLEPRESS_EVENT);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), button_event, ch0, DOUBLEPRESS_EVENT);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), button_event, ch0, LONGPRESS_EVENT);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), button_event, ch0, SINGLEPRESS_EVENT);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), button_event, ch0, DOUBLEPRESS_EVENT);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_2), button_event, ch0, LONGPRESS_EVENT);
         
         const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         return new_accessory_count;
@@ -2466,6 +2612,9 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->characteristics[1] = ch1;
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch1, TYPE_LOCK);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch1, TYPE_LOCK);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput_1, ch1, TYPE_LOCK);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput_0, ch1, TYPE_LOCK);
         
         uint8_t initial_state = 0;
         if (cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
@@ -2557,6 +2706,10 @@ void normal_mode_init() {
         
         if (acc_type == ACC_TYPE_MOTION_SENSOR) {
             ch_group->acc_type = ACC_TYPE_MOTION_SENSOR;
+            
+            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), sensor_0, ch0, TYPE_SENSOR_BOOL);
+            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), sensor_1, ch0, TYPE_SENSOR_BOOL);
+            
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), sensor_0, ch0, TYPE_SENSOR_BOOL)) {
                 sensor_0(0, ch0, TYPE_SENSOR_BOOL);
             }
@@ -2565,6 +2718,9 @@ void normal_mode_init() {
                 sensor_1(0, ch0, TYPE_SENSOR_BOOL);
             }
         } else {
+            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), sensor_0, ch0, TYPE_SENSOR);
+            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), sensor_1, ch0, TYPE_SENSOR);
+            
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), sensor_0, ch0, TYPE_SENSOR)) {
                 sensor_0(0, ch0, TYPE_SENSOR);
             }
@@ -2639,6 +2795,9 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(VALVE_TYPE, valve_type);
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch0, TYPE_VALVE);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch0, TYPE_VALVE);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput_1, ch0, TYPE_VALVE);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput_0, ch0, TYPE_VALVE);
         
         uint8_t initial_state = 0;
         if (cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
@@ -2790,11 +2949,19 @@ void normal_mode_init() {
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), th_input, ch1, 9);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), th_input_temp, ch0, THERMOSTAT_TEMP_UP);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), th_input_temp, ch0, THERMOSTAT_TEMP_DOWN);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), th_input, ch1, 9);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_3), th_input_temp, ch0, THERMOSTAT_TEMP_UP);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_4), th_input_temp, ch0, THERMOSTAT_TEMP_DOWN);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), th_input, ch0, 1);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), th_input, ch0, 0);
         
         if (th_type == THERMOSTAT_TYPE_HEATERCOOLER) {
             diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), th_input, ch0, 5);
             diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), th_input, ch0, 6);
             diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_7), th_input, ch0, 7);
+            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_5), th_input, ch0, 5);
+            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), th_input, ch0, 6);
+            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_7), th_input, ch0, 7);
             
             ch4->value.int_value = set_initial_state(accessory, 4, cJSON_Parse(INIT_STATE_LAST_STR), ch4, CH_TYPE_INT8, 0);
         }
@@ -3087,6 +3254,11 @@ void normal_mode_init() {
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch0, TYPE_LIGHTBULB);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), rgbw_brightness, ch1, LIGHTBULB_BRIGHTNESS_UP);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), rgbw_brightness, ch1, LIGHTBULB_BRIGHTNESS_DOWN);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch0, TYPE_LIGHTBULB);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_2), rgbw_brightness, ch1, LIGHTBULB_BRIGHTNESS_UP);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_3), rgbw_brightness, ch1, LIGHTBULB_BRIGHTNESS_DOWN);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput_1, ch0, TYPE_LIGHTBULB);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput_0, ch0, TYPE_LIGHTBULB);
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY) != NULL ||
             cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0) != NULL ||
@@ -3176,6 +3348,16 @@ void normal_mode_init() {
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch1, TYPE_GARAGE_DOOR);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch1, TYPE_GARAGE_DOOR);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_8), garage_door_stop, ch0, 0);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch1, TYPE_GARAGE_DOOR);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput_0, ch1, TYPE_GARAGE_DOOR);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput_1, ch1, TYPE_GARAGE_DOOR);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_8), garage_door_stop, ch0, 0);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_5), garage_door_sensor, ch0, GARAGE_DOOR_CLOSING);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_4), garage_door_sensor, ch0, GARAGE_DOOR_OPENING);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_3), garage_door_sensor, ch0, GARAGE_DOOR_CLOSED);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_2), garage_door_sensor, ch0, GARAGE_DOOR_OPENED);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), garage_door_obstruction, ch0, 0);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_7), garage_door_obstruction, ch0, 1);
         
         ch0->value.int_value = (uint8_t) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_INT8, 1);
         if (ch0->value.int_value > 1) {
@@ -3294,6 +3476,14 @@ void normal_mode_init() {
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), window_cover_diginput, ch1, WINDOW_COVER_STOP);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), window_cover_diginput, ch1, WINDOW_COVER_CLOSING + 3);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), window_cover_diginput, ch1, WINDOW_COVER_OPENING + 3);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch1, TYPE_WINDOW_COVER);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), window_cover_diginput, ch1, WINDOW_COVER_CLOSING);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), window_cover_diginput, ch1, WINDOW_COVER_OPENING);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_2), window_cover_diginput, ch1, WINDOW_COVER_STOP);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_3), window_cover_diginput, ch1, WINDOW_COVER_CLOSING + 3);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_4), window_cover_diginput, ch1, WINDOW_COVER_OPENING + 3);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_5), window_cover_obstruction, ch0, 0);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), window_cover_obstruction, ch0, 1);
         
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), window_cover_obstruction, ch0, 0)) {
             window_cover_obstruction(0, ch0, 0);
@@ -3393,7 +3583,7 @@ void normal_mode_init() {
     
     cJSON_Delete(json_config);
     
-    INFO("\n");
+    INFO("");
     
     // --- LIGHTBULBS INIT
     if (lightbulb_groups) {
@@ -3418,12 +3608,13 @@ void normal_mode_init() {
             
             lightbulb_group = lightbulb_group->next;
         }
+        
+        INFO("");
     }
     
     // --- HOMEKIT SET CONFIG
     serial.value = name.value;
     config.accessories = accessories;
-    config.password = "021-82-017";
     config.setupId = "JOSE";
     config.category = homekit_accessory_category_other;
     config.config_number = FIRMWARE_VERSION_OCTAL;
@@ -3432,6 +3623,8 @@ void normal_mode_init() {
     
     FREEHEAP();
 
+    INFO("");
+    
     wifi_config_init("HAA", NULL, run_homekit_server, custom_hostname);
 }
 
@@ -3439,7 +3632,7 @@ void user_init(void) {
 #ifdef HAA_DEBUG
     sdk_os_timer_setfn(&free_heap_timer, free_heap_watchdog, NULL);
     sdk_os_timer_arm(&free_heap_timer, 2000, 1);
-#endif
+#endif  // HAA_DEBUG
     
     sdk_wifi_station_disconnect();
     

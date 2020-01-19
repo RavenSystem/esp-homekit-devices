@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "1.3.1"
-#define FIRMWARE_VERSION_OCTAL              010301      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "1.4.0"
+#define FIRMWARE_VERSION_OCTAL              010400      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        0
@@ -72,6 +72,18 @@
 #define FIXED_BUTTONS_ARRAY_6               "f6"
 #define FIXED_BUTTONS_ARRAY_7               "f7"
 #define FIXED_BUTTONS_ARRAY_8               "f8"
+#define PINGS_ARRAY                         "l"
+#define FIXED_PINGS_ARRAY_0                 "p0"
+#define FIXED_PINGS_ARRAY_1                 "p1"
+#define FIXED_PINGS_ARRAY_2                 "p2"
+#define FIXED_PINGS_ARRAY_3                 "p3"
+#define FIXED_PINGS_ARRAY_4                 "p4"
+#define FIXED_PINGS_ARRAY_5                 "p5"
+#define FIXED_PINGS_ARRAY_6                 "p6"
+#define FIXED_PINGS_ARRAY_7                 "p7"
+#define FIXED_PINGS_ARRAY_8                 "p8"
+#define PING_HOST                           "h"
+#define PING_RESPONSE_TYPE                  "r"
 #define BUTTON_PRESS_TYPE                   "t"
 #define PULLUP_RESISTOR                     "p"
 #define VALUE                               "v"
