@@ -1,0 +1,4 @@
+# vim:ft=automake
+# All paths should be given relative to the root
+
+EXTRA_DIST+= examples/benchmark/tls-bench.c
