@@ -32,6 +32,7 @@ typedef struct {
     char *setupId;
     
     bool insecure;
+    bool log_output;
 
     // Callback for "POST /resource" to get snapshot image from camera
     void (*on_resource)(const char *body, size_t body_size);

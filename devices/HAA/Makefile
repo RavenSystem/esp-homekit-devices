@@ -1,6 +1,7 @@
 PROGRAM = main
 
 EXTRA_COMPONENTS = \
+	$(abspath setup_mode) \
     extras/onewire \
     extras/ds18b20 \
     extras/multipwm \
@@ -10,10 +11,10 @@ EXTRA_COMPONENTS = \
     $(abspath ../../external_libs/wolfssl) \
     $(abspath ../../external_libs/cJSON) \
     $(abspath ../../external_libs/homekit) \
-    $(abspath ../../external_libs/wifi_config_haa) \
     $(abspath ../../libs/adv_button) \
 	$(abspath ../../libs/new_dht) \
 	$(abspath ../../libs/ping)
+	
 
 FLASH_SIZE = 8
 FLASH_MODE = dout

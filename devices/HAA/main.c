@@ -40,7 +40,6 @@
 
 #include <homekit/homekit.h>
 #include <homekit/characteristics.h>
-#include <wifi_config.h>
 #include <adv_button.h>
 #include <ping.h>
 
@@ -51,6 +50,8 @@
 
 #include <cJSON.h>
 
+#include "setup_mode/include/wifi_config.h"
+#include "../common/ir_code.h"
 #include "header.h"
 #include "types.h"
 
@@ -61,7 +62,7 @@ void free_heap_watchdog() {
     uint32_t new_free_heap = xPortGetFreeHeapSize();
     if (new_free_heap != free_heap) {
         free_heap = new_free_heap;
-        INFO("Free Heap: %d", free_heap);
+        INFO(log_output, "Free Heap: %d", free_heap);
     }
 }
 #endif  // HAA_DEBUG
@@ -77,6 +78,12 @@ bool used_gpio[17];
 bool led_inverted = true;
 bool enable_homekit_server = true;
 bool allow_insecure = false;
+bool log_output = false;
+
+bool ir_tx_is_running = false;
+uint8_t ir_tx_freq = 38;
+uint8_t ir_tx_gpio = 255;
+char *ir_protocol = NULL;
 
 bool setpwm_is_running = false;
 bool setpwm_bool_semaphore = true;
@@ -153,26 +160,26 @@ void led_blink(const int blinks) {
 void wifi_watchdog() {
     if (wifi_status == WIFI_STATUS_DISCONNECTED) {
         wifi_status = WIFI_STATUS_CONNECTING;
-        INFO("WiFi connecting...");
+        INFO(log_output, "WiFi connecting...");
         sdk_wifi_station_connect();
         sdk_wifi_station_set_auto_connect(true);
         
     } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         if (wifi_status == WIFI_STATUS_CONNECTING) {
             wifi_status = WIFI_STATUS_PRECONNECTED;
-            INFO("WiFi connected");
+            INFO(log_output, "WiFi connected");
             homekit_mdns_announce();
             
         } else if (wifi_status == WIFI_STATUS_PRECONNECTED) {
             wifi_status = WIFI_STATUS_CONNECTED;
-            INFO("mDNS reannounced");
+            INFO(log_output, "mDNS reannounced");
             homekit_mdns_announce();
         }
         
     } else {
         sdk_wifi_station_disconnect();
         led_blink(8);
-        ERROR("WiFi disconnected");
+        ERROR(log_output, "WiFi disconnected");
 
         wifi_status = WIFI_STATUS_DISCONNECTED;
     }
@@ -241,7 +248,7 @@ void ping_task() {
                 if (ping_result && !ping_input->last_response) {
                     ping_input->last_response = true;
                     ping_input->fails = 0;
-                    INFO("Ping %s", ping_input->host);
+                    INFO(log_output, "Ping %s", ping_input->host);
                     ping_input_run_callback_fn(ping_input->callback_1);
 
                 } else if (!ping_result && ping_input->last_response) {
@@ -249,7 +256,7 @@ void ping_task() {
                     if (ping_input->fails == 3) {
                         ping_input->last_response = false;
                         ping_input->fails = 0;
-                        ERROR("Ping %s", ping_input->host);
+                        ERROR(log_output, "Ping %s", ping_input->host);
                         ping_input_run_callback_fn(ping_input->callback_0);
                     }
                     
@@ -277,13 +284,13 @@ void reboot_task() {
 }
 
 void setup_mode_call(const uint8_t gpio, void *args, const uint8_t param) {
-    INFO("Setup mode call");
+    INFO(log_output, "Setup mode call");
     
     if (setup_mode_time == 0 || xTaskGetTickCountFromISR() < setup_mode_time * 1000 / portTICK_PERIOD_MS) {
         sysparam_set_int8("setup", 1);
-        xTaskCreate(reboot_task, "reboot_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+        xTaskCreate(reboot_task, "reboot_task", configMINIMAL_STACK_SIZE * 2, NULL, 1, NULL);
     } else {
-        ERROR("Not allowed after %i secs since boot", setup_mode_time);
+        ERROR(log_output, "Not allowed after %i secs since boot", setup_mode_time);
     }
 }
 
@@ -305,7 +312,7 @@ void setup_mode_toggle() {
 void exit_emergency_setup_mode_task() {
     vTaskDelay(MS_TO_TICK(EXIT_EMERGENCY_SETUP_MODE_TIME));
     
-    INFO("Disarming Emergency Setup Mode");
+    INFO(log_output, "Disarming Emergency Setup Mode");
     sysparam_set_int8("setup", 0);
 
     vTaskDelete(NULL);
@@ -313,7 +320,7 @@ void exit_emergency_setup_mode_task() {
 
 // -----
 void save_states() {
-    INFO("Saving states");
+    INFO(log_output, "Saving states");
     last_state_t *last_state = last_states;
     sysparam_status_t status;
     
@@ -337,7 +344,7 @@ void save_states() {
         }
         
         if (status != SYSPARAM_OK) {
-            ERROR("Flash saving states");
+            ERROR(log_output, "Flash saving states");
         }
         
         last_state = last_state->next;
@@ -382,7 +389,7 @@ void hkc_group_notify(homekit_characteristic_t *ch) {
 }
 
 void hkc_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
-    INFO("Setter");
+    INFO(log_output, "Setter");
     ch->value = value;
     hkc_group_notify(ch);
     
@@ -404,7 +411,7 @@ void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         if (ch->value.bool_value != value.bool_value) {
             led_blink(1);
-            INFO("Setter ON");
+            INFO(log_output, "Setter ON");
             
             ch->value = value;
             
@@ -459,7 +466,7 @@ void hkc_lock_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            INFO("Setter LOCK");
+            INFO(log_output, "Setter LOCK");
             
             ch->value = value;
             ch_group->ch0->value = value;
@@ -493,7 +500,7 @@ void button_event(const uint8_t gpio, void *args, const uint8_t event_type) {
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_child || ch_group->ch_child->value.bool_value) {
         led_blink(event_type + 1);
-        INFO("Setter EVENT %i", event_type);
+        INFO(log_output, "Setter EVENT %i", event_type);
         
         homekit_characteristic_notify(ch, HOMEKIT_UINT8(event_type));
         
@@ -513,7 +520,7 @@ void sensor_1(const uint8_t gpio, void *args, const uint8_t type) {
         (type == TYPE_SENSOR_BOOL &&
         ch->value.bool_value == false)) {
         led_blink(1);
-        INFO("Sensor ON");
+        INFO(log_output, "Sensor ON");
         
         if (type == TYPE_SENSOR) {
             ch->value = HOMEKIT_UINT8(1);
@@ -547,7 +554,7 @@ void sensor_0(const uint8_t gpio, void *args, const uint8_t type) {
         (type == TYPE_SENSOR_BOOL &&
         ch->value.bool_value == true)) {
         led_blink(1);
-        INFO("Sensor OFF");
+        INFO(log_output, "Sensor OFF");
         
         if (type == TYPE_SENSOR) {
             ch->value = HOMEKIT_UINT8(0);
@@ -568,7 +575,7 @@ void hkc_valve_setter(homekit_characteristic_t *ch, const homekit_value_t value)
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            INFO("Setter VALVE");
+            INFO(log_output, "Setter VALVE");
             
             ch->value = value;
             ch_group->ch1->value = value;
@@ -623,7 +630,7 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         led_blink(1);
-        INFO("Setter TH");
+        INFO(log_output, "Setter TH");
         
         ch->value = value;
         
@@ -895,10 +902,10 @@ void temperature_timer_worker(void *args) {
             }
         }
         
-        INFO("TEMP %g, HUM %g", temperature_value, humidity_value);
+        INFO(log_output, "TEMP %g, HUM %g", temperature_value, humidity_value);
     } else {
         led_blink(5);
-        ERROR("Sensor");
+        ERROR(log_output, "Sensor");
         
         if (ch_group->ch5) {
             ch_group->ch3->value = HOMEKIT_UINT8(THERMOSTAT_MODE_OFF);
@@ -1015,12 +1022,12 @@ void rgbw_set_timer_worker() {
                 }
             }
             
-            //INFO("RGBW -> %i, %i, %i, %i", multipwm_duty[lightbulb_group->pwm_r], multipwm_duty[lightbulb_group->pwm_g], multipwm_duty[lightbulb_group->pwm_g], multipwm_duty[lightbulb_group->pwm_w]);
+            //INFO(log_output, "RGBW -> %i, %i, %i, %i", multipwm_duty[lightbulb_group->pwm_r], multipwm_duty[lightbulb_group->pwm_g], multipwm_duty[lightbulb_group->pwm_g], multipwm_duty[lightbulb_group->pwm_w]);
 
             if (channels_to_set == 0) {
                 setpwm_is_running = false;
                 sdk_os_timer_disarm(pwm_timer);
-                INFO("Color fixed");
+                INFO(log_output, "Color fixed");
             }
             
             lightbulb_group = lightbulb_group->next;
@@ -1030,7 +1037,7 @@ void rgbw_set_timer_worker() {
 
         setpwm_bool_semaphore = false;
     } else {
-        ERROR("MISSED Color set");
+        ERROR(log_output, "MISSED Color set");
     }
 }
 
@@ -1085,7 +1092,7 @@ void hkc_rgbw_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
         }
         
         led_blink(1);
-        INFO("Target RGBW = %i, %i, %i, %i", lightbulb_group->target_r, lightbulb_group->target_g, lightbulb_group->target_b, lightbulb_group->target_w);
+        INFO(log_output, "Target RGBW = %i, %i, %i, %i", lightbulb_group->target_r, lightbulb_group->target_g, lightbulb_group->target_b, lightbulb_group->target_w);
         
         if (!setpwm_is_running) {
             setpwm_is_running = true;
@@ -1127,7 +1134,7 @@ void rgbw_brightness(const uint8_t gpio, void *args, const uint8_t type) {
 }
 
 void autodimmer_task(void *args) {
-    INFO("AUTODimmer started");
+    INFO(log_output, "AUTODimmer started");
     
     homekit_characteristic_t *ch = args;
     ch_group_t *ch_group = ch_group_find(ch);
@@ -1154,7 +1161,7 @@ void autodimmer_task(void *args) {
         }
     }
     
-    INFO("AUTODimmer stopped");
+    INFO(log_output, "AUTODimmer stopped");
     
     vTaskDelete(NULL);
 }
@@ -1193,7 +1200,7 @@ void garage_door_stop(const uint8_t gpio, void *args, const uint8_t type) {
     
     if (ch0->value.int_value == GARAGE_DOOR_OPENING || ch0->value.int_value == GARAGE_DOOR_CLOSING) {
         led_blink(1);
-        INFO("GD stop");
+        INFO(log_output, "GD stop");
         
         ch0->value.int_value = GARAGE_DOOR_STOPPED;
         
@@ -1211,7 +1218,7 @@ void garage_door_obstruction(const uint8_t gpio, void *args, const uint8_t type)
     ch_group_t *ch_group = ch_group_find(ch);
     
     led_blink(1);
-    INFO("GD obstr: %i", type);
+    INFO(log_output, "GD obstr: %i", type);
     
     ch_group->ch2->value.bool_value = (bool) type;
     
@@ -1226,7 +1233,7 @@ void garage_door_sensor(const uint8_t gpio, void *args, const uint8_t type) {
     ch_group_t *ch_group = ch_group_find(ch);
     
     led_blink(1);
-    INFO("GD sensor: %i", type);
+    INFO(log_output, "GD sensor: %i", type);
     
     ch->value.int_value = type;
     
@@ -1266,7 +1273,7 @@ void hkc_garage_door_setter(homekit_characteristic_t *ch1, const homekit_value_t
 
         if (value.int_value != current_door_state) {
             led_blink(1);
-            INFO("Setter GD");
+            INFO(log_output, "Setter GD");
             
             ch1->value = value;
 
@@ -1347,7 +1354,7 @@ void window_cover_stop(homekit_characteristic_t *ch) {
     ch_group_t *ch_group = ch_group_find(ch);
     
     led_blink(1);
-    INFO("WC Stopped at %f, real %f", WINDOW_COVER_POSITION, WINDOW_COVER_REAL_POSITION);
+    INFO(log_output, "WC Stopped at %f, real %f", WINDOW_COVER_POSITION, WINDOW_COVER_REAL_POSITION);
     
     sdk_os_timer_disarm(ch_group->timer);
     normalize_position(ch);
@@ -1379,7 +1386,7 @@ void window_cover_obstruction(const uint8_t gpio, void *args, const uint8_t type
     ch_group_t *ch_group = ch_group_find(ch);
     
     led_blink(1);
-    INFO("WC obstr: %i", type);
+    INFO(log_output, "WC obstr: %i", type);
     
     ch_group->ch3->value.bool_value = (bool) type;
     
@@ -1393,7 +1400,7 @@ void hkc_window_cover_setter(homekit_characteristic_t *ch1, const homekit_value_
     ch_group_t *ch_group = ch_group_find(ch1);
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         led_blink(1);
-        INFO("Setter WC: Current: %i, Target: %i", WINDOW_COVER_CH_CURRENT_POSITION->value.int_value, value.int_value);
+        INFO(log_output, "Setter WC: Current: %i, Target: %i", WINDOW_COVER_CH_CURRENT_POSITION->value.int_value, value.int_value);
         
         ch1->value = value;
 
@@ -1456,7 +1463,7 @@ void window_cover_timer_worker(void *args) {
             WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = 100;
         } else {
             if ((WINDOW_COVER_CH_CURRENT_POSITION->value.int_value / 2) != (uint8_t) (WINDOW_COVER_POSITION / 2)) {
-                INFO("WC Moving at %f, real %f", WINDOW_COVER_POSITION, WINDOW_COVER_REAL_POSITION);
+                INFO(log_output, "WC Moving at %f, real %f", WINDOW_COVER_POSITION, WINDOW_COVER_REAL_POSITION);
                 WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_POSITION;
                 homekit_characteristic_notify(WINDOW_COVER_CH_CURRENT_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
             } else {
@@ -1694,6 +1701,207 @@ void hkc_autooff_setter_task(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
+// --- IR Send task
+void ir_tx_task(void *pvParameters) {
+    cJSON *json_ir_actions = pvParameters;
+    for(uint8_t l=0; l<cJSON_GetArraySize(json_ir_actions); l++) {
+        cJSON *json_ir_action = cJSON_GetArrayItem(json_ir_actions, l);
+        
+        uint16_t *ir_code = NULL;
+        uint16_t ir_code_len = 0;
+        
+        uint8_t ir_repeats = 1;
+        if (cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_REPEATS) != NULL) {
+            ir_repeats = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_REPEATS)->valuedouble;
+        }
+        
+        uint8_t freq = ir_tx_freq;
+        if (cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_FREQ) != NULL) {
+            freq = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_FREQ)->valuedouble;
+        }
+        
+        freq = 1000 / freq / 2;
+        
+        // Decoding protocol based IR code
+        if (cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_PROTOCOL_CODE) != NULL) {
+            char *prot = NULL;
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_PROTOCOL) != NULL) {
+                prot = cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_PROTOCOL)->valuestring;
+            } else {
+                prot = ir_protocol;
+            }
+            
+            // Decoding protocol based IR code length
+            char *json_ir_code = cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_PROTOCOL_CODE)->valuestring;
+            const uint16_t json_ir_code_len = strlen(json_ir_code);
+            ir_code_len = 3;
+            
+            for (uint16_t i=0; i<json_ir_code_len; i++) {
+                char *found = strchr(baseUC_dic, json_ir_code[i]);
+                if (found) {
+                    ir_code_len += (1 + found - baseUC_dic) << 1;
+                } else {
+                    found = strchr(baseLC_dic, json_ir_code[i]);
+                    ir_code_len += (1 + found - baseLC_dic) << 1;
+                }
+            }
+            
+            ir_code = malloc(sizeof(uint16_t) * ir_code_len);
+            
+            INFO(log_output, "IR Code Len: %i\nIR Protocol: %s", ir_code_len, prot);
+            
+            uint16_t bit0_mark = 0, bit0_space = 0, bit1_mark = 0, bit1_space = 0, packet;
+            uint8_t index;
+            for (uint8_t i=0; i<IR_ACTION_PROTOCOL_LEN / 2; i++) {
+                index = i * 2;
+                char *found = strchr(baseRaw_dic, prot[index]);
+                packet = (found - baseRaw_dic) * IR_CODE_LEN * IR_CODE_SCALE;
+                
+                found = strchr(baseRaw_dic, prot[index + 1]);
+                packet += (found - baseRaw_dic) * IR_CODE_SCALE;
+
+                if (log_output)
+                    printf("%s%5d ", i & 1 ? "-" : "+", packet);
+                
+                switch (i) {
+                    case IR_CODE_HEADER_MARK_POS:
+                        ir_code[0] = packet;
+                        break;
+                        
+                    case IR_CODE_HEADER_SPACE_POS:
+                        ir_code[1] = packet;
+                        break;
+                        
+                    case IR_CODE_BIT0_MARK_POS:
+                        bit0_mark = packet;
+                        break;
+                        
+                    case IR_CODE_BIT0_SPACE_POS:
+                        bit0_space = packet;
+                        break;
+                        
+                    case IR_CODE_BIT1_MARK_POS:
+                        bit1_mark = packet;
+                        break;
+                        
+                    case IR_CODE_BIT1_SPACE_POS:
+                        bit1_space = packet;
+                        break;
+                        
+                    case IR_CODE_FOOTER_MARK_POS:
+                        ir_code[ir_code_len - 1] = packet;
+                        break;
+                        
+                    default:
+                        // Do nothing
+                        break;
+                }
+            }
+            
+            // Decoding BIT code part
+            uint16_t ir_code_index = 2;
+            for (uint16_t i=0; i<json_ir_code_len; i++) {
+                char *found = strchr(baseUC_dic, json_ir_code[i]);
+                if (found) {
+                    for (uint16_t j=0; j<1 + found - baseUC_dic; j++) {
+                        ir_code[ir_code_index] = bit1_mark;
+                        ir_code_index++;
+                        ir_code[ir_code_index] = bit1_space;
+                        ir_code_index++;
+                    }
+                } else {
+                    found = strchr(baseLC_dic, json_ir_code[i]);
+                    for (uint16_t j=0; j<1 + found - baseLC_dic; j++) {
+                        ir_code[ir_code_index] = bit0_mark;
+                        ir_code_index++;
+                        ir_code[ir_code_index] = bit0_space;
+                        ir_code_index++;
+                    }
+                }
+            }
+            
+            if (log_output) {
+                printf("\nIR code: %s\n", json_ir_code);
+                for (uint16_t i=0; i<ir_code_len; i++) {
+                    printf("%s%5d ", i & 1 ? "-" : "+", ir_code[i]);
+                    if (i % 16 == 15) {
+                        printf("\n");
+                    }
+
+                }
+                printf("\n");
+            }
+            
+        } else {    // IR_ACTION_RAW_CODE
+            char *json_ir_code = cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_RAW_CODE)->valuestring;
+
+            const uint16_t json_ir_code_len = strlen(json_ir_code);
+            ir_code_len = json_ir_code_len >> 1;
+            
+            ir_code = malloc(sizeof(uint16_t) * ir_code_len);
+            
+            INFO(log_output, "IR packet (%i)", ir_code_len);
+
+            uint16_t index, packet;
+            for (uint16_t i=0; i<ir_code_len; i++) {
+                index = i << 1;
+                char *found = strchr(baseRaw_dic, json_ir_code[index]);
+                packet = (found - baseRaw_dic) * IR_CODE_LEN * IR_CODE_SCALE;
+                
+                found = strchr(baseRaw_dic, json_ir_code[index + 1]);
+                packet += (found - baseRaw_dic) * IR_CODE_SCALE;
+
+                ir_code[i] = packet;
+
+                if (log_output) {
+                    printf("%s%5d ", i & 1 ? "-" : "+", packet);
+                    if (i % 16 == 15) {
+                        printf("\n");
+                    }
+                }
+            }
+            
+            INFO(log_output, "");
+        }
+        
+        // IR TRANSMITTER
+        uint32_t start;
+        for (uint8_t r=0; r<ir_repeats; r++) {
+            for (uint16_t i=0; i<ir_code_len; i++) {
+                if (ir_code[i] > 0) {
+                    if (i & 1) {    // Space
+                        gpio_write(ir_tx_gpio, false);
+                        sdk_os_delay_us(ir_code[i]);
+                    } else {        // Mark
+                        start = sdk_system_get_time();
+                        while ((sdk_system_get_time() - start) < ir_code[i]) {
+                            gpio_write(ir_tx_gpio, true);
+                            sdk_os_delay_us(freq);
+                            gpio_write(ir_tx_gpio, false);
+                            sdk_os_delay_us(freq);
+                        }
+                    }
+                }
+            }
+            
+            gpio_write(ir_tx_gpio, false);
+            
+            INFO(log_output, "IR %i sent", r);
+            
+            vTaskDelay(MS_TO_TICK(100));
+        }
+        
+        if (ir_code) {
+            free(ir_code);
+        }
+    }
+    
+    ir_tx_is_running = false;
+            
+    vTaskDelete(NULL);
+}
+
 // --- ACTIONS
 void autoswitch_task(void *pvParameters) {
     autoswitch_params_t *autoswitch_params = pvParameters;
@@ -1701,7 +1909,7 @@ void autoswitch_task(void *pvParameters) {
     vTaskDelay(MS_TO_TICK(autoswitch_params->time * 1000));
     
     gpio_write(autoswitch_params->gpio, autoswitch_params->value);
-    INFO("AutoSw digO GPIO %i -> %i", autoswitch_params->gpio, autoswitch_params->value);
+    INFO(log_output, "AutoSw digO GPIO %i -> %i", autoswitch_params->gpio, autoswitch_params->value);
     
     free(autoswitch_params);
     vTaskDelete(NULL);
@@ -1737,7 +1945,7 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
             }
 
             gpio_write(gpio, value);
-            INFO("DigO GPIO %i -> %i", gpio, value);
+            INFO(log_output, "DigO GPIO %i -> %i", gpio, value);
             
             if (cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME) != NULL) {
                 const double autoswitch_time = cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME)->valuedouble;
@@ -1799,7 +2007,7 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                             break;
                     }
                     
-                    INFO("Kill Sw Manager %i -> %.2f", accessory, value);
+                    INFO(log_output, "Kill Sw Manager %i -> %.2f", accessory, value);
                     
                 } else {
                     switch (ch_group->acc_type) {
@@ -1874,10 +2082,10 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                             break;
                     }
                     
-                    INFO("Acc Manager %i -> %.2f", accessory, value);
+                    INFO(log_output, "Acc Manager %i -> %.2f", accessory, value);
                 }
             } else {
-                ERROR("No acc found: %i", accessory);
+                ERROR(log_output, "No acc found: %i", accessory);
             }
         }
         
@@ -1897,7 +2105,7 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                 port_n = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_PORT)->valuedouble;
             }
             
-            INFO("HTTP Action http://%s:%i/%s", host, port_n, url);
+            INFO(log_output, "HTTP Action http://%s:%i/%s", host, port_n, url);
             
             const struct addrinfo hints = {
                 .ai_family = AF_UNSPEC,
@@ -1951,10 +2159,10 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                                  content);
                         
                         if (write(s, req, strlen(req)) >= 0) {
-                            INFO("%s", req);
+                            INFO(log_output, "%s", req);
                             
                         } else {
-                            ERROR("HTTP");
+                            ERROR(log_output, "HTTP");
                         }
                         
                         if (method_req != NULL) {
@@ -1963,15 +2171,15 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                         
                         free(req);
                     } else {
-                        ERROR("Connection");
+                        ERROR(log_output, "Connection");
                     }
                 } else {
-                    ERROR("Socket");
+                    ERROR(log_output, "Socket");
                 }
                 
                 close(s);
             } else {
-                ERROR("DNS");
+                ERROR(log_output, "DNS");
             }
             
             freeaddrinfo(res);
@@ -1984,7 +2192,7 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
             
             const uint8_t system_action = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_system_action, SYSTEM_ACTION)->valuedouble;
 
-            INFO("Sys Action %i", system_action);
+            INFO(log_output, "Sys Action %i", system_action);
             
             char *ota = NULL;
             
@@ -1996,14 +2204,21 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                 case SYSTEM_ACTION_OTA_UPDATE:
                     if (sysparam_get_string("ota_repo", &ota) == SYSPARAM_OK) {
                         rboot_set_temp_rom(1);
-                        xTaskCreate(reboot_task, "reboot_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+                        xTaskCreate(reboot_task, "reboot_task", configMINIMAL_STACK_SIZE * 2, NULL, 1, NULL);
                     }
                     break;
                     
                 default:    // case SYSTEM_ACTION_REBOOT:
-                    xTaskCreate(reboot_task, "reboot_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+                    xTaskCreate(reboot_task, "reboot_task", configMINIMAL_STACK_SIZE * 2, NULL, 1, NULL);
                     break;
             }
+        }
+        
+        // IR outputs
+        cJSON *json_ir_actions = cJSON_GetObjectItemCaseSensitive(actions, IR_ACTIONS_ARRAY);
+        if (json_ir_actions != NULL && !ir_tx_is_running) {
+            ir_tx_is_running = true;
+            xTaskCreate(ir_tx_task, "ir_tx_task", configMINIMAL_STACK_SIZE * 4, json_ir_actions, 12, NULL);
         }
         
     }
@@ -2012,13 +2227,13 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
 // --- IDENTIFY
 void identify(homekit_value_t _value) {
     led_blink(6);
-    INFO("Identifying");
+    INFO(log_output, "ID");
 }
 
 // ---------
 
 void delayed_sensor_starter_task(void *args) {
-    INFO("Starting delayed sensor");
+    INFO(log_output, "Starting delayed sensor");
     homekit_characteristic_t *ch = args;
     ch_group_t *ch_group = ch_group_find(ch);
     
@@ -2052,7 +2267,7 @@ homekit_server_config_t config;
 
 void run_homekit_server() {
     if (enable_homekit_server) {
-        INFO("Start HK Server");
+        INFO(log_output, "Start HK Server");
 
         homekit_server_init(&config);
     }
@@ -2068,9 +2283,13 @@ void run_homekit_server() {
 }
 
 void printf_header() {
-    printf("\n\n\n");
-    INFO("Home Accessory Architect v%s", FIRMWARE_VERSION);
-    INFO("Developed by José Antonio Jiménez Campos (@RavenSystem)\n");
+    printf("\n");
+    printf("Home Accessory Architect v%s\n", FIRMWARE_VERSION);
+    printf("Developed by José Antonio Jiménez Campos (@RavenSystem)\n\n");
+    
+#ifdef HAA_DEBUG
+    INFO(log_output, "HAA DEBUG ENABLED\n");
+#endif  // HAA_DEBUG
 }
 
 void normal_mode_init() {
@@ -2084,9 +2303,9 @@ void normal_mode_init() {
     
     if (total_accessories == 0) {
         uart_set_baud(0, 115200);
-        ERROR("Invalid JSON");
+        printf("! Invalid JSON\n");
         sysparam_set_int8("setup", 2);
-        xTaskCreate(reboot_task, "reboot_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
+        xTaskCreate(reboot_task, "reboot_task", configMINIMAL_STACK_SIZE * 2, NULL, 1, NULL);
         
         free(txt_config);
         
@@ -2129,7 +2348,7 @@ void normal_mode_init() {
             }
             adv_button_register_callback_fn(gpio, callback, button_type, (void *) hk_ch, param);
             
-            INFO("Digital input GPIO: %i, type: %i, inv: %i", gpio, button_type, inverted);
+            INFO(log_output, "Digital input GPIO: %i, type: %i, inv: %i", gpio, button_type, inverted);
              
             if (gpio_read(gpio) == button_type) {
                 run_at_launch = true;
@@ -2178,14 +2397,14 @@ void normal_mode_init() {
                 ping_input->callback_0 = ping_input_callback_fn;
             }
             
-            INFO("Ping input: %s, res: %i", ping_input->host, response_type);
+            INFO(log_output, "Ping input: %s, res: %i", ping_input->host, response_type);
         }
     }
     
     // Initial state function
     float set_initial_state(const uint8_t accessory, const uint8_t ch_number, cJSON *json_context, homekit_characteristic_t *ch, const uint8_t ch_type, const float default_value) {
         float state = default_value;
-        INFO("Set init state");
+        INFO(log_output, "Set init state");
         if (cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
             const uint8_t initial_state = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE)->valuedouble;
             if (initial_state < INIT_STATE_LAST) {
@@ -2248,10 +2467,10 @@ void normal_mode_init() {
                 }
                 
                 if (status != SYSPARAM_OK) {
-                    ERROR("No saved state found");
+                    ERROR(log_output, "No saved state found");
                 }
                 
-                INFO("Init state = %.2f", state);
+                INFO(log_output, "Init state = %.2f", state);
                 
             }
         }
@@ -2264,11 +2483,15 @@ void normal_mode_init() {
     // Log output type
     if (cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT) != NULL &&
         cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT)->valuedouble == 1) {
+        log_output = true;
         uart_set_baud(0, 115200);
         printf_header();
-        INFO("NORMAL MODE\n");
-        INFO("JSON: %s\n", txt_config);
+        INFO(log_output, "NORMAL MODE\n\nJSON: %s\n", txt_config);
     }
+    
+#ifdef HAA_DEBUG
+    log_output = true;
+#endif  // HAA_DEBUG
 
     free(txt_config);
     
@@ -2278,7 +2501,7 @@ void normal_mode_init() {
         const uint8_t custom_hostname_len = strlen(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring) + 1;
         custom_hostname = malloc(custom_hostname_len);
         snprintf(custom_hostname, custom_hostname_len, "%s", cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring);
-        INFO("Hostname: %s", custom_hostname);
+        INFO(log_output, "Hostname: %s", custom_hostname);
     }
     
     // Status LED
@@ -2292,45 +2515,67 @@ void normal_mode_init() {
         gpio_enable(led_gpio, GPIO_OUTPUT);
         used_gpio[led_gpio] = true;
         gpio_write(led_gpio, false ^ led_inverted);
-        INFO("Status LED GPIO: %i, inv: %i", led_gpio, led_inverted);
+        INFO(log_output, "Status LED GPIO: %i, inv: %i", led_gpio, led_inverted);
+    }
+    
+    // IR TX Frequency
+    if (cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_FREQ) != NULL) {
+        ir_tx_freq = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_FREQ)->valuedouble;
+        INFO(log_output, "IR TX Freq: %i", ir_tx_freq);
+    }
+    
+    // IR TX GPIO
+    if (cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO) != NULL) {
+        ir_tx_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO)->valuedouble;
+        gpio_enable(ir_tx_gpio, GPIO_OUTPUT);
+        used_gpio[ir_tx_gpio] = true;
+        gpio_write(ir_tx_gpio, 0);
+        INFO(log_output, "IR TX GPIO: %i", ir_tx_gpio);
+    }
+    
+    // IR Protocol
+    if (cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_PROTOCOL) != NULL) {
+        ir_protocol = malloc(IR_ACTION_PROTOCOL_LEN + 1);
+        snprintf(ir_protocol, IR_ACTION_PROTOCOL_LEN + 1, "%s", cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_PROTOCOL)->valuestring);
+        INFO(log_output, "IR Protocol: %s", ir_protocol);
     }
     
     // Button filter
     if (cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER) != NULL) {
         uint8_t button_filter_value = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER)->valuedouble;
         adv_button_set_evaluate_delay(button_filter_value);
-        INFO("Button filter: %i", button_filter_value);
+        INFO(log_output, "Button filter: %i", button_filter_value);
     }
     
     // PWM Frequency
     if (cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ) != NULL) {
         pwm_freq = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ)->valuedouble;
-        INFO("PWM Frequency: %i", pwm_freq);
+        INFO(log_output, "PWM Freq: %i", pwm_freq);
     }
     
     // Allowed Setup Mode Time
     if (cJSON_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME) != NULL) {
         setup_mode_time = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME)->valuedouble;
-        INFO("Setup mode time: %i secs", setup_mode_time);
+        INFO(log_output, "Setup mode time: %i secs", setup_mode_time);
     }
     
     // Run HomeKit Server
     if (cJSON_GetObjectItemCaseSensitive(json_config, ENABLE_HOMEKIT_SERVER) != NULL) {
         enable_homekit_server = (bool) cJSON_GetObjectItemCaseSensitive(json_config, ENABLE_HOMEKIT_SERVER)->valuedouble;
-        INFO("Run HomeKit Server: %i", enable_homekit_server);
+        INFO(log_output, "Run HomeKit Server: %i", enable_homekit_server);
     }
     
     // Allow unsecure connections
     if (cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS) != NULL) {
         bool allow_insecure = (bool) cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS)->valuedouble;
         config.insecure = allow_insecure;
-        INFO("Unsecure connections: %i", allow_insecure);
+        INFO(log_output, "Unsecure connections: %i", allow_insecure);
     }
     
     // Times to toggle quickly an accessory status to enter setup mode
     if (cJSON_GetObjectItemCaseSensitive(json_config, SETUP_MODE_ACTIVATE_COUNT) != NULL) {
         setup_mode_toggle_counter_max = (int8_t) cJSON_GetObjectItemCaseSensitive(json_config, SETUP_MODE_ACTIVATE_COUNT)->valuedouble;
-        INFO("Toggles to enter setup mode: %i", setup_mode_toggle_counter_max);
+        INFO(log_output, "Toggles to enter setup mode: %i", setup_mode_toggle_counter_max);
     }
     
     if (setup_mode_toggle_counter_max > 0) {
@@ -2432,19 +2677,19 @@ void normal_mode_init() {
             const uint8_t kill_switch = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, KILL_SWITCH)->valuedouble;
             
             if (kill_switch == 1) {
-                INFO("Secure Switch");
+                INFO(log_output, "Secure Switch");
                 ch_group->ch_sec = new_kill_switch(accessory);
                 return accessory + 1;
                 
             } else if (kill_switch == 2) {
-                INFO("Kids Switch");
+                INFO(log_output, "Kids Switch");
                 ch_group->ch_child = new_kill_switch(accessory);
                 return accessory + 1;
                 
             } else if (kill_switch == 3) {
-                INFO("Secure Switch");
+                INFO(log_output, "Secure Switch");
                 ch_group->ch_sec = new_kill_switch(accessory);
-                INFO("Kids Switch");
+                INFO(log_output, "Kids Switch");
                 ch_group->ch_child = new_kill_switch(accessory + 1);
                 return accessory + 2;
             }
@@ -3109,7 +3354,7 @@ void normal_mode_init() {
         new_accessory(accessory, 3);
         
         if (!lightbulb_groups) {
-            INFO("PWM Init");
+            INFO(log_output, "PWM Init");
             pwm_timer = malloc(sizeof(ETSTimer));
             memset(pwm_timer, 0, sizeof(*pwm_timer));
             sdk_os_timer_setfn(pwm_timer, rgbw_set_timer_worker, NULL);
@@ -3500,14 +3745,13 @@ void normal_mode_init() {
     
     // Accessory Builder
     if (bridge_needed) {
-        INFO("BRIDGE CREATED");
+        INFO(log_output, "BRIDGE CREATED");
         new_accessory(0, 2);
         acc_count++;
     }
     
     for(uint8_t i=0; i<total_accessories; i++) {
-        INFO("");
-        INFO("ACCESSORY %i", accessory_numerator);
+        INFO(log_output, "\nACCESSORY %i", accessory_numerator);
         
         uint8_t acc_type = ACC_TYPE_SWITCH;
         if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE) != NULL) {
@@ -3529,8 +3773,10 @@ void normal_mode_init() {
                         const uint8_t gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_relays, j), PIN_GPIO)->valuedouble;
                         if (!used_gpio[gpio]) {
                             gpio_enable(gpio, GPIO_OUTPUT);
+                            gpio_write(gpio, false);
+                            
                             used_gpio[gpio] = true;
-                            INFO("DigO GPIO: %i", gpio);
+                            INFO(log_output, "DigO GPIO: %i", gpio);
                         }
                     }
                 }
@@ -3538,7 +3784,7 @@ void normal_mode_init() {
         }
         
         // Creating HomeKit Accessory
-        INFO("Type: %i", acc_type);
+        INFO(log_output, "Type %i", acc_type);
         if (acc_type == ACC_TYPE_BUTTON) {
             acc_count = new_button_event(acc_count, json_accessory);
             
@@ -3571,6 +3817,9 @@ void normal_mode_init() {
             
         } else if (acc_type == ACC_TYPE_WINDOW_COVER) {
             acc_count = new_window_cover(acc_count, json_accessory);
+
+        } else if (acc_type == ACC_TYPE_LIGHT_SENSOR) {
+            //acc_count = new_analog_sensor(acc_count, json_accessory);
         
         } else {    // acc_type == ACC_TYPE_SWITCH || acc_type == ACC_TYPE_OUTLET
             acc_count = new_switch(acc_count, json_accessory, acc_type);
@@ -3583,11 +3832,11 @@ void normal_mode_init() {
     
     cJSON_Delete(json_config);
     
-    INFO("");
+    INFO(log_output, "");
     
     // --- LIGHTBULBS INIT
     if (lightbulb_groups) {
-        INFO("Init Lights");
+        INFO(log_output, "Init Lights");
         
         setpwm_bool_semaphore = false;
         
@@ -3609,7 +3858,7 @@ void normal_mode_init() {
             lightbulb_group = lightbulb_group->next;
         }
         
-        INFO("");
+        INFO(log_output, "");
     }
     
     // --- HOMEKIT SET CONFIG
@@ -3618,12 +3867,13 @@ void normal_mode_init() {
     config.setupId = "JOSE";
     config.category = homekit_accessory_category_other;
     config.config_number = FIRMWARE_VERSION_OCTAL;
+    config.log_output = log_output;
     
     setup_mode_toggle_counter = 0;
     
     FREEHEAP();
 
-    INFO("");
+    INFO(log_output, "");
     
     wifi_config_init("HAA", NULL, run_homekit_server, custom_hostname);
 }
@@ -3634,8 +3884,27 @@ void user_init(void) {
     sdk_os_timer_arm(&free_heap_timer, 2000, 1);
 #endif  // HAA_DEBUG
     
+    sdk_wifi_set_opmode(STATION_MODE);
     sdk_wifi_station_disconnect();
+
+    printf("\n\n\n\n");
     
+    // Sysparam starter
+    sysparam_status_t status;
+    status = sysparam_init(SYSPARAMSECTOR, 0);
+    if (status == SYSPARAM_NOTFOUND) {
+        status = sysparam_init(SYSPARAMOLDSECTOR, 0);
+        if (status == SYSPARAM_NOTFOUND) {
+            printf("Creating new sysparam\n");
+            sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
+            sysparam_init(SYSPARAMSECTOR, 0);
+        } else if (status == SYSPARAM_OK) {
+            printf("Old sysparam ready\n");
+        }
+    } else if (status == SYSPARAM_OK) {
+        printf("New sysparam ready\n");
+    }
+
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     
@@ -3650,7 +3919,7 @@ void user_init(void) {
     if (haa_setup > 0) {
         uart_set_baud(0, 115200);
         printf_header();
-        INFO("SETUP MODE");
+        printf("SETUP MODE\n");
         wifi_config_init("HAA", NULL, NULL, name.value.string_value);
         
     } else {

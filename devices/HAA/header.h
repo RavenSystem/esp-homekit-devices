@@ -20,8 +20,13 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "1.4.0"
-#define FIRMWARE_VERSION_OCTAL              010400      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "1.5.0"
+#define FIRMWARE_VERSION_OCTAL              010500      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+
+// Sysparam
+#define SYSPARAMOLDSECTOR                   0xF7000
+#define SYSPARAMSECTOR                      0xF3000
+#define SYSPARAMSIZE                        8
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        0
@@ -203,6 +208,21 @@
 #define DIGITAL_OUTPUTS_ARRAY               "r"
 #define SYSTEM_ACTIONS_ARRAY                "s"
 #define HTTP_ACTIONS_ARRAY                  "h"
+#define IR_ACTIONS_ARRAY                    "i"
+#define IR_ACTION_PROTOCOL                  "p"
+#define IR_ACTION_PROTOCOL_LEN              14
+#define IR_CODE_HEADER_MARK_POS             0
+#define IR_CODE_HEADER_SPACE_POS            1
+#define IR_CODE_BIT0_MARK_POS               2
+#define IR_CODE_BIT0_SPACE_POS              3
+#define IR_CODE_BIT1_MARK_POS               4
+#define IR_CODE_BIT1_SPACE_POS              5
+#define IR_CODE_FOOTER_MARK_POS             6
+#define IR_ACTION_PROTOCOL_CODE             "c"
+#define IR_ACTION_RAW_CODE                  "w"
+#define IR_ACTION_TX_GPIO                   "t"
+#define IR_ACTION_FREQ                      "x"
+#define IR_ACTION_REPEATS                   "r"
 #define SYSTEM_ACTION                       "a"
 #define HTTP_ACTION_HOST                    "h"
 #define HTTP_ACTION_PORT                    "p"
@@ -234,6 +254,8 @@
 #define ACC_TYPE_LIGHTBULB                  30
 #define ACC_TYPE_GARAGE_DOOR                40
 #define ACC_TYPE_WINDOW_COVER               45
+#define ACC_TYPE_LIGHT_SENSOR               50
+#define ACC_TYPE_TV                         60
 
 #define ACC_CREATION_DELAY                  30
 #define EXIT_EMERGENCY_SETUP_MODE_TIME      2200
@@ -251,9 +273,9 @@
 
 #define MS_TO_TICK(x)                       ((x) / portTICK_PERIOD_MS)
 
-#define DEBUG(message, ...)                 printf("%s: " message "\n", __func__, ##__VA_ARGS__);
-#define INFO(message, ...)                  printf(message "\n", ##__VA_ARGS__);
-#define ERROR(message, ...)                 printf("! " message "\n", ##__VA_ARGS__);
+#define DEBUG(cond, message, ...)           if (cond) printf("%s: " message "\n", __func__, ##__VA_ARGS__);
+#define INFO(cond, message, ...)            if (cond) printf(message "\n", ##__VA_ARGS__);
+#define ERROR(cond, message, ...)           if (cond) printf("! " message "\n", ##__VA_ARGS__);
 
 #define FREEHEAP()                          printf("Free Heap: %d\n", xPortGetFreeHeapSize())
 
