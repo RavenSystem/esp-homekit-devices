@@ -1,8 +1,8 @@
-PROGRAM = otaboot
+PROGRAM = haaboot
 
 ### select EITHER the top block OR the bottom block
 
-#PROGRAM = otamain
+#PROGRAM = main
 #LINKER_SCRIPTS = $(ROOT)ld/program1.ld
 
 #==================================================
@@ -15,7 +15,7 @@ PROGRAM = otaboot
 # note that the previous len is forgetting about the system settings area which
 # is 9 sectors for esp-open-rtos, and then it is ignored as well...
 #
-# also we need to change paramters.mk like this:
+# also we need to change parameters.mk like this:
 # LINKER_SCRIPTS += $(ROOT)ld/program.ld $(ROOT)ld/rom.ld
 # becomes:
 # LINKER_SCRIPTS ?= $(ROOT)ld/program.ld

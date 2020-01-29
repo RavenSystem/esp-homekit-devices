@@ -162,7 +162,7 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status)
 static void wifi_scan_task(void *arg)
 {
     INFO("Start WiFi scan");
-    while (true)
+    while (context != NULL)
     {
         sdk_wifi_station_scan(NULL, wifi_scan_done_cb);
         vTaskDelay(10000 / portTICK_PERIOD_MS);
@@ -262,8 +262,7 @@ static void wifi_config_server_on_settings_update(client_t *client) {
     static const char payload[] = "HTTP/1.1 204 \r\nContent-Type: text/html\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
     client_send(client, payload, sizeof(payload)-1);
 
-    sysparam_set_string("ota_repo", "RavenSystem/haa");
-    sysparam_set_string("ota_file", "main.bin");
+    sysparam_set_string("ota_repo", "1");
     
     sysparam_set_int8("setup", 0);
     
@@ -667,6 +666,7 @@ static void wifi_config_sta_connect_timeout_callback(void *arg) {
         
         if (context->on_wifi_ready) {
             http_stop();
+            vTaskDelay(500 / portTICK_PERIOD_MS);
             context->on_wifi_ready();
         }
         
