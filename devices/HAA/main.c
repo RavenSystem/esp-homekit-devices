@@ -515,58 +515,64 @@ void button_event(const uint8_t gpio, void *args, const uint8_t event_type) {
 void sensor_1(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
 
-    if ((type == TYPE_SENSOR &&
-        ch->value.int_value == 0) ||
-        (type == TYPE_SENSOR_BOOL &&
-        ch->value.bool_value == false)) {
-        led_blink(1);
-        INFO(log_output, "Sensor ON");
-        
-        if (type == TYPE_SENSOR) {
-            ch->value = HOMEKIT_UINT8(1);
-        } else {
-            ch->value = HOMEKIT_BOOL(true);
-        }
-        
-        homekit_characteristic_notify(ch, ch->value);
-        
-        cJSON *json_context = ch->context;
-        do_actions(json_context, 1);
-        
-        if (cJSON_GetObjectItemCaseSensitive(json_context, AUTOSWITCH_TIME) != NULL) {
-            const double autoswitch_time = cJSON_GetObjectItemCaseSensitive(json_context, AUTOSWITCH_TIME)->valuedouble;
-            if (autoswitch_time > 0) {
-                autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                autooff_setter_params->ch = ch;
-                autooff_setter_params->type = type;
-                autooff_setter_params->time = autoswitch_time;
-                xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", configMINIMAL_STACK_SIZE, autooff_setter_params, 1, NULL);
+    ch_group_t *ch_group = ch_group_find(ch);
+    if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
+        if ((type == TYPE_SENSOR &&
+            ch->value.int_value == 0) ||
+            (type == TYPE_SENSOR_BOOL &&
+            ch->value.bool_value == false)) {
+            led_blink(1);
+            INFO(log_output, "Sensor ON");
+            
+            if (type == TYPE_SENSOR) {
+                ch->value = HOMEKIT_UINT8(1);
+            } else {
+                ch->value = HOMEKIT_BOOL(true);
+            }
+
+            cJSON *json_context = ch->context;
+            do_actions(json_context, 1);
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_context, AUTOSWITCH_TIME) != NULL) {
+                const double autoswitch_time = cJSON_GetObjectItemCaseSensitive(json_context, AUTOSWITCH_TIME)->valuedouble;
+                if (autoswitch_time > 0) {
+                    autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                    autooff_setter_params->ch = ch;
+                    autooff_setter_params->type = type;
+                    autooff_setter_params->time = autoswitch_time;
+                    xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", configMINIMAL_STACK_SIZE, autooff_setter_params, 1, NULL);
+                }
             }
         }
     }
+    
+    hkc_group_notify(ch);
 }
 
 void sensor_0(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
-
-    if ((type == TYPE_SENSOR &&
-        ch->value.int_value == 1) ||
-        (type == TYPE_SENSOR_BOOL &&
-        ch->value.bool_value == true)) {
-        led_blink(1);
-        INFO(log_output, "Sensor OFF");
-        
-        if (type == TYPE_SENSOR) {
-            ch->value = HOMEKIT_UINT8(0);
-        } else {
-            ch->value = HOMEKIT_BOOL(false);
+    
+    ch_group_t *ch_group = ch_group_find(ch);
+    if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
+        if ((type == TYPE_SENSOR &&
+            ch->value.int_value == 1) ||
+            (type == TYPE_SENSOR_BOOL &&
+            ch->value.bool_value == true)) {
+            led_blink(1);
+            INFO(log_output, "Sensor OFF");
+            
+            if (type == TYPE_SENSOR) {
+                ch->value = HOMEKIT_UINT8(0);
+            } else {
+                ch->value = HOMEKIT_BOOL(false);
+            }
+            
+            cJSON *json_context = ch->context;
+            do_actions(json_context, 0);
         }
-        
-        homekit_characteristic_notify(ch, ch->value);
-        
-        cJSON *json_context = ch->context;
-        do_actions(json_context, 0);
     }
+    
+    hkc_group_notify(ch);
 }
 
 // --- WATER VALVE
@@ -2975,7 +2981,8 @@ void normal_mode_init() {
             }
         }
         
-        return accessory + 1;
+        const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
+        return new_accessory_count;
     }
     
     uint8_t new_water_valve(uint8_t accessory, cJSON *json_context) {
