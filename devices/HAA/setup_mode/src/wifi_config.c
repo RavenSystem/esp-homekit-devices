@@ -170,7 +170,7 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status)
 static void wifi_scan_task(void *arg)
 {
     INFO("Start WiFi scan");
-    while (context != NULL)
+    while (true)
     {
         sdk_wifi_station_scan(NULL, wifi_scan_done_cb);
         vTaskDelay(10000 / portTICK_PERIOD_MS);
