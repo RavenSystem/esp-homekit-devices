@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "1.5.2"
-#define FIRMWARE_VERSION_OCTAL              010502      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "1.5.3"
+#define FIRMWARE_VERSION_OCTAL              010503      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMOLDSECTOR                   0xF7000
@@ -43,6 +43,16 @@
 #define TYPE_LIGHTBULB                      5
 #define TYPE_GARAGE_DOOR                    6
 #define TYPE_WINDOW_COVER                   7
+
+// Task Stack Sizes
+#define LED_TASK_SIZE                       (configMINIMAL_STACK_SIZE)
+#define REBOOT_TASK_SIZE                    (configMINIMAL_STACK_SIZE * 2)
+#define PING_TASK_SIZE                      (configMINIMAL_STACK_SIZE * 2)
+#define AUTOSWITCH_TASK_SIZE                (configMINIMAL_STACK_SIZE * 2)
+#define AUTOOFF_SETTER_TASK_SIZE            (configMINIMAL_STACK_SIZE * 2)
+#define AUTODIMMER_TASK_SIZE                (configMINIMAL_STACK_SIZE)
+#define IT_TX_TASK_SIZE                     (configMINIMAL_STACK_SIZE * 4)
+#define DELAYED_SENSOR_START_TASK_SIZE      (configMINIMAL_STACK_SIZE)
 
 // Button Events
 #define SINGLEPRESS_EVENT                   0

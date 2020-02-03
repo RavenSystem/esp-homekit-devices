@@ -153,7 +153,7 @@ void led_task(void *pvParameters) {
 
 void led_blink(const int blinks) {
     if (led_gpio != 255) {
-        xTaskCreate(led_task, "led_task", configMINIMAL_STACK_SIZE, (void *) blinks, 1, NULL);
+        xTaskCreate(led_task, "led_task", LED_TASK_SIZE, (void *) blinks, 1, NULL);
     }
 }
 
@@ -288,7 +288,7 @@ void setup_mode_call(const uint8_t gpio, void *args, const uint8_t param) {
     
     if (setup_mode_time == 0 || xTaskGetTickCountFromISR() < setup_mode_time * 1000 / portTICK_PERIOD_MS) {
         sysparam_set_int8("setup", 1);
-        xTaskCreate(reboot_task, "reboot_task", configMINIMAL_STACK_SIZE * 2, NULL, 1, NULL);
+        xTaskCreate(reboot_task, "reboot_task", REBOOT_TASK_SIZE, NULL, 1, NULL);
     } else {
         ERROR(log_output, "Not allowed after %i secs since boot", setup_mode_time);
     }
@@ -425,7 +425,7 @@ void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
                     autooff_setter_params->ch = ch;
                     autooff_setter_params->type = TYPE_ON;
                     autooff_setter_params->time = autoswitch_time;
-                    xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", configMINIMAL_STACK_SIZE, autooff_setter_params, 1, NULL);
+                    xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, 1, NULL);
                 }
             }
             
@@ -481,7 +481,7 @@ void hkc_lock_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
                     autooff_setter_params->ch = ch;
                     autooff_setter_params->type = TYPE_LOCK;
                     autooff_setter_params->time = autoswitch_time;
-                    xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", configMINIMAL_STACK_SIZE, autooff_setter_params, 1, NULL);
+                    xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, 1, NULL);
                 }
             }
             
@@ -540,7 +540,7 @@ void sensor_1(const uint8_t gpio, void *args, const uint8_t type) {
                     autooff_setter_params->ch = ch;
                     autooff_setter_params->type = type;
                     autooff_setter_params->time = autoswitch_time;
-                    xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", configMINIMAL_STACK_SIZE, autooff_setter_params, 1, NULL);
+                    xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, 1, NULL);
                 }
             }
         }
@@ -596,7 +596,7 @@ void hkc_valve_setter(homekit_characteristic_t *ch, const homekit_value_t value)
                     autooff_setter_params->ch = ch;
                     autooff_setter_params->type = TYPE_VALVE;
                     autooff_setter_params->time = autoswitch_time;
-                    xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", configMINIMAL_STACK_SIZE, autooff_setter_params, 1, NULL);
+                    xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, 1, NULL);
                 }
             }
             
@@ -1191,7 +1191,7 @@ void autodimmer_call(homekit_characteristic_t *ch0, const homekit_value_t value)
         if (lightbulb_group->armed_autodimmer) {
             lightbulb_group->armed_autodimmer = false;
             sdk_os_timer_disarm(ch_group->timer);
-            xTaskCreate(autodimmer_task, "autodimmer_task", configMINIMAL_STACK_SIZE, (void *) ch0, 1, NULL);
+            xTaskCreate(autodimmer_task, "autodimmer_task", AUTODIMMER_TASK_SIZE, (void *) ch0, 1, NULL);
         } else {
             sdk_os_timer_arm(ch_group->timer, AUTODIMMER_DELAY, 0);
             lightbulb_group->armed_autodimmer = true;
@@ -1960,7 +1960,7 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                     autoswitch_params->gpio = gpio;
                     autoswitch_params->value = !value;
                     autoswitch_params->time = autoswitch_time;
-                    xTaskCreate(autoswitch_task, "autoswitch_task", configMINIMAL_STACK_SIZE, autoswitch_params, 1, NULL);
+                    xTaskCreate(autoswitch_task, "autoswitch_task", AUTOSWITCH_TASK_SIZE, autoswitch_params, 1, NULL);
                 }
             }
         }
@@ -2210,12 +2210,12 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                 case SYSTEM_ACTION_OTA_UPDATE:
                     if (sysparam_get_string("ota_repo", &ota) == SYSPARAM_OK) {
                         rboot_set_temp_rom(1);
-                        xTaskCreate(reboot_task, "reboot_task", configMINIMAL_STACK_SIZE * 2, NULL, 1, NULL);
+                        xTaskCreate(reboot_task, "reboot_task", REBOOT_TASK_SIZE, NULL, 1, NULL);
                     }
                     break;
                     
                 default:    // case SYSTEM_ACTION_REBOOT:
-                    xTaskCreate(reboot_task, "reboot_task", configMINIMAL_STACK_SIZE * 2, NULL, 1, NULL);
+                    xTaskCreate(reboot_task, "reboot_task", REBOOT_TASK_SIZE, NULL, 1, NULL);
                     break;
             }
         }
@@ -2224,7 +2224,7 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
         cJSON *json_ir_actions = cJSON_GetObjectItemCaseSensitive(actions, IR_ACTIONS_ARRAY);
         if (json_ir_actions != NULL && !ir_tx_is_running) {
             ir_tx_is_running = true;
-            xTaskCreate(ir_tx_task, "ir_tx_task", configMINIMAL_STACK_SIZE * 4, json_ir_actions, 12, NULL);
+            xTaskCreate(ir_tx_task, "ir_tx_task", IT_TX_TASK_SIZE, json_ir_actions, 12, NULL);
         }
         
     }
@@ -2282,7 +2282,7 @@ void run_homekit_server() {
     sdk_os_timer_arm(&wifi_watchdog_timer, WIFI_WATCHDOG_POLL_PERIOD_MS, 1);
 
     if (ping_inputs) {
-        xTaskCreate(ping_task, "ping_task", configMINIMAL_STACK_SIZE * 2, NULL, 1, NULL);
+        xTaskCreate(ping_task, "ping_task", PING_TASK_SIZE, NULL, 1, NULL);
     }
     
     led_blink(6);
@@ -2311,7 +2311,7 @@ void normal_mode_init() {
         uart_set_baud(0, 115200);
         printf("! Invalid JSON\n");
         sysparam_set_int8("setup", 2);
-        xTaskCreate(reboot_task, "reboot_task", configMINIMAL_STACK_SIZE * 2, NULL, 1, NULL);
+        xTaskCreate(reboot_task, "reboot_task", REBOOT_TASK_SIZE, NULL, 1, NULL);
         
         free(txt_config);
         
@@ -2492,7 +2492,7 @@ void normal_mode_init() {
         log_output = true;
         uart_set_baud(0, 115200);
         printf_header();
-        INFO(log_output, "NORMAL MODE\n\nJSON: %s\n", txt_config);
+        INFO(log_output, "NORMAL MODE\n\nJSON:\n %s\n", txt_config);
     }
     
 #ifdef HAA_DEBUG
@@ -3196,7 +3196,7 @@ void normal_mode_init() {
         memset(ch_group->timer, 0, sizeof(*ch_group->timer));
         sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch0);
         
-        xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", configMINIMAL_STACK_SIZE, ch0, 1, NULL);
+        xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", DELAYED_SENSOR_START_TASK_SIZE, ch0, 1, NULL);
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), th_input, ch1, 9);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), th_input_temp, ch0, THERMOSTAT_TEMP_UP);
@@ -3276,7 +3276,7 @@ void normal_mode_init() {
         memset(ch_group->timer, 0, sizeof(*ch_group->timer));
         sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch0);
         
-        xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", configMINIMAL_STACK_SIZE, ch0, 1, NULL);
+        xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", DELAYED_SENSOR_START_TASK_SIZE, ch0, 1, NULL);
         
         return accessory + 1;
     }
@@ -3305,7 +3305,7 @@ void normal_mode_init() {
         memset(ch_group->timer, 0, sizeof(*ch_group->timer));
         sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch1);
         
-        xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", configMINIMAL_STACK_SIZE, ch1, 1, NULL);
+        xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", DELAYED_SENSOR_START_TASK_SIZE, ch1, 1, NULL);
         
         return accessory + 1;
     }
@@ -3352,7 +3352,7 @@ void normal_mode_init() {
         memset(ch_group->timer, 0, sizeof(*ch_group->timer));
         sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch0);
         
-        xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", configMINIMAL_STACK_SIZE, ch0, 1, NULL);
+        xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", DELAYED_SENSOR_START_TASK_SIZE, ch0, 1, NULL);
         
         return accessory + 1;
     }
