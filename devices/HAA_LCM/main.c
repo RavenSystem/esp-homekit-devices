@@ -46,7 +46,7 @@ void ota_task(void *arg) {
     signature_t signature;
     int file_size;
 
-    UDPLGP("OTA Version: %s\n", OTAVERSION);
+    UDPLGP("HAA OTA Version: %s\n", OTAVERSION);
 
     ota_init();
 

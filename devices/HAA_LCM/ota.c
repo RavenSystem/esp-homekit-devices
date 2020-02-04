@@ -51,10 +51,9 @@ void MyLoggingCallback(const int logLevel, const char* const logMessage) {
 #endif
 
 void ota_init() {
-    UDPLGP("OTA INIT\n");
+    UDPLGP("INIT\n");
 
     ip_addr_t target_ip;
-    int ret;
     
     //rboot setup
     rboot_config conf;
@@ -89,11 +88,9 @@ void ota_init() {
     
     UDPLGP("DNS ");
     
-    ret = netconn_gethostbyname(HOST, &target_ip);
-    while(ret) {
-        UDPLGP("%d", ret);
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
-        ret = netconn_gethostbyname(HOST, &target_ip);
+    if (netconn_gethostbyname(HOST, &target_ip)) {
+        UDPLGP("ERROR\n");
+        ota_reboot();
     }
 
     UDPLGP("OK\n");
@@ -137,7 +134,7 @@ int ota_compare(char* newv, char* oldv) { //(if equal,0) (if newer,1) (if pre-re
     char news[MAXVERSIONLEN], olds[MAXVERSIONLEN];
     char * new = news;
     char * old = olds;
-    int result=0;
+    int result = 0;
     
     if (strcmp(newv, oldv)) { //https://semver.org/#spec-item-11
         do {
