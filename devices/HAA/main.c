@@ -1990,25 +1990,25 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                     switch ((uint8_t) value) {
                         case 1:
                             if (ch_group->ch_child) {
-                                ch_group->ch_child->value.bool_value = true;
+                                hkc_setter(ch_group->ch_child, HOMEKIT_BOOL(true));
                             }
                             break;
                             
                         case 2:
                             if (ch_group->ch_sec) {
-                                ch_group->ch_sec->value.bool_value = false;
+                                hkc_setter(ch_group->ch_sec, HOMEKIT_BOOL(false));
                             }
                             break;
                             
                         case 3:
                             if (ch_group->ch_sec) {
-                                ch_group->ch_sec->value.bool_value = true;
+                                hkc_setter(ch_group->ch_sec, HOMEKIT_BOOL(true));
                             }
                             break;
                             
                         default:    // case 0:
                             if (ch_group->ch_child) {
-                                ch_group->ch_child->value.bool_value = false;
+                                hkc_setter(ch_group->ch_child, HOMEKIT_BOOL(false));
                             }
                             break;
                     }

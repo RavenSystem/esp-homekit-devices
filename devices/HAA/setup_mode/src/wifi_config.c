@@ -65,7 +65,6 @@ ETSTimer auto_reboot_timer;
 static void wifi_config_station_connect();
 static void wifi_config_softap_start();
 static void wifi_config_softap_stop();
-void wifi_config_reset();
 
 static client_t *client_new() {
     client_t *client = malloc(sizeof(client_t));
@@ -323,19 +322,20 @@ static void wifi_config_server_on_settings_update(client_t *client) {
     }
     
     if (nowifi_param) {
-        wifi_config_reset();
+        sysparam_set_data("wifi_ssid", NULL, 0, false);
+        sysparam_set_data("wifi_password", NULL, 0, false);
     }
     
-    vTaskDelay(300 / portTICK_PERIOD_MS);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
     sysparam_compact();
-    vTaskDelay(700 / portTICK_PERIOD_MS);
+    vTaskDelay(300 / portTICK_PERIOD_MS);
     
     if (reset_param) {
         homekit_server_reset();
     }
 
     INFO("Restarting...");
-    vTaskDelay(1500 / portTICK_PERIOD_MS);
+    vTaskDelay(500 / portTICK_PERIOD_MS);
     
     sdk_system_restart();
 }
@@ -804,22 +804,4 @@ void wifi_config_init(const char *ssid_prefix, const char *password, void (*on_w
     context->on_wifi_ready = on_wifi_ready;
 
     wifi_config_station_connect();
-}
-
-
-void wifi_config_reset() {
-    sysparam_set_data("wifi_ssid", NULL, 0, false);
-    sysparam_set_data("wifi_password", NULL, 0, false);
-}
-
-
-void wifi_config_get(char **ssid, char **password) {
-    sysparam_get_string("wifi_ssid", ssid);
-    sysparam_get_string("wifi_password", password);
-}
-
-
-void wifi_config_set(const char *ssid, const char *password) {
-    sysparam_set_string("wifi_ssid", ssid);
-    sysparam_set_string("wifi_password", password);
 }
