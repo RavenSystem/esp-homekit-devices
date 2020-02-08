@@ -3148,7 +3148,7 @@ client_context_t *homekit_server_accept_client(homekit_server_t *server) {
         context = next;
     }
 
-    const struct timeval rcvtimeout = { 10, 0 }; /* 10 second timeout */
+    const struct timeval rcvtimeout = { 60, 0 }; /* 60 second timeout (orig: 10) */
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
 
     const int yes = 1; /* enable sending keepalive probes for socket */
@@ -3287,7 +3287,7 @@ static void homekit_run_server(homekit_server_t *server)
         fd_set read_fds;
         memcpy(&read_fds, &server->fds, sizeof(read_fds));
 
-        struct timeval timeout = { 3, 0 }; /* 3 second timeout */
+        struct timeval timeout = { 0, 500000 }; /* 0.5 second timeout (orig: 1) */
         int triggered_nfds = select(server->max_fd + 1, &read_fds, NULL, NULL, &timeout);
         if (triggered_nfds > 0) {
             if (FD_ISSET(server->listen_fd, &read_fds)) {

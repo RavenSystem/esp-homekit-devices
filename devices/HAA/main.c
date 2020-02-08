@@ -2245,16 +2245,16 @@ void delayed_sensor_starter_task(void *args) {
     
     cJSON *json_context = ch->context;
     
-    uint16_t th_poll_period = THERMOSTAT_DEFAULT_POLL_PERIOD;
+    uint16_t th_poll_period = THERMOSTAT_POLL_PERIOD_DEFAULT;
     if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_POLL_PERIOD) != NULL) {
         th_poll_period = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_POLL_PERIOD)->valuedouble;
     }
     
-    if (th_poll_period < 3) {
-        th_poll_period = 3;
+    if (th_poll_period < THERMOSTAT_POLL_PERIOD_MIN) {
+        th_poll_period = THERMOSTAT_POLL_PERIOD_MIN;
     }
     
-    vTaskDelay(ch_group->accessory * MS_TO_TICK(TH_SENSOR_DELAYED_TIME_MS));
+    vTaskDelay(ch_group->accessory * MS_TO_TICK(THERMOSTAT_POLL_PERIOD_MIN * 1000));
     
     temperature_timer_worker(ch);
     sdk_os_timer_arm(ch_group->timer, th_poll_period * 1000, 1);
@@ -3100,16 +3100,6 @@ void normal_mode_init() {
         
         const float default_target_temp = (th_min_temp + th_max_temp) / 2;
         
-        // Sensor poll period
-        uint16_t th_poll_period = THERMOSTAT_DEFAULT_POLL_PERIOD;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_POLL_PERIOD) != NULL) {
-            th_poll_period = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_POLL_PERIOD)->valuedouble;
-        }
-        
-        if (th_poll_period < 3) {
-            th_poll_period = 3;
-        }
-        
         // Thermostat Type
         uint8_t th_type = THERMOSTAT_TYPE_HEATER;
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TYPE) != NULL) {
@@ -3246,15 +3236,6 @@ void normal_mode_init() {
     uint8_t new_temp_sensor(uint8_t accessory, cJSON *json_context) {
         new_accessory(accessory, 3);
         
-        uint16_t th_poll_period = THERMOSTAT_DEFAULT_POLL_PERIOD;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_POLL_PERIOD) != NULL) {
-            th_poll_period = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_POLL_PERIOD)->valuedouble;
-        }
-        
-        if (th_poll_period < 3) {
-            th_poll_period = 3;
-        }
-        
         homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200}, .context=json_context);
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
@@ -3312,15 +3293,6 @@ void normal_mode_init() {
     
     uint8_t new_th_sensor(uint8_t accessory, cJSON *json_context) {
         new_accessory(accessory, 4);
-        
-        uint16_t th_poll_period = THERMOSTAT_DEFAULT_POLL_PERIOD;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_POLL_PERIOD) != NULL) {
-            th_poll_period = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_POLL_PERIOD)->valuedouble;
-        }
-        
-        if (th_poll_period < 3) {
-            th_poll_period = 3;
-        }
         
         homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200}, .context=json_context);
         homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0, .context=json_context);

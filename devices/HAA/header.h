@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "1.5.4"
-#define FIRMWARE_VERSION_OCTAL              010504      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "1.5.5"
+#define FIRMWARE_VERSION_OCTAL              010505      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMOLDSECTOR                   0xF7000
@@ -125,7 +125,8 @@
 #define THERMOSTAT_DEFAULT_MAX_TEMP         38
 #define THERMOSTAT_DEADBAND                 "d"
 #define THERMOSTAT_POLL_PERIOD              "j"
-#define THERMOSTAT_DEFAULT_POLL_PERIOD      30
+#define THERMOSTAT_POLL_PERIOD_DEFAULT      30
+#define THERMOSTAT_POLL_PERIOD_MIN          4
 #define THERMOSTAT_MODE_OFF                 0
 #define THERMOSTAT_MODE_IDLE                1
 #define THERMOSTAT_MODE_HEATER              2
@@ -146,7 +147,6 @@
 #define TEMPERATURE_SENSOR_TYPE             "n"
 #define TEMPERATURE_OFFSET                  "z"
 #define HUMIDITY_OFFSET                     "h"
-#define TH_SENSOR_DELAYED_TIME_MS           3000
 
 #define LIGHTBULB_PWM_GPIO_R                "r"
 #define LIGHTBULB_PWM_GPIO_G                "g"
@@ -277,7 +277,7 @@
 #define WIFI_STATUS_CONNECTING              1
 #define WIFI_STATUS_PRECONNECTED            2
 #define WIFI_STATUS_CONNECTED               3
-#define WIFI_WATCHDOG_POLL_PERIOD_MS        7500
+#define WIFI_WATCHDOG_POLL_PERIOD_MS        7000
 
 #define ACCESSORIES_WITHOUT_BRIDGE          4   // Max number of accessories before using a bridge
 
