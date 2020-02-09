@@ -111,6 +111,8 @@ static void client_send_redirect(client_t *client, int code, const char *redirec
 
 typedef struct _wifi_network_info {
     char ssid[33];
+    char bssid[6];
+    char rssi[3];
     bool secure;
 
     struct _wifi_network_info *next;
@@ -144,9 +146,11 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status)
     bss = bss->next.stqe_next;
 
     while (bss) {
+        //printf("%s (%i) %i - %02x%02x%02x%02x%02x%02x\n", bss->ssid, bss->rssi, bss->channel, bss->bssid[0], bss->bssid[1], bss->bssid[2], bss->bssid[3], bss->bssid[4], bss->bssid[5]);
+
         wifi_network_info_t *net = wifi_networks;
         while (net) {
-            if (!strncmp(net->ssid, (char *)bss->ssid, sizeof(net->ssid)))
+            if (!strncmp(net->bssid, (char *)bss->bssid, sizeof(net->bssid)))
                 break;
             net = net->next;
         }
@@ -154,6 +158,8 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status)
             wifi_network_info_t *net = malloc(sizeof(wifi_network_info_t));
             memset(net, 0, sizeof(*net));
             strncpy(net->ssid, (char *)bss->ssid, sizeof(net->ssid));
+            strncpy(net->bssid, (char *)bss->bssid, sizeof(net->bssid));
+            itoa(bss->rssi, net->rssi, 10);
             net->secure = bss->authmode != AUTH_OPEN;
             net->next = wifi_networks;
 
@@ -169,25 +175,12 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status)
 static void wifi_scan_task(void *arg)
 {
     INFO("Start WiFi scan");
+
     while (true)
     {
         sdk_wifi_station_scan(NULL, wifi_scan_done_cb);
         vTaskDelay(10000 / portTICK_PERIOD_MS);
     }
-
-    xSemaphoreTake(wifi_networks_mutex, portMAX_DELAY);
-
-    wifi_network_info_t *wifi_network = wifi_networks;
-    while (wifi_network) {
-        wifi_network_info_t *next = wifi_network->next;
-        free(wifi_network);
-        wifi_network = next;
-    }
-    wifi_networks = NULL;
-
-    xSemaphoreGive(wifi_networks_mutex);
-
-    vTaskDelete(NULL);
 }
 
 #include "index.html.h"
@@ -234,14 +227,29 @@ static void wifi_config_server_on_settings(client_t *client) {
     
     client_send_chunk(client, html_settings_postota);
     
-    char buffer[64];
+    int8_t wifi_mode = 0;
+    sysparam_get_int8("wifi_mode", &wifi_mode);
+    if (wifi_mode == 0) {
+        client_send_chunk(client, "selected");
+    }
+    client_send_chunk(client, html_wifi_mode_0);
+    
+    if (wifi_mode == 1) {
+        client_send_chunk(client, "selected");
+    }
+    client_send_chunk(client, html_wifi_mode_1);
+    
+    // WiFi Networks
+    char buffer[120];
+    char bssid[13];
     if (xSemaphoreTake(wifi_networks_mutex, 5000 / portTICK_PERIOD_MS)) {
         wifi_network_info_t *net = wifi_networks;
         while (net) {
+            snprintf(bssid, 13, "%02x%02x%02x%02x%02x%02x", net->bssid[0], net->bssid[1], net->bssid[2], net->bssid[3], net->bssid[4], net->bssid[5]);
             snprintf(
                 buffer, sizeof(buffer),
                 html_network_item,
-                net->secure ? "secure" : "unsecure", net->ssid
+                net->secure ? "secure" : "unsecure", bssid, net->ssid, net->ssid, net->rssi, bssid
             );
             client_send_chunk(client, buffer);
 
@@ -277,7 +285,9 @@ static void wifi_config_server_on_settings_update(client_t *client) {
     form_param_t *nowifi_param = form_params_find(form, "nowifi");
     form_param_t *ota_param = form_params_find(form, "ota");
     form_param_t *autoota_param = form_params_find(form, "autoota");
+    form_param_t *wifimode_param = form_params_find(form, "wifimode");
     form_param_t *ssid_param = form_params_find(form, "ssid");
+    form_param_t *bssid_param = form_params_find(form, "bssid");
     form_param_t *password_param = form_params_find(form, "password");
     
     static const char payload[] = "HTTP/1.1 204 \r\nContent-Type: text/html\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
@@ -285,6 +295,25 @@ static void wifi_config_server_on_settings_update(client_t *client) {
 
     if (ssid_param->value) {
         sysparam_set_string("wifi_ssid", ssid_param->value);
+
+        if (bssid_param->value && strlen(bssid_param->value) == 12) {
+            char *bssid = malloc(7);
+            char hex[2];
+            
+            for (uint8_t i = 0; i < 6; i++) {
+                hex[0] = bssid_param->value[(i * 2)];
+                hex[1] = bssid_param->value[(i * 2) + 1];
+                bssid[i] = (char) strtol(hex, NULL, 16);
+
+            }
+
+            sysparam_set_string("wifi_bssid", bssid);
+            
+            free(bssid);
+        } else {
+            sysparam_set_string("wifi_bssid", "");
+        }
+        
         if (password_param->value) {
             sysparam_set_string("wifi_password", password_param->value);
         } else {
@@ -313,6 +342,10 @@ static void wifi_config_server_on_settings_update(client_t *client) {
         sysparam_set_bool("aota", true);
     } else {
         sysparam_set_bool("aota", false);
+    }
+    
+    if (wifimode_param->value) {
+        sysparam_set_int8("wifi_mode", strtol(wifimode_param->value, NULL, 10));
     }
     
     sysparam_set_int8("setup", 0);
@@ -637,7 +670,7 @@ static void wifi_config_softap_start() {
         "%s-%02X%02X%02X", context->ssid_prefix, macaddr[3], macaddr[4], macaddr[5]
     );
     softap_config.ssid_hidden = 0;
-    softap_config.channel = 3;
+    softap_config.channel = 6;
     if (context->password) {
         softap_config.authmode = AUTH_WPA_WPA2_PSK;
         strncpy((char *)softap_config.password,
@@ -693,7 +726,6 @@ static void wifi_config_sta_connect_timeout_callback(void *arg) {
         netif->hostname = context->custom_hostname;
         dhcp_start(netif);
         UNLOCK_TCPIP_CORE();
-        
         INFO("Hostname: %s", context->custom_hostname);
     }
     
@@ -731,10 +763,8 @@ static void auto_reboot_run() {
 
 static void wifi_config_station_connect() {
     char *wifi_ssid = NULL;
-    char *wifi_password = NULL;
     sysparam_get_string("wifi_ssid", &wifi_ssid);
-    sysparam_get_string("wifi_password", &wifi_password);
-    
+
     if (!wifi_ssid) {
         INFO("No WiFi config found");
         
@@ -745,8 +775,25 @@ static void wifi_config_station_connect() {
         memset(&sta_config, 0, sizeof(sta_config));
         strncpy((char *)sta_config.ssid, wifi_ssid, sizeof(sta_config.ssid));
         sta_config.ssid[sizeof(sta_config.ssid)-1] = 0;
+        
+        char *wifi_password = NULL;
+        sysparam_get_string("wifi_password", &wifi_password);
         if (wifi_password) {
             strncpy((char *)sta_config.password, wifi_password, sizeof(sta_config.password));
+        }
+        
+        int8_t wifi_mode = 0;
+        sysparam_get_int8("wifi_mode", &wifi_mode);
+        if (wifi_mode == 1) {
+            char *wifi_bssid = NULL;
+            sysparam_get_string("wifi_bssid", &wifi_bssid);
+            if (wifi_bssid) {
+                sta_config.bssid_set = 1;
+                strncpy((char *)sta_config.bssid, wifi_bssid, sizeof(sta_config.bssid));
+                //INFO("BSSID: %02x%02x%02x%02x%02x%02x", sta_config.bssid[0], sta_config.bssid[1], sta_config.bssid[2], sta_config.bssid[3], sta_config.bssid[4], sta_config.bssid[5]);
+                
+                free(wifi_bssid);
+            }
         }
 
         sdk_wifi_station_set_config(&sta_config);
@@ -776,10 +823,10 @@ static void wifi_config_station_connect() {
         }
         
         free(wifi_ssid);
-    }
-    
-    if (wifi_password) {
-        free(wifi_password);
+        
+        if (wifi_password) {
+            free(wifi_password);
+        }
     }
 }
 

@@ -3861,7 +3861,7 @@ void user_init(void) {
 #ifdef HAA_DEBUG
     sdk_os_timer_setfn(&free_heap_timer, free_heap_watchdog, NULL);
     sdk_os_timer_arm(&free_heap_timer, 2000, 1);
-#endif  // HAA_DEBUG
+#endif // HAA_DEBUG
     
     sdk_wifi_set_opmode(STATION_MODE);
     sdk_wifi_station_disconnect();
@@ -3892,7 +3892,8 @@ void user_init(void) {
     
     int8_t haa_setup = 0;
     
-    //sysparam_set_int8("setup", 2);    // Force to enter always in setup mode. Only for tests. Keep comment for releases
+    //sysparam_set_int8("setup", 2);            // Force to enter always in setup mode. Only for tests. Keep comment for releases
+    //sysparam_set_string("ota_repo", "1");     // Simulates Installation with OTA. Only for tests. Keep comment for releases
     
     sysparam_get_int8("setup", &haa_setup);
     if (haa_setup > 0) {
