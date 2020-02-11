@@ -23,7 +23,6 @@
 #define IR_CODE_LEN             83
 #define IR_CODE_LEN_2           (IR_CODE_LEN * IR_CODE_LEN)
 #define IR_CODE_SCALE           5
-#define IR_CODE_CAPTURES        10
 
 const char baseRaw_dic[] = "0ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz123456789+/!@#$%&()=?*,.;:-_<>";
 const char baseUC_dic[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";

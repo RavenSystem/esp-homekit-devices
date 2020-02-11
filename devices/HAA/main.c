@@ -2224,7 +2224,7 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
         cJSON *json_ir_actions = cJSON_GetObjectItemCaseSensitive(actions, IR_ACTIONS_ARRAY);
         if (json_ir_actions != NULL && !ir_tx_is_running) {
             ir_tx_is_running = true;
-            xTaskCreate(ir_tx_task, "ir_tx_task", IT_TX_TASK_SIZE, json_ir_actions, 12, NULL);
+            xTaskCreate(ir_tx_task, "ir_tx_task", IR_TX_TASK_SIZE, json_ir_actions, 12, NULL);
         }
         
     }

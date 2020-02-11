@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <string.h>
-#include <stdint.h>
+//#include <stdint.h>
 #include <sysparam.h>
 #include <etstimer.h>
 #include <esplibs/libmain.h>
@@ -794,6 +794,8 @@ static void wifi_config_station_connect() {
                 
                 free(wifi_bssid);
             }
+        } else {
+            sta_config.bssid_set = 0;
         }
 
         sdk_wifi_station_set_config(&sta_config);
