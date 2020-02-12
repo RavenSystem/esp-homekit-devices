@@ -110,12 +110,22 @@ typedef struct _wifi_network_info {
     struct _wifi_network_info *next;
 } wifi_network_info_t;
 
+void wifi_config_reset() {
+    struct sdk_station_config sta_config;
+    memset(&sta_config, 0, sizeof(sta_config));
+
+    strncpy((char *)sta_config.ssid, "none", sizeof(sta_config.ssid));
+    sta_config.ssid[sizeof(sta_config.ssid) - 1] = 0;
+    sdk_wifi_station_set_config(&sta_config);
+    sdk_wifi_station_connect();
+    sdk_wifi_station_set_auto_connect(true);
+}
+
 wifi_network_info_t *wifi_networks = NULL;
 SemaphoreHandle_t wifi_networks_mutex;
 
 static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
-    if (status != SCAN_OK)
-    {
+    if (status != SCAN_OK) {
         ERROR("WiFi scan failed");
         return;
     }
@@ -356,12 +366,7 @@ static void wifi_config_server_on_settings_update(client_t *client) {
         sysparam_set_int8("wifi_mode", new_wifi_mode);
         
         if (current_wifi_mode != new_wifi_mode) {
-            struct sdk_station_config sta_config;
-            memset(&sta_config, 0, sizeof(sta_config));
-            
-            strncpy((char *)sta_config.ssid, "none", sizeof(sta_config.ssid));
-            sta_config.ssid[sizeof(sta_config.ssid) - 1] = 0;
-            sdk_wifi_station_set_config(&sta_config);
+            wifi_config_reset();
         }
     }
     
@@ -743,28 +748,23 @@ static void auto_reboot_run() {
     sdk_system_restart();
 }
 
-static void wifi_config_station_connect() {
+bool wifi_config_connect() {
     char *wifi_ssid = NULL;
     sysparam_get_string("wifi_ssid", &wifi_ssid);
-
-    if (!wifi_ssid) {
-        INFO("No WiFi config found");
-        
-        wifi_config_softap_start();
-    } else {
-
+    
+    if (wifi_ssid) {
         struct sdk_station_config sta_config;
-        
+               
         memset(&sta_config, 0, sizeof(sta_config));
         strncpy((char *)sta_config.ssid, wifi_ssid, sizeof(sta_config.ssid));
         sta_config.ssid[sizeof(sta_config.ssid) - 1] = 0;
-        
+
         char *wifi_password = NULL;
         sysparam_get_string("wifi_password", &wifi_password);
         if (wifi_password) {
-            strncpy((char *)sta_config.password, wifi_password, sizeof(sta_config.password));
+           strncpy((char *)sta_config.password, wifi_password, sizeof(sta_config.password));
         }
-        
+
         int8_t wifi_mode = 0;
         sysparam_get_int8("wifi_mode", &wifi_mode);
         if (wifi_mode == 1) {
@@ -774,18 +774,34 @@ static void wifi_config_station_connect() {
                 sta_config.bssid_set = 1;
                 strncpy((char *)sta_config.bssid, wifi_bssid, sizeof(sta_config.bssid));
                 printf("WiFi Mode: Forced BSSID %02x%02x%02x%02x%02x%02x\n", sta_config.bssid[0], sta_config.bssid[1], sta_config.bssid[2], sta_config.bssid[3], sta_config.bssid[4], sta_config.bssid[5]);
-                
+               
                 free(wifi_bssid);
             }
         } else {
             INFO("WiFi Mode: Normal");
             sta_config.bssid_set = 0;
         }
-        
+
         sdk_wifi_station_set_config(&sta_config);
         sdk_wifi_station_connect();
         sdk_wifi_station_set_auto_connect(true);
         
+        free(wifi_ssid);
+        
+        if (wifi_password) {
+            free(wifi_password);
+        }
+        
+        return true;
+    } else {
+        INFO("No WiFi config found");
+    }
+    
+    return false;
+}
+
+static void wifi_config_station_connect() {
+    if (wifi_config_connect()) {
         wifi_config_sta_connect_timeout_callback(context);
         
         sdk_os_timer_setfn(&context->sta_connect_timeout, wifi_config_sta_connect_timeout_callback, context);
@@ -807,12 +823,8 @@ static void wifi_config_station_connect() {
             
             wifi_config_softap_start();
         }
-        
-        free(wifi_ssid);
-        
-        if (wifi_password) {
-            free(wifi_password);
-        }
+    } else {
+        wifi_config_softap_start();
     }
 }
 

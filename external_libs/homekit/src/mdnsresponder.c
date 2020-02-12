@@ -549,9 +549,17 @@ void mdns_announce() {
     struct netif *netif = sdk_system_get_netif(STATION_IF);
 #if LWIP_IPV4
     mdns_announce_netif(netif, &gMulticastV4Addr);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+    mdns_announce_netif(netif, &gMulticastV4Addr);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+    mdns_announce_netif(netif, &gMulticastV4Addr);
 #endif
 #if LWIP_IPV6
     mdns_announce_netif(netif, &gMulticastV6Addr);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+    mdns_announce_netif(netif, &gMulticastV4Addr);
+    vTaskDelay(50 / portTICK_PERIOD_MS);
+    mdns_announce_netif(netif, &gMulticastV4Addr);
 #endif
 }
 

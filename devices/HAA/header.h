@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "1.6.2"
-#define FIRMWARE_VERSION_OCTAL              010602      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "1.6.3"
+#define FIRMWARE_VERSION_OCTAL              010603      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMOLDSECTOR                   0xF7000
@@ -277,7 +277,7 @@
 #define WIFI_STATUS_CONNECTING              1
 #define WIFI_STATUS_PRECONNECTED            2
 #define WIFI_STATUS_CONNECTED               3
-#define WIFI_WATCHDOG_POLL_PERIOD_MS        7000
+#define WIFI_WATCHDOG_POLL_PERIOD_MS        6000
 
 #define ACCESSORIES_WITHOUT_BRIDGE          4   // Max number of accessories before using a bridge
 

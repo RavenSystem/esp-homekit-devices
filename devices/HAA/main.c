@@ -161,8 +161,7 @@ void wifi_watchdog() {
     if (wifi_status == WIFI_STATUS_DISCONNECTED) {
         wifi_status = WIFI_STATUS_CONNECTING;
         INFO(log_output, "WiFi connecting...");
-        sdk_wifi_station_connect();
-        sdk_wifi_station_set_auto_connect(true);
+        wifi_config_connect();
         
     } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         if (wifi_status == WIFI_STATUS_CONNECTING) {
@@ -182,6 +181,8 @@ void wifi_watchdog() {
         ERROR(log_output, "WiFi disconnected");
 
         wifi_status = WIFI_STATUS_DISCONNECTED;
+        
+        wifi_config_reset();
     }
 }
 
@@ -315,6 +316,8 @@ void exit_emergency_setup_mode_task() {
     INFO(log_output, "Disarming Emergency Setup Mode");
     sysparam_set_int8("setup", 0);
 
+    //vTaskDelay(MS_TO_TICK(10000)); sdk_wifi_station_disconnect();      // Emulates a WiFi disconnection. Keep comment for releases
+    
     vTaskDelete(NULL);
 }
 
@@ -3865,7 +3868,7 @@ void user_init(void) {
     sdk_os_timer_setfn(&free_heap_timer, free_heap_watchdog, NULL);
     sdk_os_timer_arm(&free_heap_timer, 2000, 1);
 #endif // HAA_DEBUG
-    
+    sdk_wifi_station_set_auto_connect(false);
     sdk_wifi_set_opmode(STATION_MODE);
     sdk_wifi_station_disconnect();
 
