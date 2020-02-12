@@ -2310,6 +2310,7 @@ void normal_mode_init() {
     if (total_accessories == 0) {
         uart_set_baud(0, 115200);
         printf("! Invalid JSON\n");
+        sysparam_set_int8("total_ac", 0);
         sysparam_set_int8("setup", 2);
         xTaskCreate(reboot_task, "reboot_task", REBOOT_TASK_SIZE, NULL, 1, NULL);
         
@@ -3810,6 +3811,8 @@ void normal_mode_init() {
     }
     
     cJSON_Delete(json_config);
+    
+    sysparam_set_int8("total_ac", hk_total_ac);
     
     INFO(log_output, "");
     

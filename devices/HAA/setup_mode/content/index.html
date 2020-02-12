@@ -22,7 +22,7 @@ input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
 .nonetworks{text-align:center;margin:1em 0;}
 .field{margin-bottom:0.5em;}
 .field.required label::before{content:"*";color:red;}
-</style></head><body><div class="container"><h1>Home Accessory Architect v1.6.1</h1>
+</style></head><body><div class="container"><h1>Home Accessory Architect v1.6.2</h1>
 <form action="/settings" method="post">
 <div class="field required conf">
 <label for="conf">JSON Config:</label>
@@ -41,9 +41,9 @@ input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
 <div class="nonetworks" style="display:none;">
 No networks found
 </div>
-<label class="networkheader">WiFi SSID (RSSI) BSSID</label><ul id="networks" class="networks">
+<label class="networkheader">WiFi SSID (RSSI Channel) BSSID</label><ul id="networks" class="networks">
 <!-- part HTML_NETWORK_ITEM -->{% for network in networks %}
-<li class="{{ network.secure | ternary('secure', 'unsecure') }}" id="{{ network.bssid }}" title="{{ network.ssid }}">{{ network.ssid }} ({{ network.rssi }}) {{ network.bssid }}</li>
+<li class="{{ network.secure | ternary('secure', 'unsecure') }}" id="{{ network.bssid }}" title="{{ network.ssid }}">{{ network.ssid }} ({{ network.rssi }} Ch{{ network.channel }}) {{ network.bssid }}</li>
 {% endfor %}
 <!-- part HTML_SETTINGS_FOOTER --><li class="other">Enter SSID manually</li>
 </ul>

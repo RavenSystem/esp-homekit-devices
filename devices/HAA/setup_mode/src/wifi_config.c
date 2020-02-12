@@ -27,14 +27,12 @@
 #define INFO(message, ...)              printf(message "\n", ##__VA_ARGS__);
 #define ERROR(message, ...)             printf("! " message "\n", ##__VA_ARGS__);
 
-
 typedef enum {
     ENDPOINT_UNKNOWN = 0,
     ENDPOINT_INDEX,
     ENDPOINT_SETTINGS,
     ENDPOINT_SETTINGS_UPDATE,
 } endpoint_t;
-
 
 typedef struct {
     char *ssid_prefix;
@@ -47,9 +45,7 @@ typedef struct {
     TaskHandle_t dns_task_handle;
 } wifi_config_context_t;
 
-
 static wifi_config_context_t *context;
-
 
 typedef struct _client {
     int fd;
@@ -76,7 +72,6 @@ static client_t *client_new() {
     return client;
 }
 
-
 static void client_free(client_t *client) {
     if (client->body) {
         free(client->body);
@@ -85,11 +80,9 @@ static void client_free(client_t *client) {
     free(client);
 }
 
-
 static void client_send(client_t *client, const char *payload, size_t payload_size) {
     lwip_write(client->fd, payload, payload_size);
 }
-
 
 static void client_send_chunk(client_t *client, const char *payload) {
     int len = strlen(payload);
@@ -100,7 +93,6 @@ static void client_send_chunk(client_t *client, const char *payload) {
     client_send(client, "\r\n", 2);
 }
 
-
 static void client_send_redirect(client_t *client, int code, const char *redirect_url) {
     INFO("Redirecting to %s", redirect_url);
     char buffer[128];
@@ -108,23 +100,20 @@ static void client_send_redirect(client_t *client, int code, const char *redirec
     client_send(client, buffer, len);
 }
 
-
 typedef struct _wifi_network_info {
     char ssid[33];
-    char bssid[6];
-    char rssi[3];
+    char bssid[7];
+    char rssi[4];
+    char channel[3];
     bool secure;
 
     struct _wifi_network_info *next;
 } wifi_network_info_t;
 
-
 wifi_network_info_t *wifi_networks = NULL;
 SemaphoreHandle_t wifi_networks_mutex;
 
-
-static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status)
-{
+static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
     if (status != SCAN_OK)
     {
         ERROR("WiFi scan failed");
@@ -146,7 +135,7 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status)
     bss = bss->next.stqe_next;
 
     while (bss) {
-        //printf("%s (%i) %i - %02x%02x%02x%02x%02x%02x\n", bss->ssid, bss->rssi, bss->channel, bss->bssid[0], bss->bssid[1], bss->bssid[2], bss->bssid[3], bss->bssid[4], bss->bssid[5]);
+        //INFO("%s (%i) Ch %i - %02x%02x%02x%02x%02x%02x", bss->ssid, bss->rssi, bss->channel, bss->bssid[0], bss->bssid[1], bss->bssid[2], bss->bssid[3], bss->bssid[4], bss->bssid[5]);
 
         wifi_network_info_t *net = wifi_networks;
         while (net) {
@@ -160,6 +149,7 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status)
             strncpy(net->ssid, (char *)bss->ssid, sizeof(net->ssid));
             strncpy(net->bssid, (char *)bss->bssid, sizeof(net->bssid));
             itoa(bss->rssi, net->rssi, 10);
+            itoa(bss->channel, net->channel, 10);
             net->secure = bss->authmode != AUTH_OPEN;
             net->next = wifi_networks;
 
@@ -172,15 +162,27 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status)
     xSemaphoreGive(wifi_networks_mutex);
 }
 
-static void wifi_scan_task(void *arg)
-{
+static void wifi_scan_task(void *arg) {
     INFO("Start WiFi scan");
 
-    while (true)
-    {
+    while(context != NULL) {
         sdk_wifi_station_scan(NULL, wifi_scan_done_cb);
         vTaskDelay(10000 / portTICK_PERIOD_MS);
     }
+    
+    xSemaphoreTake(wifi_networks_mutex, portMAX_DELAY);
+
+    wifi_network_info_t *wifi_network = wifi_networks;
+    while (wifi_network) {
+        wifi_network_info_t *next = wifi_network->next;
+        free(wifi_network);
+        wifi_network = next;
+    }
+    wifi_networks = NULL;
+
+    xSemaphoreGive(wifi_networks_mutex);
+    
+    vTaskDelete(NULL);
 }
 
 #include "index.html.h"
@@ -249,7 +251,7 @@ static void wifi_config_server_on_settings(client_t *client) {
             snprintf(
                 buffer, sizeof(buffer),
                 html_network_item,
-                net->secure ? "secure" : "unsecure", bssid, net->ssid, net->ssid, net->rssi, bssid
+                net->secure ? "secure" : "unsecure", bssid, net->ssid, net->ssid, net->rssi, net->channel, bssid
             );
             client_send_chunk(client, buffer);
 
@@ -263,23 +265,15 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send_chunk(client, "");
 }
 
-
 static void wifi_config_server_on_settings_update(client_t *client) {
     INFO("Update settings, body = %s", client->body);
-
+    
     form_param_t *form = form_params_parse((char *)client->body);
     if (!form) {
         client_send_redirect(client, 302, "/settings");
         return;
     }
-    
-    // Remove sated states
-    char saved_state_id[5];
-    for (uint16_t int_saved_state_id=100; int_saved_state_id<=3099; int_saved_state_id++) {
-        itoa(int_saved_state_id, saved_state_id, 10);
-        sysparam_set_data(saved_state_id, NULL, 0, false);
-    }
-    
+
     form_param_t *conf_param = form_params_find(form, "conf");
     form_param_t *reset_param = form_params_find(form, "reset");
     form_param_t *nowifi_param = form_params_find(form, "nowifi");
@@ -291,47 +285,15 @@ static void wifi_config_server_on_settings_update(client_t *client) {
     form_param_t *password_param = form_params_find(form, "password");
     
     static const char payload[] = "HTTP/1.1 204 \r\nContent-Type: text/html\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-    client_send(client, payload, sizeof(payload)-1);
-
-    if (ssid_param->value) {
-        sysparam_set_string("wifi_ssid", ssid_param->value);
-
-        if (bssid_param->value && strlen(bssid_param->value) == 12) {
-            char *bssid = malloc(7);
-            char hex[2];
-            
-            for (uint8_t i = 0; i < 6; i++) {
-                hex[0] = bssid_param->value[(i * 2)];
-                hex[1] = bssid_param->value[(i * 2) + 1];
-                bssid[i] = (char) strtol(hex, NULL, 16);
-
-            }
-
-            sysparam_set_string("wifi_bssid", bssid);
-            
-            free(bssid);
-        } else {
-            sysparam_set_string("wifi_bssid", "");
-        }
-        
-        if (password_param->value) {
-            sysparam_set_string("wifi_password", password_param->value);
-        } else {
-            sysparam_set_string("wifi_password", "");
-        }
-        
-        struct sdk_station_config sta_config;
-        memset(&sta_config, 0, sizeof(sta_config));
-        strncpy((char *)sta_config.ssid, ssid_param->value, sizeof(sta_config.ssid));
-        sta_config.ssid[sizeof(sta_config.ssid)-1] = 0;
-        
-        if (password_param->value) {
-            strncpy((char *)sta_config.password, password_param->value, sizeof(sta_config.password));
-        }
-        
-        sdk_wifi_station_set_config(&sta_config);
-        sdk_wifi_station_connect();
-        sdk_wifi_station_set_auto_connect(true);
+    client_send(client, payload, sizeof(payload) - 1);
+    
+    // Remove sated states
+    int8_t hk_total_ac = 0;
+    sysparam_get_int8("total_ac", &hk_total_ac);
+    char saved_state_id[5];
+    for (uint16_t int_saved_state_id = 100; int_saved_state_id <= hk_total_ac * 100; int_saved_state_id++) {
+        itoa(int_saved_state_id, saved_state_id, 10);
+        sysparam_set_data(saved_state_id, NULL, 0, false);
     }
 
     if (conf_param->value) {
@@ -344,12 +306,6 @@ static void wifi_config_server_on_settings_update(client_t *client) {
         sysparam_set_bool("aota", false);
     }
     
-    if (wifimode_param->value) {
-        sysparam_set_int8("wifi_mode", strtol(wifimode_param->value, NULL, 10));
-    }
-    
-    sysparam_set_int8("setup", 0);
-    
     if (ota_param) {
         rboot_set_temp_rom(1);
     }
@@ -359,20 +315,60 @@ static void wifi_config_server_on_settings_update(client_t *client) {
         sysparam_set_data("wifi_password", NULL, 0, false);
     }
     
-    vTaskDelay(200 / portTICK_PERIOD_MS);
-    sysparam_compact();
-    vTaskDelay(300 / portTICK_PERIOD_MS);
-    
     if (reset_param) {
         homekit_server_reset();
     }
-
-    INFO("Restarting...");
-    vTaskDelay(500 / portTICK_PERIOD_MS);
     
+    if (ssid_param->value) {
+        sysparam_set_string("wifi_ssid", ssid_param->value);
+
+        if (bssid_param->value && strlen(bssid_param->value) == 12) {
+            char *bssid = malloc(7);
+            char *hex = malloc(3);
+            
+            for (uint8_t i = 0; i < 6; i++) {
+                hex[0] = bssid_param->value[(i * 2)];
+                hex[1] = bssid_param->value[(i * 2) + 1];
+                bssid[i] = (char) strtol(hex, NULL, 16);
+            }
+
+            sysparam_set_string("wifi_bssid", bssid);
+            
+            free(hex);
+            free(bssid);
+        } else {
+            sysparam_set_string("wifi_bssid", "");
+        }
+        
+        if (password_param->value) {
+            sysparam_set_string("wifi_password", password_param->value);
+        } else {
+            sysparam_set_string("wifi_password", "");
+        }
+    }
+    
+    sysparam_compact();
+    
+    if (wifimode_param->value) {
+        int8_t current_wifi_mode = 0;
+        int8_t new_wifi_mode = strtol(wifimode_param->value, NULL, 10);
+        sysparam_get_int8("wifi_mode", &current_wifi_mode);
+        sysparam_set_int8("wifi_mode", new_wifi_mode);
+        
+        if (current_wifi_mode != new_wifi_mode) {
+            struct sdk_station_config sta_config;
+            memset(&sta_config, 0, sizeof(sta_config));
+            
+            strncpy((char *)sta_config.ssid, "none", sizeof(sta_config.ssid));
+            sta_config.ssid[sizeof(sta_config.ssid) - 1] = 0;
+            sdk_wifi_station_set_config(&sta_config);
+        }
+    }
+    
+    INFO("Rebooting...");
+    vTaskDelay(250 / portTICK_PERIOD_MS);
     sdk_system_restart();
 }
-
 
 static int wifi_config_server_on_url(http_parser *parser, const char *data, size_t length) {
     client_t *client = (client_t*) parser->data;
@@ -399,7 +395,6 @@ static int wifi_config_server_on_url(http_parser *parser, const char *data, size
     return 0;
 }
 
-
 static int wifi_config_server_on_body(http_parser *parser, const char *data, size_t length) {
     client_t *client = parser->data;
     client->body = realloc(client->body, client->body_length + length + 1);
@@ -410,6 +405,16 @@ static int wifi_config_server_on_body(http_parser *parser, const char *data, siz
     return 0;
 }
 
+static void wifi_config_context_free(wifi_config_context_t *context) {
+    if (context->ssid_prefix)
+        free(context->ssid_prefix);
+
+    if (context->password)
+        free(context->password);
+
+    free(context);
+    context = NULL;
+}
 
 static int wifi_config_server_on_message_complete(http_parser *parser) {
     client_t *client = parser->data;
@@ -424,6 +429,7 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
             break;
         }
         case ENDPOINT_SETTINGS_UPDATE: {
+            wifi_config_context_free(context);
             wifi_config_server_on_settings_update(client);
             break;
         }
@@ -443,13 +449,11 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
     return 0;
 }
 
-
 static http_parser_settings wifi_config_http_parser_settings = {
     .on_url = wifi_config_server_on_url,
     .on_body = wifi_config_server_on_body,
     .on_message_complete = wifi_config_server_on_message_complete,
 };
-
 
 static void http_task(void *arg) {
     INFO("Start HTTP server");
@@ -535,11 +539,9 @@ static void http_task(void *arg) {
     vTaskDelete(NULL);
 }
 
-
 static void http_start() {
     xTaskCreate(http_task, "http_task", 512, NULL, 2, &context->http_task_handle);
 }
-
 
 static void http_stop() {
     if (! context->http_task_handle) {
@@ -548,7 +550,6 @@ static void http_stop() {
 
     xTaskNotify(context->http_task_handle, 1, eSetValueWithOverwrite);
 }
-
 
 static void dns_task(void *arg)
 {
@@ -633,11 +634,9 @@ static void dns_task(void *arg)
     vTaskDelete(NULL);
 }
 
-
 static void dns_start() {
     xTaskCreate(dns_task, "dns_task", 384, NULL, 2, &context->dns_task_handle);
 }
-
 
 static void dns_stop() {
     if (!context->dns_task_handle)
@@ -645,18 +644,6 @@ static void dns_stop() {
 
     xTaskNotify(context->dns_task_handle, 1, eSetValueWithOverwrite);
 }
-
-
-static void wifi_config_context_free(wifi_config_context_t *context) {
-    if (context->ssid_prefix)
-        free(context->ssid_prefix);
-
-    if (context->password)
-        free(context->password);
-
-    free(context);
-}
-
 
 static void wifi_config_softap_start() {
     sdk_wifi_set_opmode(STATIONAP_MODE);
@@ -708,7 +695,6 @@ static void wifi_config_softap_start() {
     http_start();
 }
 
-
 static void wifi_config_softap_stop() {
     LOCK_TCPIP_CORE();
     dhcpserver_stop();
@@ -716,7 +702,6 @@ static void wifi_config_softap_stop() {
     sdk_wifi_set_opmode(STATION_MODE);
     UNLOCK_TCPIP_CORE();
 }
-
 
 static void wifi_config_sta_connect_timeout_callback(void *arg) {
     struct netif *netif = sdk_system_get_netif(STATION_IF);
@@ -738,13 +723,11 @@ static void wifi_config_sta_connect_timeout_callback(void *arg) {
         if (context->on_wifi_ready) {
             http_stop();
             context->on_wifi_ready();
+            
+            wifi_config_context_free(context);
         }
-        
-        wifi_config_context_free(context);
-        context = NULL;
     }
 }
-
 
 static void auto_reboot_run() {
     bool auto_ota = false;
@@ -755,11 +738,10 @@ static void auto_reboot_run() {
     }
 
     INFO("Auto Reboot");
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
+    vTaskDelay(150 / portTICK_PERIOD_MS);
     
     sdk_system_restart();
 }
-
 
 static void wifi_config_station_connect() {
     char *wifi_ssid = NULL;
@@ -772,9 +754,10 @@ static void wifi_config_station_connect() {
     } else {
 
         struct sdk_station_config sta_config;
+        
         memset(&sta_config, 0, sizeof(sta_config));
         strncpy((char *)sta_config.ssid, wifi_ssid, sizeof(sta_config.ssid));
-        sta_config.ssid[sizeof(sta_config.ssid)-1] = 0;
+        sta_config.ssid[sizeof(sta_config.ssid) - 1] = 0;
         
         char *wifi_password = NULL;
         sysparam_get_string("wifi_password", &wifi_password);
@@ -790,14 +773,15 @@ static void wifi_config_station_connect() {
             if (wifi_bssid) {
                 sta_config.bssid_set = 1;
                 strncpy((char *)sta_config.bssid, wifi_bssid, sizeof(sta_config.bssid));
-                //INFO("BSSID: %02x%02x%02x%02x%02x%02x", sta_config.bssid[0], sta_config.bssid[1], sta_config.bssid[2], sta_config.bssid[3], sta_config.bssid[4], sta_config.bssid[5]);
+                printf("WiFi Mode: Forced BSSID %02x%02x%02x%02x%02x%02x\n", sta_config.bssid[0], sta_config.bssid[1], sta_config.bssid[2], sta_config.bssid[3], sta_config.bssid[4], sta_config.bssid[5]);
                 
                 free(wifi_bssid);
             }
         } else {
+            INFO("WiFi Mode: Normal");
             sta_config.bssid_set = 0;
         }
-
+        
         sdk_wifi_station_set_config(&sta_config);
         sdk_wifi_station_connect();
         sdk_wifi_station_set_auto_connect(true);
@@ -831,7 +815,6 @@ static void wifi_config_station_connect() {
         }
     }
 }
-
 
 void wifi_config_init(const char *ssid_prefix, const char *password, void (*on_wifi_ready)(), const char *custom_hostname) {
     INFO("WiFi config init");
