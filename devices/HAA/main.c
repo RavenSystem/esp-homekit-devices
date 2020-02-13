@@ -68,6 +68,7 @@ void free_heap_watchdog() {
 #endif  // HAA_DEBUG
 
 uint8_t wifi_status = WIFI_STATUS_CONNECTED;
+uint8_t wifi_channel = 0;
 int8_t setup_mode_toggle_counter = INT8_MIN;
 int8_t setup_mode_toggle_counter_max = SETUP_MODE_DEFAULT_ACTIVATE_COUNT;
 uint8_t led_gpio = 255;
@@ -158,7 +159,14 @@ void led_blink(const int blinks) {
 }
 
 void wifi_watchdog() {
-    if (wifi_status == WIFI_STATUS_DISCONNECTED) {
+    if (wifi_status == WIFI_STATUS_CONNECTED) {
+        uint8_t current_channel = sdk_wifi_get_channel();
+        if (wifi_channel != current_channel) {
+            INFO(log_output, "WiFi new Ch%i", current_channel);
+            wifi_channel = current_channel;
+            homekit_mdns_announce();
+        }
+    } else if (wifi_status == WIFI_STATUS_DISCONNECTED) {
         wifi_status = WIFI_STATUS_CONNECTING;
         INFO(log_output, "WiFi connecting...");
         wifi_config_connect();
@@ -171,6 +179,7 @@ void wifi_watchdog() {
             
         } else if (wifi_status == WIFI_STATUS_PRECONNECTED) {
             wifi_status = WIFI_STATUS_CONNECTED;
+            wifi_channel = sdk_wifi_get_channel();
             INFO(log_output, "mDNS reannounced");
             homekit_mdns_announce();
         }
@@ -316,7 +325,7 @@ void exit_emergency_setup_mode_task() {
     INFO(log_output, "Disarming Emergency Setup Mode");
     sysparam_set_int8("setup", 0);
 
-    //vTaskDelay(MS_TO_TICK(10000)); sdk_wifi_station_disconnect();      // Emulates a WiFi disconnection. Keep comment for releases
+    // vTaskDelay(MS_TO_TICK(8000)); sdk_wifi_station_disconnect(); sdk_wifi_station_connect();      // Emulates a WiFi disconnection. Keep comment for releases
     
     vTaskDelete(NULL);
 }
@@ -2275,6 +2284,8 @@ homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, F
 homekit_server_config_t config;
 
 void run_homekit_server() {
+    wifi_channel = sdk_wifi_get_channel();
+    
     if (enable_homekit_server) {
         INFO(log_output, "Start HK Server");
 
