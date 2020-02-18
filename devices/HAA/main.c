@@ -162,6 +162,7 @@ void wifi_watchdog() {
     if (wifi_status == WIFI_STATUS_CONNECTED) {
         uint8_t current_channel = sdk_wifi_get_channel();
         if (wifi_channel != current_channel) {
+            wifi_status = WIFI_STATUS_PRECONNECTED;
             INFO(log_output, "WiFi new Ch%i", current_channel);
             wifi_channel = current_channel;
             homekit_mdns_announce();
@@ -2779,7 +2780,7 @@ void normal_mode_init() {
             accessories[accessory]->services[1]->characteristics[ch_calloc - 3] = ch1;
             accessories[accessory]->services[1]->characteristics[ch_calloc - 2] = ch2;
             
-            const uint32_t initial_time = (uint32_t) set_initial_state(accessory, 1, cJSON_Parse(INIT_STATE_LAST_STR), ch1, CH_TYPE_INT32, 900);
+            const uint32_t initial_time = (uint32_t) set_initial_state(accessory, 1, cJSON_Parse(INIT_STATE_LAST_STR), ch1, CH_TYPE_INT32, max_duration);
             if (initial_time > max_duration) {
                 ch1->value.int_value = max_duration;
             } else {
