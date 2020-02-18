@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "1.6.5"
-#define FIRMWARE_VERSION_OCTAL              010605      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "1.6.6"
+#define FIRMWARE_VERSION_OCTAL              010606      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMOLDSECTOR                   0xF7000
@@ -52,6 +52,7 @@
 #define AUTOOFF_SETTER_TASK_SIZE            (configMINIMAL_STACK_SIZE * 2)
 #define AUTODIMMER_TASK_SIZE                (configMINIMAL_STACK_SIZE)
 #define IR_TX_TASK_SIZE                     (configMINIMAL_STACK_SIZE * 4)
+#define HTTP_GET_TASK_SIZE                  (configMINIMAL_STACK_SIZE * 2)
 #define DELAYED_SENSOR_START_TASK_SIZE      (configMINIMAL_STACK_SIZE)
 
 // Button Events

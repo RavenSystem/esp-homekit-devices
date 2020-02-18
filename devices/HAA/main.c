@@ -55,18 +55,6 @@
 #include "header.h"
 #include "types.h"
 
-#ifdef HAA_DEBUG
-ETSTimer free_heap_timer;
-uint32_t free_heap = 0;
-void free_heap_watchdog() {
-    uint32_t new_free_heap = xPortGetFreeHeapSize();
-    if (new_free_heap != free_heap) {
-        free_heap = new_free_heap;
-        INFO(log_output, "Free Heap: %d", free_heap);
-    }
-}
-#endif  // HAA_DEBUG
-
 uint8_t wifi_status = WIFI_STATUS_CONNECTED;
 uint8_t wifi_channel = 0;
 int8_t setup_mode_toggle_counter = INT8_MIN;
@@ -100,6 +88,18 @@ last_state_t *last_states = NULL;
 ch_group_t *ch_groups = NULL;
 lightbulb_group_t *lightbulb_groups = NULL;
 ping_input_t *ping_inputs = NULL;
+
+#ifdef HAA_DEBUG
+ETSTimer free_heap_timer;
+uint32_t free_heap = 0;
+void free_heap_watchdog() {
+    uint32_t new_free_heap = xPortGetFreeHeapSize();
+    if (new_free_heap != free_heap) {
+        free_heap = new_free_heap;
+        INFO(log_output, "Free Heap: %d", free_heap);
+    }
+}
+#endif  // HAA_DEBUG
 
 ch_group_t *ch_group_find(homekit_characteristic_t *ch) {
     ch_group_t *ch_group = ch_groups;
@@ -1720,6 +1720,108 @@ void hkc_autooff_setter_task(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
+// --- HTTP GET task
+void http_get_task(void *pvParameters) {
+    cJSON *json_http_actions = pvParameters;
+    for(uint8_t i=0; i<cJSON_GetArraySize(json_http_actions); i++) {
+        cJSON *json_http_action = cJSON_GetArrayItem(json_http_actions, i);
+        
+        char *host = cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_HOST)->valuestring;
+        char *url = "";
+        if (cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_URL) != NULL) {
+            url = cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_URL)->valuestring;
+        }
+        
+        uint16_t port_n = 80;
+        if (cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_PORT) != NULL) {
+            port_n = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_PORT)->valuedouble;
+        }
+        
+        INFO(log_output, "HTTP Action http://%s:%i/%s", host, port_n, url);
+        
+        const struct addrinfo hints = {
+            .ai_family = AF_UNSPEC,
+            .ai_socktype = SOCK_STREAM,
+        };
+        struct addrinfo *res;
+        
+        char port[5];
+        itoa(port_n, port, 10);
+        
+        if (getaddrinfo(host, port, &hints, &res) == 0) {
+            int s = socket(res->ai_family, res->ai_socktype, 0);
+            if (s >= 0) {
+                if (connect(s, res->ai_addr, res->ai_addrlen) == 0) {
+                    uint8_t method_n = 0;
+                    if (cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_METHOD) != NULL) {
+                        method_n = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_METHOD)->valuedouble;
+                    }
+                    
+                    uint16_t content_len_n = 0;
+                    
+                    char *method = "GET";
+                    char *method_req = NULL;
+                    char *content = "";
+                    if (method_n > 0) {
+                        if (cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_CONTENT) != NULL) {
+                            content = cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_CONTENT)->valuestring;
+                            content_len_n = strlen(content);
+                        }
+                        
+                        char content_len[4];
+                        itoa(content_len_n, content_len, 10);
+                        method_req = malloc(48);
+                        snprintf(method_req, 48, "Content-type: text/html\r\nContent-length: %s\r\n", content_len);
+                        
+                        if (method_n == 1) {
+                            method = "PUT";
+                        } else if (method_n == 2) {
+                            method = "POST";
+                        }
+                    }
+                    
+                    uint16_t req_len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(host) +  strlen(url) + content_len_n;
+                    
+                    char *req = malloc(req_len);
+                    snprintf(req, req_len, "%s /%s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HAA/"FIRMWARE_VERSION" esp8266\r\nConnection: close\r\n%s\r\n%s",
+                             method,
+                             url,
+                             host,
+                             (method_req != NULL) ? method_req : "",
+                             content);
+                    
+                    if (write(s, req, strlen(req)) >= 0) {
+                        INFO(log_output, "%s", req);
+                        
+                    } else {
+                        ERROR(log_output, "HTTP");
+                    }
+                    
+                    if (method_req != NULL) {
+                        free(method_req);
+                    }
+                    
+                    free(req);
+                } else {
+                    ERROR(log_output, "Connection");
+                }
+            } else {
+                ERROR(log_output, "Socket");
+            }
+            
+            close(s);
+        } else {
+            ERROR(log_output, "DNS");
+        }
+        
+        freeaddrinfo(res);
+        
+        vTaskDelay(MS_TO_TICK(10));
+    }
+    
+    vTaskDelete(NULL);
+}
+
 // --- IR Send task
 void ir_tx_task(void *pvParameters) {
     cJSON *json_ir_actions = pvParameters;
@@ -2110,98 +2212,15 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
         
         // HTTP GET actions
         cJSON *json_http_actions = cJSON_GetObjectItemCaseSensitive(actions, HTTP_ACTIONS_ARRAY);
-        for(uint8_t i=0; i<cJSON_GetArraySize(json_http_actions); i++) {
-            cJSON *json_http_action = cJSON_GetArrayItem(json_http_actions, i);
-            
-            char *host = cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_HOST)->valuestring;
-            char *url = "";
-            if (cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_URL) != NULL) {
-                url = cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_URL)->valuestring;
-            }
-            
-            uint16_t port_n = 80;
-            if (cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_PORT) != NULL) {
-                port_n = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_PORT)->valuedouble;
-            }
-            
-            INFO(log_output, "HTTP Action http://%s:%i/%s", host, port_n, url);
-            
-            const struct addrinfo hints = {
-                .ai_family = AF_UNSPEC,
-                .ai_socktype = SOCK_STREAM,
-            };
-            struct addrinfo *res;
-            
-            char port[5];
-            itoa(port_n, port, 10);
-            
-            if (getaddrinfo(host, port, &hints, &res) == 0) {
-                int s = socket(res->ai_family, res->ai_socktype, 0);
-                if (s >= 0) {
-                    if (connect(s, res->ai_addr, res->ai_addrlen) == 0) {
-                        uint8_t method_n = 0;
-                        if (cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_METHOD) != NULL) {
-                            method_n = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_METHOD)->valuedouble;
-                        }
-                        
-                        uint16_t content_len_n = 0;
-                        
-                        char *method = "GET";
-                        char *method_req = NULL;
-                        char *content = "";
-                        if (method_n > 0) {
-                            if (cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_CONTENT) != NULL) {
-                                content = cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_CONTENT)->valuestring;
-                                content_len_n = strlen(content);
-                            }
-                            
-                            char content_len[4];
-                            itoa(content_len_n, content_len, 10);
-                            method_req = malloc(48);
-                            snprintf(method_req, 48, "Content-type: text/html\r\nContent-length: %s\r\n", content_len);
-                            
-                            if (method_n == 1) {
-                                method = "PUT";
-                            } else if (method_n == 2) {
-                                method = "POST";
-                            }
-                        }
-                        
-                        uint16_t req_len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(host) +  strlen(url) + content_len_n;
-                        
-                        char *req = malloc(req_len);
-                        snprintf(req, req_len, "%s /%s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HAA/"FIRMWARE_VERSION" esp8266\r\nConnection: close\r\n%s\r\n%s",
-                                 method,
-                                 url,
-                                 host,
-                                 (method_req != NULL) ? method_req : "",
-                                 content);
-                        
-                        if (write(s, req, strlen(req)) >= 0) {
-                            INFO(log_output, "%s", req);
-                            
-                        } else {
-                            ERROR(log_output, "HTTP");
-                        }
-                        
-                        if (method_req != NULL) {
-                            free(method_req);
-                        }
-                        
-                        free(req);
-                    } else {
-                        ERROR(log_output, "Connection");
-                    }
-                } else {
-                    ERROR(log_output, "Socket");
-                }
-                
-                close(s);
-            } else {
-                ERROR(log_output, "DNS");
-            }
-            
-            freeaddrinfo(res);
+        if (json_http_actions != NULL) {
+            xTaskCreate(http_get_task, "http_get_task", HTTP_GET_TASK_SIZE, json_http_actions, 0, NULL);
+        }
+        
+        // IR outputs
+        cJSON *json_ir_actions = cJSON_GetObjectItemCaseSensitive(actions, IR_ACTIONS_ARRAY);
+        if (json_ir_actions != NULL && !ir_tx_is_running) {
+            ir_tx_is_running = true;
+            xTaskCreate(ir_tx_task, "ir_tx_task", IR_TX_TASK_SIZE, json_ir_actions, 12, NULL);
         }
         
         // System actions
@@ -2231,13 +2250,6 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                     xTaskCreate(reboot_task, "reboot_task", REBOOT_TASK_SIZE, NULL, 1, NULL);
                     break;
             }
-        }
-        
-        // IR outputs
-        cJSON *json_ir_actions = cJSON_GetObjectItemCaseSensitive(actions, IR_ACTIONS_ARRAY);
-        if (json_ir_actions != NULL && !ir_tx_is_running) {
-            ir_tx_is_running = true;
-            xTaskCreate(ir_tx_task, "ir_tx_task", IR_TX_TASK_SIZE, json_ir_actions, 12, NULL);
         }
         
     }
