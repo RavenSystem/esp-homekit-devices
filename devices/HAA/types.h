@@ -58,6 +58,8 @@ typedef struct _ch_group {
     float num3;
     float num4;
     
+    float last_wildcard_action0;
+    
     ETSTimer *timer;
     
     struct _ch_group *next;
@@ -66,6 +68,8 @@ typedef struct _ch_group {
 typedef struct _lightbulb_group {
     homekit_characteristic_t *ch0;
 
+    bool is_pwm;
+    
     uint8_t pwm_r;
     uint8_t pwm_g;
     uint8_t pwm_b;

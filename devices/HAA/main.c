@@ -417,6 +417,7 @@ void hkc_setter_with_setup(homekit_characteristic_t *ch, const homekit_value_t v
 
 void hkc_autooff_setter_task(void *pvParameters);
 void do_actions(cJSON *json_context, const uint8_t int_action);
+void do_wildcard_actions(ch_group_t *ch_group, cJSON *json_context, const float action_value);
 
 // --- ON
 void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
@@ -660,7 +661,7 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
             temp_deadband = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND)->valuedouble;
         }
         
-        if (ch_group->ch1->value.bool_value) {
+        if (ch_group->ch1->value.int_value) {
             const float mid_target_temp = (ch_group->ch5->value.float_value + ch_group->ch6->value.float_value) / 2;
             
             switch (ch_group->ch4->value.int_value) {
@@ -747,41 +748,41 @@ void th_input(const uint8_t gpio, void *args, const uint8_t type) {
         
         switch (type) {
             case 0:
-                ch_group->ch1->value.bool_value = false;
+                ch_group->ch1->value.int_value = 0;
                 break;
                 
             case 1:
-                ch_group->ch1->value.bool_value = true;
+                ch_group->ch1->value.int_value = 1;
                 break;
                 
             case 5:
-                ch_group->ch1->value.bool_value = true;
+                ch_group->ch1->value.int_value = 1;
                 ch_group->ch4->value.int_value = 2;
                 break;
                 
             case 6:
-                ch_group->ch1->value.bool_value = true;
+                ch_group->ch1->value.int_value = 1;
                 ch_group->ch4->value.int_value = 1;
                 break;
                 
             case 7:
-                ch_group->ch1->value.bool_value = true;
+                ch_group->ch1->value.int_value = 1;
                 ch_group->ch4->value.int_value = 0;
                 break;
                 
             default:    // case 9:  // Cyclic
-                if (ch_group->ch1->value.bool_value) {
+                if (ch_group->ch1->value.int_value) {
                     if (th_type == THERMOSTAT_TYPE_HEATERCOOLER) {
                         if (ch_group->ch4->value.int_value > 0) {
                             ch_group->ch4->value.int_value--;
                         } else {
-                            ch_group->ch1->value.bool_value = false;
+                            ch_group->ch1->value.int_value = 0;
                         }
                     } else {
-                        ch_group->ch1->value.bool_value = false;
+                        ch_group->ch1->value.int_value = 0;
                     }
                 } else {
-                    ch_group->ch1->value.bool_value = true;
+                    ch_group->ch1->value.int_value = 1;
                     if (th_type == THERMOSTAT_TYPE_HEATERCOOLER) {
                         ch_group->ch4->value.int_value = THERMOSTAT_TARGET_MODE_COOLER;
                     }
@@ -887,8 +888,7 @@ void temperature_timer_worker(void *args) {
         }
     }
     
-    //get_temp = true;          // Only for tests. Keep comment for releases
-    //temperature_value = 21;   // Only for tests. Keep comment for releases
+    //get_temp = true; temperature_value = 21;      // Only for tests. Keep comment for releases
     
     if (get_temp) {
         if (ch_group->ch0) {
@@ -905,6 +905,8 @@ void temperature_timer_worker(void *args) {
                 if (ch_group->ch5) {
                     update_th(ch_group->ch0, ch_group->ch0->value);
                 }
+                
+                do_wildcard_actions(ch_group, json_context, temperature_value);
             }
         }
         
@@ -918,6 +920,8 @@ void temperature_timer_worker(void *args) {
 
             if (humidity_value != ch_group->ch1->value.float_value) {
                 ch_group->ch1->value = HOMEKIT_FLOAT(humidity_value);
+                
+                //do_wildcard_actions(ch_group, json_context, temperature_value);
             }
         }
         
@@ -1113,13 +1117,17 @@ void hkc_rgbw_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
         led_blink(1);
         INFO(log_output, "Target RGBW = %i, %i, %i, %i", lightbulb_group->target_r, lightbulb_group->target_g, lightbulb_group->target_b, lightbulb_group->target_w);
         
-        if (!setpwm_is_running) {
+        if (lightbulb_group->is_pwm && !setpwm_is_running) {
             setpwm_is_running = true;
             sdk_os_timer_arm(pwm_timer, RGBW_PERIOD, true);
         }
         
         cJSON *json_context = ch_group->ch0->context;
         do_actions(json_context, (uint8_t) ch_group->ch0->value.bool_value);
+        
+        if (ch_group->ch0->value.bool_value) {
+            do_wildcard_actions(ch_group, json_context, ch_group->ch1->value.int_value);
+        }
         
         hkc_group_notify(ch_group->ch0);
         
@@ -1460,6 +1468,8 @@ void hkc_window_cover_setter(homekit_characteristic_t *ch1, const homekit_value_
         } else {
             window_cover_stop(ch1);
         }
+        
+        do_wildcard_actions(ch_group, json_context, value.int_value);
     
     }
     
@@ -1526,6 +1536,46 @@ void window_cover_timer_worker(void *args) {
             window_cover_stop(ch0);
             break;
     }
+}
+
+// --- FAN
+void hkc_fan_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
+    ch_group_t *ch_group = ch_group_find(ch);
+    if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
+        if (ch->value.int_value != value.int_value) {
+            led_blink(1);
+            INFO(log_output, "Setter FAN");
+            
+            ch->value = value;
+            
+            cJSON *json_context = ch->context;
+            
+            if (ch == ch_group->ch0) {
+                do_actions(json_context, (uint8_t) ch->value.int_value);
+                
+                if (ch->value.int_value == 1 && cJSON_GetObjectItemCaseSensitive(json_context, AUTOSWITCH_TIME) != NULL) {
+                    const double autoswitch_time = cJSON_GetObjectItemCaseSensitive(json_context, AUTOSWITCH_TIME)->valuedouble;
+                    if (autoswitch_time > 0) {
+                        autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                        autooff_setter_params->ch = ch;
+                        autooff_setter_params->type = TYPE_VALVE;
+                        autooff_setter_params->time = autoswitch_time;
+                        xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, 1, NULL);
+                    }
+                }
+                
+                setup_mode_toggle_upcount();
+            }
+            
+            if (ch_group->ch0->value.int_value) {
+                do_wildcard_actions(ch_group, json_context, ch_group->ch1->value.float_value);
+            }
+            
+            save_states_callback();
+        }
+    }
+    
+    hkc_group_notify(ch_group->ch0);
 }
 
 // --- DIGITAL INPUTS
@@ -1608,6 +1658,14 @@ void diginput(const uint8_t gpio, void *args, const uint8_t type) {
                 }
                 break;
                 
+            case TYPE_FAN:
+                if (ch->value.int_value == 1) {
+                    hkc_fan_setter(ch, HOMEKIT_UINT8(0));
+                } else {
+                    hkc_fan_setter(ch, HOMEKIT_UINT8(1));
+                }
+                break;
+                
             default:    // case TYPE_ON:
                 hkc_on_setter(ch, HOMEKIT_BOOL(!ch->value.bool_value));
                 break;
@@ -1641,6 +1699,12 @@ void diginput_1(const uint8_t gpio, void *args, const uint8_t type) {
             case TYPE_GARAGE_DOOR:
                 if (ch->value.int_value == 0) {
                     hkc_garage_door_setter(ch, HOMEKIT_UINT8(1));
+                }
+                break;
+                
+            case TYPE_FAN:
+                if (ch->value.int_value == 0) {
+                    hkc_fan_setter(ch, HOMEKIT_UINT8(1));
                 }
                 break;
                 
@@ -1679,6 +1743,12 @@ void diginput_0(const uint8_t gpio, void *args, const uint8_t type) {
             case TYPE_GARAGE_DOOR:
                 if (ch->value.int_value == 1) {
                     hkc_garage_door_setter(ch, HOMEKIT_UINT8(0));
+                }
+                break;
+                
+            case TYPE_FAN:
+                if (ch->value.int_value == 1) {
+                    hkc_fan_setter(ch, HOMEKIT_UINT8(0));
                 }
                 break;
                 
@@ -2162,7 +2232,7 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                             
                         case ACC_TYPE_THERMOSTAT:
                             if (value == 0.02 || value == 0.03) {
-                                update_th(ch_group->ch1, HOMEKIT_BOOL((bool) ((value - 0.02) * 100)));
+                                update_th(ch_group->ch1, HOMEKIT_UINT8((uint8_t) ((value - 0.02) * 100)));
                             } else if (value == 0.04 || value == 0.05 || value == 0.06) {
                                 update_th(ch_group->ch4, HOMEKIT_UINT8((uint8_t) ((value - 0.04) * 100)));
                             } else {
@@ -2195,6 +2265,16 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                                 hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
                             } else {
                                 hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, HOMEKIT_UINT8((uint8_t) value));
+                            }
+                            break;
+                            
+                        case ACC_TYPE_FAN:
+                            if (value == 0) {
+                                hkc_fan_setter(ch_group->ch0, HOMEKIT_UINT8(0));
+                            } else if (value > 100) {
+                                hkc_fan_setter(ch_group->ch0, HOMEKIT_UINT8(1));
+                            } else {
+                                hkc_fan_setter(ch_group->ch0, HOMEKIT_FLOAT(value));
                             }
                             break;
                             
@@ -2252,6 +2332,43 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
             }
         }
         
+    }
+}
+
+void do_wildcard_actions(ch_group_t *ch_group, cJSON *json_context, const float action_value) {
+    INFO(log_output, "Wildcard %.2f", action_value);
+    float last_value, last_diff = 10000;
+    cJSON *json_last_wilcard_action = NULL, *json_wilcard_action;
+    
+    cJSON *json_wilcard_actions = cJSON_GetObjectItemCaseSensitive(json_context, WILDCARD_ACTIONS_ARRAY_0);
+    for(uint8_t i = 0; i < cJSON_GetArraySize(json_wilcard_actions); i++) {
+        json_wilcard_action = cJSON_GetArrayItem(json_wilcard_actions, i);
+        
+        const float value = (float) cJSON_GetObjectItemCaseSensitive(json_wilcard_action, VALUE)->valuedouble;
+        const float diff = action_value - value;
+
+        if (value <= action_value && diff < last_diff) {
+            last_value = value;
+            last_diff = diff;
+            json_last_wilcard_action = json_wilcard_action;
+        }
+    }
+    
+    if (json_last_wilcard_action != NULL) {
+        if (ch_group->last_wildcard_action0 == last_value) {
+            bool repeat = false;
+            if (cJSON_GetObjectItemCaseSensitive(json_last_wilcard_action, WILDCARD_ACTION_REPEAT) != NULL) {
+                repeat = (bool) cJSON_GetObjectItemCaseSensitive(json_last_wilcard_action, WILDCARD_ACTION_REPEAT)->valuedouble;
+            }
+            
+            if (!repeat) {
+                return;
+            }
+        }
+        
+        ch_group->last_wildcard_action0 = last_value;
+        INFO(log_output, "Wilcard Action %.2f", last_value);
+        do_actions(json_last_wilcard_action, 0);
     }
 }
 
@@ -3136,7 +3253,7 @@ void normal_mode_init() {
         
         // HomeKit Characteristics
         homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200}, .context=json_context);
-        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, false, .setter_ex=hkc_th_target_setter, .context=json_context);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_th_target_setter, .context=json_context);
         homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(TEMPERATURE_DISPLAY_UNITS, 0, .setter_ex=hkc_setter);
         homekit_characteristic_t *ch3 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_HEATER_COOLER_STATE, 0);
         homekit_characteristic_t *ch5 = NEW_HOMEKIT_CHARACTERISTIC(HEATING_THRESHOLD_TEMPERATURE, default_target_temp -1, .min_value=(float[]) {th_min_temp}, .max_value=(float[]) {th_max_temp}, .setter_ex=update_th, .context=json_context);
@@ -3245,14 +3362,14 @@ void normal_mode_init() {
             diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), th_input, ch0, 1);
             diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), th_input, ch0, 0);
             
-            ch1->value.bool_value = !((bool) set_initial_state(accessory, 1, json_context, ch1, CH_TYPE_BOOL, false));
-            update_th(ch1, HOMEKIT_BOOL(!ch1->value.bool_value));
+            ch1->value.int_value = !((uint8_t) set_initial_state(accessory, 1, json_context, ch1, CH_TYPE_INT8, 0));
+            update_th(ch1, HOMEKIT_UINT8(!ch1->value.int_value));
         } else {
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), th_input, ch0, 1)) {
                 th_input(0, ch1, 1);
             }
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), th_input, ch0, 0)) {
-                ch1->value = HOMEKIT_BOOL(true);
+                ch1->value = HOMEKIT_UINT8(1);
                 th_input(0, ch1, 0);
             }
         }
@@ -3360,7 +3477,13 @@ void normal_mode_init() {
     uint8_t new_lightbulb(uint8_t accessory, cJSON *json_context) {
         new_accessory(accessory, 3);
         
-        if (!lightbulb_groups) {
+        bool is_pwm = true;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R) == NULL &&
+            cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W) == NULL) {
+            is_pwm = false;
+        }
+
+        if (is_pwm && !lightbulb_groups) {
             INFO(log_output, "PWM Init");
             pwm_timer = malloc(sizeof(ETSTimer));
             memset(pwm_timer, 0, sizeof(*pwm_timer));
@@ -3392,6 +3515,7 @@ void normal_mode_init() {
         lightbulb_group_t *lightbulb_group = malloc(sizeof(lightbulb_group_t));
         memset(lightbulb_group, 0, sizeof(*lightbulb_group));
         lightbulb_group->ch0 = ch0;
+        lightbulb_group->is_pwm = is_pwm;
         lightbulb_group->pwm_r = 255;
         lightbulb_group->pwm_g = 255;
         lightbulb_group->pwm_b = 255;
@@ -3412,44 +3536,46 @@ void normal_mode_init() {
         lightbulb_group->next = lightbulb_groups;
         lightbulb_groups = lightbulb_group;
 
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-            lightbulb_group->pwm_r = pwm_info->channels;
-            pwm_info->channels++;
-            multipwm_set_pin(pwm_info, lightbulb_group->pwm_r, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R)->valuedouble);
-        }
-        
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_R) != NULL) {
-            lightbulb_group->factor_r = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_R)->valuedouble;
-        }
+        if (is_pwm) {
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                lightbulb_group->pwm_r = pwm_info->channels;
+                pwm_info->channels++;
+                multipwm_set_pin(pwm_info, lightbulb_group->pwm_r, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R)->valuedouble);
+            }
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_R) != NULL) {
+                lightbulb_group->factor_r = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_R)->valuedouble;
+            }
 
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-            lightbulb_group->pwm_g = pwm_info->channels;
-            pwm_info->channels++;
-            multipwm_set_pin(pwm_info, lightbulb_group->pwm_g, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G)->valuedouble);
-        }
-        
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_G) != NULL) {
-            lightbulb_group->factor_g = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_G)->valuedouble;
-        }
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                lightbulb_group->pwm_g = pwm_info->channels;
+                pwm_info->channels++;
+                multipwm_set_pin(pwm_info, lightbulb_group->pwm_g, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G)->valuedouble);
+            }
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_G) != NULL) {
+                lightbulb_group->factor_g = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_G)->valuedouble;
+            }
 
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-            lightbulb_group->pwm_b = pwm_info->channels;
-            pwm_info->channels++;
-            multipwm_set_pin(pwm_info, lightbulb_group->pwm_b, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B)->valuedouble);
-        }
-        
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_B) != NULL) {
-            lightbulb_group->factor_b = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_B)->valuedouble;
-        }
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                lightbulb_group->pwm_b = pwm_info->channels;
+                pwm_info->channels++;
+                multipwm_set_pin(pwm_info, lightbulb_group->pwm_b, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B)->valuedouble);
+            }
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_B) != NULL) {
+                lightbulb_group->factor_b = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_B)->valuedouble;
+            }
 
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-            lightbulb_group->pwm_w = pwm_info->channels;
-            pwm_info->channels++;
-            multipwm_set_pin(pwm_info, lightbulb_group->pwm_w, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W)->valuedouble);
-        }
-        
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_W) != NULL) {
-            lightbulb_group->factor_w = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_W)->valuedouble;
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                lightbulb_group->pwm_w = pwm_info->channels;
+                pwm_info->channels++;
+                multipwm_set_pin(pwm_info, lightbulb_group->pwm_w, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W)->valuedouble);
+            }
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_W) != NULL) {
+                lightbulb_group->factor_w = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_W)->valuedouble;
+            }
         }
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, RGBW_STEP) != NULL) {
@@ -3748,6 +3874,63 @@ void normal_mode_init() {
         return new_accessory_count;
     }
     
+    uint8_t new_fan(uint8_t accessory, cJSON *json_context) {
+        new_accessory(accessory, 3);
+        
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_fan_setter, .context=json_context);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(ROTATION_SPEED, 100, .setter_ex=hkc_fan_setter, .context=json_context);
+        
+        ch_group_t *ch_group = malloc(sizeof(ch_group_t));
+        memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->accessory = accessory_numerator;
+        accessory_numerator++;
+        ch_group->acc_type = ACC_TYPE_FAN;
+        ch_group->ch0 = ch0;
+        ch_group->ch1 = ch1;
+        ch_group->last_wildcard_action0 = NO_LAST_WILDCARD_ACTION;
+        ch_group->next = ch_groups;
+        ch_groups = ch_group;
+        
+        accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
+        accessories[accessory]->services[1]->id = 8;
+        accessories[accessory]->services[1]->primary = true;
+        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_FAN2;
+        accessories[accessory]->services[1]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+        accessories[accessory]->services[1]->characteristics[0] = ch0;
+        accessories[accessory]->services[1]->characteristics[1] = ch1;
+        
+        ch1->value.float_value = set_initial_state(accessory, 1, cJSON_Parse(INIT_STATE_LAST_STR), ch1, CH_TYPE_FLOAT, 100);
+        
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch0, TYPE_FAN);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch0, TYPE_FAN);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput_1, ch0, TYPE_FAN);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput_0, ch0, TYPE_FAN);
+        
+        uint8_t initial_state = 0;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
+            initial_state = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE)->valuedouble;
+        }
+        
+        if (initial_state != INIT_STATE_FIXED_INPUT) {
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_FAN);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_FAN);
+            
+            ch0->value.int_value = !((uint8_t) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_INT8, 0));
+            hkc_fan_setter(ch0, HOMEKIT_UINT8(!ch0->value.int_value));
+        } else {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_FAN)) {
+                diginput_1(0, ch0, TYPE_FAN);
+            }
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_FAN)) {
+                ch0->value = HOMEKIT_UINT8(1);
+                diginput_0(0, ch0, TYPE_FAN);
+            }
+        }
+        
+        const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
+        return new_accessory_count;
+    }
+    
     uint8_t acc_count = 0;
     
     // Accessory Builder
@@ -3757,7 +3940,7 @@ void normal_mode_init() {
         acc_count++;
     }
     
-    for(uint8_t i=0; i<total_accessories; i++) {
+    for(uint8_t i = 0; i < total_accessories; i++) {
         INFO(log_output, "\nACCESSORY %i", accessory_numerator);
         
         uint8_t acc_type = ACC_TYPE_SWITCH;
@@ -3767,16 +3950,39 @@ void normal_mode_init() {
         
         cJSON *json_accessory = cJSON_GetArrayItem(json_accessories, i);
 
-        // Digital outputs GPIO Setup
+        // Digital outputs GPIO Setup (Stardard Actions)
         char action[3];
-        for (uint8_t int_action=0; int_action<MAX_ACTIONS; int_action++) {
+        for (uint8_t int_action = 0; int_action < MAX_ACTIONS; int_action++) {
             itoa(int_action, action, 10);
             
             if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
                 if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), DIGITAL_OUTPUTS_ARRAY) != NULL) {
                     cJSON *json_relays = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), DIGITAL_OUTPUTS_ARRAY);
                     
-                    for(uint8_t j=0; j<cJSON_GetArraySize(json_relays); j++) {
+                    for(uint8_t j = 0; j < cJSON_GetArraySize(json_relays); j++) {
+                        const uint8_t gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_relays, j), PIN_GPIO)->valuedouble;
+                        if (!used_gpio[gpio]) {
+                            gpio_enable(gpio, GPIO_OUTPUT);
+                            gpio_write(gpio, false);
+                            
+                            used_gpio[gpio] = true;
+                            INFO(log_output, "DigO GPIO: %i", gpio);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Digital outputs GPIO Setup (Wildcard Actions)
+        cJSON *json_wilcard_actions = cJSON_GetObjectItemCaseSensitive(json_accessory, WILDCARD_ACTIONS_ARRAY_0);
+        for(uint8_t k = 0; k < cJSON_GetArraySize(json_wilcard_actions); k++) {
+            cJSON *json_wilcard_action = cJSON_GetArrayItem(json_wilcard_actions, k);
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_wilcard_action, "0") != NULL) {
+                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_wilcard_action, "0"), DIGITAL_OUTPUTS_ARRAY) != NULL) {
+                    cJSON *json_relays = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_wilcard_action, "0"), DIGITAL_OUTPUTS_ARRAY);
+                    
+                    for(uint8_t j = 0; j < cJSON_GetArraySize(json_relays); j++) {
                         const uint8_t gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_relays, j), PIN_GPIO)->valuedouble;
                         if (!used_gpio[gpio]) {
                             gpio_enable(gpio, GPIO_OUTPUT);
@@ -3827,6 +4033,12 @@ void normal_mode_init() {
 
         } else if (acc_type == ACC_TYPE_LIGHT_SENSOR) {
             //acc_count = new_analog_sensor(acc_count, json_accessory);
+            
+        } else if (acc_type == ACC_TYPE_TV) {
+            //acc_count = new_TV(acc_count, json_accessory);
+            
+        } else if (acc_type == ACC_TYPE_FAN) {
+            acc_count = new_fan(acc_count, json_accessory);
         
         } else {    // acc_type == ACC_TYPE_SWITCH || acc_type == ACC_TYPE_OUTLET
             acc_count = new_switch(acc_count, json_accessory, acc_type);

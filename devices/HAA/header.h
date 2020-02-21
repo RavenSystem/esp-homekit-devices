@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "1.6.6"
-#define FIRMWARE_VERSION_OCTAL              010606      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "1.7.0"
+#define FIRMWARE_VERSION_OCTAL              010700      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMOLDSECTOR                   0xF7000
@@ -43,6 +43,7 @@
 #define TYPE_LIGHTBULB                      5
 #define TYPE_GARAGE_DOOR                    6
 #define TYPE_WINDOW_COVER                   7
+#define TYPE_FAN                            8
 
 // Task Stack Sizes
 #define LED_TASK_SIZE                       (configMINIMAL_STACK_SIZE)
@@ -110,6 +111,10 @@
 #define PIN_GPIO                            "g"
 #define INITIAL_STATE                       "s"
 #define KILL_SWITCH                         "k"
+#define WILDCARD_ACTIONS_ARRAY_0            "y0"
+#define NO_LAST_WILDCARD_ACTION             (-1000)
+#define WILDCARD_ACTIONS                    "0"
+#define WILDCARD_ACTION_REPEAT              "r"
 
 #define VALVE_SYSTEM_TYPE                   "w"
 #define VALVE_SYSTEM_TYPE_DEFAULT           0
@@ -267,6 +272,7 @@
 #define ACC_TYPE_WINDOW_COVER               45
 #define ACC_TYPE_LIGHT_SENSOR               50
 #define ACC_TYPE_TV                         60
+#define ACC_TYPE_FAN                        65
 
 #define ACC_CREATION_DELAY                  30
 #define EXIT_EMERGENCY_SETUP_MODE_TIME      2200
