@@ -1771,7 +1771,7 @@ void hkc_tv_power_mode(homekit_characteristic_t *ch, const homekit_value_t value
         ch->value = value;
         
         cJSON *json_context = ch->context;
-        do_actions(json_context, (uint8_t) ch->value.int_value + 2);
+        do_actions(json_context, (uint8_t) ch->value.int_value + 30);
     }
     
     hkc_group_notify(ch);
@@ -4553,6 +4553,31 @@ void normal_mode_init() {
                             
                             used_gpio[gpio] = true;
                             INFO2("DigO GPIO: %i", gpio);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Digital outputs GPIO Setup (TV Inputs)
+        if (acc_type == ACC_TYPE_TV) {
+            cJSON *json_tv_inputs = cJSON_GetObjectItemCaseSensitive(json_accessory, TV_INPUTS_ARRAY);
+            for(uint8_t k = 0; k < cJSON_GetArraySize(json_tv_inputs); k++) {
+                cJSON *json_tv_input = cJSON_GetArrayItem(json_tv_inputs, k);
+                
+                if (cJSON_GetObjectItemCaseSensitive(json_tv_input, "0") != NULL) {
+                    if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_tv_input, "0"), DIGITAL_OUTPUTS_ARRAY) != NULL) {
+                        cJSON *json_relays = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_tv_input, "0"), DIGITAL_OUTPUTS_ARRAY);
+                        
+                        for(uint8_t j = 0; j < cJSON_GetArraySize(json_relays); j++) {
+                            const uint8_t gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_relays, j), PIN_GPIO)->valuedouble;
+                            if (!used_gpio[gpio]) {
+                                gpio_enable(gpio, GPIO_OUTPUT);
+                                gpio_write(gpio, false);
+                                
+                                used_gpio[gpio] = true;
+                                INFO2("DigO GPIO: %i", gpio);
+                            }
                         }
                     }
                 }

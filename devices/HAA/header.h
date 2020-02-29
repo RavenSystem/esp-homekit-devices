@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "1.8.0"
-#define FIRMWARE_VERSION_OCTAL              011000      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "1.8.1"
+#define FIRMWARE_VERSION_OCTAL              011001      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMOLDSECTOR                   0xF7000
@@ -232,7 +232,7 @@
 #define TV_INPUTS_ARRAY                     "i"
 #define TV_INPUT_NAME                       "n"
 
-#define MAX_ACTIONS                         23   // from 0 to ...
+#define MAX_ACTIONS                         31   // from 0 to ...
 #define COPY_ACTIONS                        "a"
 #define DIGITAL_OUTPUTS_ARRAY               "r"
 #define SYSTEM_ACTIONS_ARRAY                "s"
