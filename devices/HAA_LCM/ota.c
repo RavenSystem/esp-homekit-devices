@@ -50,6 +50,27 @@ void MyLoggingCallback(const int logLevel, const char* const logMessage) {
 }
 #endif
 
+char *strstr_lc(const char *full_string, const char *search) {
+    char *lc_string = strdup(full_string);
+
+    unsigned char *ch = (unsigned char *) lc_string;
+    while(*ch) {
+        *ch = tolower(*ch);
+        ch++;
+    }
+    
+    const char *found = strstr(lc_string, search);
+    free(lc_string);
+    
+    if(found == NULL) {
+        return NULL;
+    }
+    
+    const int offset = (int) found - (int) lc_string;
+    
+    return (char *) ((int) full_string + offset);
+}
+
 void ota_init() {
     UDPLGP("INIT\n");
 
@@ -299,8 +320,8 @@ char* ota_get_version(char * repo) {
             if (ret > 0) {
                 recv_buf[ret] = 0; //error checking
 
-                location=strstr(recv_buf,"HTTP/1.1 ");
-                strchr(location, ' ')[0] = 0;
+                location = strstr_lc(recv_buf, "http/1.1 ");
+                //strchr(location, ' ')[0] = 0;
                 location += 9; //flush "HTTP/1.1 "
                 httpcode = atoi(location);
                 UDPLGP("HTTP returns %d for ", httpcode);
@@ -309,12 +330,12 @@ char* ota_get_version(char * repo) {
                     lwip_close(socket);
                     return "404";
                 }
-                recv_buf[strlen(recv_buf)] = ' '; //for further headers
+                //recv_buf[strlen(recv_buf)] = ' '; //for further headers
 
-                location = strstr(recv_buf, "Location: ");
+                location = strstr_lc(recv_buf, "\nlocation:");
                 strchr(location,'\r')[0] = 0;
 
-                location = strstr(location, "tag/");
+                location = strstr_lc(location, "tag/");
                 version = malloc(strlen(location + 4));
                 strcpy(version, location + 4);
                 printf("%s@version:\"%s\" according to latest release\n", repo, version);
@@ -388,8 +409,8 @@ int ota_get_file_ex(char * repo, char * version, char * file, int sector, byte *
             if (ret > 0) {
                 recv_buf[ret] = 0; //error checking, e.g. not result=206
                 printf("\n%s\n\n", recv_buf);
-                location = strstr(recv_buf, "HTTP/1.1 ");
-                strchr(location,' ')[0] = 0;
+                location = strstr_lc(recv_buf, "http/1.1 ");
+                //strchr(location,' ')[0] = 0;
                 location += 9; //flush "HTTP/1.1 "
                 slash = atoi(location);
                 UDPLGP("HTTP returns %d\n", slash);
@@ -398,9 +419,12 @@ int ota_get_file_ex(char * repo, char * version, char * file, int sector, byte *
                     lwip_close(socket);
                     return -1;
                 }
-                recv_buf[strlen(recv_buf)] = ' '; //for further headers
-                location = strstr(recv_buf, "Location: ");
+                //recv_buf[strlen(recv_buf)] = ' '; //for further headers
+                location = strstr_lc(recv_buf, "\nlocation:");
                 strchr(location, '\r')[0] = 0;
+                if (location[10] == ' ') {
+                    location++;
+                }
                 location += 18; //flush Location: https://
 
             } else {
@@ -466,13 +490,16 @@ int ota_get_file_ex(char * repo, char * version, char * file, int sector, byte *
                     if (header) {
                         //printf("%s\n-------- %d\n", recv_buf, ret);
                         //parse Content-Length: xxxx
-                        location = strstr(recv_buf, "Content-Length: ");
+                        location = strstr_lc(recv_buf, "content-length:");
                         strchr(location, '\r')[0] = 0;
-                        location += 16; //flush Content-Length: //
+                        if (location[15] == ' ') {
+                            location++;
+                        }
+                        location += 15; //flush Content-Length: //
                         clength = atoi(location);
                         location[strlen(location)] = '\r'; //in case the order changes
                         //parse Content-Range: bytes xxxx-yyyy/zzzz
-                        location = strstr(recv_buf, "Content-Range: bytes ");
+                        location = strstr_lc(recv_buf, "content-range: bytes ");
                         strchr(location, '\r')[0] = 0;
                         location += 21; //flush Content-Range: bytes //
                         location = strstr(location,"/"); location++; //flush /
