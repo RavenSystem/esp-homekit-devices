@@ -199,7 +199,7 @@ void server_free(homekit_server_t *server) {
 #define TLV_DEBUG(values)
 #endif
 
-#define HOMEKIT_DEBUG(message, ...)             if (homekit_log_output) DEBUG(message, ##__VA_ARGS__)
+#define HOMEKIT_DEBUG_LOG(message, ...)             if (homekit_log_output) DEBUG(message, ##__VA_ARGS__)
 #define HOMEKIT_INFO(message, ...)              if (homekit_log_output) INFO(message, ##__VA_ARGS__)
 #define HOMEKIT_ERROR(message, ...)             if (homekit_log_output) ERROR(message, ##__VA_ARGS__)
 
@@ -208,10 +208,10 @@ void server_free(homekit_server_t *server) {
 #define CLIENT_ERROR(client, message, ...)      if (homekit_log_output) ERROR("[%d] " message, client->socket, ##__VA_ARGS__)
 
 void tlv_debug(const tlv_values_t *values) {
-    HOMEKIT_DEBUG("Got following TLV values:");
+    HOMEKIT_DEBUG_LOG("Got following TLV values:");
     for (tlv_t *t=values->head; t; t=t->next) {
         char *escaped_payload = binary_to_string(t->value, t->size);
-        HOMEKIT_DEBUG("Type %d value (%d bytes): %s", t->type, t->size, escaped_payload);
+        HOMEKIT_DEBUG_LOG("Type %d value (%d bytes): %s", t->type, t->size, escaped_payload);
         free(escaped_payload);
     }
 }
@@ -720,7 +720,7 @@ void client_notify_characteristic(homekit_characteristic_t *ch, homekit_value_t 
         // This value is set by this client, no need to send notification
         return;
 
-    HOMEKIT_DEBUG("Got characteristic %d.%d change event", ch->service->accessory->id, ch->id);
+    HOMEKIT_DEBUG_LOG("Got characteristic %d.%d change event", ch->service->accessory->id, ch->id);
 
     if (!client->event_queue) {
         HOMEKIT_ERROR("Client has no event queue. Skipping notification");
@@ -731,7 +731,7 @@ void client_notify_characteristic(homekit_characteristic_t *ch, homekit_value_t 
     event->characteristic = ch;
     homekit_value_copy(&event->value, &value);
 
-    HOMEKIT_DEBUG("Sending event to client %d", client->socket);
+    HOMEKIT_DEBUG_LOG("Sending event to client %d", client->socket);
 
     xQueueSendToBack(client->event_queue, &event, 10);
 }
@@ -1014,7 +1014,7 @@ void homekit_server_on_identify(client_context_t *context) {
 }
 
 void homekit_server_on_pair_setup(client_context_t *context, const byte *data, size_t size) {
-    HOMEKIT_DEBUG("Pair Setup");
+    HOMEKIT_DEBUG_LOG("Pair Setup");
     DEBUG_HEAP();
 
 #ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
@@ -1511,7 +1511,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 }
 
 void homekit_server_on_pair_verify(client_context_t *context, const byte *data, size_t size) {
-    HOMEKIT_DEBUG("HomeKit Pair Verify");
+    HOMEKIT_DEBUG_LOG("HomeKit Pair Verify");
     DEBUG_HEAP();
 
 #ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
@@ -2575,7 +2575,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 }
 
 void homekit_server_on_pairings(client_context_t *context, const byte *data, size_t size) {
-    HOMEKIT_DEBUG("HomeKit Pairings");
+    HOMEKIT_DEBUG_LOG("HomeKit Pairings");
     DEBUG_HEAP();
 
     tlv_values_t *message = tlv_new();
@@ -2972,7 +2972,7 @@ int homekit_server_on_message_complete(http_parser *parser) {
             break;
         }
         case HOMEKIT_ENDPOINT_UNKNOWN: {
-            HOMEKIT_DEBUG("Unknown endpoint");
+            HOMEKIT_DEBUG_LOG("Unknown endpoint");
             send_404_response(context);
             break;
         }
@@ -3268,7 +3268,7 @@ void homekit_server_close_clients(homekit_server_t *server) {
 
 static void homekit_run_server(homekit_server_t *server)
 {
-    HOMEKIT_DEBUG("Staring HTTP server");
+    HOMEKIT_DEBUG_LOG("Staring HTTP server");
 
     struct sockaddr_in serv_addr;
     server->listen_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -3369,7 +3369,7 @@ void homekit_setup_mdns(homekit_server_t *server) {
     homekit_mdns_add_txt("ci", "%d", server->config->category);
 
     if (server->config->setupId) {
-        HOMEKIT_DEBUG("Accessory Setup ID = %s", server->config->setupId);
+        HOMEKIT_DEBUG_LOG("Accessory Setup ID = %s", server->config->setupId);
 
         size_t data_size = strlen(server->config->setupId) + strlen(server->accessory_id) + 1;
         char *data = malloc(data_size);

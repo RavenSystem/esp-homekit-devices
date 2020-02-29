@@ -49,6 +49,7 @@ typedef struct _ch_group {
     homekit_characteristic_t *ch4;
     homekit_characteristic_t *ch5;
     homekit_characteristic_t *ch6;
+    homekit_characteristic_t *ch7;
     homekit_characteristic_t *ch_child;
     homekit_characteristic_t *ch_sec;
     

@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "1.7.0"
-#define FIRMWARE_VERSION_OCTAL              010700      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "1.8.0"
+#define FIRMWARE_VERSION_OCTAL              011000      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMOLDSECTOR                   0xF7000
@@ -33,6 +33,7 @@
 #define CH_TYPE_INT8                        1
 #define CH_TYPE_INT32                       2
 #define CH_TYPE_FLOAT                       3
+#define CH_TYPE_STRING                      4
 
 // Auto-off types (type)
 #define TYPE_ON                             0
@@ -44,8 +45,10 @@
 #define TYPE_GARAGE_DOOR                    6
 #define TYPE_WINDOW_COVER                   7
 #define TYPE_FAN                            8
+#define TYPE_TV                             9
 
 // Task Stack Sizes
+#define INITIAL_SETUP_TASK_SIZE             (configMINIMAL_STACK_SIZE * 20)
 #define LED_TASK_SIZE                       (configMINIMAL_STACK_SIZE)
 #define REBOOT_TASK_SIZE                    (configMINIMAL_STACK_SIZE * 2)
 #define PING_TASK_SIZE                      (configMINIMAL_STACK_SIZE * 2)
@@ -89,6 +92,8 @@
 #define FIXED_BUTTONS_ARRAY_6               "f6"
 #define FIXED_BUTTONS_ARRAY_7               "f7"
 #define FIXED_BUTTONS_ARRAY_8               "f8"
+#define FIXED_BUTTONS_STATUS_ARRAY_0        "g0"
+#define FIXED_BUTTONS_STATUS_ARRAY_1        "g1"
 #define PINGS_ARRAY                         "l"
 #define FIXED_PINGS_ARRAY_0                 "p0"
 #define FIXED_PINGS_ARRAY_1                 "p1"
@@ -99,6 +104,8 @@
 #define FIXED_PINGS_ARRAY_6                 "p6"
 #define FIXED_PINGS_ARRAY_7                 "p7"
 #define FIXED_PINGS_ARRAY_8                 "p8"
+#define FIXED_PINGS_STATUS_ARRAY_0          "q0"
+#define FIXED_PINGS_STATUS_ARRAY_1          "q1"
 #define PING_HOST                           "h"
 #define PING_RESPONSE_TYPE                  "r"
 #define BUTTON_PRESS_TYPE                   "t"
@@ -112,6 +119,9 @@
 #define INITIAL_STATE                       "s"
 #define KILL_SWITCH                         "k"
 #define WILDCARD_ACTIONS_ARRAY_0            "y0"
+#define WILDCARD_ACTIONS_ARRAY_1            "y1"
+#define WILDCARD_ACTIONS_ARRAY_2            "y2"
+#define WILDCARD_ACTIONS_ARRAY_3            "y3"
 #define NO_LAST_WILDCARD_ACTION             (-1000)
 #define WILDCARD_ACTIONS                    "0"
 #define WILDCARD_ACTION_REPEAT              "r"
@@ -219,7 +229,10 @@
 #define WINDOW_COVER_CH_STATE               ch_group->ch2
 #define WINDOW_COVER_CH_OBSTRUCTION         ch_group->ch3
 
-#define MAX_ACTIONS                         10   // from 0 to ...
+#define TV_INPUTS_ARRAY                     "i"
+#define TV_INPUT_NAME                       "n"
+
+#define MAX_ACTIONS                         23   // from 0 to ...
 #define COPY_ACTIONS                        "a"
 #define DIGITAL_OUTPUTS_ARRAY               "r"
 #define SYSTEM_ACTIONS_ARRAY                "s"
@@ -237,6 +250,7 @@
 #define IR_ACTION_PROTOCOL_CODE             "c"
 #define IR_ACTION_RAW_CODE                  "w"
 #define IR_ACTION_TX_GPIO                   "t"
+#define IR_ACTION_TX_GPIO_INVERTED          "j"
 #define IR_ACTION_FREQ                      "x"
 #define IR_ACTION_REPEATS                   "r"
 #define SYSTEM_ACTION                       "a"
@@ -293,6 +307,10 @@
 #define DEBUG(cond, message, ...)           if (cond) printf("%s: " message "\n", __func__, ##__VA_ARGS__);
 #define INFO(cond, message, ...)            if (cond) printf(message "\n", ##__VA_ARGS__);
 #define ERROR(cond, message, ...)           if (cond) printf("! " message "\n", ##__VA_ARGS__);
+
+#define DEBUG2(message, ...)                DEBUG(log_output, message, ##__VA_ARGS__);
+#define INFO2(message, ...)                 INFO(log_output, message, ##__VA_ARGS__);
+#define ERROR2(message, ...)                ERROR(log_output, message, ##__VA_ARGS__);
 
 #define FREEHEAP()                          printf("Free Heap: %d\n", xPortGetFreeHeapSize())
 
