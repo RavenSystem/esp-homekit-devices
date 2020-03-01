@@ -2583,7 +2583,13 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                             break;
                             
                         case ACC_TYPE_WATER_VALVE:
-                            hkc_valve_setter(ch_group->ch0, HOMEKIT_UINT8((uint8_t) value));
+                            if (value == -1) {
+                                if (ch_group->ch3) {
+                                    ch_group->ch3->value = ch_group->ch2->value;
+                                }
+                            } else {
+                                hkc_valve_setter(ch_group->ch0, HOMEKIT_UINT8((uint8_t) value));
+                            }
                             break;
                             
                         case ACC_TYPE_THERMOSTAT:
@@ -2651,7 +2657,13 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                             break;
                             
                         default:    // ON Type ch
-                            hkc_on_setter(ch_group->ch0, HOMEKIT_BOOL((bool) value));
+                            if (value == -1) {
+                                if (ch_group->ch2) {
+                                    ch_group->ch2->value = ch_group->ch1->value;
+                                }
+                            } else {
+                                hkc_on_setter(ch_group->ch0, HOMEKIT_BOOL((bool) value));
+                            }
                             break;
                     }
                     
