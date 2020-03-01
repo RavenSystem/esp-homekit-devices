@@ -292,6 +292,7 @@ void ping_task() {
 // -----
 void reboot_task() {
     led_blink(5);
+    printf("\nRebooting...\n\n");
     vTaskDelay(MS_TO_TICK(2900));
     sdk_system_restart();
 }
@@ -1701,12 +1702,12 @@ void hkc_tv_active(homekit_characteristic_t *ch0, const homekit_value_t value) {
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         if (ch0->value.int_value != value.int_value) {
             led_blink(1);
-            INFO2("Setter TV ON");
+            INFO2("Setter TV ON %i", value.int_value);
             
             ch0->value = value;
             
             cJSON *json_context = ch0->context;
-            do_actions(json_context, ch0->value.int_value);
+            do_actions(json_context, value.int_value);
             
             setup_mode_toggle_upcount();
             save_states_callback();
@@ -1719,7 +1720,7 @@ void hkc_tv_active(homekit_characteristic_t *ch0, const homekit_value_t value) {
 void hkc_tv_status_active(homekit_characteristic_t *ch0, const homekit_value_t value) {
     if (ch0->value.int_value != value.int_value) {
         led_blink(1);
-        INFO2("Setter Status TV ON");
+        INFO2("Setter Status TV ON %i", value.int_value);
         
         ch0->value = value;
         
@@ -1734,7 +1735,7 @@ void hkc_tv_active_identifier(homekit_characteristic_t *ch, const homekit_value_
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            INFO2("Setter TV Input");
+            INFO2("Setter TV Input %i", value.int_value);
             
             ch->value = value;
             
@@ -1751,12 +1752,12 @@ void hkc_tv_key(homekit_characteristic_t *ch, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         led_blink(1);
-        INFO2("Setter TV Key");
+        INFO2("Setter TV Key %i", value.int_value + 2);
         
         ch->value = value;
         
         cJSON *json_context = ch->context;
-        do_actions(json_context, (uint8_t) ch->value.int_value + 2);
+        do_actions(json_context, value.int_value + 2);
     }
     
     hkc_group_notify(ch);
@@ -1766,12 +1767,12 @@ void hkc_tv_power_mode(homekit_characteristic_t *ch, const homekit_value_t value
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         led_blink(1);
-        INFO2("Setter TV Settings");
+        INFO2("Setter TV Settings %i", value.int_value + 30);
         
         ch->value = value;
         
         cJSON *json_context = ch->context;
-        do_actions(json_context, (uint8_t) ch->value.int_value + 30);
+        do_actions(json_context, value.int_value + 30);
     }
     
     hkc_group_notify(ch);
@@ -1781,12 +1782,12 @@ void hkc_tv_mute(homekit_characteristic_t *ch, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         led_blink(1);
-        INFO2("Setter TV Mute");
+        INFO2("Setter TV Mute %i", value.int_value + 20);
         
         ch->value = value;
         
         cJSON *json_context = ch->context;
-        do_actions(json_context, (uint8_t) ch->value.int_value + 20);
+        do_actions(json_context, value.int_value + 20);
     }
     
     hkc_group_notify(ch);
@@ -1796,12 +1797,12 @@ void hkc_tv_volume(homekit_characteristic_t *ch, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         led_blink(1);
-        INFO2("Setter TV Volume");
+        INFO2("Setter TV Volume %i", value.int_value + 22);
         
         ch->value = value;
         
         cJSON *json_context = ch->context;
-        do_actions(json_context, (uint8_t) ch->value.int_value + 22);
+        do_actions(json_context, value.int_value + 22);
     }
     
     hkc_group_notify(ch);
@@ -1810,9 +1811,7 @@ void hkc_tv_volume(homekit_characteristic_t *ch, const homekit_value_t value) {
 void hkc_tv_configured_name(homekit_characteristic_t *ch1, const homekit_value_t value) {
     INFO2("Setter TV Name %s", value.string_value);
     
-    const uint8_t new_name_len = strlen(value.string_value) + 1;
-    char *new_name = malloc(new_name_len);
-    memcpy(new_name, value.string_value, new_name_len);
+    char *new_name = strdup(value.string_value);
     
     homekit_value_destruct(&ch1->value);
     ch1->value = HOMEKIT_STRING(new_name);
@@ -2827,14 +2826,14 @@ void normal_mode_init() {
     
     if (total_accessories == 0) {
         uart_set_baud(0, 115200);
-        printf("! Invalid JSON\n");
+        printf("\n\n\n! Invalid JSON\n");
         sysparam_set_int8("total_ac", 0);
         sysparam_set_int8("setup", 2);
         xTaskCreate(reboot_task, "reboot_task", REBOOT_TASK_SIZE, NULL, 1, NULL);
         
-        free(txt_config);
+        //free(txt_config);     // Not needed because device will reboot
         
-        return;
+        vTaskDelete(NULL);
     }
     
     xTaskCreate(exit_emergency_setup_mode_task, "exit_emergency_setup_mode_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
@@ -3038,9 +3037,7 @@ void normal_mode_init() {
     // Custom Hostname
     char *custom_hostname = name.value.string_value;
     if (cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME) != NULL) {
-        const uint8_t custom_hostname_len = strlen(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring) + 1;
-        custom_hostname = malloc(custom_hostname_len);
-        memcpy(custom_hostname, cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring, custom_hostname_len);
+        custom_hostname = strdup(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring);
         INFO2("Hostname: %s", custom_hostname);
     }
     
@@ -4430,14 +4427,10 @@ void normal_mode_init() {
         for (uint8_t i = 0; i < inputs; i++) {
             cJSON *json_input = cJSON_GetArrayItem(json_inputs, i);
             
-            char *name = malloc(3);
-            memset(name, 0, 3);
-            memcpy(name, "TV", 3);
+            char *name = strdup("TV");
             if (cJSON_GetObjectItemCaseSensitive(json_input, TV_INPUT_NAME) != NULL) {
                 free(name);
-                const uint8_t name_len = strlen(cJSON_GetObjectItemCaseSensitive(json_input, TV_INPUT_NAME)->valuestring) + 1;
-                name = malloc(name_len);
-                name = memcpy(name, cJSON_GetObjectItemCaseSensitive(json_input, TV_INPUT_NAME)->valuestring, name_len);
+                name = strdup(cJSON_GetObjectItemCaseSensitive(json_input, TV_INPUT_NAME)->valuestring);
             }
             
             accessories[accessory]->services[1]->linked[i] = new_tv_input_service(i + 1, name);
@@ -4687,9 +4680,11 @@ void normal_mode_init() {
 
 void user_init(void) {
 #ifdef HAA_DEBUG
+    log_output = true;
     sdk_os_timer_setfn(&free_heap_timer, free_heap_watchdog, NULL);
     sdk_os_timer_arm(&free_heap_timer, 2000, 1);
 #endif // HAA_DEBUG
+    
     sdk_wifi_station_set_auto_connect(false);
     sdk_wifi_set_opmode(STATION_MODE);
     sdk_wifi_station_disconnect();

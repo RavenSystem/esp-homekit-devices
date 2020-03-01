@@ -224,9 +224,17 @@ static void wifi_config_server_on_settings(client_t *client) {
     char *ota = NULL;
     status = sysparam_get_string("ota_repo", &ota);
     if (status == SYSPARAM_OK) {
+        client_send_chunk(client, html_settings_ota);
+        
+        if (strlen(ota) < 10) {
+            client_send_chunk(client, "(HAA OTA v");
+            client_send_chunk(client, ota);
+            client_send_chunk(client, ")");
+        }
+        
         free(ota);
         
-        client_send_chunk(client, html_settings_ota);
+        client_send_chunk(client, html_settings_otaversion);
         
         bool auto_ota = false;
         status = sysparam_get_bool("aota", &auto_ota);
@@ -297,7 +305,7 @@ static void wifi_config_server_on_settings_update(client_t *client) {
     static const char payload[] = "HTTP/1.1 204 \r\nContent-Type: text/html\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
     client_send(client, payload, sizeof(payload) - 1);
     
-    // Remove sated states
+    // Remove saved states
     int8_t hk_total_ac = 0;
     sysparam_get_int8("total_ac", &hk_total_ac);
     char saved_state_id[5];
