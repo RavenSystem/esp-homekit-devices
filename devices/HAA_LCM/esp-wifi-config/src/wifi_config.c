@@ -289,7 +289,7 @@ static void wifi_config_server_on_settings_update(client_t *client) {
         sysparam_set_data(saved_state_id, NULL, 0, false);
     }
 
-    sysparam_set_string("ota_repo", "1");
+    sysparam_set_string("ota_repo", "2.2.1");
     
     sysparam_set_int8("setup", 0);
     
