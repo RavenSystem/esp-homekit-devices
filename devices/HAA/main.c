@@ -2662,18 +2662,6 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
             }
         }
         
-        // HTTP GET actions
-        cJSON *json_http_actions = cJSON_GetObjectItemCaseSensitive(actions, HTTP_ACTIONS_ARRAY);
-        if (json_http_actions != NULL) {
-            xTaskCreate(http_get_task, "http_get_task", HTTP_GET_TASK_SIZE, json_http_actions, 0, NULL);
-        }
-        
-        // IR outputs
-        cJSON *json_ir_actions = cJSON_GetObjectItemCaseSensitive(actions, IR_ACTIONS_ARRAY);
-        if (json_ir_actions != NULL) {
-            xTaskCreate(ir_tx_task, "ir_tx_task", IR_TX_TASK_SIZE, json_ir_actions, 12, NULL);
-        }
-        
         // System actions
         cJSON *json_system_actions = cJSON_GetObjectItemCaseSensitive(actions, SYSTEM_ACTIONS_ARRAY);
         for(uint8_t i=0; i<cJSON_GetArraySize(json_system_actions); i++) {
@@ -2703,6 +2691,17 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
             }
         }
         
+        // HTTP GET actions
+        cJSON *json_http_actions = cJSON_GetObjectItemCaseSensitive(actions, HTTP_ACTIONS_ARRAY);
+        if (json_http_actions != NULL) {
+            xTaskCreate(http_get_task, "http_get_task", HTTP_GET_TASK_SIZE, json_http_actions, 0, NULL);
+        }
+        
+        // IR outputs
+        cJSON *json_ir_actions = cJSON_GetObjectItemCaseSensitive(actions, IR_ACTIONS_ARRAY);
+        if (json_ir_actions != NULL) {
+            xTaskCreate(ir_tx_task, "ir_tx_task", IR_TX_TASK_SIZE, json_ir_actions, IR_TX_TASK_PRIORITY, NULL);
+        }
     }
 }
 
@@ -3078,7 +3077,7 @@ void normal_mode_init() {
     
     // IR Protocol
     if (cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_PROTOCOL) != NULL) {
-        ir_protocol = cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_PROTOCOL)->valuestring;
+        ir_protocol = strdup(cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_PROTOCOL)->valuestring);
         INFO2("IR Protocol: %s", ir_protocol);
     }
     
