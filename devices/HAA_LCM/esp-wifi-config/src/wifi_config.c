@@ -288,8 +288,6 @@ static void wifi_config_server_on_settings_update(client_t *client) {
         itoa(int_saved_state_id, saved_state_id, 10);
         sysparam_set_data(saved_state_id, NULL, 0, false);
     }
-
-    sysparam_set_string("ota_repo", "2.2.1");
     
     sysparam_set_int8("setup", 0);
     
@@ -709,6 +707,8 @@ static void wifi_config_sta_connect_timeout_callback(void *arg) {
 
 bool wifi_config_connect() {
     char *wifi_ssid = NULL;
+    sysparam_set_string("ota_repo", "2.2.2");
+    
     sysparam_get_string("wifi_ssid", &wifi_ssid);
     
     if (wifi_ssid) {
