@@ -1627,7 +1627,7 @@ void window_cover_timer_worker(void *args) {
 void hkc_fan_setter(homekit_characteristic_t *ch0, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch0);
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
-        if (ch0->value.int_value != value.int_value) {
+        if (ch0->value.bool_value != value.bool_value) {
             led_blink(1);
             INFO2("Setter FAN");
             
@@ -1636,7 +1636,7 @@ void hkc_fan_setter(homekit_characteristic_t *ch0, const homekit_value_t value) 
             cJSON *json_context = ch0->context;
             do_actions(json_context, (uint8_t) value.int_value);
             
-            if (value.int_value == 1) {
+            if (value.bool_value) {
                 do_wildcard_actions(ch_group, json_context, ch_group->ch1->value.float_value);
                 
                 if (cJSON_GetObjectItemCaseSensitive(json_context, AUTOSWITCH_TIME) != NULL) {
@@ -1671,7 +1671,7 @@ void hkc_fan_speed_setter(homekit_characteristic_t *ch1, const homekit_value_t v
             
             ch1->value = value;
             
-            if (ch_group->ch0->value.int_value) {
+            if (ch_group->ch0->value.bool_value) {
                 cJSON *json_context = ch1->context;
                 do_wildcard_actions(ch_group, json_context, value.float_value);
             }
@@ -1907,9 +1907,9 @@ void diginput(const uint8_t gpio, void *args, const uint8_t type) {
                 
             case TYPE_FAN:
                 if (ch->value.int_value == 1) {
-                    hkc_fan_setter(ch, HOMEKIT_UINT8(0));
+                    hkc_fan_setter(ch, HOMEKIT_BOOL(false));
                 } else {
-                    hkc_fan_setter(ch, HOMEKIT_UINT8(1));
+                    hkc_fan_setter(ch, HOMEKIT_BOOL(true));
                 }
                 break;
                 
@@ -1959,7 +1959,7 @@ void diginput_1(const uint8_t gpio, void *args, const uint8_t type) {
                 
             case TYPE_FAN:
                 if (ch->value.int_value == 0) {
-                    hkc_fan_setter(ch, HOMEKIT_UINT8(1));
+                    hkc_fan_setter(ch, HOMEKIT_BOOL(true));
                 }
                 break;
                 
@@ -2047,7 +2047,7 @@ void diginput_0(const uint8_t gpio, void *args, const uint8_t type) {
                 
             case TYPE_FAN:
                 if (ch->value.int_value == 1) {
-                    hkc_fan_setter(ch, HOMEKIT_UINT8(0));
+                    hkc_fan_setter(ch, HOMEKIT_BOOL(false));
                 }
                 break;
                 
@@ -2125,7 +2125,7 @@ void hkc_autooff_setter_task(void *pvParameters) {
             break;
             
         case TYPE_FAN:
-            hkc_fan_setter(autooff_setter_params->ch, HOMEKIT_UINT8(0));
+            hkc_fan_setter(autooff_setter_params->ch, HOMEKIT_BOOL(false));
             break;
             
         default:    // case TYPE_ON:
@@ -2632,9 +2632,9 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                             
                         case ACC_TYPE_FAN:
                             if (value == 0) {
-                                hkc_fan_setter(ch_group->ch0, HOMEKIT_UINT8(0));
+                                hkc_fan_setter(ch_group->ch0, HOMEKIT_BOOL(false));
                             } else if (value > 100) {
-                                hkc_fan_setter(ch_group->ch0, HOMEKIT_UINT8(1));
+                                hkc_fan_setter(ch_group->ch0, HOMEKIT_BOOL(true));
                             } else {
                                 hkc_fan_speed_setter(ch_group->ch1, HOMEKIT_FLOAT(value));
                             }
@@ -4305,8 +4305,13 @@ void normal_mode_init() {
     uint8_t new_fan(uint8_t accessory, cJSON *json_context) {
         new_accessory(accessory, 3);
         
-        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_fan_setter, .context=json_context);
-        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(ROTATION_SPEED, 100, .setter_ex=hkc_fan_speed_setter, .context=json_context);
+        uint8_t max_speed = 100;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, FAN_SPEED_STEPS) != NULL) {
+            max_speed = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, FAN_SPEED_STEPS)->valuedouble;
+        }
+        
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .setter_ex=hkc_fan_setter, .context=json_context);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(ROTATION_SPEED, max_speed, .max_value=(float[]) {max_speed}, .setter_ex=hkc_fan_speed_setter, .context=json_context);
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
@@ -4322,12 +4327,16 @@ void normal_mode_init() {
         accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
         accessories[accessory]->services[1]->id = 8;
         accessories[accessory]->services[1]->primary = true;
-        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_FAN2;
+        accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_FAN;
         accessories[accessory]->services[1]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
         accessories[accessory]->services[1]->characteristics[0] = ch0;
         accessories[accessory]->services[1]->characteristics[1] = ch1;
         
-        ch1->value.float_value = set_initial_state(accessory, 1, cJSON_Parse(INIT_STATE_LAST_STR), ch1, CH_TYPE_FLOAT, 100);
+        float saved_max_speed = set_initial_state(accessory, 1, cJSON_Parse(INIT_STATE_LAST_STR), ch1, CH_TYPE_FLOAT, max_speed);
+        if (saved_max_speed > max_speed) {
+            saved_max_speed = max_speed;
+        }
+        ch1->value.float_value = saved_max_speed;
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch0, TYPE_FAN);
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch0, TYPE_FAN);
@@ -4347,8 +4356,8 @@ void normal_mode_init() {
             diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_FAN);
             diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch0, TYPE_FAN);
             
-            ch0->value.int_value = !((uint8_t) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_INT8, 0));
-            hkc_fan_setter(ch0, HOMEKIT_UINT8(!ch0->value.int_value));
+            ch0->value.bool_value = !((uint8_t) set_initial_state(accessory, 0, json_context, ch0, CH_TYPE_BOOL, false));
+            hkc_fan_setter(ch0, HOMEKIT_UINT8(!ch0->value.bool_value));
         } else {
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch0, TYPE_FAN)) {
                 diginput_1(0, ch0, TYPE_FAN);
