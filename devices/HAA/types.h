@@ -109,7 +109,6 @@ typedef struct _ping_input_callback_fn {
 typedef struct _ping_input {
     char *host;
     bool last_response;
-    uint8_t fails;
     
     ping_input_callback_fn_t *callback_0;
     ping_input_callback_fn_t *callback_1;

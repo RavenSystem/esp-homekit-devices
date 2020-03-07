@@ -524,7 +524,7 @@ static void http_task(void *arg) {
             }
 
             if (data_len > 0) {
-                INFO("Got %d incomming data", data_len);
+                INFO("Got %d bytes", data_len);
 
                 http_parser_execute(
                     &client->parser, &wifi_config_http_parser_settings,

@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "1.8.5"
-#define FIRMWARE_VERSION_OCTAL              011005      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "1.8.6"
+#define FIRMWARE_VERSION_OCTAL              011006      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMOLDSECTOR                   0xF7000
@@ -48,19 +48,20 @@
 #define TYPE_TV                             9
 
 // Task Stack Sizes
-#define INITIAL_SETUP_TASK_SIZE             (configMINIMAL_STACK_SIZE * 20)
-#define LED_TASK_SIZE                       (configMINIMAL_STACK_SIZE)
+#define INITIAL_SETUP_TASK_SIZE             (configMINIMAL_STACK_SIZE * 4)
+#define LED_TASK_SIZE                       (configMINIMAL_STACK_SIZE * 1)
 #define REBOOT_TASK_SIZE                    (configMINIMAL_STACK_SIZE * 2)
 #define PING_TASK_SIZE                      (configMINIMAL_STACK_SIZE * 2)
 #define AUTOSWITCH_TASK_SIZE                (configMINIMAL_STACK_SIZE * 2)
 #define AUTOOFF_SETTER_TASK_SIZE            (configMINIMAL_STACK_SIZE * 2)
-#define AUTODIMMER_TASK_SIZE                (configMINIMAL_STACK_SIZE)
+#define AUTODIMMER_TASK_SIZE                (configMINIMAL_STACK_SIZE * 1)
 #define IR_TX_TASK_SIZE                     (configMINIMAL_STACK_SIZE * 4)
 #define HTTP_GET_TASK_SIZE                  (configMINIMAL_STACK_SIZE * 2)
-#define DELAYED_SENSOR_START_TASK_SIZE      (configMINIMAL_STACK_SIZE)
+#define DELAYED_SENSOR_START_TASK_SIZE      (configMINIMAL_STACK_SIZE * 1)
 
 // Task Priorities
-#define IR_TX_TASK_PRIORITY                 (configMAX_PRIORITIES - 3)
+#define PING_TASK_PRIORITY                  (tskIDLE_PRIORITY)
+#define IR_TX_TASK_PRIORITY                 (tskIDLE_PRIORITY + 10)
 
 // Button Events
 #define SINGLEPRESS_EVENT                   0
@@ -111,6 +112,8 @@
 #define FIXED_PINGS_STATUS_ARRAY_1          "q1"
 #define PING_HOST                           "h"
 #define PING_RESPONSE_TYPE                  "r"
+#define PING_RETRIES                        3
+#define PING_POLL_DELAY                     5000
 #define BUTTON_PRESS_TYPE                   "t"
 #define PULLUP_RESISTOR                     "p"
 #define VALUE                               "v"

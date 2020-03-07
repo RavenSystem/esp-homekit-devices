@@ -85,6 +85,8 @@ uint16_t pwm_freq = 0;
 char name_value[11];
 char serial_value[13];
 
+ETSTimer *ping_task_timer;
+
 last_state_t *last_states = NULL;
 ch_group_t *ch_groups = NULL;
 lightbulb_group_t *lightbulb_groups = NULL;
@@ -209,6 +211,8 @@ ping_input_t *ping_input_find_by_host(char *host) {
 }
 
 void ping_task() {
+    INFO2("Ping...");
+    
     void ping_input_run_callback_fn(ping_input_callback_fn_t *callbacks) {
         ping_input_callback_fn_t *ping_input_callback_fn = callbacks;
         
@@ -218,11 +222,13 @@ void ping_task() {
         }
     }
     
-    for (;;) {
-        vTaskDelay(MS_TO_TICK(5000));
-        
-        ping_input_t *ping_input = ping_inputs;
-        while (ping_input) {
+    ping_input_t *ping_input = ping_inputs;
+    while (ping_input) {
+        bool ping_result = false;
+        uint8_t i = 0;
+        do {
+            i++;
+            
             ip_addr_t target_ip;
             const struct addrinfo hints = {
                 .ai_family = AF_UNSPEC,
@@ -233,19 +239,7 @@ void ping_task() {
 
             int err = getaddrinfo(ping_input->host, NULL, &hints, &res);
 
-            if (err != 0 || res == NULL) {
-                if (ping_input->last_response) {
-                    ping_input->fails++;
-                    if (ping_input->fails == 3) {
-                        ping_input->fails = 0;
-                        ping_input->last_response = false;
-                        ping_input_run_callback_fn(ping_input->callback_0);
-                    }
-                } else {
-                    ping_input->fails = 0;
-                }
-                
-            } else {
+            if (err == 0 && res != NULL) {
                 struct sockaddr *sa = res->ai_addr;
                 if (sa->sa_family == AF_INET) {
                     struct in_addr ipv4_inaddr = ((struct sockaddr_in*) sa)->sin_addr;
@@ -257,36 +251,35 @@ void ping_task() {
                     memcpy(&target_ip, &ipv6_inaddr, sizeof(target_ip));
                 }
 #endif
-                bool ping_result = ping(target_ip);
-                if (ping_result && !ping_input->last_response) {
-                    ping_input->last_response = true;
-                    ping_input->fails = 0;
-                    INFO2("Ping %s", ping_input->host);
-                    ping_input_run_callback_fn(ping_input->callback_1);
-
-                } else if (!ping_result && ping_input->last_response) {
-                    ping_input->fails++;
-                    if (ping_input->fails == 3) {
-                        ping_input->last_response = false;
-                        ping_input->fails = 0;
-                        ERROR2("Ping %s", ping_input->host);
-                        ping_input_run_callback_fn(ping_input->callback_0);
-                    }
-                    
-                } else {
-                    ping_input->fails = 0;
-                }
+                ping_result = ping(target_ip);
             }
             
             if (res) {
                 freeaddrinfo(res);
             }
-            
-            ping_input = ping_input->next;
-            
-            vTaskDelay(MS_TO_TICK(50));
+    
+            vTaskDelay(MS_TO_TICK(40));
+        } while (i < PING_RETRIES && !ping_result);
+        
+        if (ping_result && !ping_input->last_response) {
+            ping_input->last_response = true;
+            INFO2("Ping %s", ping_input->host);
+            ping_input_run_callback_fn(ping_input->callback_1);
+
+        } else if (!ping_result && ping_input->last_response) {
+            ping_input->last_response = false;
+            ERROR2("Ping %s", ping_input->host);
+            ping_input_run_callback_fn(ping_input->callback_0);
         }
+        
+        ping_input = ping_input->next;
     }
+    
+    vTaskDelete(NULL);
+}
+
+void ping_task_timer_worker() {
+    xTaskCreate(ping_task, "ping_task", PING_TASK_SIZE, NULL, PING_TASK_PRIORITY, NULL);
 }
 
 // -----
@@ -2810,7 +2803,10 @@ void run_homekit_server() {
     sdk_os_timer_arm(&wifi_watchdog_timer, WIFI_WATCHDOG_POLL_PERIOD_MS, 1);
 
     if (ping_inputs) {
-        xTaskCreate(ping_task, "ping_task", PING_TASK_SIZE, NULL, 1, NULL);
+        ping_task_timer = malloc(sizeof(ETSTimer));
+        memset(ping_task_timer, 0, sizeof(*ping_task_timer));
+        sdk_os_timer_setfn(ping_task_timer, ping_task_timer_worker, NULL);
+        sdk_os_timer_arm(ping_task_timer, PING_POLL_DELAY, 1);
     }
     
     led_blink(6);
@@ -2830,8 +2826,9 @@ void normal_mode_init() {
     char *txt_config = NULL;
     sysparam_get_string("haa_conf", &txt_config);
     
-    cJSON *json_config = cJSON_GetObjectItemCaseSensitive(cJSON_Parse(txt_config), GENERAL_CONFIG);
-    cJSON *json_accessories = cJSON_GetObjectItemCaseSensitive(cJSON_Parse(txt_config), ACCESSORIES);
+    cJSON *json_haa = cJSON_Parse(txt_config);
+    cJSON *json_config = cJSON_GetObjectItemCaseSensitive(json_haa, GENERAL_CONFIG);
+    cJSON *json_accessories = cJSON_GetObjectItemCaseSensitive(json_haa, ACCESSORIES);
     
     const uint8_t total_accessories = cJSON_GetArraySize(json_accessories);
     
@@ -2904,7 +2901,6 @@ void normal_mode_init() {
                 
                 ping_input->host = cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_HOST)->valuestring;
                 ping_input->last_response = false;
-                ping_input->fails = 0;
                 
                 ping_input->next = ping_inputs;
                 ping_inputs = ping_input;
@@ -3140,6 +3136,7 @@ void normal_mode_init() {
     // Buttons to enter setup mode
     diginput_register(cJSON_GetObjectItemCaseSensitive(json_config, BUTTONS_ARRAY), setup_mode_call, NULL, 0);
     
+    //cJSON_Delete(json_config);
     // ----- END CONFIG SECTION
     
     uint8_t hk_total_ac = 1;
@@ -4649,8 +4646,6 @@ void normal_mode_init() {
         
         vTaskDelay(MS_TO_TICK(ACC_CREATION_DELAY));
     }
-    
-    cJSON_Delete(json_config);
     
     sysparam_set_int8("total_ac", hk_total_ac);
     
