@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "1.8.6"
-#define FIRMWARE_VERSION_OCTAL              011006      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "1.9.0"
+#define FIRMWARE_VERSION_OCTAL              011100      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMOLDSECTOR                   0xF7000
@@ -124,13 +124,6 @@
 #define PIN_GPIO                            "g"
 #define INITIAL_STATE                       "s"
 #define KILL_SWITCH                         "k"
-#define WILDCARD_ACTIONS_ARRAY_0            "y0"
-#define WILDCARD_ACTIONS_ARRAY_1            "y1"
-#define WILDCARD_ACTIONS_ARRAY_2            "y2"
-#define WILDCARD_ACTIONS_ARRAY_3            "y3"
-#define NO_LAST_WILDCARD_ACTION             (-1000)
-#define WILDCARD_ACTIONS                    "0"
-#define WILDCARD_ACTION_REPEAT              "r"
 
 #define VALVE_SYSTEM_TYPE                   "w"
 #define VALVE_SYSTEM_TYPE_DEFAULT           0
@@ -138,17 +131,18 @@
 #define VALVE_MAX_DURATION_DEFAULT          3600
 
 #define THERMOSTAT_TYPE                     "w"
+#define TH_TYPE                             ch_group->num[5]
 #define THERMOSTAT_TYPE_HEATER              1
 #define THERMOSTAT_TYPE_COOLER              2
 #define THERMOSTAT_TYPE_HEATERCOOLER        3
 #define THERMOSTAT_MIN_TEMP                 "m"
+#define TH_MIN_TEMP                         ch_group->num[7]
 #define THERMOSTAT_DEFAULT_MIN_TEMP         10
 #define THERMOSTAT_MAX_TEMP                 "x"
+#define TH_MAX_TEMP                         ch_group->num[8]
 #define THERMOSTAT_DEFAULT_MAX_TEMP         38
 #define THERMOSTAT_DEADBAND                 "d"
-#define THERMOSTAT_POLL_PERIOD              "j"
-#define THERMOSTAT_POLL_PERIOD_DEFAULT      30
-#define THERMOSTAT_POLL_PERIOD_MIN          4
+#define TH_DEADBAND                         ch_group->num[6]
 #define THERMOSTAT_MODE_OFF                 0
 #define THERMOSTAT_MODE_IDLE                1
 #define THERMOSTAT_MODE_HEATER              2
@@ -166,9 +160,17 @@
 #define THERMOSTAT_TEMP_DOWN                1
 
 #define TEMPERATURE_SENSOR_GPIO             "g"
+#define TH_SENSOR_GPIO                      ch_group->num[0]
 #define TEMPERATURE_SENSOR_TYPE             "n"
+#define TH_SENSOR_TYPE                      ch_group->num[1]
+#define TEMPERATURE_SENSOR_POLL_PERIOD      "j"
+#define TH_SENSOR_POLL_PERIOD               ch_group->num[2]
+#define TH_SENSOR_POLL_PERIOD_DEFAULT       30
+#define TH_SENSOR_POLL_PERIOD_MIN           3.2
 #define TEMPERATURE_OFFSET                  "z"
+#define TH_SENSOR_TEMP_OFFSET               ch_group->num[3]
 #define HUMIDITY_OFFSET                     "h"
+#define TH_SENSOR_HUM_OFFSET                ch_group->num[4]
 
 #define LIGHTBULB_PWM_GPIO_R                "r"
 #define LIGHTBULB_PWM_GPIO_G                "g"
@@ -202,10 +204,14 @@
 #define GARAGE_DOOR_TIME_CLOSE_SET          "c"
 #define GARAGE_DOOR_TIME_MARGIN_SET         "e"
 #define GARAGE_DOOR_TIME_MARGIN_DEFAULT     0
-#define GARAGE_DOOR_CURRENT_TIME            ch_group->num0
-#define GARAGE_DOOR_WORKING_TIME            ch_group->num1
-#define GARAGE_DOOR_TIME_MARGIN             ch_group->num2
-#define GARAGE_DOOR_CLOSE_TIME_FACTOR       ch_group->num3
+#define GARAGE_DOOR_CURRENT_TIME            ch_group->num[0]
+#define GARAGE_DOOR_WORKING_TIME            ch_group->num[1]
+#define GARAGE_DOOR_TIME_MARGIN             ch_group->num[2]
+#define GARAGE_DOOR_CLOSE_TIME_FACTOR       ch_group->num[3]
+#define GARAGE_DOOR_HAS_F2                  ch_group->num[4]
+#define GARAGE_DOOR_HAS_F3                  ch_group->num[5]
+#define GARAGE_DOOR_HAS_F4                  ch_group->num[6]
+#define GARAGE_DOOR_HAS_F5                  ch_group->num[7]
 
 #define WINDOW_COVER_CLOSING                0
 #define WINDOW_COVER_OPENING                1
@@ -225,11 +231,11 @@
 #define WINDOW_COVER_POLL_PERIOD_MS         250
 #define WINDOW_COVER_MARGIN_SYNC            15
 #define WINDOW_COVER_STEP_TIME(x)           ((100.0 / (x)) * (WINDOW_COVER_POLL_PERIOD_MS / 1000.0))
-#define WINDOW_COVER_STEP_TIME_UP           ch_group->num0
-#define WINDOW_COVER_STEP_TIME_DOWN         ch_group->num1
-#define WINDOW_COVER_POSITION               ch_group->num2
-#define WINDOW_COVER_REAL_POSITION          ch_group->num3
-#define WINDOW_COVER_CORRECTION             ch_group->num4
+#define WINDOW_COVER_STEP_TIME_UP           ch_group->num[0]
+#define WINDOW_COVER_STEP_TIME_DOWN         ch_group->num[1]
+#define WINDOW_COVER_POSITION               ch_group->num[2]
+#define WINDOW_COVER_REAL_POSITION          ch_group->num[3]
+#define WINDOW_COVER_CORRECTION             ch_group->num[4]
 #define WINDOW_COVER_CH_CURRENT_POSITION    ch_group->ch0
 #define WINDOW_COVER_CH_TARGET_POSITION     ch_group->ch1
 #define WINDOW_COVER_CH_STATE               ch_group->ch2
@@ -240,7 +246,12 @@
 
 #define FAN_SPEED_STEPS                     "e"
 
-#define MAX_ACTIONS                         31   // from 0 to ...
+#define MAX_ACTIONS                         32      // from 0 to (MAX_ACTIONS - 1)
+#define MAX_WILDCARD_ACTIONS                2       // from 0 to (MAX_WILDCARD_ACTIONS - 1)
+#define WILDCARD_ACTIONS_ARRAY_HEADER       "y"
+#define NO_LAST_WILDCARD_ACTION             (-1000)
+#define WILDCARD_ACTIONS                    "0"
+#define WILDCARD_ACTION_REPEAT              "r"
 #define COPY_ACTIONS                        "a"
 #define DIGITAL_OUTPUTS_ARRAY               "r"
 #define SYSTEM_ACTIONS_ARRAY                "s"
@@ -261,6 +272,7 @@
 #define IR_ACTION_TX_GPIO_INVERTED          "j"
 #define IR_ACTION_FREQ                      "x"
 #define IR_ACTION_REPEATS                   "r"
+#define IR_ACTION_REPEATS_PAUSE             "d"
 #define SYSTEM_ACTION                       "a"
 #define HTTP_ACTION_HOST                    "h"
 #define HTTP_ACTION_PORT                    "p"

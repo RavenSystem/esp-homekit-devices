@@ -70,7 +70,7 @@ bool allow_insecure = false;
 bool log_output = false;
 
 bool ir_tx_is_running = false;
-uint8_t ir_tx_freq = 38;
+uint8_t ir_tx_freq = 13;
 uint8_t ir_tx_gpio = 255;
 bool ir_tx_inv = false;
 char *ir_protocol = NULL;
@@ -365,11 +365,10 @@ void save_states() {
 }
 
 void save_states_callback() {
-    sdk_os_timer_arm(&save_states_timer, 5000, 0);
+    sdk_os_timer_arm(&save_states_timer, 4800, 0);
 }
 
-void hkc_group_notify(homekit_characteristic_t *ch) {
-    ch_group_t *ch_group = ch_group_find(ch);
+void hkc_group_notify(ch_group_t *ch_group) {
     if (ch_group->ch0) {
         homekit_characteristic_notify(ch_group->ch0, ch_group->ch0->value);
     }
@@ -407,7 +406,7 @@ void hkc_group_notify(homekit_characteristic_t *ch) {
 void hkc_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
     INFO2("Setter");
     ch->value = value;
-    hkc_group_notify(ch);
+    hkc_group_notify(ch_group_find(ch));
     
     save_states_callback();
 }
@@ -419,8 +418,8 @@ void hkc_setter_with_setup(homekit_characteristic_t *ch, const homekit_value_t v
 }
 
 void hkc_autooff_setter_task(void *pvParameters);
-void do_actions(cJSON *json_context, const uint8_t int_action);
-void do_wildcard_actions(ch_group_t *ch_group, cJSON *json_context, const float action_value);
+void do_actions(ch_group_t *ch_group, const uint8_t int_action);
+void do_wildcard_actions(ch_group_t *ch_group, uint8_t index, const float action_value);
 
 // --- ON
 void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
@@ -432,18 +431,14 @@ void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
             
             ch->value = value;
             
-            cJSON *json_context = ch->context;
-            do_actions(json_context, (uint8_t) ch->value.bool_value);
+            do_actions(ch_group, (uint8_t) ch->value.bool_value);
             
-            if (ch->value.bool_value && cJSON_GetObjectItemCaseSensitive(json_context, AUTOSWITCH_TIME) != NULL) {
-                const double autoswitch_time = cJSON_GetObjectItemCaseSensitive(json_context, AUTOSWITCH_TIME)->valuedouble;
-                if (autoswitch_time > 0) {
-                    autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                    autooff_setter_params->ch = ch;
-                    autooff_setter_params->type = TYPE_ON;
-                    autooff_setter_params->time = autoswitch_time;
-                    xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, 1, NULL);
-                }
+            if (ch->value.bool_value && ch_group->num[0] > 0) {
+                autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                autooff_setter_params->ch = ch;
+                autooff_setter_params->type = TYPE_ON;
+                autooff_setter_params->time = ch_group->num[0];
+                xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, 1, NULL);
             }
             
             setup_mode_toggle_upcount();
@@ -461,7 +456,7 @@ void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
         }
     }
     
-    hkc_group_notify(ch_group->ch0);
+    hkc_group_notify(ch_group);
 }
 
 void hkc_on_status_setter(homekit_characteristic_t *ch0, const homekit_value_t value) {
@@ -470,7 +465,7 @@ void hkc_on_status_setter(homekit_characteristic_t *ch0, const homekit_value_t v
         INFO2("Setter Status ON");
         ch0->value = value;
         
-        hkc_group_notify(ch0);
+        hkc_group_notify(ch_group_find(ch0));
     }
 }
 
@@ -498,18 +493,14 @@ void hkc_lock_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
             ch->value = value;
             ch_group->ch0->value = value;
             
-            cJSON *json_context = ch->context;
-            do_actions(json_context, (uint8_t) ch->value.int_value);
+            do_actions(ch_group, (uint8_t) ch->value.int_value);
             
-            if (ch->value.int_value == 0 && cJSON_GetObjectItemCaseSensitive(json_context, AUTOSWITCH_TIME) != NULL) {
-                const double autoswitch_time = cJSON_GetObjectItemCaseSensitive(json_context, AUTOSWITCH_TIME)->valuedouble;
-                if (autoswitch_time > 0) {
-                    autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                    autooff_setter_params->ch = ch;
-                    autooff_setter_params->type = TYPE_LOCK;
-                    autooff_setter_params->time = autoswitch_time;
-                    xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, 1, NULL);
-                }
+            if (ch->value.int_value == 0 && ch_group->num[0] > 0) {
+                autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                autooff_setter_params->ch = ch;
+                autooff_setter_params->type = TYPE_LOCK;
+                autooff_setter_params->time = ch_group->num[0];
+                xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, 1, NULL);
             }
             
             setup_mode_toggle_upcount();
@@ -517,7 +508,7 @@ void hkc_lock_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
         }
     }
     
-    hkc_group_notify(ch_group->ch0);
+    hkc_group_notify(ch_group);
 }
 
 void hkc_lock_status_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
@@ -528,7 +519,7 @@ void hkc_lock_status_setter(homekit_characteristic_t *ch, const homekit_value_t 
         ch_group_t *ch_group = ch_group_find(ch);
         ch_group->ch0->value = value;
         
-        hkc_group_notify(ch_group->ch0);
+        hkc_group_notify(ch_group);
     }
 }
 
@@ -543,8 +534,7 @@ void button_event(const uint8_t gpio, void *args, const uint8_t event_type) {
         
         homekit_characteristic_notify(ch, HOMEKIT_UINT8(event_type));
         
-        cJSON *json_context = ch->context;
-        do_actions(json_context, event_type);
+        do_actions(ch_group, event_type);
         
         setup_mode_toggle_upcount();
     }
@@ -569,23 +559,19 @@ void sensor_1(const uint8_t gpio, void *args, const uint8_t type) {
                 ch->value = HOMEKIT_BOOL(true);
             }
 
-            cJSON *json_context = ch->context;
-            do_actions(json_context, 1);
+            do_actions(ch_group, 1);
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, AUTOSWITCH_TIME) != NULL) {
-                const double autoswitch_time = cJSON_GetObjectItemCaseSensitive(json_context, AUTOSWITCH_TIME)->valuedouble;
-                if (autoswitch_time > 0) {
-                    autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                    autooff_setter_params->ch = ch;
-                    autooff_setter_params->type = type;
-                    autooff_setter_params->time = autoswitch_time;
-                    xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, 1, NULL);
-                }
+            if (ch_group->num[0] > 0) {
+                autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                autooff_setter_params->ch = ch;
+                autooff_setter_params->type = type;
+                autooff_setter_params->time = ch_group->num[0];
+                xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, 1, NULL);
             }
         }
     }
     
-    hkc_group_notify(ch);
+    hkc_group_notify(ch_group);
 }
 
 void sensor_status_1(const uint8_t gpio, void *args, const uint8_t type) {
@@ -604,7 +590,7 @@ void sensor_status_1(const uint8_t gpio, void *args, const uint8_t type) {
             ch->value = HOMEKIT_BOOL(true);
         }
 
-        hkc_group_notify(ch);
+        hkc_group_notify(ch_group_find(ch));
     }
 }
 
@@ -626,12 +612,11 @@ void sensor_0(const uint8_t gpio, void *args, const uint8_t type) {
                 ch->value = HOMEKIT_BOOL(false);
             }
             
-            cJSON *json_context = ch->context;
-            do_actions(json_context, 0);
+            do_actions(ch_group, 0);
         }
     }
     
-    hkc_group_notify(ch);
+    hkc_group_notify(ch_group);
 }
 
 void sensor_status_0(const uint8_t gpio, void *args, const uint8_t type) {
@@ -650,7 +635,7 @@ void sensor_status_0(const uint8_t gpio, void *args, const uint8_t type) {
             ch->value = HOMEKIT_BOOL(false);
         }
         
-        hkc_group_notify(ch);
+        hkc_group_notify(ch_group_find(ch));
     }
 }
 
@@ -665,18 +650,14 @@ void hkc_valve_setter(homekit_characteristic_t *ch, const homekit_value_t value)
             ch->value = value;
             ch_group->ch1->value = value;
             
-            cJSON *json_context = ch->context;
-            do_actions(json_context, (uint8_t) ch->value.int_value);
+            do_actions(ch_group, (uint8_t) ch->value.int_value);
             
-            if (ch->value.int_value == 1 && cJSON_GetObjectItemCaseSensitive(json_context, AUTOSWITCH_TIME) != NULL) {
-                const double autoswitch_time = cJSON_GetObjectItemCaseSensitive(json_context, AUTOSWITCH_TIME)->valuedouble;
-                if (autoswitch_time > 0) {
-                    autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                    autooff_setter_params->ch = ch;
-                    autooff_setter_params->type = TYPE_VALVE;
-                    autooff_setter_params->time = autoswitch_time;
-                    xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, 1, NULL);
-                }
+            if (ch->value.int_value == 1 && ch_group->num[0] > 0) {
+                autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                autooff_setter_params->ch = ch;
+                autooff_setter_params->type = TYPE_VALVE;
+                autooff_setter_params->time = ch_group->num[0];
+                xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, 1, NULL);
             }
             
             setup_mode_toggle_upcount();
@@ -694,7 +675,7 @@ void hkc_valve_setter(homekit_characteristic_t *ch, const homekit_value_t value)
         }
     }
     
-    hkc_group_notify(ch_group->ch0);
+    hkc_group_notify(ch_group);
 }
 
 void hkc_valve_status_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
@@ -706,7 +687,7 @@ void hkc_valve_status_setter(homekit_characteristic_t *ch, const homekit_value_t
         ch_group_t *ch_group = ch_group_find(ch);
         ch_group->ch1->value = value;
         
-        hkc_group_notify(ch_group->ch0);
+        hkc_group_notify(ch_group);
     }
 }
 
@@ -732,38 +713,31 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
         
         ch->value = value;
         
-        cJSON *json_context = ch->context;
-        
-        float temp_deadband = 0;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND) != NULL) {
-            temp_deadband = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND)->valuedouble;
-        }
-        
         if (ch_group->ch1->value.int_value) {
             const float mid_target_temp = (ch_group->ch5->value.float_value + ch_group->ch6->value.float_value) / 2;
             
             switch (ch_group->ch4->value.int_value) {
                 case THERMOSTAT_TARGET_MODE_HEATER:
                     if (ch_group->ch3->value.int_value <= THERMOSTAT_MODE_IDLE) {
-                        if (ch_group->ch0->value.float_value < (ch_group->ch5->value.float_value - temp_deadband)) {
+                        if (ch_group->ch0->value.float_value < (ch_group->ch5->value.float_value - TH_DEADBAND)) {
                             ch_group->ch3->value.int_value = THERMOSTAT_MODE_HEATER;
-                            do_actions(json_context, THERMOSTAT_ACTION_HEATER_ON);
+                            do_actions(ch_group, THERMOSTAT_ACTION_HEATER_ON);
                         }
                     } else if (ch_group->ch0->value.float_value >= ch_group->ch5->value.float_value) {
                         ch_group->ch3->value.int_value = THERMOSTAT_MODE_IDLE;
-                        do_actions(json_context, THERMOSTAT_ACTION_HEATER_IDLE);
+                        do_actions(ch_group, THERMOSTAT_ACTION_HEATER_IDLE);
                     }
                     break;
                 
                 case THERMOSTAT_TARGET_MODE_COOLER:
                     if (ch_group->ch3->value.int_value <= THERMOSTAT_MODE_IDLE) {
-                        if (ch_group->ch0->value.float_value > (ch_group->ch6->value.float_value + temp_deadband)) {
+                        if (ch_group->ch0->value.float_value > (ch_group->ch6->value.float_value + TH_DEADBAND)) {
                             ch_group->ch3->value.int_value = THERMOSTAT_MODE_COOLER;
-                            do_actions(json_context, THERMOSTAT_ACTION_COOLER_ON);
+                            do_actions(ch_group, THERMOSTAT_ACTION_COOLER_ON);
                         }
                     } else if (ch_group->ch0->value.float_value <= ch_group->ch6->value.float_value) {
                         ch_group->ch3->value.int_value = THERMOSTAT_MODE_IDLE;
-                        do_actions(json_context, THERMOSTAT_ACTION_COOLER_IDLE);
+                        do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
                     }
                     break;
                 
@@ -772,24 +746,24 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
                         case THERMOSTAT_MODE_HEATER:
                             if (ch_group->ch0->value.float_value >= mid_target_temp) {
                                 ch_group->ch3->value.int_value = THERMOSTAT_MODE_IDLE;
-                                do_actions(json_context, THERMOSTAT_ACTION_HEATER_IDLE);
+                                do_actions(ch_group, THERMOSTAT_ACTION_HEATER_IDLE);
                             }
                             break;
                             
                         case THERMOSTAT_MODE_COOLER:
                             if (ch_group->ch0->value.float_value <= mid_target_temp) {
                                 ch_group->ch3->value.int_value = THERMOSTAT_MODE_IDLE;
-                                do_actions(json_context, THERMOSTAT_ACTION_COOLER_IDLE);
+                                do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
                             }
                             break;
                             
                         default:    // cases THERMOSTAT_MODE_IDLE, THERMOSTAT_MODE_OFF:
                             if (ch_group->ch0->value.float_value < ch_group->ch5->value.float_value) {
                                 ch_group->ch3->value.int_value = THERMOSTAT_MODE_HEATER;
-                                do_actions(json_context, THERMOSTAT_ACTION_HEATER_ON);
+                                do_actions(ch_group, THERMOSTAT_ACTION_HEATER_ON);
                             } else if (ch_group->ch0->value.float_value > ch_group->ch6->value.float_value) {
                                 ch_group->ch3->value.int_value = THERMOSTAT_MODE_COOLER;
-                                do_actions(json_context, THERMOSTAT_ACTION_COOLER_ON);
+                                do_actions(ch_group, THERMOSTAT_ACTION_COOLER_ON);
                             }
                             break;
                     }
@@ -798,13 +772,13 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
             
         } else {
             ch_group->ch3->value.int_value = THERMOSTAT_MODE_OFF;
-            do_actions(json_context, THERMOSTAT_ACTION_TOTAL_OFF);
+            do_actions(ch_group, THERMOSTAT_ACTION_TOTAL_OFF);
         }
         
         save_states_callback();
     }
     
-    hkc_group_notify(ch_group->ch0);
+    hkc_group_notify(ch_group);
 }
 
 void hkc_th_target_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
@@ -817,14 +791,7 @@ void th_input(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_child || ch_group->ch_child->value.bool_value) {
-        // Thermostat Type
-        cJSON *json_context = ch->context;
-        uint8_t th_type = THERMOSTAT_TYPE_HEATER;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TYPE) != NULL) {
-            th_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TYPE)->valuedouble;
-        }
-        
-        switch (type) {
+        switch ((uint8_t) TH_TYPE) {
             case 0:
                 ch_group->ch1->value.int_value = 0;
                 break;
@@ -850,7 +817,7 @@ void th_input(const uint8_t gpio, void *args, const uint8_t type) {
                 
             default:    // case 9:  // Cyclic
                 if (ch_group->ch1->value.int_value) {
-                    if (th_type == THERMOSTAT_TYPE_HEATERCOOLER) {
+                    if (TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
                         if (ch_group->ch4->value.int_value > 0) {
                             ch_group->ch4->value.int_value--;
                         } else {
@@ -861,7 +828,7 @@ void th_input(const uint8_t gpio, void *args, const uint8_t type) {
                     }
                 } else {
                     ch_group->ch1->value.int_value = 1;
-                    if (th_type == THERMOSTAT_TYPE_HEATERCOOLER) {
+                    if (TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
                         ch_group->ch4->value.int_value = THERMOSTAT_TARGET_MODE_COOLER;
                     }
                 }
@@ -876,37 +843,26 @@ void th_input_temp(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_child || ch_group->ch_child->value.bool_value) {
-        cJSON *json_context = ch->context;
-        
-        float th_min_temp = THERMOSTAT_DEFAULT_MIN_TEMP;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MIN_TEMP) != NULL) {
-            th_min_temp = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MIN_TEMP)->valuedouble;
-        }
-        
-        float th_max_temp = THERMOSTAT_DEFAULT_MAX_TEMP;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MAX_TEMP) != NULL) {
-            th_max_temp = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MAX_TEMP)->valuedouble;
-        }
-        
         float set_h_temp = ch_group->ch5->value.float_value;
         float set_c_temp = ch_group->ch6->value.float_value;
+        
         if (type == THERMOSTAT_TEMP_UP) {
             set_h_temp += 0.5;
             set_c_temp += 0.5;
-            if (set_h_temp > th_max_temp) {
-                set_h_temp = th_max_temp;
+            if (set_h_temp > TH_MAX_TEMP) {
+                set_h_temp = TH_MAX_TEMP;
             }
-            if (set_c_temp > th_max_temp) {
-                set_c_temp = th_max_temp;
+            if (set_c_temp > TH_MAX_TEMP) {
+                set_c_temp = TH_MAX_TEMP;
             }
         } else {    // type == THERMOSTAT_TEMP_DOWN
             set_h_temp -= 0.5;
             set_c_temp -= 0.5;
-            if (set_h_temp < th_min_temp) {
-                set_h_temp = th_min_temp;
+            if (set_h_temp < TH_MIN_TEMP) {
+                set_h_temp = TH_MIN_TEMP;
             }
-            if (set_c_temp < th_min_temp) {
-                set_c_temp = th_min_temp;
+            if (set_c_temp < TH_MIN_TEMP) {
+                set_c_temp = TH_MIN_TEMP;
             }
         }
         
@@ -919,47 +875,27 @@ void th_input_temp(const uint8_t gpio, void *args, const uint8_t type) {
 
 // --- TEMPERATURE
 void temperature_timer_worker(void *args) {
-    homekit_characteristic_t *ch = args;
-    ch_group_t *ch_group = ch_group_find(ch);
-    
-    cJSON *json_context = ch->context;
-    
-    const uint8_t sensor_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, TEMPERATURE_SENSOR_GPIO)->valuedouble;
-    
-    uint8_t sensor_type = 2;
-    if (cJSON_GetObjectItemCaseSensitive(json_context, TEMPERATURE_SENSOR_TYPE) != NULL) {
-        sensor_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, TEMPERATURE_SENSOR_TYPE)->valuedouble;
-    }
-    
-    float temp_offset = 0;
-    if (cJSON_GetObjectItemCaseSensitive(json_context, TEMPERATURE_OFFSET) != NULL) {
-        temp_offset = (float) cJSON_GetObjectItemCaseSensitive(json_context, TEMPERATURE_OFFSET)->valuedouble;
-    }
-    
-    float hum_offset = 0;
-    if (cJSON_GetObjectItemCaseSensitive(json_context, HUMIDITY_OFFSET) != NULL) {
-        hum_offset = (float) cJSON_GetObjectItemCaseSensitive(json_context, HUMIDITY_OFFSET)->valuedouble;
-    }
+    ch_group_t *ch_group = args;
     
     float humidity_value, temperature_value;
     bool get_temp = false;
     
-    if (sensor_type != 3) {
-        dht_sensor_type_t current_sensor_type = DHT_TYPE_DHT22; // sensor_type == 2
+    if (TH_SENSOR_TYPE != 3) {
+        dht_sensor_type_t current_sensor_type = DHT_TYPE_DHT22; // TH_SENSOR_TYPE == 2
         
-        if (sensor_type == 1) {
+        if (TH_SENSOR_TYPE == 1) {
             current_sensor_type = DHT_TYPE_DHT11;
-        } else if (sensor_type == 4) {
+        } else if (TH_SENSOR_TYPE == 4) {
             current_sensor_type = DHT_TYPE_SI7021;
         }
         
-        get_temp = dht_read_float_data(current_sensor_type, sensor_gpio, &humidity_value, &temperature_value);
-    } else {    // sensor_type == 3
+        get_temp = dht_read_float_data(current_sensor_type, TH_SENSOR_GPIO, &humidity_value, &temperature_value);
+    } else {    // TH_SENSOR_TYPE == 3
         ds18b20_addr_t ds18b20_addr[1];
         
-        if (ds18b20_scan_devices(sensor_gpio, ds18b20_addr, 1) == 1) {
+        if (ds18b20_scan_devices(TH_SENSOR_GPIO, ds18b20_addr, 1) == 1) {
             float temps[1];
-            ds18b20_measure_and_read_multi(sensor_gpio, ds18b20_addr, 1, temps);
+            ds18b20_measure_and_read_multi(TH_SENSOR_GPIO, ds18b20_addr, 1, temps);
             temperature_value = temps[0];
             humidity_value = 0.0;
             get_temp = true;
@@ -970,7 +906,7 @@ void temperature_timer_worker(void *args) {
     
     if (get_temp) {
         if (ch_group->ch0) {
-            temperature_value += temp_offset;
+            temperature_value += TH_SENSOR_TEMP_OFFSET;
             if (temperature_value < -100) {
                 temperature_value = -100;
             } else if (temperature_value > 200) {
@@ -984,12 +920,12 @@ void temperature_timer_worker(void *args) {
                     update_th(ch_group->ch0, ch_group->ch0->value);
                 }
                 
-                do_wildcard_actions(ch_group, json_context, temperature_value);
+                do_wildcard_actions(ch_group, 0, temperature_value);
             }
         }
         
         if (ch_group->ch1 && !ch_group->ch5) {
-            humidity_value += hum_offset;
+            humidity_value += TH_SENSOR_HUM_OFFSET;
             if (humidity_value < 0) {
                 humidity_value = 0;
             } else if (humidity_value > 100) {
@@ -999,7 +935,7 @@ void temperature_timer_worker(void *args) {
             if (humidity_value != ch_group->ch1->value.float_value) {
                 ch_group->ch1->value = HOMEKIT_FLOAT(humidity_value);
                 
-                //do_wildcard_actions(ch_group, json_context, temperature_value);
+                do_wildcard_actions(ch_group, 1, humidity_value);
             }
         }
         
@@ -1011,15 +947,11 @@ void temperature_timer_worker(void *args) {
         if (ch_group->ch5) {
             ch_group->ch3->value = HOMEKIT_UINT8(THERMOSTAT_MODE_OFF);
             
-            do_actions(json_context, THERMOSTAT_ACTION_SENSOR_ERROR);
+            do_actions(ch_group, THERMOSTAT_ACTION_SENSOR_ERROR);
         }
     }
     
-    if (ch_group->ch1) {
-        hkc_group_notify(ch_group->ch1);
-    } else {
-        hkc_group_notify(ch_group->ch0);
-    }
+    hkc_group_notify(ch_group);
 }
 
 // --- LIGHTBULBS
@@ -1145,7 +1077,7 @@ void rgbw_set_timer_worker() {
 void hkc_rgbw_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch);
     if (ch_group->ch_sec && !ch_group->ch_sec->value.bool_value) {
-        hkc_group_notify(ch_group->ch0);
+        hkc_group_notify(ch_group);
         
     } else if (ch != ch_group->ch0 || value.bool_value != ch_group->ch0->value.bool_value) {
         lightbulb_group_t *lightbulb_group = lightbulb_group_find(ch_group->ch0);
@@ -1200,14 +1132,13 @@ void hkc_rgbw_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
             sdk_os_timer_arm(pwm_timer, RGBW_PERIOD, true);
         }
         
-        cJSON *json_context = ch_group->ch0->context;
-        do_actions(json_context, (uint8_t) ch_group->ch0->value.bool_value);
+        do_actions(ch_group, (uint8_t) ch_group->ch0->value.bool_value);
         
         if (ch_group->ch0->value.bool_value) {
-            do_wildcard_actions(ch_group, json_context, ch_group->ch1->value.int_value);
+            do_wildcard_actions(ch_group, 0, ch_group->ch1->value.int_value);
         }
         
-        hkc_group_notify(ch_group->ch0);
+        hkc_group_notify(ch_group);
         
         save_states_callback();
 
@@ -1311,10 +1242,9 @@ void garage_door_stop(const uint8_t gpio, void *args, const uint8_t type) {
         
         sdk_os_timer_disarm(ch_group->timer);
 
-        cJSON *json_context = ch0->context;
-        do_actions(json_context, 10);
+        do_actions(ch_group, 10);
         
-        hkc_group_notify(ch0);
+        hkc_group_notify(ch_group);
     }
 }
 
@@ -1327,10 +1257,9 @@ void garage_door_obstruction(const uint8_t gpio, void *args, const uint8_t type)
     
     ch_group->ch2->value.bool_value = (bool) type;
     
-    hkc_group_notify(ch);
+    hkc_group_notify(ch_group);
     
-    cJSON *json_context = ch->context;
-    do_actions(json_context, type + 8);
+    do_actions(ch_group, type + 8);
 }
 
 void garage_door_sensor(const uint8_t gpio, void *args, const uint8_t type) {
@@ -1360,10 +1289,9 @@ void garage_door_sensor(const uint8_t gpio, void *args, const uint8_t type) {
         }
     }
     
-    hkc_group_notify(ch);
+    hkc_group_notify(ch_group);
     
-    cJSON *json_context = ch->context;
-    do_actions(json_context, type + 4);
+    do_actions(ch_group, type + 4);
 }
 
 void hkc_garage_door_setter(homekit_characteristic_t *ch1, const homekit_value_t value) {
@@ -1382,13 +1310,12 @@ void hkc_garage_door_setter(homekit_characteristic_t *ch1, const homekit_value_t
             
             ch1->value = value;
 
-            cJSON *json_context = ch1->context;
-            do_actions(json_context, (uint8_t) ch_group->ch0->value.int_value);
+            do_actions(ch_group, (uint8_t) ch_group->ch0->value.int_value);
    
-            if ((value.int_value == GARAGE_DOOR_OPENED && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4) == NULL) ||
+            if ((value.int_value == GARAGE_DOOR_OPENED && GARAGE_DOOR_HAS_F4 == 0) ||
                        ch_group->ch0->value.int_value == GARAGE_DOOR_CLOSING) {
                 garage_door_sensor(0, ch_group->ch0, GARAGE_DOOR_OPENING);
-            } else if ((value.int_value == GARAGE_DOOR_CLOSED && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5) == NULL) ||
+            } else if ((value.int_value == GARAGE_DOOR_CLOSED && GARAGE_DOOR_HAS_F5 == 0) ||
                        ch_group->ch0->value.int_value == GARAGE_DOOR_OPENING) {
                 garage_door_sensor(0, ch_group->ch0, GARAGE_DOOR_CLOSING);
             }
@@ -1398,15 +1325,13 @@ void hkc_garage_door_setter(homekit_characteristic_t *ch1, const homekit_value_t
 
     }
     
-    hkc_group_notify(ch_group->ch0);
+    hkc_group_notify(ch_group);
 }
 
 void garage_door_timer_worker(void *args) {
     homekit_characteristic_t *ch0 = args;
     ch_group_t *ch_group = ch_group_find(ch0);
-    
-    cJSON *json_context = ch0->context;
-    
+
     void halt_timer() {
         sdk_os_timer_disarm(ch_group->timer);
         if (GARAGE_DOOR_TIME_MARGIN > 0) {
@@ -1417,22 +1342,22 @@ void garage_door_timer_worker(void *args) {
     if (ch0->value.int_value == GARAGE_DOOR_OPENING) {
         GARAGE_DOOR_CURRENT_TIME++;
 
-        if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2) == NULL) {
+        if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN && GARAGE_DOOR_HAS_F2 == 0) {
             sdk_os_timer_disarm(ch_group->timer);
             garage_door_sensor(0, ch0, GARAGE_DOOR_OPENED);
             
-        } else if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2) != NULL) {
+        } else if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME && GARAGE_DOOR_HAS_F2 == 1) {
             halt_timer();
         }
         
     } else {    // GARAGE_DOOR_CLOSING
         GARAGE_DOOR_CURRENT_TIME -= GARAGE_DOOR_CLOSE_TIME_FACTOR;
         
-        if (GARAGE_DOOR_CURRENT_TIME <= GARAGE_DOOR_TIME_MARGIN && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3) == NULL) {
+        if (GARAGE_DOOR_CURRENT_TIME <= GARAGE_DOOR_TIME_MARGIN && GARAGE_DOOR_HAS_F3 == 0) {
             sdk_os_timer_disarm(ch_group->timer);
             garage_door_sensor(0, ch0, GARAGE_DOOR_CLOSED);
             
-        } else if (GARAGE_DOOR_CURRENT_TIME <= 0 && cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3) != NULL) {
+        } else if (GARAGE_DOOR_CURRENT_TIME <= 0 && GARAGE_DOOR_HAS_F3 == 1) {
             halt_timer();
         }
     }
@@ -1466,20 +1391,18 @@ void window_cover_stop(homekit_characteristic_t *ch) {
     
     WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_REAL_POSITION;
     WINDOW_COVER_CH_TARGET_POSITION->value = WINDOW_COVER_CH_CURRENT_POSITION->value;
-    
-    cJSON *json_context = ch->context;
 
     if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_CLOSING) {
-        do_actions(json_context, WINDOW_COVER_STOP_FROM_CLOSING);
+        do_actions(ch_group, WINDOW_COVER_STOP_FROM_CLOSING);
     } else if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_OPENING) {
-        do_actions(json_context, WINDOW_COVER_STOP_FROM_OPENING);
+        do_actions(ch_group, WINDOW_COVER_STOP_FROM_OPENING);
     }
     
-    do_actions(json_context, WINDOW_COVER_STOP);
+    do_actions(ch_group, WINDOW_COVER_STOP);
     
     WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_STOP;
     
-    hkc_group_notify(ch_group->ch0);
+    hkc_group_notify(ch_group);
     
     setup_mode_toggle_upcount();
     
@@ -1495,10 +1418,9 @@ void window_cover_obstruction(const uint8_t gpio, void *args, const uint8_t type
     
     ch_group->ch3->value.bool_value = (bool) type;
     
-    hkc_group_notify(ch);
+    hkc_group_notify(ch_group);
     
-    cJSON *json_context = ch->context;
-    do_actions(json_context, type + WINDOW_COVER_OBSTRUCTION);
+    do_actions(ch_group, type + WINDOW_COVER_OBSTRUCTION);
 }
 
 void hkc_window_cover_setter(homekit_characteristic_t *ch1, const homekit_value_t value) {
@@ -1511,15 +1433,13 @@ void hkc_window_cover_setter(homekit_characteristic_t *ch1, const homekit_value_
 
         normalize_position(ch1);
         
-        cJSON *json_context = ch1->context;
-        
         if (value.int_value < WINDOW_COVER_CH_CURRENT_POSITION->value.int_value) {
             
             if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_OPENING) {
-                do_actions(json_context, WINDOW_COVER_CLOSING_FROM_MOVING);
+                do_actions(ch_group, WINDOW_COVER_CLOSING_FROM_MOVING);
                 setup_mode_toggle_upcount();
             } else {
-                do_actions(json_context, WINDOW_COVER_CLOSING);
+                do_actions(ch_group, WINDOW_COVER_CLOSING);
             }
             
             if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
@@ -1531,10 +1451,10 @@ void hkc_window_cover_setter(homekit_characteristic_t *ch1, const homekit_value_
         } else if (value.int_value > WINDOW_COVER_CH_CURRENT_POSITION->value.int_value) {
 
             if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_CLOSING) {
-                do_actions(json_context, WINDOW_COVER_OPENING_FROM_MOVING);
+                do_actions(ch_group, WINDOW_COVER_OPENING_FROM_MOVING);
                 setup_mode_toggle_upcount();
             } else {
-                do_actions(json_context, WINDOW_COVER_OPENING);
+                do_actions(ch_group, WINDOW_COVER_OPENING);
             }
             
             if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
@@ -1547,11 +1467,11 @@ void hkc_window_cover_setter(homekit_characteristic_t *ch1, const homekit_value_
             window_cover_stop(ch1);
         }
         
-        do_wildcard_actions(ch_group, json_context, value.int_value);
+        do_wildcard_actions(ch_group, 0, value.int_value);
     
     }
     
-    hkc_group_notify(ch_group->ch0);
+    hkc_group_notify(ch_group);
 }
 
 void window_cover_timer_worker(void *args) {
@@ -1626,24 +1546,20 @@ void hkc_fan_setter(homekit_characteristic_t *ch0, const homekit_value_t value) 
             
             ch0->value = value;
             
-            cJSON *json_context = ch0->context;
-            do_actions(json_context, (uint8_t) value.int_value);
+            do_actions(ch_group, (uint8_t) value.int_value);
             
             if (value.bool_value) {
-                do_wildcard_actions(ch_group, json_context, ch_group->ch1->value.float_value);
+                do_wildcard_actions(ch_group, 0, ch_group->ch1->value.float_value);
                 
-                if (cJSON_GetObjectItemCaseSensitive(json_context, AUTOSWITCH_TIME) != NULL) {
-                    const double autoswitch_time = cJSON_GetObjectItemCaseSensitive(json_context, AUTOSWITCH_TIME)->valuedouble;
-                    if (autoswitch_time > 0) {
-                        autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                        autooff_setter_params->ch = ch0;
-                        autooff_setter_params->type = TYPE_FAN;
-                        autooff_setter_params->time = autoswitch_time;
-                        xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, 1, NULL);
-                    }
+                if (ch0->value.bool_value && ch_group->num[0] > 0) {
+                    autooff_setter_params_t *autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                    autooff_setter_params->ch = ch0;
+                    autooff_setter_params->type = TYPE_FAN;
+                    autooff_setter_params->time = ch_group->num[0];
+                    xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_setter_task", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, 1, NULL);
                 }
             } else {
-                ch_group->last_wildcard_action0 = NO_LAST_WILDCARD_ACTION;
+                ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
             }
 
             setup_mode_toggle_upcount();
@@ -1652,7 +1568,7 @@ void hkc_fan_setter(homekit_characteristic_t *ch0, const homekit_value_t value) 
         }
     }
     
-    hkc_group_notify(ch0);
+    hkc_group_notify(ch_group);
 }
 
 void hkc_fan_speed_setter(homekit_characteristic_t *ch1, const homekit_value_t value) {
@@ -1665,15 +1581,14 @@ void hkc_fan_speed_setter(homekit_characteristic_t *ch1, const homekit_value_t v
             ch1->value = value;
             
             if (ch_group->ch0->value.bool_value) {
-                cJSON *json_context = ch1->context;
-                do_wildcard_actions(ch_group, json_context, value.float_value);
+                do_wildcard_actions(ch_group, 0, value.float_value);
             }
             
             save_states_callback();
         }
     }
     
-    hkc_group_notify(ch1);
+    hkc_group_notify(ch_group);
 }
 
 void hkc_fan_status_setter(homekit_characteristic_t *ch0, const homekit_value_t value) {
@@ -1683,7 +1598,7 @@ void hkc_fan_status_setter(homekit_characteristic_t *ch0, const homekit_value_t 
         
         ch0->value = value;
         
-        hkc_group_notify(ch0);
+        hkc_group_notify(ch_group_find(ch0));
         
         save_states_callback();
     }
@@ -1699,15 +1614,14 @@ void hkc_tv_active(homekit_characteristic_t *ch0, const homekit_value_t value) {
             
             ch0->value = value;
             
-            cJSON *json_context = ch0->context;
-            do_actions(json_context, value.int_value);
+            do_actions(ch_group, value.int_value);
             
             setup_mode_toggle_upcount();
             save_states_callback();
         }
     }
     
-    hkc_group_notify(ch0);
+    hkc_group_notify(ch_group);
 }
 
 void hkc_tv_status_active(homekit_characteristic_t *ch0, const homekit_value_t value) {
@@ -1717,7 +1631,7 @@ void hkc_tv_status_active(homekit_characteristic_t *ch0, const homekit_value_t v
         
         ch0->value = value;
         
-        hkc_group_notify(ch0);
+        hkc_group_notify(ch_group_find(ch0));
         
         save_states_callback();
     }
@@ -1731,14 +1645,12 @@ void hkc_tv_active_identifier(homekit_characteristic_t *ch, const homekit_value_
             INFO2("Setter TV Input %i", value.int_value);
             
             ch->value = value;
-            
-            cJSON *json_context = ch->context;
-            cJSON *json_input = cJSON_GetArrayItem(cJSON_GetObjectItemCaseSensitive(json_context, TV_INPUTS_ARRAY), value.int_value - 1);
-            do_actions(json_input, 0);
+
+            do_actions(ch_group, (MAX_ACTIONS - 1) + value.int_value);
         }
     }
     
-    hkc_group_notify(ch);
+    hkc_group_notify(ch_group);
 }
 
 void hkc_tv_key(homekit_characteristic_t *ch, const homekit_value_t value) {
@@ -1749,11 +1661,10 @@ void hkc_tv_key(homekit_characteristic_t *ch, const homekit_value_t value) {
         
         ch->value = value;
         
-        cJSON *json_context = ch->context;
-        do_actions(json_context, value.int_value + 2);
+        do_actions(ch_group, value.int_value + 2);
     }
     
-    hkc_group_notify(ch);
+    hkc_group_notify(ch_group);
 }
 
 void hkc_tv_power_mode(homekit_characteristic_t *ch, const homekit_value_t value) {
@@ -1764,11 +1675,10 @@ void hkc_tv_power_mode(homekit_characteristic_t *ch, const homekit_value_t value
         
         ch->value = value;
         
-        cJSON *json_context = ch->context;
-        do_actions(json_context, value.int_value + 30);
+        do_actions(ch_group, value.int_value + 30);
     }
     
-    hkc_group_notify(ch);
+    hkc_group_notify(ch_group);
 }
 
 void hkc_tv_mute(homekit_characteristic_t *ch, const homekit_value_t value) {
@@ -1779,11 +1689,10 @@ void hkc_tv_mute(homekit_characteristic_t *ch, const homekit_value_t value) {
         
         ch->value = value;
         
-        cJSON *json_context = ch->context;
-        do_actions(json_context, value.int_value + 20);
+        do_actions(ch_group, value.int_value + 20);
     }
     
-    hkc_group_notify(ch);
+    hkc_group_notify(ch_group);
 }
 
 void hkc_tv_volume(homekit_characteristic_t *ch, const homekit_value_t value) {
@@ -1794,11 +1703,10 @@ void hkc_tv_volume(homekit_characteristic_t *ch, const homekit_value_t value) {
         
         ch->value = value;
         
-        cJSON *json_context = ch->context;
-        do_actions(json_context, value.int_value + 22);
+        do_actions(ch_group, value.int_value + 22);
     }
     
-    hkc_group_notify(ch);
+    hkc_group_notify(ch_group);
 }
 
 void hkc_tv_configured_name(homekit_characteristic_t *ch1, const homekit_value_t value) {
@@ -1809,7 +1717,7 @@ void hkc_tv_configured_name(homekit_characteristic_t *ch1, const homekit_value_t
     homekit_value_destruct(&ch1->value);
     ch1->value = HOMEKIT_STRING(new_name);
 
-    hkc_group_notify(ch1);
+    hkc_group_notify(ch_group_find(ch1));
 
     save_states_callback();
 }
@@ -2132,313 +2040,300 @@ void hkc_autooff_setter_task(void *pvParameters) {
 
 // --- HTTP GET task
 void http_get_task(void *pvParameters) {
-    cJSON *json_http_actions = pvParameters;
-    for(uint8_t i=0; i<cJSON_GetArraySize(json_http_actions); i++) {
-        cJSON *json_http_action = cJSON_GetArrayItem(json_http_actions, i);
-        
-        char *host = cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_HOST)->valuestring;
-        char *url = "";
-        if (cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_URL) != NULL) {
-            url = cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_URL)->valuestring;
-        }
-        
-        uint16_t port_n = 80;
-        if (cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_PORT) != NULL) {
-            port_n = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_PORT)->valuedouble;
-        }
-        
-        INFO2("HTTP Action http://%s:%i/%s", host, port_n, url);
-        
-        const struct addrinfo hints = {
-            .ai_family = AF_UNSPEC,
-            .ai_socktype = SOCK_STREAM,
-        };
-        struct addrinfo *res;
-        
-        char port[5];
-        itoa(port_n, port, 10);
-        
-        if (getaddrinfo(host, port, &hints, &res) == 0) {
-            int s = socket(res->ai_family, res->ai_socktype, 0);
-            if (s >= 0) {
-                if (connect(s, res->ai_addr, res->ai_addrlen) == 0) {
-                    uint8_t method_n = 0;
-                    if (cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_METHOD) != NULL) {
-                        method_n = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_METHOD)->valuedouble;
-                    }
-                    
-                    uint16_t content_len_n = 0;
-                    
-                    char *method = "GET";
-                    char *method_req = NULL;
-                    char *content = "";
-                    if (method_n > 0) {
-                        if (cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_CONTENT) != NULL) {
-                            content = cJSON_GetObjectItemCaseSensitive(json_http_action, HTTP_ACTION_CONTENT)->valuestring;
-                            content_len_n = strlen(content);
+    action_task_t *action_task = pvParameters;
+    action_http_t *action_http = action_task->ch_group->action_http;
+    
+    while(action_http) {
+        if (action_http->action == action_task->action) {
+            INFO2("HTTP Action http://%s:%i/%s", action_http->host, action_http->port_n, action_http->url);
+            
+            const struct addrinfo hints = {
+                .ai_family = AF_UNSPEC,
+                .ai_socktype = SOCK_STREAM,
+            };
+            struct addrinfo *res;
+            
+            char port[5];
+            itoa(action_http->port_n, port, 10);
+            
+            if (getaddrinfo(action_http->host, port, &hints, &res) == 0) {
+                int s = socket(res->ai_family, res->ai_socktype, 0);
+                if (s >= 0) {
+                    if (connect(s, res->ai_addr, res->ai_addrlen) == 0) {
+                        uint16_t content_len_n = 0;
+                        
+                        char *method = "GET";
+                        char *method_req = NULL;
+                        if (action_http->method_n > 0) {
+                            content_len_n = strlen(action_http->content);
+
+                            char content_len[4];
+                            itoa(content_len_n, content_len, 10);
+                            method_req = malloc(48);
+                            snprintf(method_req, 48, "Content-type: text/html\r\nContent-length: %s\r\n", content_len);
+                            
+                            if (action_http->method_n == 1) {
+                                method = "PUT";
+                            } else if (action_http->method_n == 2) {
+                                method = "POST";
+                            }
                         }
                         
-                        char content_len[4];
-                        itoa(content_len_n, content_len, 10);
-                        method_req = malloc(48);
-                        snprintf(method_req, 48, "Content-type: text/html\r\nContent-length: %s\r\n", content_len);
+                        uint16_t req_len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(action_http->host) +  strlen(action_http->url) + content_len_n;
                         
-                        if (method_n == 1) {
-                            method = "PUT";
-                        } else if (method_n == 2) {
-                            method = "POST";
+                        char *req = malloc(req_len);
+                        snprintf(req, req_len, "%s /%s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HAA/"FIRMWARE_VERSION" esp8266\r\nConnection: close\r\n%s\r\n%s",
+                                 method,
+                                 action_http->url,
+                                 action_http->host,
+                                 (method_req != NULL) ? method_req : "",
+                                 action_http->content);
+                        
+                        if (write(s, req, strlen(req)) >= 0) {
+                            INFO2("%s", req);
+                            
+                        } else {
+                            ERROR2("HTTP");
                         }
-                    }
-                    
-                    uint16_t req_len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(host) +  strlen(url) + content_len_n;
-                    
-                    char *req = malloc(req_len);
-                    snprintf(req, req_len, "%s /%s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HAA/"FIRMWARE_VERSION" esp8266\r\nConnection: close\r\n%s\r\n%s",
-                             method,
-                             url,
-                             host,
-                             (method_req != NULL) ? method_req : "",
-                             content);
-                    
-                    if (write(s, req, strlen(req)) >= 0) {
-                        INFO2("%s", req);
                         
+                        if (method_req != NULL) {
+                            free(method_req);
+                        }
+                        
+                        free(req);
                     } else {
-                        ERROR2("HTTP");
+                        ERROR2("Connection");
                     }
-                    
-                    if (method_req != NULL) {
-                        free(method_req);
-                    }
-                    
-                    free(req);
                 } else {
-                    ERROR2("Connection");
+                    ERROR2("Socket");
                 }
+                
+                close(s);
             } else {
-                ERROR2("Socket");
+                ERROR2("DNS");
             }
             
-            close(s);
-        } else {
-            ERROR2("DNS");
+            freeaddrinfo(res);
+            
+            vTaskDelay(MS_TO_TICK(10));
         }
         
-        freeaddrinfo(res);
-        
-        vTaskDelay(MS_TO_TICK(10));
+        action_http = action_http->next;
     }
     
+    free(pvParameters);
     vTaskDelete(NULL);
 }
 
 // --- IR Send task
 void ir_tx_task(void *pvParameters) {
-    cJSON *json_ir_actions = pvParameters;
-    for(uint8_t l=0; l<cJSON_GetArraySize(json_ir_actions); l++) {
-        cJSON *json_ir_action = cJSON_GetArrayItem(json_ir_actions, l);
-        
-        uint16_t *ir_code = NULL;
-        uint16_t ir_code_len = 0;
-        
-        uint8_t ir_repeats = 1;
-        if (cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_REPEATS) != NULL) {
-            ir_repeats = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_REPEATS)->valuedouble;
-        }
-        
-        uint8_t freq = ir_tx_freq;
-        if (cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_FREQ) != NULL) {
-            freq = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_FREQ)->valuedouble;
-        }
-        
-        freq = 1000 / freq / 2;
-        
-        // Decoding protocol based IR code
-        if (cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_PROTOCOL_CODE) != NULL) {
-            char *prot = NULL;
+    action_task_t *action_task = pvParameters;
+    action_ir_tx_t *action_ir_tx = action_task->ch_group->action_ir_tx;
+    
+    while(action_ir_tx) {
+        if (action_ir_tx->action == action_task->action) {
+            uint16_t *ir_code = NULL;
+            uint16_t ir_code_len = 0;
             
-            if (cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_PROTOCOL) != NULL) {
-                prot = cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_PROTOCOL)->valuestring;
-            } else {
-                prot = ir_protocol;
+            uint8_t freq = ir_tx_freq;
+            if (action_ir_tx->freq > 0) {
+                freq = action_ir_tx->freq;
             }
             
-            // Decoding protocol based IR code length
-            char *json_ir_code = cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_PROTOCOL_CODE)->valuestring;
-            const uint16_t json_ir_code_len = strlen(json_ir_code);
-            ir_code_len = 3;
-            
-            for (uint16_t i=0; i<json_ir_code_len; i++) {
-                char *found = strchr(baseUC_dic, json_ir_code[i]);
-                if (found) {
-                    ir_code_len += (1 + found - baseUC_dic) << 1;
+            // Decoding protocol based IR code
+            if (action_ir_tx->prot_code) {
+                char *prot = NULL;
+                
+                if (action_ir_tx->prot) {
+                    prot = action_ir_tx->prot;
                 } else {
-                    found = strchr(baseLC_dic, json_ir_code[i]);
-                    ir_code_len += (1 + found - baseLC_dic) << 1;
+                    prot = ir_protocol;
                 }
-            }
-            
-            ir_code = malloc(sizeof(uint16_t) * ir_code_len);
-            
-            INFO2("IR Code Len: %i\nIR Protocol: %s", ir_code_len, prot);
-            
-            uint16_t bit0_mark = 0, bit0_space = 0, bit1_mark = 0, bit1_space = 0, packet;
-            uint8_t index;
-            for (uint8_t i=0; i<IR_ACTION_PROTOCOL_LEN / 2; i++) {
-                index = i * 2;
-                char *found = strchr(baseRaw_dic, prot[index]);
-                packet = (found - baseRaw_dic) * IR_CODE_LEN * IR_CODE_SCALE;
                 
-                found = strchr(baseRaw_dic, prot[index + 1]);
-                packet += (found - baseRaw_dic) * IR_CODE_SCALE;
-
-                if (log_output)
-                    printf("%s%5d ", i & 1 ? "-" : "+", packet);
+                // Decoding protocol based IR code length
+                const uint16_t json_ir_code_len = strlen(action_ir_tx->prot_code);
+                ir_code_len = 3;
                 
-                switch (i) {
-                    case IR_CODE_HEADER_MARK_POS:
-                        ir_code[0] = packet;
-                        break;
-                        
-                    case IR_CODE_HEADER_SPACE_POS:
-                        ir_code[1] = packet;
-                        break;
-                        
-                    case IR_CODE_BIT0_MARK_POS:
-                        bit0_mark = packet;
-                        break;
-                        
-                    case IR_CODE_BIT0_SPACE_POS:
-                        bit0_space = packet;
-                        break;
-                        
-                    case IR_CODE_BIT1_MARK_POS:
-                        bit1_mark = packet;
-                        break;
-                        
-                    case IR_CODE_BIT1_SPACE_POS:
-                        bit1_space = packet;
-                        break;
-                        
-                    case IR_CODE_FOOTER_MARK_POS:
-                        ir_code[ir_code_len - 1] = packet;
-                        break;
-                        
-                    default:
-                        // Do nothing
-                        break;
-                }
-            }
-            
-            // Decoding BIT code part
-            uint16_t ir_code_index = 2;
-            for (uint16_t i=0; i<json_ir_code_len; i++) {
-                char *found = strchr(baseUC_dic, json_ir_code[i]);
-                if (found) {
-                    for (uint16_t j=0; j<1 + found - baseUC_dic; j++) {
-                        ir_code[ir_code_index] = bit1_mark;
-                        ir_code_index++;
-                        ir_code[ir_code_index] = bit1_space;
-                        ir_code_index++;
-                    }
-                } else {
-                    found = strchr(baseLC_dic, json_ir_code[i]);
-                    for (uint16_t j=0; j<1 + found - baseLC_dic; j++) {
-                        ir_code[ir_code_index] = bit0_mark;
-                        ir_code_index++;
-                        ir_code[ir_code_index] = bit0_space;
-                        ir_code_index++;
+                for (uint16_t i = 0; i < json_ir_code_len; i++) {
+                    char *found = strchr(baseUC_dic, action_ir_tx->prot_code[i]);
+                    if (found) {
+                        ir_code_len += (1 + found - baseUC_dic) << 1;
+                    } else {
+                        found = strchr(baseLC_dic, action_ir_tx->prot_code[i]);
+                        ir_code_len += (1 + found - baseLC_dic) << 1;
                     }
                 }
-            }
-            
-            if (log_output) {
-                printf("\nIR code: %s\n", json_ir_code);
-                for (uint16_t i=0; i<ir_code_len; i++) {
-                    printf("%s%5d ", i & 1 ? "-" : "+", ir_code[i]);
-                    if (i % 16 == 15) {
-                        printf("\n");
-                    }
-
-                }
-                printf("\n");
-            }
-            
-        } else {    // IR_ACTION_RAW_CODE
-            char *json_ir_code = cJSON_GetObjectItemCaseSensitive(json_ir_action, IR_ACTION_RAW_CODE)->valuestring;
-
-            const uint16_t json_ir_code_len = strlen(json_ir_code);
-            ir_code_len = json_ir_code_len >> 1;
-            
-            ir_code = malloc(sizeof(uint16_t) * ir_code_len);
-            
-            INFO2("IR packet (%i)", ir_code_len);
-
-            uint16_t index, packet;
-            for (uint16_t i=0; i<ir_code_len; i++) {
-                index = i << 1;
-                char *found = strchr(baseRaw_dic, json_ir_code[index]);
-                packet = (found - baseRaw_dic) * IR_CODE_LEN * IR_CODE_SCALE;
                 
-                found = strchr(baseRaw_dic, json_ir_code[index + 1]);
-                packet += (found - baseRaw_dic) * IR_CODE_SCALE;
+                ir_code = malloc(sizeof(uint16_t) * ir_code_len);
+                
+                INFO2("IR Code Len: %i\nIR Protocol: %s", ir_code_len, prot);
+                
+                uint16_t bit0_mark = 0, bit0_space = 0, bit1_mark = 0, bit1_space = 0, packet;
+                uint8_t index;
+                for (uint8_t i=0; i<IR_ACTION_PROTOCOL_LEN / 2; i++) {
+                    index = i * 2;
+                    char *found = strchr(baseRaw_dic, prot[index]);
+                    packet = (found - baseRaw_dic) * IR_CODE_LEN * IR_CODE_SCALE;
+                    
+                    found = strchr(baseRaw_dic, prot[index + 1]);
+                    packet += (found - baseRaw_dic) * IR_CODE_SCALE;
 
-                ir_code[i] = packet;
-
-                if (log_output) {
-                    printf("%s%5d ", i & 1 ? "-" : "+", packet);
-                    if (i % 16 == 15) {
-                        printf("\n");
+                    if (log_output)
+                        printf("%s%5d ", i & 1 ? "-" : "+", packet);
+                    
+                    switch (i) {
+                        case IR_CODE_HEADER_MARK_POS:
+                            ir_code[0] = packet;
+                            break;
+                            
+                        case IR_CODE_HEADER_SPACE_POS:
+                            ir_code[1] = packet;
+                            break;
+                            
+                        case IR_CODE_BIT0_MARK_POS:
+                            bit0_mark = packet;
+                            break;
+                            
+                        case IR_CODE_BIT0_SPACE_POS:
+                            bit0_space = packet;
+                            break;
+                            
+                        case IR_CODE_BIT1_MARK_POS:
+                            bit1_mark = packet;
+                            break;
+                            
+                        case IR_CODE_BIT1_SPACE_POS:
+                            bit1_space = packet;
+                            break;
+                            
+                        case IR_CODE_FOOTER_MARK_POS:
+                            ir_code[ir_code_len - 1] = packet;
+                            break;
+                            
+                        default:
+                            // Do nothing
+                            break;
                     }
                 }
-            }
-            
-            INFO2("");
-        }
-        
-        // IR TRANSMITTER
-        uint32_t start;
-        const bool ir_true = true ^ ir_tx_inv;
-        const bool ir_false = false ^ ir_tx_inv;
-        
-        while (ir_tx_is_running) {
-            vTaskDelay(MS_TO_TICK(200));
-        }
-        
-        ir_tx_is_running = true;
-        
-        for (uint8_t r = 0; r < ir_repeats; r++) {
-            for (uint16_t i=0; i<ir_code_len; i++) {
-                if (ir_code[i] > 0) {
-                    if (i & 1) {    // Space
-                        gpio_write(ir_tx_gpio, ir_false);
-                        sdk_os_delay_us(ir_code[i]);
-                    } else {        // Mark
-                        start = sdk_system_get_time();
-                        while ((sdk_system_get_time() - start) < ir_code[i]) {
-                            gpio_write(ir_tx_gpio, ir_true);
-                            sdk_os_delay_us(freq);
-                            gpio_write(ir_tx_gpio, ir_false);
-                            sdk_os_delay_us(freq);
+                
+                // Decoding BIT code part
+                uint16_t ir_code_index = 2;
+                for (uint16_t i = 0; i < json_ir_code_len; i++) {
+                    char *found = strchr(baseUC_dic, action_ir_tx->prot_code[i]);
+                    if (found) {
+                        for (uint16_t j = 0; j < 1 + found - baseUC_dic; j++) {
+                            ir_code[ir_code_index] = bit1_mark;
+                            ir_code_index++;
+                            ir_code[ir_code_index] = bit1_space;
+                            ir_code_index++;
+                        }
+                    } else {
+                        found = strchr(baseLC_dic, action_ir_tx->prot_code[i]);
+                        for (uint16_t j = 0; j < 1 + found - baseLC_dic; j++) {
+                            ir_code[ir_code_index] = bit0_mark;
+                            ir_code_index++;
+                            ir_code[ir_code_index] = bit0_space;
+                            ir_code_index++;
                         }
                     }
                 }
+                
+                if (log_output) {
+                    printf("\nIR code: %s\n", action_ir_tx->prot_code);
+                    for (uint16_t i = 0; i < ir_code_len; i++) {
+                        printf("%s%5d ", i & 1 ? "-" : "+", ir_code[i]);
+                        if (i % 16 == 15) {
+                            printf("\n");
+                        }
+
+                    }
+                    printf("\n");
+                }
+                
+            } else {    // IR_ACTION_RAW_CODE
+                const uint16_t json_ir_code_len = strlen(action_ir_tx->raw_code);
+                ir_code_len = json_ir_code_len >> 1;
+                
+                ir_code = malloc(sizeof(uint16_t) * ir_code_len);
+                
+                INFO2("IR packet (%i)", ir_code_len);
+
+                uint16_t index, packet;
+                for (uint16_t i = 0; i < ir_code_len; i++) {
+                    index = i << 1;
+                    char *found = strchr(baseRaw_dic, action_ir_tx->raw_code[index]);
+                    packet = (found - baseRaw_dic) * IR_CODE_LEN * IR_CODE_SCALE;
+                    
+                    found = strchr(baseRaw_dic, action_ir_tx->raw_code[index + 1]);
+                    packet += (found - baseRaw_dic) * IR_CODE_SCALE;
+
+                    ir_code[i] = packet;
+
+                    if (log_output) {
+                        printf("%s%5d ", i & 1 ? "-" : "+", packet);
+                        if (i % 16 == 15) {
+                            printf("\n");
+                        }
+                    }
+                }
+                
+                INFO2("");
             }
             
-            gpio_write(ir_tx_gpio, ir_false);
+            // IR TRANSMITTER
+            uint32_t start;
+            const bool ir_true = true ^ ir_tx_inv;
+            const bool ir_false = false ^ ir_tx_inv;
             
-            INFO2("IR %i sent", r);
+            while (ir_tx_is_running) {
+                vTaskDelay(MS_TO_TICK(200));
+            }
+            
+            ir_tx_is_running = true;
+            
+            for (uint8_t r = 0; r < action_ir_tx->repeats; r++) {
+                for (uint16_t i = 0; i < ir_code_len; i++) {
+                    if (ir_code[i] > 0) {
+                        if (i & 1) {    // Space
+                            gpio_write(ir_tx_gpio, ir_false);
+                            sdk_os_delay_us(ir_code[i]);
+                        } else {        // Mark
+                            start = sdk_system_get_time();
+                            while ((sdk_system_get_time() - start) < ir_code[i]) {
+                                gpio_write(ir_tx_gpio, ir_true);
+                                sdk_os_delay_us(freq);
+                                gpio_write(ir_tx_gpio, ir_false);
+                                sdk_os_delay_us(freq);
+                            }
+                        }
+                    }
+                }
+                
+                gpio_write(ir_tx_gpio, ir_false);
+                
+                INFO2("IR %i sent", r);
+                
+                if (action_ir_tx->pause > 0) {
+                    sdk_os_delay_us(action_ir_tx->pause);
+                } else {
+                    vTaskDelay(MS_TO_TICK(100));
+                }
+                
+            }
+            
+            ir_tx_is_running = false;
+            
+            if (ir_code) {
+                free(ir_code);
+            }
             
             vTaskDelay(MS_TO_TICK(100));
         }
         
-        ir_tx_is_running = false;
-        
-        if (ir_code) {
-            free(ir_code);
-        }
+        action_ir_tx = action_ir_tx->next;
     }
-            
+    
+    free(pvParameters);
     vTaskDelete(NULL);
 }
 
@@ -2455,73 +2350,47 @@ void autoswitch_task(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
-void do_actions(cJSON *json_context, const uint8_t int_action) {
-    char action[3];
-    itoa(int_action, action, 10);
+void do_actions(ch_group_t *ch_group, uint8_t action) {
+    INFO2("Exec action %i", action);
     
-    if (cJSON_GetObjectItemCaseSensitive(json_context, action) != NULL) {
-        cJSON *actions = cJSON_GetObjectItemCaseSensitive(json_context, action);
-        
-        // Copy actions
-        if(cJSON_GetObjectItemCaseSensitive(actions, COPY_ACTIONS) != NULL) {
-            const uint8_t new_action = (uint8_t) cJSON_GetObjectItemCaseSensitive(actions, COPY_ACTIONS)->valuedouble;
-            itoa(new_action, action, 10);
-            
-            if (cJSON_GetObjectItemCaseSensitive(json_context, action) != NULL) {
-                actions = cJSON_GetObjectItemCaseSensitive(json_context, action);
-            }
+    // Copy actions
+    action_copy_t *action_copy = ch_group->action_copy;
+    while(action_copy) {
+        if (action_copy->action == action) {
+            action = action_copy->new_action;
+            action_copy = NULL;
         }
-        
-        // Digital outputs
-        cJSON *json_relays = cJSON_GetObjectItemCaseSensitive(actions, DIGITAL_OUTPUTS_ARRAY);
-        for(uint8_t i=0; i<cJSON_GetArraySize(json_relays); i++) {
-            cJSON *json_relay = cJSON_GetArrayItem(json_relays, i);
-            
-            const uint8_t gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuedouble;
-            
-            bool value = false;
-            if (cJSON_GetObjectItemCaseSensitive(json_relay, VALUE) != NULL) {
-                value = (bool) cJSON_GetObjectItemCaseSensitive(json_relay, VALUE)->valuedouble;
-            }
 
-            gpio_write(gpio, value);
-            INFO2("DigO GPIO %i -> %i", gpio, value);
+        action_copy = action_copy->next;
+    }
+    
+    // Digital outputs
+    action_relay_t *action_relay = ch_group->action_relay;
+    while(action_relay) {
+        if (action_relay->action == action) {
+            gpio_write(action_relay->gpio, action_relay->value);
+            INFO2("DigO GPIO %i -> %i", action_relay->gpio, action_relay->value);
             
-            if (cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME) != NULL) {
-                const double autoswitch_time = cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME)->valuedouble;
-                if (autoswitch_time > 0) {
-                    autoswitch_params_t *autoswitch_params = malloc(sizeof(autoswitch_params_t));
-                    autoswitch_params->gpio = gpio;
-                    autoswitch_params->value = !value;
-                    autoswitch_params->time = autoswitch_time;
-                    xTaskCreate(autoswitch_task, "autoswitch_task", AUTOSWITCH_TASK_SIZE, autoswitch_params, 1, NULL);
-                }
+            if (action_relay->inching > 0) {
+                autoswitch_params_t *autoswitch_params = malloc(sizeof(autoswitch_params_t));
+                autoswitch_params->gpio = action_relay->gpio;
+                autoswitch_params->value = !action_relay->value;
+                autoswitch_params->time = action_relay->inching;
+                xTaskCreate(autoswitch_task, "autoswitch_task", AUTOSWITCH_TASK_SIZE, autoswitch_params, 1, NULL);
             }
         }
-        
-        // Accessory Manager
-        cJSON *json_acc_managers = cJSON_GetObjectItemCaseSensitive(actions, MANAGE_OTHERS_ACC_ARRAY);
-        for(uint8_t i=0; i<cJSON_GetArraySize(json_acc_managers); i++) {
-            cJSON *json_acc_manager = cJSON_GetArrayItem(json_acc_managers, i);
-            
-            bool is_kill_switch = false;
-            uint8_t accessory = 1;
-            if (cJSON_GetObjectItemCaseSensitive(json_acc_manager, ACCESSORY_INDEX_KILL_SWITCH) != NULL) {
-                is_kill_switch = true;
-                accessory = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_acc_manager, ACCESSORY_INDEX_KILL_SWITCH)->valuedouble;
-            } else if (cJSON_GetObjectItemCaseSensitive(json_acc_manager, ACCESSORY_INDEX) != NULL) {
-                accessory = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_acc_manager, ACCESSORY_INDEX)->valuedouble;
-            }
-            
-            ch_group_t *ch_group = ch_group_find_by_acc(accessory);
+
+        action_relay = action_relay->next;
+    }
+    
+    // Accessory Manager
+    action_acc_manager_t *action_acc_manager = ch_group->action_acc_manager;
+    while(action_acc_manager) {
+        if (action_acc_manager->action == action) {
+            ch_group_t *ch_group = ch_group_find_by_acc(action_acc_manager->accessory);
             if (ch_group) {
-                float value = 0.0;
-                if (cJSON_GetObjectItemCaseSensitive(json_acc_manager, VALUE) != NULL) {
-                    value = (float) cJSON_GetObjectItemCaseSensitive(json_acc_manager, VALUE)->valuedouble;
-                }
-                
-                if (is_kill_switch) {
-                    switch ((uint8_t) value) {
+                if (action_acc_manager->is_kill_switch) {
+                    switch ((uint8_t) action_acc_manager->value) {
                         case 1:
                             if (ch_group->ch_child) {
                                 hkc_setter(ch_group->ch_child, HOMEKIT_BOOL(true));
@@ -2547,20 +2416,20 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                             break;
                     }
                     
-                    INFO2("Kill Sw Manager %i -> %.2f", accessory, value);
+                    INFO2("Kill Sw Manager %i -> %.2f", action_acc_manager->accessory, action_acc_manager->value);
                     
                 } else {
                     switch (ch_group->acc_type) {
                         case ACC_TYPE_BUTTON:
-                            button_event(0, ch_group->ch0, (uint8_t) value);
+                            button_event(0, ch_group->ch0, (uint8_t) action_acc_manager->value);
                             break;
                             
                         case ACC_TYPE_LOCK:
-                            hkc_lock_setter(ch_group->ch1, HOMEKIT_UINT8((uint8_t) value));
+                            hkc_lock_setter(ch_group->ch1, HOMEKIT_UINT8((uint8_t) action_acc_manager->value));
                             break;
                             
                         case ACC_TYPE_CONTACT_SENSOR:
-                            if ((bool) value) {
+                            if ((bool) action_acc_manager->value) {
                                 sensor_1(0, ch_group->ch0, TYPE_SENSOR);
                             } else {
                                 sensor_0(0, ch_group->ch0, TYPE_SENSOR);
@@ -2568,7 +2437,7 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                             break;
                             
                         case ACC_TYPE_MOTION_SENSOR:
-                            if ((bool) value) {
+                            if ((bool) action_acc_manager->value) {
                                 sensor_1(0, ch_group->ch0, TYPE_SENSOR_BOOL);
                             } else {
                                 sensor_0(0, ch_group->ch0, TYPE_SENSOR_BOOL);
@@ -2576,109 +2445,109 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
                             break;
                             
                         case ACC_TYPE_WATER_VALVE:
-                            if (value == -1) {
+                            if (action_acc_manager->value == -1) {
                                 if (ch_group->ch3) {
                                     ch_group->ch3->value = ch_group->ch2->value;
                                 }
                             } else {
-                                hkc_valve_setter(ch_group->ch0, HOMEKIT_UINT8((uint8_t) value));
+                                hkc_valve_setter(ch_group->ch0, HOMEKIT_UINT8((uint8_t) action_acc_manager->value));
                             }
                             break;
                             
                         case ACC_TYPE_THERMOSTAT:
-                            if (value == 0.02 || value == 0.03) {
-                                update_th(ch_group->ch1, HOMEKIT_UINT8((uint8_t) ((value - 0.02) * 100)));
-                            } else if (value == 0.04 || value == 0.05 || value == 0.06) {
-                                update_th(ch_group->ch4, HOMEKIT_UINT8((uint8_t) ((value - 0.04) * 100)));
+                            if (action_acc_manager->value == 0.02 || action_acc_manager->value == 0.03) {
+                                update_th(ch_group->ch1, HOMEKIT_UINT8((uint8_t) ((action_acc_manager->value - 0.02) * 100)));
+                            } else if (action_acc_manager->value == 0.04 || action_acc_manager->value == 0.05 || action_acc_manager->value == 0.06) {
+                                update_th(ch_group->ch4, HOMEKIT_UINT8((uint8_t) ((action_acc_manager->value - 0.04) * 100)));
                             } else {
-                                if (((uint16_t) (value * 100) % 2) == 0) {
-                                    update_th(ch_group->ch5, HOMEKIT_FLOAT(value));
+                                if (((uint16_t) (action_acc_manager->value * 100) % 2) == 0) {
+                                    update_th(ch_group->ch5, HOMEKIT_FLOAT(action_acc_manager->value));
                                 } else {
-                                    update_th(ch_group->ch6, HOMEKIT_FLOAT(value - 0.01));
+                                    update_th(ch_group->ch6, HOMEKIT_FLOAT(action_acc_manager->value - 0.01));
                                 }
                             }
                             break;
                             
                         case ACC_TYPE_GARAGE_DOOR:
-                            if (value < 2) {
-                                hkc_garage_door_setter(ch_group->ch1, HOMEKIT_UINT8((uint8_t) value));
-                            } else if (value == 2) {
+                            if (action_acc_manager->value < 2) {
+                                hkc_garage_door_setter(ch_group->ch1, HOMEKIT_UINT8((uint8_t) action_acc_manager->value));
+                            } else if (action_acc_manager->value == 2) {
                                 garage_door_stop(0, ch_group->ch0, 0);
                             } else {
-                                garage_door_obstruction(0, ch_group->ch0, value - 3);
+                                garage_door_obstruction(0, ch_group->ch0, action_acc_manager->value - 3);
                             }
                             break;
                             
                         case ACC_TYPE_LIGHTBULB:
-                            hkc_rgbw_setter(ch_group->ch0, HOMEKIT_BOOL((bool) value));
+                            hkc_rgbw_setter(ch_group->ch0, HOMEKIT_BOOL((bool) action_acc_manager->value));
                             break;
                             
                         case ACC_TYPE_WINDOW_COVER:
-                            if (value < 0) {
-                                window_cover_obstruction(0, ch_group->ch0, value + 2);
-                            } else if (value > 100) {
+                            if (action_acc_manager->value < 0) {
+                                window_cover_obstruction(0, ch_group->ch0, action_acc_manager->value + 2);
+                            } else if (action_acc_manager->value > 100) {
                                 hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
                             } else {
-                                hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, HOMEKIT_UINT8((uint8_t) value));
+                                hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, HOMEKIT_UINT8(action_acc_manager->value));
                             }
                             break;
                             
                         case ACC_TYPE_FAN:
-                            if (value == 0) {
+                            if (action_acc_manager->value == 0) {
                                 hkc_fan_setter(ch_group->ch0, HOMEKIT_BOOL(false));
-                            } else if (value > 100) {
+                            } else if (action_acc_manager->value > 100) {
                                 hkc_fan_setter(ch_group->ch0, HOMEKIT_BOOL(true));
                             } else {
-                                hkc_fan_speed_setter(ch_group->ch1, HOMEKIT_FLOAT(value));
+                                hkc_fan_speed_setter(ch_group->ch1, HOMEKIT_FLOAT(action_acc_manager->value));
                             }
                             break;
                             
                         case ACC_TYPE_TV:
-                            if (value < 2 && value >= 0) {
-                                hkc_tv_active(ch_group->ch0, HOMEKIT_UINT8(value));
-                            } else if (value < 20) {
-                                hkc_tv_key(ch_group->ch3, HOMEKIT_UINT8(value - 2));
-                            } else if (value < 22) {
-                                hkc_tv_mute(ch_group->ch5, HOMEKIT_BOOL((bool) (value - 20)));
-                            } else if (value < 24) {
-                                hkc_tv_volume(ch_group->ch7, HOMEKIT_UINT8(value - 22));
-                            } else if (value < 32) {
-                                hkc_tv_power_mode(ch_group->ch4, HOMEKIT_UINT8(value - 30));
-                            } else if (value > 100) {
-                                hkc_tv_active_identifier(ch_group->ch2, HOMEKIT_UINT8(value - 100));
+                            if (action_acc_manager->value < 2 && action_acc_manager->value >= 0) {
+                                hkc_tv_active(ch_group->ch0, HOMEKIT_UINT8(action_acc_manager->value));
+                            } else if (action_acc_manager->value < 20) {
+                                hkc_tv_key(ch_group->ch3, HOMEKIT_UINT8(action_acc_manager->value - 2));
+                            } else if (action_acc_manager->value < 22) {
+                                hkc_tv_mute(ch_group->ch5, HOMEKIT_BOOL((bool) (action_acc_manager->value - 20)));
+                            } else if (action_acc_manager->value < 24) {
+                                hkc_tv_volume(ch_group->ch7, HOMEKIT_UINT8(action_acc_manager->value - 22));
+                            } else if (action_acc_manager->value < 32) {
+                                hkc_tv_power_mode(ch_group->ch4, HOMEKIT_UINT8(action_acc_manager->value - 30));
+                            } else if (action_acc_manager->value > 100) {
+                                hkc_tv_active_identifier(ch_group->ch2, HOMEKIT_UINT8(action_acc_manager->value - 100));
                             }
                             break;
                             
                         default:    // ON Type ch
-                            if (value == -1) {
+                            if (action_acc_manager->value == -1) {
                                 if (ch_group->ch2) {
                                     ch_group->ch2->value = ch_group->ch1->value;
                                 }
                             } else {
-                                hkc_on_setter(ch_group->ch0, HOMEKIT_BOOL((bool) value));
+                                hkc_on_setter(ch_group->ch0, HOMEKIT_BOOL((bool) action_acc_manager->value));
                             }
                             break;
                     }
                     
-                    INFO2("Acc Manager %i -> %.2f", accessory, value);
+                    INFO2("Acc Manager %i -> %.2f", action_acc_manager->accessory, action_acc_manager->value);
                 }
             } else {
-                ERROR2("No acc found: %i", accessory);
+                ERROR2("No acc found: %i", action_acc_manager->accessory);
             }
         }
-        
-        // System actions
-        cJSON *json_system_actions = cJSON_GetObjectItemCaseSensitive(actions, SYSTEM_ACTIONS_ARRAY);
-        for(uint8_t i=0; i<cJSON_GetArraySize(json_system_actions); i++) {
-            cJSON *json_system_action = cJSON_GetArrayItem(json_system_actions, i);
-            
-            const uint8_t system_action = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_system_action, SYSTEM_ACTION)->valuedouble;
 
-            INFO2("Sys Action %i", system_action);
+        action_acc_manager = action_acc_manager->next;
+    }
+    
+    // System actions
+    action_system_t *action_system = ch_group->action_system;
+    while(action_system) {
+        if (action_system->action == action) {
+            INFO2("Sys Action %i", action_system->value);
             
             char *ota = NULL;
             
-            switch (system_action) {
+            switch (action_system->value) {
                 case SYSTEM_ACTION_SETUP_MODE:
                     setup_mode_call(0, NULL, 0);
                     break;
@@ -2696,54 +2565,56 @@ void do_actions(cJSON *json_context, const uint8_t int_action) {
             }
         }
         
-        // HTTP GET actions
-        cJSON *json_http_actions = cJSON_GetObjectItemCaseSensitive(actions, HTTP_ACTIONS_ARRAY);
-        if (json_http_actions != NULL) {
-            xTaskCreate(http_get_task, "http_get_task", HTTP_GET_TASK_SIZE, json_http_actions, 0, NULL);
-        }
+        action_system = action_system->next;
+    }
+    
+    // HTTP GET actions
+    if (ch_group->action_http) {
+        action_task_t *action_task = malloc(sizeof(action_task_t));
+        memset(action_task, 0, sizeof(*action_task));
+        action_task->action = action;
+        action_task->ch_group = ch_group;
         
-        // IR outputs
-        cJSON *json_ir_actions = cJSON_GetObjectItemCaseSensitive(actions, IR_ACTIONS_ARRAY);
-        if (json_ir_actions != NULL) {
-            xTaskCreate(ir_tx_task, "ir_tx_task", IR_TX_TASK_SIZE, json_ir_actions, IR_TX_TASK_PRIORITY, NULL);
-        }
+        xTaskCreate(http_get_task, "http_get_task", HTTP_GET_TASK_SIZE, action_task, 0, NULL);
+    }
+    
+    // IR TX actions
+    if (ch_group->action_ir_tx) {
+        action_task_t *action_task = malloc(sizeof(action_task_t));
+        memset(action_task, 0, sizeof(*action_task));
+        action_task->action = action;
+        action_task->ch_group = ch_group;
+        
+        xTaskCreate(ir_tx_task, "ir_tx_task", IR_TX_TASK_SIZE, action_task, IR_TX_TASK_PRIORITY, NULL);
     }
 }
 
-void do_wildcard_actions(ch_group_t *ch_group, cJSON *json_context, const float action_value) {
-    INFO2("Wildcard %.2f", action_value);
+void do_wildcard_actions(ch_group_t *ch_group, uint8_t index, const float action_value) {
+    INFO2("Wildcard %i %.2f", index, action_value);
     float last_value, last_diff = 10000;
-    cJSON *json_last_wilcard_action = NULL, *json_wilcard_action;
+    wildcard_action_t *wildcard_action = ch_group->wildcard_action;
+    wildcard_action_t *last_wildcard_action = NULL;
     
-    cJSON *json_wilcard_actions = cJSON_GetObjectItemCaseSensitive(json_context, WILDCARD_ACTIONS_ARRAY_0);
-    for(uint8_t i = 0; i < cJSON_GetArraySize(json_wilcard_actions); i++) {
-        json_wilcard_action = cJSON_GetArrayItem(json_wilcard_actions, i);
-        
-        const float value = (float) cJSON_GetObjectItemCaseSensitive(json_wilcard_action, VALUE)->valuedouble;
-        const float diff = action_value - value;
+    while (wildcard_action) {
+        if (wildcard_action->index == index) {
+            const float diff = action_value - wildcard_action->value;
 
-        if (value <= action_value && diff < last_diff) {
-            last_value = value;
-            last_diff = diff;
-            json_last_wilcard_action = json_wilcard_action;
+            if (wildcard_action->value <= action_value && diff < last_diff) {
+                last_value = wildcard_action->value;
+                last_diff = diff;
+                last_wildcard_action = wildcard_action;
+            }
         }
+        
+        wildcard_action = wildcard_action->next;
     }
     
-    if (json_last_wilcard_action != NULL) {
-        if (ch_group->last_wildcard_action0 == last_value) {
-            bool repeat = false;
-            if (cJSON_GetObjectItemCaseSensitive(json_last_wilcard_action, WILDCARD_ACTION_REPEAT) != NULL) {
-                repeat = (bool) cJSON_GetObjectItemCaseSensitive(json_last_wilcard_action, WILDCARD_ACTION_REPEAT)->valuedouble;
-            }
-            
-            if (!repeat) {
-                return;
-            }
+    if (last_wildcard_action != NULL) {
+        if (ch_group->last_wildcard_action[index] != last_value || last_wildcard_action->repeat) {
+            ch_group->last_wildcard_action[index] = last_value;
+            INFO2("Wilcard Action %i %.2f", index, last_value);
+            do_actions(ch_group, last_wildcard_action->target_action);
         }
-        
-        ch_group->last_wildcard_action0 = last_value;
-        INFO2("Wilcard Action %.2f", last_value);
-        do_actions(json_last_wilcard_action, 0);
     }
 }
 
@@ -2757,24 +2628,12 @@ void identify(homekit_value_t _value) {
 
 void delayed_sensor_starter_task(void *args) {
     INFO2("Starting delayed sensor");
-    homekit_characteristic_t *ch = args;
-    ch_group_t *ch_group = ch_group_find(ch);
+    ch_group_t *ch_group = args;
     
-    cJSON *json_context = ch->context;
+    vTaskDelay(ch_group->accessory * MS_TO_TICK(TH_SENSOR_POLL_PERIOD_MIN * 1000));
     
-    uint16_t th_poll_period = THERMOSTAT_POLL_PERIOD_DEFAULT;
-    if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_POLL_PERIOD) != NULL) {
-        th_poll_period = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_POLL_PERIOD)->valuedouble;
-    }
-    
-    if (th_poll_period < THERMOSTAT_POLL_PERIOD_MIN) {
-        th_poll_period = THERMOSTAT_POLL_PERIOD_MIN;
-    }
-    
-    vTaskDelay(ch_group->accessory * MS_TO_TICK(THERMOSTAT_POLL_PERIOD_MIN * 1000));
-    
-    temperature_timer_worker(ch);
-    sdk_os_timer_arm(ch_group->timer, th_poll_period * 1000, 1);
+    temperature_timer_worker(ch_group);
+    sdk_os_timer_arm(ch_group->timer, TH_SENSOR_POLL_PERIOD * 1000, 1);
     
     vTaskDelete(NULL);
 }
@@ -2791,13 +2650,14 @@ homekit_server_config_t config;
 void run_homekit_server() {
     wifi_channel = sdk_wifi_get_channel();
     
+    FREEHEAP();
+    
     if (enable_homekit_server) {
         INFO2("Start HK Server");
 
         homekit_server_init(&config);
+        FREEHEAP();
     }
-    
-    FREEHEAP();
     
     sdk_os_timer_setfn(&wifi_watchdog_timer, wifi_watchdog, NULL);
     sdk_os_timer_arm(&wifi_watchdog_timer, WIFI_WATCHDOG_POLL_PERIOD_MS, 1);
@@ -2838,8 +2698,6 @@ void normal_mode_init() {
         sysparam_set_int8("total_ac", 0);
         sysparam_set_int8("setup", 2);
         xTaskCreate(reboot_task, "reboot_task", REBOOT_TASK_SIZE, NULL, 1, NULL);
-        
-        //free(txt_config);     // Not needed because device will reboot
         
         vTaskDelete(NULL);
     }
@@ -2892,14 +2750,14 @@ void normal_mode_init() {
     
     // Ping Setup function
     void ping_register(cJSON *json_pings, void *callback, homekit_characteristic_t *ch, const uint8_t param) {
-        for(uint8_t j=0; j<cJSON_GetArraySize(json_pings); j++) {
+        for(uint8_t j = 0; j < cJSON_GetArraySize(json_pings); j++) {
             ping_input_t *ping_input = ping_input_find_by_host(cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_HOST)->valuestring);
             
             if (!ping_input) {
                 ping_input = malloc(sizeof(ping_input_t));
                 memset(ping_input, 0, sizeof(*ping_input));
                 
-                ping_input->host = cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_HOST)->valuestring;
+                ping_input->host = strdup(cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_HOST)->valuestring);
                 ping_input->last_response = false;
                 
                 ping_input->next = ping_inputs;
@@ -3021,6 +2879,428 @@ void normal_mode_init() {
         return state;
     }
     
+    // REGISTER ACTIONS
+    // Copy actions
+    void new_action_copy(ch_group_t *ch_group, cJSON *json_context, uint8_t fixed_action) {
+        action_copy_t *last_action = ch_group->action_copy;
+        
+        void register_action(cJSON *json_accessory, uint8_t new_int_action) {
+            char action[3];
+            itoa(new_int_action, action, 10);
+            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                cJSON *json_action = cJSON_GetObjectItemCaseSensitive(json_accessory, action);
+                if (cJSON_GetObjectItemCaseSensitive(json_action, COPY_ACTIONS) != NULL) {
+                    action_copy_t *action_copy = malloc(sizeof(action_copy_t));
+                    memset(action_copy, 0, sizeof(*action_copy));
+                    
+                    action_copy->action = new_int_action;
+                    action_copy->new_action = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_action, COPY_ACTIONS)->valuedouble;
+                    
+                    action_copy->next = last_action;
+                    last_action = action_copy;
+                }
+            }
+        }
+        
+        if (fixed_action < MAX_ACTIONS) {
+            for (uint8_t int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+                register_action(json_context, int_action);
+            }
+        } else {
+            register_action(json_context, fixed_action);
+        }
+        
+        ch_group->action_copy = last_action;
+    }
+    
+    // Digital outputs
+    void new_action_relay(ch_group_t *ch_group, cJSON *json_context, uint8_t fixed_action) {
+        action_relay_t *last_action = ch_group->action_relay;
+        
+        void register_action(cJSON *json_accessory, uint8_t new_int_action) {
+            char action[3];
+            itoa(new_int_action, action, 10);
+            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), DIGITAL_OUTPUTS_ARRAY) != NULL) {
+                    cJSON *json_relays = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), DIGITAL_OUTPUTS_ARRAY);
+                    for(int16_t i = cJSON_GetArraySize(json_relays) - 1; i >= 0; i--) {
+                        action_relay_t *action_relay = malloc(sizeof(action_relay_t));
+                        memset(action_relay, 0, sizeof(*action_relay));
+                        
+                        cJSON *json_relay = cJSON_GetArrayItem(json_relays, i);
+                        
+                        action_relay->action = new_int_action;
+                        
+                        action_relay->gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuedouble;
+                        if (!used_gpio[action_relay->gpio]) {
+                            gpio_enable(action_relay->gpio, GPIO_OUTPUT);
+                            gpio_write(action_relay->gpio, false);
+                            
+                            used_gpio[action_relay->gpio] = true;
+                            INFO2("DigO GPIO: %i", action_relay->gpio);
+                        }
+                        
+                        action_relay->value = false;
+                        if (cJSON_GetObjectItemCaseSensitive(json_relay, VALUE) != NULL) {
+                            action_relay->value = (bool) cJSON_GetObjectItemCaseSensitive(json_relay, VALUE)->valuedouble;
+                        }
+                        
+                        action_relay->inching = 0;
+                        if (cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME) != NULL) {
+                            action_relay->inching = (float) cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME)->valuedouble;
+                        }
+                        
+                        action_relay->next = last_action;
+                        last_action = action_relay;
+                    }
+                }
+            }
+        }
+        
+        if (fixed_action < MAX_ACTIONS) {
+            for (uint8_t int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+                register_action(json_context, int_action);
+            }
+        } else {
+            register_action(json_context, fixed_action);
+        }
+        
+        ch_group->action_relay = last_action;
+    }
+    
+    // Accessory Manager
+    void new_action_acc_manager(ch_group_t *ch_group, cJSON *json_context, uint8_t fixed_action) {
+        action_acc_manager_t *last_action = ch_group->action_acc_manager;
+        
+        void register_action(cJSON *json_accessory, uint8_t new_int_action) {
+            char action[3];
+            itoa(new_int_action, action, 10);
+            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), DIGITAL_OUTPUTS_ARRAY) != NULL) {
+                    cJSON *json_acc_managers = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), DIGITAL_OUTPUTS_ARRAY);
+                    
+                    for(int16_t i = cJSON_GetArraySize(json_acc_managers) - 1; i >= 0; i--) {
+                        action_acc_manager_t *action_acc_manager = malloc(sizeof(action_acc_manager_t));
+                        memset(action_acc_manager, 0, sizeof(*action_acc_manager));
+                        
+                        cJSON *json_acc_manager = cJSON_GetArrayItem(json_acc_managers, i);
+                        
+                        action_acc_manager->action = new_int_action;
+                        
+                        action_acc_manager->is_kill_switch = false;
+                        action_acc_manager->accessory = 1;
+                        if (cJSON_GetObjectItemCaseSensitive(json_acc_manager, ACCESSORY_INDEX_KILL_SWITCH) != NULL) {
+                            action_acc_manager->is_kill_switch = true;
+                            action_acc_manager->accessory = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_acc_manager, ACCESSORY_INDEX_KILL_SWITCH)->valuedouble;
+                        } else if (cJSON_GetObjectItemCaseSensitive(json_acc_manager, ACCESSORY_INDEX) != NULL) {
+                            action_acc_manager->accessory = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_acc_manager, ACCESSORY_INDEX)->valuedouble;
+                        }
+
+                        action_acc_manager->value = 0;
+                        if (cJSON_GetObjectItemCaseSensitive(json_acc_manager, VALUE) != NULL) {
+                            action_acc_manager->value = (float) cJSON_GetObjectItemCaseSensitive(json_acc_manager, VALUE)->valuedouble;
+                        }
+                        
+                        action_acc_manager->next = last_action;
+                        last_action = action_acc_manager;
+                    }
+                }
+            }
+        }
+        
+        if (fixed_action < MAX_ACTIONS) {
+            for (uint8_t int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+                register_action(json_context, int_action);
+            }
+        } else {
+            register_action(json_context, fixed_action);
+        }
+        
+        ch_group->action_acc_manager = last_action;
+    }
+    
+    // System Actions
+    void new_action_system(ch_group_t *ch_group, cJSON *json_context, uint8_t fixed_action) {
+        action_system_t *last_action = ch_group->action_system;
+        
+        void register_action(cJSON *json_accessory, uint8_t new_int_action) {
+            char action[3];
+            itoa(new_int_action, action, 10);
+            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SYSTEM_ACTIONS_ARRAY) != NULL) {
+                    cJSON *json_action_systems = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SYSTEM_ACTIONS_ARRAY);
+                    for(int16_t i = cJSON_GetArraySize(json_action_systems) - 1; i >= 0; i--) {
+                        action_system_t *action_system = malloc(sizeof(action_system_t));
+                        memset(action_system, 0, sizeof(*action_system));
+                        
+                        cJSON *json_action_system = cJSON_GetArrayItem(json_action_systems, i);
+                        
+                        action_system->action = new_int_action;
+                        
+                        action_system->value = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_action_system, SYSTEM_ACTION)->valuedouble;
+                        
+                        action_system->next = last_action;
+                        last_action = action_system;
+                    }
+                }
+            }
+        }
+        
+        if (fixed_action < MAX_ACTIONS) {
+            for (uint8_t int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+                register_action(json_context, int_action);
+            }
+        } else {
+            register_action(json_context, fixed_action);
+        }
+        
+        ch_group->action_system = last_action;
+    }
+    
+    // HTTP GET Actions
+    void new_action_http(ch_group_t *ch_group, cJSON *json_context, uint8_t fixed_action) {
+        action_http_t *last_action = ch_group->action_http;
+        
+        void register_action(cJSON *json_accessory, uint8_t new_int_action) {
+            char action[3];
+            itoa(new_int_action, action, 10);
+            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), HTTP_ACTIONS_ARRAY) != NULL) {
+                    cJSON *json_action_https = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), HTTP_ACTIONS_ARRAY);
+                    for(int16_t i = cJSON_GetArraySize(json_action_https) - 1; i >= 0; i--) {
+                        action_http_t *action_http = malloc(sizeof(action_http_t));
+                        memset(action_http, 0, sizeof(*action_http));
+                        
+                        cJSON *json_action_http = cJSON_GetArrayItem(json_action_https, i);
+                        
+                        action_http->action = new_int_action;
+                        
+                        action_http->host = strdup(cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_HOST)->valuestring);
+                        
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_URL) != NULL) {
+                            action_http->url = strdup(cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_URL)->valuestring);
+                        } else {
+                            action_http->url = strdup("");
+                        }
+                        
+                        action_http->port_n = 80;
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_PORT) != NULL) {
+                            action_http->port_n = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_PORT)->valuedouble;
+                        }
+                        
+                        action_http->method_n = 0;
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_METHOD) != NULL) {
+                            action_http->method_n = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_METHOD)->valuedouble;
+                        }
+                        
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_CONTENT) != NULL) {
+                            action_http->content = strdup(cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_CONTENT)->valuestring);
+                        } else {
+                            action_http->content = strdup("");
+                        }
+                        
+                        action_http->next = last_action;
+                        last_action = action_http;
+                    }
+                }
+            }
+        }
+        
+        if (fixed_action < MAX_ACTIONS) {
+            for (uint8_t int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+                register_action(json_context, int_action);
+            }
+        } else {
+            register_action(json_context, fixed_action);
+        }
+        
+        ch_group->action_http = last_action;
+    }
+    
+    // IR TX Actions
+    void new_action_ir_tx(ch_group_t *ch_group, cJSON *json_context, uint8_t fixed_action) {
+        action_ir_tx_t *last_action = ch_group->action_ir_tx;
+        
+        void register_action(cJSON *json_accessory, uint8_t new_int_action) {
+            char action[3];
+            itoa(new_int_action, action, 10);
+            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), IR_ACTIONS_ARRAY) != NULL) {
+                    cJSON *json_action_ir_txs = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), IR_ACTIONS_ARRAY);
+                    for(int16_t i = cJSON_GetArraySize(json_action_ir_txs) - 1; i >= 0; i--) {
+                        action_ir_tx_t *action_ir_tx = malloc(sizeof(action_ir_tx_t));
+                        memset(action_ir_tx, 0, sizeof(*action_ir_tx));
+                        
+                        cJSON *json_action_ir_tx = cJSON_GetArrayItem(json_action_ir_txs, i);
+                        
+                        action_ir_tx->action = new_int_action;
+                        
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_ir_tx, IR_ACTION_PROTOCOL) != NULL) {
+                            action_ir_tx->prot = strdup(cJSON_GetObjectItemCaseSensitive(json_action_ir_tx, IR_ACTION_PROTOCOL)->valuestring);
+                        }
+                        
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_ir_tx, IR_ACTION_PROTOCOL_CODE) != NULL) {
+                            action_ir_tx->prot_code = strdup(cJSON_GetObjectItemCaseSensitive(json_action_ir_tx, IR_ACTION_PROTOCOL_CODE)->valuestring);
+                        }
+
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_ir_tx, IR_ACTION_RAW_CODE) != NULL) {
+                            action_ir_tx->raw_code = strdup(cJSON_GetObjectItemCaseSensitive(json_action_ir_tx, IR_ACTION_RAW_CODE)->valuestring);
+                        }
+                        
+                        action_ir_tx->freq = 0;
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_ir_tx, IR_ACTION_FREQ) != NULL) {
+                            action_ir_tx->freq = 1000 / cJSON_GetObjectItemCaseSensitive(json_action_ir_tx, IR_ACTION_FREQ)->valuedouble / 2;
+                        }
+                        
+                        action_ir_tx->repeats = 1;
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_ir_tx, IR_ACTION_REPEATS) != NULL) {
+                            action_ir_tx->repeats = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_action_ir_tx, IR_ACTION_REPEATS)->valuedouble;
+                        }
+                        
+                        action_ir_tx->pause = 0;
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_ir_tx, IR_ACTION_REPEATS_PAUSE) != NULL) {
+                            action_ir_tx->pause = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_action_ir_tx, IR_ACTION_REPEATS_PAUSE)->valuedouble;
+                        }
+                        
+                        action_ir_tx->next = last_action;
+                        last_action = action_ir_tx;
+                    }
+                }
+            }
+        }
+        
+        if (fixed_action < MAX_ACTIONS) {
+            for (uint8_t int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+                register_action(json_context, int_action);
+            }
+        } else {
+            register_action(json_context, fixed_action);
+        }
+        
+        ch_group->action_ir_tx = last_action;
+    }
+    
+    void register_actions(ch_group_t *ch_group, cJSON *json_accessory, uint8_t fixed_action) {
+        new_action_copy(ch_group, json_accessory, fixed_action);
+        new_action_relay(ch_group, json_accessory, fixed_action);
+        new_action_acc_manager(ch_group, json_accessory, fixed_action);
+        new_action_system(ch_group, json_accessory, fixed_action);
+        new_action_http(ch_group, json_accessory, fixed_action);
+        new_action_ir_tx(ch_group, json_accessory, fixed_action);
+    }
+    
+    void register_wildcard_actions(ch_group_t *ch_group, cJSON *json_accessory) {
+        uint8_t global_index = MAX_ACTIONS;
+        wildcard_action_t *last_action = ch_group->wildcard_action;
+        
+        for (uint8_t int_index = 0; int_index < MAX_WILDCARD_ACTIONS; int_index++) {
+            char number[2];
+            itoa(int_index, number, 10);
+            
+            char index[3];
+            snprintf(index, 3, "%s%s", WILDCARD_ACTIONS_ARRAY_HEADER, number);
+            
+            cJSON *json_wilcard_actions = cJSON_GetObjectItemCaseSensitive(json_accessory, index);
+            for (uint8_t i = 0; i < cJSON_GetArraySize(json_wilcard_actions); i++) {
+                wildcard_action_t *wildcard_action = malloc(sizeof(wildcard_action_t));
+                memset(wildcard_action, 0, sizeof(*wildcard_action));
+                
+                cJSON *json_wilcard_action = cJSON_GetArrayItem(json_wilcard_actions, i);
+                
+                wildcard_action->index = int_index;
+                wildcard_action->value = (float) cJSON_GetObjectItemCaseSensitive(json_wilcard_action, VALUE)->valuedouble;
+                
+                wildcard_action->repeat = false;
+                if (cJSON_GetObjectItemCaseSensitive(json_wilcard_action, WILDCARD_ACTION_REPEAT) != NULL) {
+                    wildcard_action->repeat = (bool) cJSON_GetObjectItemCaseSensitive(json_wilcard_action, WILDCARD_ACTION_REPEAT)->valuedouble;
+                }
+                
+                if (cJSON_GetObjectItemCaseSensitive(json_wilcard_action, "0") != NULL) {
+                    char action[3];
+                    itoa(global_index, action, 10);
+                    cJSON *json_new_input_action = cJSON_CreateObject();
+                    cJSON_AddItemReferenceToObject(json_new_input_action, action, cJSON_GetObjectItemCaseSensitive(json_wilcard_action, "0"));
+                    register_actions(ch_group, json_new_input_action, global_index);
+                    cJSON_Delete(json_new_input_action);
+                }
+                
+                wildcard_action->target_action = global_index;
+                global_index++;
+                
+                wildcard_action->next = last_action;
+                last_action = wildcard_action;
+            }
+        }
+        
+        ch_group->wildcard_action = last_action;
+    }
+    
+    // REGISTER ACCESSORY CONFIGURATION
+    float autoswitch_time(cJSON *json_accessory) {
+        if (cJSON_GetObjectItemCaseSensitive(json_accessory, AUTOSWITCH_TIME) != NULL) {
+            return (float) cJSON_GetObjectItemCaseSensitive(json_accessory, AUTOSWITCH_TIME)->valuedouble;
+        }
+        return 0;
+    }
+    
+    int8_t th_sensor_gpio(cJSON *json_accessory) {
+        if (cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO) != NULL) {
+            return (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO)->valuedouble;
+        }
+        return -1;
+    }
+    
+    uint8_t th_sensor_type(cJSON *json_accessory) {
+        if (cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_TYPE) != NULL) {
+            return (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_TYPE)->valuedouble;
+        }
+        return 2;
+    }
+    
+    float th_sensor_temp_offset(cJSON *json_accessory) {
+        if (cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_OFFSET) != NULL) {
+            return (float) cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_OFFSET)->valuedouble;
+        }
+        return 0;
+    }
+    
+    float th_sensor_hum_offset(cJSON *json_accessory) {
+        if (cJSON_GetObjectItemCaseSensitive(json_accessory, HUMIDITY_OFFSET) != NULL) {
+            return (float) cJSON_GetObjectItemCaseSensitive(json_accessory, HUMIDITY_OFFSET)->valuedouble;
+        }
+        return 0;
+    }
+    
+    float th_sensor_poll_period(cJSON *json_accessory) {
+        float th_poll_period = TH_SENSOR_POLL_PERIOD_DEFAULT;
+        
+        if (cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_POLL_PERIOD) != NULL) {
+            th_poll_period = (float) cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_POLL_PERIOD)->valuedouble;
+            
+            if (th_poll_period < TH_SENSOR_POLL_PERIOD_MIN) {
+                th_poll_period = TH_SENSOR_POLL_PERIOD_MIN;
+            }
+        }
+        
+        return th_poll_period;
+    }
+    
+    void th_sensor(ch_group_t *ch_group, cJSON *json_accessory) {
+        TH_SENSOR_GPIO = th_sensor_gpio(json_accessory);
+        TH_SENSOR_TYPE = th_sensor_type(json_accessory);
+        TH_SENSOR_TEMP_OFFSET = th_sensor_temp_offset(json_accessory);
+        TH_SENSOR_HUM_OFFSET = th_sensor_hum_offset(json_accessory);
+        TH_SENSOR_POLL_PERIOD = th_sensor_poll_period(json_accessory);
+    }
+    
+    void th_sensor_starter(ch_group_t *ch_group) {
+        ch_group->timer = malloc(sizeof(ETSTimer));
+        memset(ch_group->timer, 0, sizeof(*ch_group->timer));
+        sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch_group);
+        
+        xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", DELAYED_SENSOR_START_TASK_SIZE, ch_group, 1, NULL);
+    }
+    
     // ----- CONFIG SECTION
     
     // Log output type
@@ -3038,7 +3318,7 @@ void normal_mode_init() {
     printf_header();
     INFO2("NORMAL MODE\n\nJSON:\n %s\n", txt_config);
 #endif  // HAA_DEBUG
-
+    
     free(txt_config);
     
     // Custom Hostname
@@ -3064,7 +3344,7 @@ void normal_mode_init() {
     
     // IR TX LED Frequency
     if (cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_FREQ) != NULL) {
-        ir_tx_freq = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_FREQ)->valuedouble;
+        ir_tx_freq = 1000 / cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_FREQ)->valuedouble / 2;
         INFO2("IR TX Freq: %i", ir_tx_freq);
     }
     
@@ -3136,7 +3416,6 @@ void normal_mode_init() {
     // Buttons to enter setup mode
     diginput_register(cJSON_GetObjectItemCaseSensitive(json_config, BUTTONS_ARRAY), setup_mode_call, NULL, 0);
     
-    //cJSON_Delete(json_config);
     // ----- END CONFIG SECTION
     
     uint8_t hk_total_ac = 1;
@@ -3251,7 +3530,7 @@ void normal_mode_init() {
     uint8_t new_switch(uint8_t accessory, cJSON *json_context, const uint8_t acc_type) {
         new_accessory(accessory, 3);
         
-        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .setter_ex=hkc_on_setter, .context=json_context);
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .setter_ex=hkc_on_setter);
         
         uint32_t max_duration = 0;
         if (cJSON_GetObjectItemCaseSensitive(json_context, VALVE_MAX_DURATION) != NULL) {
@@ -3264,6 +3543,8 @@ void normal_mode_init() {
         accessory_numerator++;
         ch_group->acc_type = ACC_TYPE_SWITCH;
         ch_group->ch0 = ch0;
+        register_actions(ch_group, json_context, 0);
+        ch_group->num[0] = autoswitch_time(json_context);
         ch_group->next = ch_groups;
         ch_groups = ch_group;
         
@@ -3283,7 +3564,7 @@ void normal_mode_init() {
         } else {    // acc_type == ACC_TYPE_OUTLET
             ch_calloc++;
             
-            homekit_characteristic_t *ch3 = NEW_HOMEKIT_CHARACTERISTIC(OUTLET_IN_USE, true, .context=json_context);
+            homekit_characteristic_t *ch3 = NEW_HOMEKIT_CHARACTERISTIC(OUTLET_IN_USE, true);
             
             accessories[accessory]->services[1]->characteristics = calloc(ch_calloc, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_OUTLET;
@@ -3357,7 +3638,7 @@ void normal_mode_init() {
     uint8_t new_button_event(uint8_t accessory, cJSON *json_context) {
         new_accessory(accessory, 3);
         
-        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(PROGRAMMABLE_SWITCH_EVENT, 0, .context=json_context);
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(PROGRAMMABLE_SWITCH_EVENT, 0);
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
@@ -3365,6 +3646,7 @@ void normal_mode_init() {
         accessory_numerator++;
         ch_group->acc_type = ACC_TYPE_BUTTON;
         ch_group->ch0 = ch0;
+        register_actions(ch_group, json_context, 0);
         ch_group->next = ch_groups;
         ch_groups = ch_group;
         
@@ -3389,8 +3671,8 @@ void normal_mode_init() {
     uint8_t new_lock(const uint8_t accessory, cJSON *json_context) {
         new_accessory(accessory, 3);
         
-        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(LOCK_CURRENT_STATE, 1, .context=json_context);
-        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(LOCK_TARGET_STATE, 1, .setter_ex=hkc_lock_setter, .context=json_context);
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(LOCK_CURRENT_STATE, 1);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(LOCK_TARGET_STATE, 1, .setter_ex=hkc_lock_setter);
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
@@ -3399,6 +3681,8 @@ void normal_mode_init() {
         ch_group->acc_type = ACC_TYPE_LOCK;
         ch_group->ch0 = ch0;
         ch_group->ch1 = ch1;
+        register_actions(ch_group, json_context, 0);
+        ch_group->num[0] = autoswitch_time(json_context);
         ch_group->next = ch_groups;
         ch_groups = ch_group;
         
@@ -3456,42 +3740,42 @@ void normal_mode_init() {
         switch (acc_type) {
             case ACC_TYPE_OCCUPANCY_SENSOR:
                 accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_OCCUPANCY_SENSOR;
-                ch0 = NEW_HOMEKIT_CHARACTERISTIC(OCCUPANCY_DETECTED, 0, .context=json_context);
+                ch0 = NEW_HOMEKIT_CHARACTERISTIC(OCCUPANCY_DETECTED, 0);
                 break;
                 
             case ACC_TYPE_LEAK_SENSOR:
                 accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_LEAK_SENSOR;
-                ch0 = NEW_HOMEKIT_CHARACTERISTIC(LEAK_DETECTED, 0, .context=json_context);
+                ch0 = NEW_HOMEKIT_CHARACTERISTIC(LEAK_DETECTED, 0);
                 break;
                 
             case ACC_TYPE_SMOKE_SENSOR:
                 accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_SMOKE_SENSOR;
-                ch0 = NEW_HOMEKIT_CHARACTERISTIC(SMOKE_DETECTED, 0, .context=json_context);
+                ch0 = NEW_HOMEKIT_CHARACTERISTIC(SMOKE_DETECTED, 0);
                 break;
                 
             case ACC_TYPE_CARBON_MONOXIDE_SENSOR:
                 accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_CARBON_MONOXIDE_SENSOR;
-                ch0 = NEW_HOMEKIT_CHARACTERISTIC(CARBON_MONOXIDE_DETECTED, 0, .context=json_context);
+                ch0 = NEW_HOMEKIT_CHARACTERISTIC(CARBON_MONOXIDE_DETECTED, 0);
                 break;
                 
             case ACC_TYPE_CARBON_DIOXIDE_SENSOR:
                 accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_CARBON_DIOXIDE_SENSOR;
-                ch0 = NEW_HOMEKIT_CHARACTERISTIC(CARBON_DIOXIDE_DETECTED, 0, .context=json_context);
+                ch0 = NEW_HOMEKIT_CHARACTERISTIC(CARBON_DIOXIDE_DETECTED, 0);
                 break;
                 
             case ACC_TYPE_FILTER_CHANGE_SENSOR:
                 accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_FILTER_MAINTENANCE;
-                ch0 = NEW_HOMEKIT_CHARACTERISTIC(FILTER_CHANGE_INDICATION, 0, .context=json_context);
+                ch0 = NEW_HOMEKIT_CHARACTERISTIC(FILTER_CHANGE_INDICATION, 0);
                 break;
                 
             case ACC_TYPE_MOTION_SENSOR:
                 accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_MOTION_SENSOR;
-                ch0 = NEW_HOMEKIT_CHARACTERISTIC(MOTION_DETECTED, 0, .context=json_context);
+                ch0 = NEW_HOMEKIT_CHARACTERISTIC(MOTION_DETECTED, 0);
                 break;
                 
             default:    // case ACC_TYPE_CONTACT_SENSOR:
                 accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_CONTACT_SENSOR;
-                ch0 = NEW_HOMEKIT_CHARACTERISTIC(CONTACT_SENSOR_STATE, 0, .context=json_context);
+                ch0 = NEW_HOMEKIT_CHARACTERISTIC(CONTACT_SENSOR_STATE, 0);
                 break;
         }
         
@@ -3504,6 +3788,8 @@ void normal_mode_init() {
         accessory_numerator++;
         ch_group->acc_type = ACC_TYPE_CONTACT_SENSOR;
         ch_group->ch0 = ch0;
+        register_actions(ch_group, json_context, 0);
+        ch_group->num[0] = autoswitch_time(json_context);
         ch_group->next = ch_groups;
         ch_groups = ch_group;
         
@@ -3558,8 +3844,8 @@ void normal_mode_init() {
             valve_max_duration = (uint32_t) cJSON_GetObjectItemCaseSensitive(json_context, VALVE_MAX_DURATION)->valuedouble;
         }
         
-        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_valve_setter, .context=json_context);
-        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(IN_USE, 0, .context=json_context);
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_valve_setter);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(IN_USE, 0);
         homekit_characteristic_t *ch2, *ch3;
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
@@ -3569,6 +3855,8 @@ void normal_mode_init() {
         ch_group->acc_type = ACC_TYPE_WATER_VALVE;
         ch_group->ch0 = ch0;
         ch_group->ch1 = ch1;
+        register_actions(ch_group, json_context, 0);
+        ch_group->num[0] = autoswitch_time(json_context);
         ch_group->next = ch_groups;
         ch_groups = ch_group;
         
@@ -3643,43 +3931,55 @@ void normal_mode_init() {
     uint8_t new_thermostat(uint8_t accessory, cJSON *json_context) {
         new_accessory(accessory, 3);
         
+        ch_group_t *ch_group = malloc(sizeof(ch_group_t));
+        memset(ch_group, 0, sizeof(*ch_group));
+        ch_group->accessory = accessory_numerator;
+        accessory_numerator++;
+        ch_group->acc_type = ACC_TYPE_THERMOSTAT;
+        
         // Custom ranges of Target Temperatures
-        float th_min_temp = THERMOSTAT_DEFAULT_MIN_TEMP;
+        TH_MIN_TEMP = THERMOSTAT_DEFAULT_MIN_TEMP;
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MIN_TEMP) != NULL) {
-            th_min_temp = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MIN_TEMP)->valuedouble;
+            TH_MIN_TEMP = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MIN_TEMP)->valuedouble;
         }
         
-        if (th_min_temp < -100) {
-            th_min_temp = -100;
+        if (TH_MIN_TEMP < -100) {
+            TH_MIN_TEMP = -100;
         }
         
-        float th_max_temp = THERMOSTAT_DEFAULT_MAX_TEMP;
+        TH_MAX_TEMP = THERMOSTAT_DEFAULT_MAX_TEMP;
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MAX_TEMP) != NULL) {
-            th_max_temp = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MAX_TEMP)->valuedouble;
+            TH_MAX_TEMP = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MAX_TEMP)->valuedouble;
         }
         
-        if (th_max_temp > 200) {
-            th_max_temp = 200;
+        if (TH_MAX_TEMP > 200) {
+            TH_MAX_TEMP = 200;
         }
         
-        const float default_target_temp = (th_min_temp + th_max_temp) / 2;
+        const float default_target_temp = (TH_MIN_TEMP + TH_MAX_TEMP) / 2;
+        
+        // Temperature Deadband
+        TH_DEADBAND = 0;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND) != NULL) {
+            TH_DEADBAND = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND)->valuedouble;
+        }
         
         // Thermostat Type
-        uint8_t th_type = THERMOSTAT_TYPE_HEATER;
+        TH_TYPE = THERMOSTAT_TYPE_HEATER;
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TYPE) != NULL) {
-            th_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TYPE)->valuedouble;
+            TH_TYPE = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TYPE)->valuedouble;
         }
         
         // HomeKit Characteristics
-        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200}, .context=json_context);
-        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_th_target_setter, .context=json_context);
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200});
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_th_target_setter);
         homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(TEMPERATURE_DISPLAY_UNITS, 0, .setter_ex=hkc_setter);
         homekit_characteristic_t *ch3 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_HEATER_COOLER_STATE, 0);
-        homekit_characteristic_t *ch5 = NEW_HOMEKIT_CHARACTERISTIC(HEATING_THRESHOLD_TEMPERATURE, default_target_temp -1, .min_value=(float[]) {th_min_temp}, .max_value=(float[]) {th_max_temp}, .setter_ex=update_th, .context=json_context);
-        homekit_characteristic_t *ch6 = NEW_HOMEKIT_CHARACTERISTIC(COOLING_THRESHOLD_TEMPERATURE, default_target_temp +1, .min_value=(float[]) {th_min_temp}, .max_value=(float[]) {th_max_temp}, .setter_ex=update_th, .context=json_context);
+        homekit_characteristic_t *ch5 = NEW_HOMEKIT_CHARACTERISTIC(HEATING_THRESHOLD_TEMPERATURE, default_target_temp -1, .min_value=(float[]) {TH_MIN_TEMP}, .max_value=(float[]) {TH_MAX_TEMP}, .setter_ex=update_th);
+        homekit_characteristic_t *ch6 = NEW_HOMEKIT_CHARACTERISTIC(COOLING_THRESHOLD_TEMPERATURE, default_target_temp +1, .min_value=(float[]) {TH_MIN_TEMP}, .max_value=(float[]) {TH_MAX_TEMP}, .setter_ex=update_th);
         
         uint8_t ch_calloc = 7;
-        if (th_type == THERMOSTAT_TYPE_HEATERCOOLER) {
+        if (TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
             ch_calloc += 1;
         }
         accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
@@ -3695,35 +3995,35 @@ void normal_mode_init() {
         homekit_characteristic_t *ch4;
         
         const float initial_h_target_temp = set_initial_state(accessory, 5, cJSON_Parse(INIT_STATE_LAST_STR), ch5, CH_TYPE_FLOAT, default_target_temp -1);
-        if (initial_h_target_temp > th_max_temp || initial_h_target_temp < th_min_temp) {
+        if (initial_h_target_temp > TH_MAX_TEMP || initial_h_target_temp < TH_MIN_TEMP) {
             ch5->value.float_value = default_target_temp -1;
         } else {
             ch5->value.float_value = initial_h_target_temp;
         }
         
         const float initial_c_target_temp = set_initial_state(accessory, 6, cJSON_Parse(INIT_STATE_LAST_STR), ch6, CH_TYPE_FLOAT, default_target_temp +1);
-        if (initial_c_target_temp > th_max_temp || initial_c_target_temp < th_min_temp) {
+        if (initial_c_target_temp > TH_MAX_TEMP || initial_c_target_temp < TH_MIN_TEMP) {
             ch6->value.float_value = default_target_temp +1;
         } else {
             ch6->value.float_value = initial_c_target_temp;
         }
         
-        switch (th_type) {
+        switch ((uint8_t) TH_TYPE) {
             case THERMOSTAT_TYPE_COOLER:
-                ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_COOLER, .min_value=(float[]) {THERMOSTAT_TARGET_MODE_COOLER}, .max_value=(float[]) {THERMOSTAT_TARGET_MODE_COOLER}, .valid_values={.count=1, .values=(uint8_t[]) {THERMOSTAT_TARGET_MODE_COOLER}}, .context=json_context);
+                ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_COOLER, .min_value=(float[]) {THERMOSTAT_TARGET_MODE_COOLER}, .max_value=(float[]) {THERMOSTAT_TARGET_MODE_COOLER}, .valid_values={.count=1, .values=(uint8_t[]) {THERMOSTAT_TARGET_MODE_COOLER}});
                 
                 accessories[accessory]->services[1]->characteristics[5] = ch6;
                 break;
                 
             case THERMOSTAT_TYPE_HEATERCOOLER:
-                ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_AUTO, .setter_ex=update_th, .context=json_context);
+                ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_AUTO, .setter_ex=update_th);
                 
                 accessories[accessory]->services[1]->characteristics[5] = ch5;
                 accessories[accessory]->services[1]->characteristics[6] = ch6;
                 break;
                 
             default:        // case THERMOSTAT_TYPE_HEATER:
-                ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_HEATER, .min_value=(float[]) {THERMOSTAT_TARGET_MODE_HEATER}, .max_value=(float[]) {THERMOSTAT_TARGET_MODE_HEATER}, .valid_values={.count=1, .values=(uint8_t[]) {THERMOSTAT_TARGET_MODE_HEATER}}, .context=json_context);
+                ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_HEATER, .min_value=(float[]) {THERMOSTAT_TARGET_MODE_HEATER}, .max_value=(float[]) {THERMOSTAT_TARGET_MODE_HEATER}, .valid_values={.count=1, .values=(uint8_t[]) {THERMOSTAT_TARGET_MODE_HEATER}});
 
                 accessories[accessory]->services[1]->characteristics[5] = ch5;
                 break;
@@ -3731,11 +4031,6 @@ void normal_mode_init() {
         
         accessories[accessory]->services[1]->characteristics[4] = ch4;
         
-        ch_group_t *ch_group = malloc(sizeof(ch_group_t));
-        memset(ch_group, 0, sizeof(*ch_group));
-        ch_group->accessory = accessory_numerator;
-        accessory_numerator++;
-        ch_group->acc_type = ACC_TYPE_THERMOSTAT;
         ch_group->ch0 = ch0;
         ch_group->ch1 = ch1;
         ch_group->ch2 = ch2;
@@ -3743,15 +4038,17 @@ void normal_mode_init() {
         ch_group->ch4 = ch4;
         ch_group->ch5 = ch5;
         ch_group->ch6 = ch6;
-        ch_group->last_wildcard_action0 = NO_LAST_WILDCARD_ACTION;
+        register_actions(ch_group, json_context, 0);
+        register_wildcard_actions(ch_group, json_context);
+        th_sensor(ch_group, json_context);
+        ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
+        ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
         ch_group->next = ch_groups;
         ch_groups = ch_group;
             
-        ch_group->timer = malloc(sizeof(ETSTimer));
-        memset(ch_group->timer, 0, sizeof(*ch_group->timer));
-        sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch0);
-        
-        xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", DELAYED_SENSOR_START_TASK_SIZE, ch0, 1, NULL);
+        if (TH_SENSOR_GPIO != -1) {
+            th_sensor_starter(ch_group);
+        }
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), th_input, ch1, 9);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), th_input_temp, ch0, THERMOSTAT_TEMP_UP);
@@ -3762,7 +4059,7 @@ void normal_mode_init() {
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), th_input, ch0, 1);
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), th_input, ch0, 0);
         
-        if (th_type == THERMOSTAT_TYPE_HEATERCOOLER) {
+        if (TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
             diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), th_input, ch0, 5);
             diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), th_input, ch0, 6);
             diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_7), th_input, ch0, 7);
@@ -3801,14 +4098,16 @@ void normal_mode_init() {
     uint8_t new_temp_sensor(uint8_t accessory, cJSON *json_context) {
         new_accessory(accessory, 3);
         
-        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200}, .context=json_context);
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200});
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
         ch_group->accessory = accessory_numerator;
         accessory_numerator++;
         ch_group->ch0 = ch0;
-        ch_group->last_wildcard_action0 = NO_LAST_WILDCARD_ACTION;
+        th_sensor(ch_group, json_context);
+        register_wildcard_actions(ch_group, json_context);
+        ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
         ch_group->next = ch_groups;
         ch_groups = ch_group;
         
@@ -3819,11 +4118,9 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
         accessories[accessory]->services[1]->characteristics[0] = ch0;
             
-        ch_group->timer = malloc(sizeof(ETSTimer));
-        memset(ch_group->timer, 0, sizeof(*ch_group->timer));
-        sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch0);
-        
-        xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", DELAYED_SENSOR_START_TASK_SIZE, ch0, 1, NULL);
+        if (TH_SENSOR_GPIO != -1) {
+            th_sensor_starter(ch_group);
+        }
         
         return accessory + 1;
     }
@@ -3831,14 +4128,16 @@ void normal_mode_init() {
     uint8_t new_hum_sensor(uint8_t accessory, cJSON *json_context) {
         new_accessory(accessory, 3);
         
-        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0, .context=json_context);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0);
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
         ch_group->accessory = accessory_numerator;
         accessory_numerator++;
         ch_group->ch1 = ch1;
-        ch_group->last_wildcard_action0 = NO_LAST_WILDCARD_ACTION;
+        th_sensor(ch_group, json_context);
+        register_wildcard_actions(ch_group, json_context);
+        ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
         ch_group->next = ch_groups;
         ch_groups = ch_group;
         
@@ -3848,12 +4147,10 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_HUMIDITY_SENSOR;
         accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
         accessories[accessory]->services[1]->characteristics[0] = ch1;
-            
-        ch_group->timer = malloc(sizeof(ETSTimer));
-        memset(ch_group->timer, 0, sizeof(*ch_group->timer));
-        sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch1);
         
-        xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", DELAYED_SENSOR_START_TASK_SIZE, ch1, 1, NULL);
+        if (TH_SENSOR_GPIO != -1) {
+            th_sensor_starter(ch_group);
+        }
         
         return accessory + 1;
     }
@@ -3861,8 +4158,8 @@ void normal_mode_init() {
     uint8_t new_th_sensor(uint8_t accessory, cJSON *json_context) {
         new_accessory(accessory, 4);
         
-        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200}, .context=json_context);
-        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0, .context=json_context);
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200});
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0);
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
@@ -3870,7 +4167,10 @@ void normal_mode_init() {
         accessory_numerator++;
         ch_group->ch0 = ch0;
         ch_group->ch1 = ch1;
-        ch_group->last_wildcard_action0 = NO_LAST_WILDCARD_ACTION;
+        th_sensor(ch_group, json_context);
+        register_wildcard_actions(ch_group, json_context);
+        ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
+        ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
         ch_group->next = ch_groups;
         ch_groups = ch_group;
         
@@ -3887,12 +4187,10 @@ void normal_mode_init() {
         accessories[accessory]->services[2]->type = HOMEKIT_SERVICE_HUMIDITY_SENSOR;
         accessories[accessory]->services[2]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
         accessories[accessory]->services[2]->characteristics[0] = ch1;
-            
-        ch_group->timer = malloc(sizeof(ETSTimer));
-        memset(ch_group->timer, 0, sizeof(*ch_group->timer));
-        sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch0);
         
-        xTaskCreate(delayed_sensor_starter_task, "delayed_sensor_starter_task", DELAYED_SENSOR_START_TASK_SIZE, ch0, 1, NULL);
+        if (TH_SENSOR_GPIO != -1) {
+            th_sensor_starter(ch_group);
+        }
         
         return accessory + 1;
     }
@@ -3922,8 +4220,8 @@ void normal_mode_init() {
             pwm_info->channels = 0;
         }
         
-        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .setter_ex=hkc_rgbw_setter, .context=json_context);
-        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(BRIGHTNESS, 100, .setter_ex=hkc_rgbw_setter, .context=json_context);
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .setter_ex=hkc_rgbw_setter);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(BRIGHTNESS, 100, .setter_ex=hkc_rgbw_setter);
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
@@ -3932,7 +4230,9 @@ void normal_mode_init() {
         ch_group->acc_type = ACC_TYPE_LIGHTBULB;
         ch_group->ch0 = ch0;
         ch_group->ch1 = ch1;
-        ch_group->last_wildcard_action0 = NO_LAST_WILDCARD_ACTION;
+        register_actions(ch_group, json_context, 0);
+        register_wildcard_actions(ch_group, json_context);
+        ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
         ch_group->next = ch_groups;
         ch_groups = ch_group;
         
@@ -4020,8 +4320,8 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_LIGHTBULB;
         
         if (lightbulb_group->pwm_r != 255) {
-            homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(HUE, 0, .setter_ex=hkc_rgbw_setter, .context=json_context);
-            homekit_characteristic_t *ch3 = NEW_HOMEKIT_CHARACTERISTIC(SATURATION, 0, .setter_ex=hkc_rgbw_setter, .context=json_context);
+            homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(HUE, 0, .setter_ex=hkc_rgbw_setter);
+            homekit_characteristic_t *ch3 = NEW_HOMEKIT_CHARACTERISTIC(SATURATION, 0, .setter_ex=hkc_rgbw_setter);
             
             ch_group->ch2 = ch2;
             ch_group->ch3 = ch3;
@@ -4035,7 +4335,7 @@ void normal_mode_init() {
             ch2->value.float_value = set_initial_state(accessory, 2, cJSON_Parse(INIT_STATE_LAST_STR), ch2, CH_TYPE_FLOAT, 0);
             ch3->value.float_value = set_initial_state(accessory, 3, cJSON_Parse(INIT_STATE_LAST_STR), ch3, CH_TYPE_FLOAT, 0);
         } else if (lightbulb_group->pwm_b != 255) {
-            homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(COLOR_TEMPERATURE, 152, .setter_ex=hkc_rgbw_setter, .context=json_context);
+            homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(COLOR_TEMPERATURE, 152, .setter_ex=hkc_rgbw_setter);
             
             ch_group->ch2 = ch2;
             
@@ -4100,9 +4400,9 @@ void normal_mode_init() {
     uint8_t new_garage_door(uint8_t accessory, cJSON *json_context) {
         new_accessory(accessory, 3);
         
-        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_DOOR_STATE, 1, .context=json_context);
-        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_DOOR_STATE, 1, .setter_ex=hkc_garage_door_setter, .context=json_context);
-        homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(OBSTRUCTION_DETECTED, false, .context=json_context);
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_DOOR_STATE, 1);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_DOOR_STATE, 1, .setter_ex=hkc_garage_door_setter);
+        homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(OBSTRUCTION_DETECTED, false);
         
         accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
         accessories[accessory]->services[1]->id = 8;
@@ -4121,6 +4421,7 @@ void normal_mode_init() {
         ch_group->ch0 = ch0;
         ch_group->ch1 = ch1;
         ch_group->ch2 = ch2;
+        register_actions(ch_group, json_context, 0);
         GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_TIME_MARGIN_DEFAULT;
         GARAGE_DOOR_WORKING_TIME = GARAGE_DOOR_TIME_OPEN_DEFAULT;
         GARAGE_DOOR_TIME_MARGIN = GARAGE_DOOR_TIME_MARGIN_DEFAULT;
@@ -4172,20 +4473,41 @@ void normal_mode_init() {
             GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN;
         }
 
+        GARAGE_DOOR_HAS_F5 = 0;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5) != NULL) {
+            GARAGE_DOOR_HAS_F5 = 1;
+        }
+        
+        GARAGE_DOOR_HAS_F4 = 0;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4) != NULL) {
+            GARAGE_DOOR_HAS_F4 = 1;
+        }
+        
+        GARAGE_DOOR_HAS_F3 = 0;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3) != NULL) {
+            GARAGE_DOOR_HAS_F3 = 1;
+        }
+        
+        GARAGE_DOOR_HAS_F2 = 0;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2) != NULL) {
+            GARAGE_DOOR_HAS_F2 = 1;
+        }
         
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), garage_door_sensor, ch0, GARAGE_DOOR_CLOSING)) {
             garage_door_sensor(0, ch0, GARAGE_DOOR_OPENING);
         }
+        
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), garage_door_sensor, ch0, GARAGE_DOOR_OPENING)) {
             garage_door_sensor(0, ch0, GARAGE_DOOR_OPENING);
         }
+        
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), garage_door_sensor, ch0, GARAGE_DOOR_CLOSED)) {
             garage_door_sensor(0, ch0, GARAGE_DOOR_CLOSED);
         }
+        
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), garage_door_sensor, ch0, GARAGE_DOOR_OPENED)) {
             garage_door_sensor(0, ch0, GARAGE_DOOR_OPENED);
         }
-        
 
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), garage_door_obstruction, ch0, 0)) {
             garage_door_obstruction(0, ch0, 0);
@@ -4206,10 +4528,10 @@ void normal_mode_init() {
             cover_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TYPE)->valuedouble;
         }
         
-        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_POSITION, 0, .context=json_context);
-        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_POSITION, 0, .setter_ex=hkc_window_cover_setter, .context=json_context);
-        homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(POSITION_STATE, WINDOW_COVER_STOP, .context=json_context);
-        homekit_characteristic_t *ch3 = NEW_HOMEKIT_CHARACTERISTIC(OBSTRUCTION_DETECTED, false, .context=json_context);
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_POSITION, 0);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_POSITION, 0, .setter_ex=hkc_window_cover_setter);
+        homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(POSITION_STATE, WINDOW_COVER_STOP);
+        homekit_characteristic_t *ch3 = NEW_HOMEKIT_CHARACTERISTIC(OBSTRUCTION_DETECTED, false);
         
         accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
         accessories[accessory]->services[1]->id = 8;
@@ -4249,7 +4571,9 @@ void normal_mode_init() {
         WINDOW_COVER_POSITION = 0;
         WINDOW_COVER_REAL_POSITION = 0;
         WINDOW_COVER_CORRECTION = WINDOW_COVER_CORRECTION_DEFAULT;
-        ch_group->last_wildcard_action0 = NO_LAST_WILDCARD_ACTION;
+        register_actions(ch_group, json_context, 0);
+        register_wildcard_actions(ch_group, json_context);
+        ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
         ch_group->next = ch_groups;
         ch_groups = ch_group;
         
@@ -4269,7 +4593,7 @@ void normal_mode_init() {
             WINDOW_COVER_CORRECTION = cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_CORRECTION_SET)->valuedouble;
         }
         
-        WINDOW_COVER_POSITION = (float) set_initial_state(accessory, 0, cJSON_Parse(INIT_STATE_LAST_STR), ch0, CH_TYPE_FLOAT, 0);
+        WINDOW_COVER_POSITION = set_initial_state(accessory, 0, cJSON_Parse(INIT_STATE_LAST_STR), ch0, CH_TYPE_INT8, 0);
         ch0->value.int_value = (uint8_t) WINDOW_COVER_POSITION;
         ch1->value.int_value = ch0->value.int_value;
         
@@ -4307,8 +4631,8 @@ void normal_mode_init() {
             max_speed = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, FAN_SPEED_STEPS)->valuedouble;
         }
         
-        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .setter_ex=hkc_fan_setter, .context=json_context);
-        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(ROTATION_SPEED, max_speed, .max_value=(float[]) {max_speed}, .setter_ex=hkc_fan_speed_setter, .context=json_context);
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .setter_ex=hkc_fan_setter);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(ROTATION_SPEED, max_speed, .max_value=(float[]) {max_speed}, .setter_ex=hkc_fan_speed_setter);
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
@@ -4317,7 +4641,10 @@ void normal_mode_init() {
         ch_group->acc_type = ACC_TYPE_FAN;
         ch_group->ch0 = ch0;
         ch_group->ch1 = ch1;
-        ch_group->last_wildcard_action0 = NO_LAST_WILDCARD_ACTION;
+        register_actions(ch_group, json_context, 0);
+        register_wildcard_actions(ch_group, json_context);
+        ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
+        ch_group->num[0] = autoswitch_time(json_context);
         ch_group->next = ch_groups;
         ch_groups = ch_group;
         
@@ -4379,15 +4706,15 @@ void normal_mode_init() {
         
         new_accessory(accessory, 4 + inputs);
 
-        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_tv_active, .context=json_context);
-        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(CONFIGURED_NAME, "HAA TV", .setter_ex=hkc_tv_configured_name, .context=json_context);
-        homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE_IDENTIFIER, 1, .setter_ex=hkc_tv_active_identifier, .context=json_context);
-        homekit_characteristic_t *ch3 = NEW_HOMEKIT_CHARACTERISTIC(REMOTE_KEY, .setter_ex=hkc_tv_key, .context=json_context);
-        homekit_characteristic_t *ch4 = NEW_HOMEKIT_CHARACTERISTIC(POWER_MODE_SELECTION, 0, .setter_ex=hkc_tv_power_mode, .context=json_context);
+        homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_tv_active);
+        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(CONFIGURED_NAME, "HAA TV", .setter_ex=hkc_tv_configured_name);
+        homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE_IDENTIFIER, 1, .setter_ex=hkc_tv_active_identifier);
+        homekit_characteristic_t *ch3 = NEW_HOMEKIT_CHARACTERISTIC(REMOTE_KEY, .setter_ex=hkc_tv_key);
+        homekit_characteristic_t *ch4 = NEW_HOMEKIT_CHARACTERISTIC(POWER_MODE_SELECTION, 0, .setter_ex=hkc_tv_power_mode);
         
-        homekit_characteristic_t *ch5 = NEW_HOMEKIT_CHARACTERISTIC(MUTE, false, .setter_ex=hkc_tv_mute, .context=json_context);
+        homekit_characteristic_t *ch5 = NEW_HOMEKIT_CHARACTERISTIC(MUTE, false, .setter_ex=hkc_tv_mute);
         homekit_characteristic_t *ch6 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, true);
-        homekit_characteristic_t *ch7 = NEW_HOMEKIT_CHARACTERISTIC(VOLUME_SELECTOR, .setter_ex=hkc_tv_volume, .context=json_context);
+        homekit_characteristic_t *ch7 = NEW_HOMEKIT_CHARACTERISTIC(VOLUME_SELECTOR, .setter_ex=hkc_tv_volume);
 
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
@@ -4402,6 +4729,7 @@ void normal_mode_init() {
         ch_group->ch5 = ch5;
         ch_group->ch6 = ch6;
         ch_group->ch7 = ch7;
+        register_actions(ch_group, json_context, 0);
         ch_group->next = ch_groups;
         ch_groups = ch_group;
         
@@ -4417,7 +4745,7 @@ void normal_mode_init() {
             service[0]->characteristics = calloc(7, sizeof(homekit_characteristic_t*));
             service[0]->characteristics[0] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "I");
             service[0]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(IDENTIFIER, service_number);
-            service[0]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(CONFIGURED_NAME, name, .setter_ex=hkc_tv_input_configured_name, .context=json_context);
+            service[0]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(CONFIGURED_NAME, name, .setter_ex=hkc_tv_input_configured_name);
             service[0]->characteristics[3] = NEW_HOMEKIT_CHARACTERISTIC(INPUT_SOURCE_TYPE, HOMEKIT_INPUT_SOURCE_TYPE_HDMI);
             service[0]->characteristics[4] = NEW_HOMEKIT_CHARACTERISTIC(IS_CONFIGURED, true);
             service[0]->characteristics[5] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_VISIBILITY_STATE, HOMEKIT_CURRENT_VISIBILITY_STATE_SHOWN);
@@ -4448,6 +4776,15 @@ void normal_mode_init() {
             if (cJSON_GetObjectItemCaseSensitive(json_input, TV_INPUT_NAME) != NULL) {
                 free(name);
                 name = strdup(cJSON_GetObjectItemCaseSensitive(json_input, TV_INPUT_NAME)->valuestring);
+                if (cJSON_GetObjectItemCaseSensitive(json_input, "0") != NULL) {
+                    uint8_t int_action = MAX_ACTIONS + i;
+                    char action[3];
+                    itoa(int_action, action, 10);
+                    cJSON *json_new_input_action = cJSON_CreateObject();
+                    cJSON_AddItemReferenceToObject(json_new_input_action, action, cJSON_GetObjectItemCaseSensitive(json_input, "0"));
+                    register_actions(ch_group, json_new_input_action, int_action);
+                    cJSON_Delete(json_new_input_action);
+                }
             }
             
             accessories[accessory]->services[1]->linked[i] = new_tv_input_service(i + 1, name);
@@ -4522,77 +4859,6 @@ void normal_mode_init() {
         }
         
         cJSON *json_accessory = cJSON_GetArrayItem(json_accessories, i);
-
-        // Digital outputs GPIO Setup (Stardard Actions)
-        char action[3];
-        for (uint8_t int_action = 0; int_action < MAX_ACTIONS; int_action++) {
-            itoa(int_action, action, 10);
-            
-            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
-                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), DIGITAL_OUTPUTS_ARRAY) != NULL) {
-                    cJSON *json_relays = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), DIGITAL_OUTPUTS_ARRAY);
-                    
-                    for(uint8_t j = 0; j < cJSON_GetArraySize(json_relays); j++) {
-                        const uint8_t gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_relays, j), PIN_GPIO)->valuedouble;
-                        if (!used_gpio[gpio]) {
-                            gpio_enable(gpio, GPIO_OUTPUT);
-                            gpio_write(gpio, false);
-                            
-                            used_gpio[gpio] = true;
-                            INFO2("DigO GPIO: %i", gpio);
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Digital outputs GPIO Setup (Wildcard Actions)
-        cJSON *json_wilcard_actions = cJSON_GetObjectItemCaseSensitive(json_accessory, WILDCARD_ACTIONS_ARRAY_0);
-        for(uint8_t k = 0; k < cJSON_GetArraySize(json_wilcard_actions); k++) {
-            cJSON *json_wilcard_action = cJSON_GetArrayItem(json_wilcard_actions, k);
-            
-            if (cJSON_GetObjectItemCaseSensitive(json_wilcard_action, "0") != NULL) {
-                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_wilcard_action, "0"), DIGITAL_OUTPUTS_ARRAY) != NULL) {
-                    cJSON *json_relays = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_wilcard_action, "0"), DIGITAL_OUTPUTS_ARRAY);
-                    
-                    for(uint8_t j = 0; j < cJSON_GetArraySize(json_relays); j++) {
-                        const uint8_t gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_relays, j), PIN_GPIO)->valuedouble;
-                        if (!used_gpio[gpio]) {
-                            gpio_enable(gpio, GPIO_OUTPUT);
-                            gpio_write(gpio, false);
-                            
-                            used_gpio[gpio] = true;
-                            INFO2("DigO GPIO: %i", gpio);
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Digital outputs GPIO Setup (TV Inputs)
-        if (acc_type == ACC_TYPE_TV) {
-            cJSON *json_tv_inputs = cJSON_GetObjectItemCaseSensitive(json_accessory, TV_INPUTS_ARRAY);
-            for(uint8_t k = 0; k < cJSON_GetArraySize(json_tv_inputs); k++) {
-                cJSON *json_tv_input = cJSON_GetArrayItem(json_tv_inputs, k);
-                
-                if (cJSON_GetObjectItemCaseSensitive(json_tv_input, "0") != NULL) {
-                    if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_tv_input, "0"), DIGITAL_OUTPUTS_ARRAY) != NULL) {
-                        cJSON *json_relays = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_tv_input, "0"), DIGITAL_OUTPUTS_ARRAY);
-                        
-                        for(uint8_t j = 0; j < cJSON_GetArraySize(json_relays); j++) {
-                            const uint8_t gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_relays, j), PIN_GPIO)->valuedouble;
-                            if (!used_gpio[gpio]) {
-                                gpio_enable(gpio, GPIO_OUTPUT);
-                                gpio_write(gpio, false);
-                                
-                                used_gpio[gpio] = true;
-                                INFO2("DigO GPIO: %i", gpio);
-                            }
-                        }
-                    }
-                }
-            }
-        }
         
         // Creating HomeKit Accessory
         INFO2("Type %i", acc_type);
@@ -4687,6 +4953,8 @@ void normal_mode_init() {
     config.log_output = log_output;
     
     setup_mode_toggle_counter = 0;
+    
+    cJSON_Delete(json_haa);
     
     wifi_config_init("HAA", NULL, run_homekit_server, custom_hostname);
     

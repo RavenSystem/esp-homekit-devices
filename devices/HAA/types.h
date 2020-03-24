@@ -22,13 +22,13 @@
 typedef struct _autoswitch_params {
     uint8_t gpio;
     bool value;
-    double time;
+    float time;
 } autoswitch_params_t;
 
 typedef struct _autooff_setter_params {
     homekit_characteristic_t *ch;
     uint8_t type;
-    double time;
+    float time;
 } autooff_setter_params_t;
 
 typedef struct _last_state {
@@ -37,6 +37,77 @@ typedef struct _last_state {
     uint8_t ch_type;
     struct _last_state *next;
 } last_state_t;
+
+typedef struct _action_copy {
+    uint8_t action;
+    
+    uint8_t new_action;
+    
+    struct _action_copy *next;
+} action_copy_t;
+
+typedef struct _action_relay {
+    uint8_t action;
+    
+    uint8_t gpio;
+    bool value;
+    float inching;
+    
+    struct _action_relay *next;
+} action_relay_t;
+
+typedef struct _action_acc_manager {
+    uint8_t action;
+    
+    uint8_t accessory;
+    bool is_kill_switch;
+    float value;
+    
+    struct _action_acc_manager *next;
+} action_acc_manager_t;
+
+typedef struct _action_system {
+    uint8_t action;
+    
+    uint8_t value;
+    
+    struct _action_system *next;
+} action_system_t;
+
+typedef struct _action_http {
+    uint8_t action;
+    
+    char *host;
+    char *url;
+    uint16_t port_n;
+    uint8_t method_n;
+    char *content;
+    
+    struct _action_http *next;
+} action_http_t;
+
+typedef struct _action_ir_tx {
+    uint8_t action;
+    
+    char *prot;
+    char *prot_code;
+    char *raw_code;
+    uint8_t freq;
+    uint8_t repeats;
+    uint16_t pause;
+    
+    struct _action_ir_tx *next;
+} action_ir_tx_t;
+
+typedef struct _wildcard_action {
+    uint8_t index;
+    float value;
+    
+    uint8_t target_action;
+    bool repeat;
+    
+    struct _wildcard_action *next;
+} wildcard_action_t;
 
 typedef struct _ch_group {
     uint8_t accessory;
@@ -53,18 +124,28 @@ typedef struct _ch_group {
     homekit_characteristic_t *ch_child;
     homekit_characteristic_t *ch_sec;
     
-    float num0;
-    float num1;
-    float num2;
-    float num3;
-    float num4;
-    
-    float last_wildcard_action0;
+    float num[9];
     
     ETSTimer *timer;
     
+    action_copy_t *action_copy;
+    action_relay_t *action_relay;
+    action_acc_manager_t *action_acc_manager;
+    action_system_t *action_system;
+    action_http_t *action_http;
+    action_ir_tx_t *action_ir_tx;
+    
+    wildcard_action_t *wildcard_action;
+    
+    float last_wildcard_action[2];
+    
     struct _ch_group *next;
 } ch_group_t;
+
+typedef struct _action_task {
+    uint8_t action;
+    ch_group_t *ch_group;
+} action_task_t;
 
 typedef struct _lightbulb_group {
     homekit_characteristic_t *ch0;
