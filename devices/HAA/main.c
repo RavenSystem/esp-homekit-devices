@@ -2976,8 +2976,8 @@ void normal_mode_init() {
             char action[3];
             itoa(new_int_action, action, 10);
             if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
-                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), DIGITAL_OUTPUTS_ARRAY) != NULL) {
-                    cJSON *json_acc_managers = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), DIGITAL_OUTPUTS_ARRAY);
+                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), MANAGE_OTHERS_ACC_ARRAY) != NULL) {
+                    cJSON *json_acc_managers = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), MANAGE_OTHERS_ACC_ARRAY);
                     
                     for(int16_t i = cJSON_GetArraySize(json_acc_managers) - 1; i >= 0; i--) {
                         action_acc_manager_t *action_acc_manager = malloc(sizeof(action_acc_manager_t));
