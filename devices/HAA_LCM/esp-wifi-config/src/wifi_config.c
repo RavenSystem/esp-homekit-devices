@@ -481,7 +481,7 @@ static void http_task(void *arg) {
             continue;
         }
 
-        const struct timeval timeout = { 2, 0 }; /* 2 second timeout */
+        const struct timeval timeout = { 2, 0 };
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
         client_t *client = client_new();
@@ -489,17 +489,15 @@ static void http_task(void *arg) {
 
         for (;;) {
             int data_len = lwip_read(client->fd, data, sizeof(data));
-            if (data_len == 0) {
-                break;
-            }
+            INFO("lwip_read %d", data_len);
 
             if (data_len > 0) {
-                INFO("Got %d incomming data", data_len);
-
                 http_parser_execute(
                     &client->parser, &wifi_config_http_parser_settings,
                     data, data_len
                 );
+            } else {
+                break;
             }
 
             if (xTaskNotifyWait(0, 1, &task_value, 0) == pdTRUE) {
@@ -707,7 +705,7 @@ static void wifi_config_sta_connect_timeout_callback(void *arg) {
 
 bool wifi_config_connect() {
     char *wifi_ssid = NULL;
-    sysparam_set_string("ota_repo", "2.2.2");
+    sysparam_set_string("ota_repo", "2.2.3");
     
     sysparam_get_string("wifi_ssid", &wifi_ssid);
     
