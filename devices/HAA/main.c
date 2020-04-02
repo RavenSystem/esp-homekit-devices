@@ -2359,9 +2359,9 @@ void do_actions(ch_group_t *ch_group, uint8_t action) {
         if (action_copy->action == action) {
             action = action_copy->new_action;
             action_copy = NULL;
+        } else {
+            action_copy = action_copy->next;
         }
-
-        action_copy = action_copy->next;
     }
     
     // Digital outputs
