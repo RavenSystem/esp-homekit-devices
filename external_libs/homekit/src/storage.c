@@ -178,20 +178,24 @@ static int compact_data() {
         return 0;
     }
 
-    if (homekit_storage_reset()) {
+    if (homekit_storage_reset() != 0) {
         ERROR("Failed to compact data: error resetting flash");
+        free(data);
         return -1;
     }
     if (homekit_storage_init() < 0) {
         ERROR("Failed to compact data: error initializing flash");
+        free(data);
         return -1;
     }
 
     if (!spiflash_write(SPIFLASH_BASE_ADDR, data, PAIRINGS_OFFSET + sizeof(pairing_data_t)*next_pairing_idx)) {
         ERROR("Failed to compact data: error writing compacted data");
+        free(data);
         return -1;
     }
 
+    free(data);
     return 0;
 }
 

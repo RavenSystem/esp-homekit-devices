@@ -2678,15 +2678,16 @@ void printf_header() {
     printf("Developed by José Antonio Jiménez Campos (@RavenSystem)\n\n");
     
 #ifdef HAA_DEBUG
-    INFO2("HAA DEBUG ENABLED\n");
+    printf("HAA DEBUG ENABLED\n\n");
 #endif  // HAA_DEBUG
 }
 
 void normal_mode_init() {
     char *txt_config = NULL;
     sysparam_get_string("haa_conf", &txt_config);
-    
+
     cJSON *json_haa = cJSON_Parse(txt_config);
+
     cJSON *json_config = cJSON_GetObjectItemCaseSensitive(json_haa, GENERAL_CONFIG);
     cJSON *json_accessories = cJSON_GetObjectItemCaseSensitive(json_haa, ACCESSORIES);
     
@@ -3309,18 +3310,20 @@ void normal_mode_init() {
         log_output = true;
         uart_set_baud(0, 115200);
         printf_header();
-        INFO2("NORMAL MODE\n\nJSON:\n %s\n", txt_config);
+        printf("NORMAL MODE\n\nJSON:\n %s\n\n", txt_config);
     }
     
 #ifdef HAA_DEBUG
-    log_output = true;
-    uart_set_baud(0, 115200);
-    printf_header();
-    INFO2("NORMAL MODE\n\nJSON:\n %s\n", txt_config);
+    if (!log_output) {
+        log_output = true;
+        uart_set_baud(0, 115200);
+        printf_header();
+        printf("NORMAL MODE\n\nJSON:\n %s\n\n", txt_config);
+    }
 #endif  // HAA_DEBUG
     
     free(txt_config);
-    
+
     // Custom Hostname
     char *custom_hostname = name.value.string_value;
     if (cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME) != NULL) {
@@ -3525,6 +3528,11 @@ void normal_mode_init() {
         }
         
         return accessory;
+    }
+    
+    bool exec_actions_on_boot() {
+        
+        return true;
     }
 
     uint8_t new_switch(uint8_t accessory, cJSON *json_context, const uint8_t acc_type) {
@@ -4963,7 +4971,6 @@ void normal_mode_init() {
 
 void user_init(void) {
 #ifdef HAA_DEBUG
-    log_output = true;
     sdk_os_timer_setfn(&free_heap_timer, free_heap_watchdog, NULL);
     sdk_os_timer_arm(&free_heap_timer, 2000, 1);
 #endif // HAA_DEBUG
@@ -4978,16 +4985,11 @@ void user_init(void) {
     sysparam_status_t status;
     status = sysparam_init(SYSPARAMSECTOR, 0);
     if (status == SYSPARAM_NOTFOUND) {
-        status = sysparam_init(SYSPARAMOLDSECTOR, 0);
-        if (status == SYSPARAM_NOTFOUND) {
-            printf("Creating new sysparam\n");
-            sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
-            sysparam_init(SYSPARAMSECTOR, 0);
-        } else if (status == SYSPARAM_OK) {
-            printf("Old sysparam ready\n");
-        }
+        printf("Creating sysparam\n");
+        sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
+        sysparam_init(SYSPARAMSECTOR, 0);
     } else if (status == SYSPARAM_OK) {
-        printf("New sysparam ready\n");
+        printf("Sysparam ready\n");
     }
 
     uint8_t macaddr[6];
@@ -5012,6 +5014,6 @@ void user_init(void) {
         // Arming emergency Setup Mode
         sysparam_set_int8("setup", 1);
         
-        xTaskCreate(normal_mode_init, "normal_mode_init", INITIAL_SETUP_TASK_SIZE, NULL, 1, NULL);
+        xTaskCreate(normal_mode_init, "normal_mode_init", INITIAL_SETUP_TASK_SIZE, NULL, INITIAL_SETUP_TASK_PRIORITY, NULL);
     }
 }

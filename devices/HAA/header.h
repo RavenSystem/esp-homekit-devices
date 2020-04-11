@@ -20,11 +20,10 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "1.9.2"
-#define FIRMWARE_VERSION_OCTAL              011102      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "1.9.3"
+#define FIRMWARE_VERSION_OCTAL              011103      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
-#define SYSPARAMOLDSECTOR                   0xF7000
 #define SYSPARAMSECTOR                      0xF3000
 #define SYSPARAMSIZE                        8
 
@@ -60,7 +59,8 @@
 #define DELAYED_SENSOR_START_TASK_SIZE      (configMINIMAL_STACK_SIZE * 1)
 
 // Task Priorities
-#define PING_TASK_PRIORITY                  (tskIDLE_PRIORITY)
+#define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
+#define PING_TASK_PRIORITY                  (tskIDLE_PRIORITY + 0)
 #define IR_TX_TASK_PRIORITY                 (tskIDLE_PRIORITY + 10)
 
 // Button Events
@@ -124,6 +124,7 @@
 #define PIN_GPIO                            "g"
 #define INITIAL_STATE                       "s"
 #define KILL_SWITCH                         "k"
+#define EXEC_ACTIONS                        "xa"
 
 #define VALVE_SYSTEM_TYPE                   "w"
 #define VALVE_SYSTEM_TYPE_DEFAULT           0

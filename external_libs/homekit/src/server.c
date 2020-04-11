@@ -2330,11 +2330,17 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     }
 
                     if (ch->min_value)
-                        min_value = (int)*ch->min_value;
+                        min_value = *ch->min_value;
                     if (ch->max_value)
-                        max_value = (int)*ch->max_value;
+                        max_value = *ch->max_value;
 
-                    int value = j_value->valueint;
+                    double value = j_value->valuedouble;
+                    if (j_value->type == cJSON_True) {
+                        value = 1;
+                    } else if (j_value->type == cJSON_False) {
+                        value = 0;
+                    }
+                    
                     if (value < min_value || value > max_value) {
                         CLIENT_ERROR(context, "Failed to update %d.%d: value is not in range", aid, iid);
                         return HAPStatus_InvalidValue;
@@ -2373,8 +2379,28 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 
                     CLIENT_DEBUG(context, "Updating characteristic %d.%d with integer %d", aid, iid, value);
 
-                    h_value = HOMEKIT_INT(value);
-                    h_value.format = ch->format;
+                    switch (ch->format) {
+                        case homekit_format_uint8:
+                            h_value = HOMEKIT_UINT8(value);
+                            break;
+                        case homekit_format_uint16:
+                            h_value = HOMEKIT_UINT16(value);
+                            break;
+                        case homekit_format_uint32:
+                            h_value = HOMEKIT_UINT32(value);
+                            break;
+                        case homekit_format_uint64:
+                            h_value = HOMEKIT_UINT64(value);
+                            break;
+                        case homekit_format_int:
+                            h_value = HOMEKIT_INT(value);
+                            break;
+
+                        default:
+                            CLIENT_ERROR(context, "Unexpected format when updating numeric value: %d", ch->format);
+                            return HAPStatus_InvalidValue;
+                    }
+                    
                     if (ch->setter_ex) {
                         ch->setter_ex(ch, h_value);
                     } else {

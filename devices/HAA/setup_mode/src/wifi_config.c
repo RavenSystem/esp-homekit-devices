@@ -118,7 +118,7 @@ void wifi_config_reset() {
     sta_config.ssid[sizeof(sta_config.ssid) - 1] = 0;
     sdk_wifi_station_set_config(&sta_config);
     sdk_wifi_station_connect();
-    sdk_wifi_station_set_auto_connect(true);
+    sdk_wifi_station_set_auto_connect(false);
 }
 
 wifi_network_info_t *wifi_networks = NULL;
