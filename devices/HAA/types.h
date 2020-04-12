@@ -128,6 +128,8 @@ typedef struct _ch_group {
     
     ETSTimer *timer;
     
+    char *ir_protocol;
+    
     action_copy_t *action_copy;
     action_relay_t *action_relay;
     action_acc_manager_t *action_acc_manager;
@@ -156,16 +158,22 @@ typedef struct _lightbulb_group {
     uint8_t pwm_g;
     uint8_t pwm_b;
     uint8_t pwm_w;
+    uint8_t pwm_cw;
+    uint8_t pwm_ww;
     
     uint16_t target_r;
     uint16_t target_g;
     uint16_t target_b;
     uint16_t target_w;
+    uint16_t target_cw;
+    uint16_t target_ww;
     
     float factor_r;
     float factor_g;
     float factor_b;
     float factor_w;
+    float factor_cw;
+    float factor_ww;
     
     uint16_t step;
     

@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "1.9.3"
-#define FIRMWARE_VERSION_OCTAL              011103      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "1.10.0"
+#define FIRMWARE_VERSION_OCTAL              011200      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMSECTOR                      0xF3000
@@ -124,7 +124,7 @@
 #define PIN_GPIO                            "g"
 #define INITIAL_STATE                       "s"
 #define KILL_SWITCH                         "k"
-#define EXEC_ACTIONS                        "xa"
+#define EXEC_ACTIONS_ON_BOOT                "xa"
 
 #define VALVE_SYSTEM_TYPE                   "w"
 #define VALVE_SYSTEM_TYPE_DEFAULT           0
@@ -177,12 +177,16 @@
 #define LIGHTBULB_PWM_GPIO_G                "g"
 #define LIGHTBULB_PWM_GPIO_B                "v"
 #define LIGHTBULB_PWM_GPIO_W                "w"
+#define LIGHTBULB_PWM_GPIO_CW               "cw"
+#define LIGHTBULB_PWM_GPIO_WW               "ww"
 #define LIGHTBULB_FACTOR_R                  "fr"
 #define LIGHTBULB_FACTOR_G                  "fg"
 #define LIGHTBULB_FACTOR_B                  "fv"
 #define LIGHTBULB_FACTOR_W                  "fw"
+#define LIGHTBULB_FACTOR_CW                 "fcw"
+#define LIGHTBULB_FACTOR_WW                 "fww"
 #define RGBW_PERIOD                         10
-#define RGBW_STEP                           "p"
+#define RGBW_STEP                           "st"
 #define RGBW_STEP_DEFAULT                   1024
 #define PWM_SCALE                           (UINT16_MAX - 1)
 #define COLOR_TEMP_MIN                      71
@@ -194,6 +198,13 @@
 #define AUTODIMMER_TASK_DELAY_DEFAULT       1000
 #define AUTODIMMER_TASK_STEP                "e"
 #define AUTODIMMER_TASK_STEP_DEFAULT        20
+
+#define CW_RED                              52200
+#define CW_GREEN                            56000
+#define CW_BLUE                             PWM_SCALE
+#define WW_RED                              PWM_SCALE
+#define WW_GREEN                            40400
+#define WW_BLUE                             15600
 
 #define GARAGE_DOOR_OPENED                  0
 #define GARAGE_DOOR_CLOSED                  1
@@ -229,7 +240,7 @@
 #define WINDOW_COVER_TIME_CLOSE_SET         "c"
 #define WINDOW_COVER_CORRECTION_SET         "f"
 #define WINDOW_COVER_CORRECTION_DEFAULT     0
-#define WINDOW_COVER_POLL_PERIOD_MS         250
+#define WINDOW_COVER_POLL_PERIOD_MS         333
 #define WINDOW_COVER_MARGIN_SYNC            15
 #define WINDOW_COVER_STEP_TIME(x)           ((100.0 / (x)) * (WINDOW_COVER_POLL_PERIOD_MS / 1000.0))
 #define WINDOW_COVER_STEP_TIME_UP           ch_group->num[0]
@@ -324,6 +335,9 @@
 #define ACCESSORIES_WITHOUT_BRIDGE          4   // Max number of accessories before using a bridge
 
 #define MS_TO_TICK(x)                       ((x) / portTICK_PERIOD_MS)
+
+#define MIN(x, y)                           (((x) < (y)) ? (x) : (y))
+#define MAX(x, y)                           (((x) > (y)) ? (x) : (y))
 
 #define DEBUG(cond, message, ...)           if (cond) printf("%s: " message "\n", __func__, ##__VA_ARGS__);
 #define INFO(cond, message, ...)            if (cond) printf(message "\n", ##__VA_ARGS__);
