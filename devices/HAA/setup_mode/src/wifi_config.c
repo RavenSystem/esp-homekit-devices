@@ -1,3 +1,21 @@
+/*
+* Home Accessory Architect
+*
+* Copyright 2019-2020 José Antonio Jiménez Campos (@RavenSystem)
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+* http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/
+
 #include <stdio.h>
 #include <string.h>
 //#include <stdint.h>
@@ -17,6 +35,19 @@
 
 #include <rboot-api.h>
 #include <homekit/homekit.h>
+
+#define CUSTOM_REPO_SYSPARAM            "ota_sever"
+#define PORT_NUMBER_SYSPARAM            "ota_port"
+#define PORT_SECURE_SYSPARAM            "ota_sec"
+#define OTA_VERSION_SYSPARAM            "ota_repo"
+#define WIFI_SSID_SYSPARAM              "wifi_ssid"
+#define WIFI_PASSWORD_SYSPARAM          "wifi_password"
+#define WIFI_MODE_SYSPARAM              "wifi_mode"
+#define WIFI_BSSID_SYSPARAM             "wifi_bssid"
+#define AUTO_OTA_SYSPARAM               "aota"
+#define TOTAL_ACC_SYSPARAM              "total_ac"
+#define HAA_JSON_SYSPARAM               "haa_conf"
+#define HAA_SETUP_MODE_SYSPARAM         "setup"
 
 #define WIFI_CONFIG_SERVER_PORT         80
 
@@ -211,33 +242,32 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send(client, http_prologue, sizeof(http_prologue)-1);
     client_send_chunk(client, html_settings_header);
     
-    char *json = NULL;
+    char *text = NULL;
     sysparam_status_t status;
-    status = sysparam_get_string("haa_conf", &json);
+    status = sysparam_get_string(HAA_JSON_SYSPARAM, &text);
     if (status == SYSPARAM_OK) {
-        client_send_chunk(client, json);
-        free(json);
+        client_send_chunk(client, text);
+        free(text);
     }
 
     client_send_chunk(client, html_settings_middle);
     
-    char *ota = NULL;
-    status = sysparam_get_string("ota_repo", &ota);
+    status = sysparam_get_string(OTA_VERSION_SYSPARAM, &text);
     if (status == SYSPARAM_OK) {
         client_send_chunk(client, html_settings_ota);
         
-        if (strlen(ota) < 10) {
+        if (strlen(text) < 10) {
             client_send_chunk(client, "(HAA OTA v");
-            client_send_chunk(client, ota);
+            client_send_chunk(client, text);
             client_send_chunk(client, ")");
         }
         
-        free(ota);
+        free(text);
         
         client_send_chunk(client, html_settings_otaversion);
         
         bool auto_ota = false;
-        status = sysparam_get_bool("aota", &auto_ota);
+        status = sysparam_get_bool(AUTO_OTA_SYSPARAM, &auto_ota);
         if (status == SYSPARAM_OK && auto_ota) {
             client_send_chunk(client, "checked");
         }
@@ -247,14 +277,14 @@ static void wifi_config_server_on_settings(client_t *client) {
     
     client_send_chunk(client, html_settings_postota);
     
-    int8_t wifi_mode = 0;
-    sysparam_get_int8("wifi_mode", &wifi_mode);
-    if (wifi_mode == 0) {
+    int8_t int8_value = 0;
+    sysparam_get_int8(WIFI_MODE_SYSPARAM, &int8_value);
+    if (int8_value == 0) {
         client_send_chunk(client, "selected");
     }
     client_send_chunk(client, html_wifi_mode_0);
     
-    if (wifi_mode == 1) {
+    if (int8_value == 1) {
         client_send_chunk(client, "selected");
     }
     client_send_chunk(client, html_wifi_mode_1);
@@ -279,7 +309,32 @@ static void wifi_config_server_on_settings(client_t *client) {
         xSemaphoreGive(wifi_networks_mutex);
     }
 
-    client_send_chunk(client, html_settings_footer);
+    client_send_chunk(client, html_settings_wifi);
+    
+    // Custom repo server
+    status = sysparam_get_string(CUSTOM_REPO_SYSPARAM, &text);
+    if (status == SYSPARAM_OK) {
+        client_send_chunk(client, text);
+        free(text);
+    }
+    client_send_chunk(client, html_settings_reposerver);
+    
+    int32_t int32_value;
+    
+    status = sysparam_get_int32(PORT_NUMBER_SYSPARAM, &int32_value);
+    if (status == SYSPARAM_OK) {
+        itoa(int32_value, text, 10);
+        client_send_chunk(client, text);
+        free(text);
+    }
+    client_send_chunk(client, html_settings_repoport);
+    
+    status = sysparam_get_int8(PORT_SECURE_SYSPARAM, &int8_value);
+    if (status != SYSPARAM_OK || (status == SYSPARAM_OK && int8_value == 1)) {
+        client_send_chunk(client, "checked");
+    }
+    client_send_chunk(client, html_settings_repossl);
+
     client_send_chunk(client, "");
 }
 
@@ -301,13 +356,16 @@ static void wifi_config_server_on_settings_update(client_t *client) {
     form_param_t *ssid_param = form_params_find(form, "ssid");
     form_param_t *bssid_param = form_params_find(form, "bssid");
     form_param_t *password_param = form_params_find(form, "password");
+    form_param_t *reposerver_param = form_params_find(form, "reposerver");
+    form_param_t *repoport_param = form_params_find(form, "repoport");
+    form_param_t *repossl_param = form_params_find(form, "repossl");
     
     static const char payload[] = "HTTP/1.1 204 \r\nContent-Type: text/html\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
     client_send(client, payload, sizeof(payload) - 1);
     
     // Remove saved states
     int8_t hk_total_ac = 0;
-    sysparam_get_int8("total_ac", &hk_total_ac);
+    sysparam_get_int8(TOTAL_ACC_SYSPARAM, &hk_total_ac);
     char saved_state_id[5];
     for (uint16_t int_saved_state_id = 100; int_saved_state_id <= hk_total_ac * 100; int_saved_state_id++) {
         itoa(int_saved_state_id, saved_state_id, 10);
@@ -315,13 +373,13 @@ static void wifi_config_server_on_settings_update(client_t *client) {
     }
 
     if (conf_param->value) {
-        sysparam_set_string("haa_conf", conf_param->value);
+        sysparam_set_string(HAA_JSON_SYSPARAM, conf_param->value);
     }
     
     if (autoota_param) {
-        sysparam_set_bool("aota", true);
+        sysparam_set_bool(AUTO_OTA_SYSPARAM, true);
     } else {
-        sysparam_set_bool("aota", false);
+        sysparam_set_bool(AUTO_OTA_SYSPARAM, false);
     }
     
     if (ota_param) {
@@ -329,16 +387,31 @@ static void wifi_config_server_on_settings_update(client_t *client) {
     }
     
     if (nowifi_param) {
-        sysparam_set_data("wifi_ssid", NULL, 0, false);
-        sysparam_set_data("wifi_password", NULL, 0, false);
+        sysparam_set_data(WIFI_SSID_SYSPARAM, NULL, 0, false);
+        sysparam_set_data(WIFI_PASSWORD_SYSPARAM, NULL, 0, false);
     }
     
     if (reset_param) {
         homekit_server_reset();
     }
     
+    if (reposerver_param->value) {
+        sysparam_set_string(CUSTOM_REPO_SYSPARAM, reposerver_param->value);
+    }
+    
+    if (repoport_param->value) {
+        int32_t port = strtol(repoport_param->value, NULL, 10);
+        sysparam_set_int32(PORT_NUMBER_SYSPARAM, port);
+    }
+    
+    if (repossl_param) {
+        sysparam_set_int8(PORT_SECURE_SYSPARAM, 1);
+    } else {
+        sysparam_set_int8(PORT_SECURE_SYSPARAM, 0);
+    }
+    
     if (ssid_param->value) {
-        sysparam_set_string("wifi_ssid", ssid_param->value);
+        sysparam_set_string(WIFI_SSID_SYSPARAM, ssid_param->value);
 
         if (bssid_param->value && strlen(bssid_param->value) == 12) {
             char *bssid = malloc(7);
@@ -350,18 +423,18 @@ static void wifi_config_server_on_settings_update(client_t *client) {
                 bssid[i] = (char) strtol(hex, NULL, 16);
             }
 
-            sysparam_set_string("wifi_bssid", bssid);
+            sysparam_set_string(WIFI_BSSID_SYSPARAM, bssid);
             
             free(hex);
             free(bssid);
         } else {
-            sysparam_set_string("wifi_bssid", "");
+            sysparam_set_string(WIFI_BSSID_SYSPARAM, "");
         }
         
         if (password_param->value) {
-            sysparam_set_string("wifi_password", password_param->value);
+            sysparam_set_string(WIFI_PASSWORD_SYSPARAM, password_param->value);
         } else {
-            sysparam_set_string("wifi_password", "");
+            sysparam_set_string(WIFI_PASSWORD_SYSPARAM, "");
         }
     }
     
@@ -370,8 +443,8 @@ static void wifi_config_server_on_settings_update(client_t *client) {
     if (wifimode_param->value) {
         int8_t current_wifi_mode = 0;
         int8_t new_wifi_mode = strtol(wifimode_param->value, NULL, 10);
-        sysparam_get_int8("wifi_mode", &current_wifi_mode);
-        sysparam_set_int8("wifi_mode", new_wifi_mode);
+        sysparam_get_int8(WIFI_MODE_SYSPARAM, &current_wifi_mode);
+        sysparam_set_int8(WIFI_MODE_SYSPARAM, new_wifi_mode);
         
         if (current_wifi_mode != new_wifi_mode) {
             wifi_config_reset();
@@ -742,7 +815,7 @@ static void wifi_config_sta_connect_timeout_callback(void *arg) {
 
 static void auto_reboot_run() {
     bool auto_ota = false;
-    sysparam_get_bool("aota", &auto_ota);
+    sysparam_get_bool(AUTO_OTA_SYSPARAM, &auto_ota);
     if (auto_ota) {
         INFO("OTA Update");
         rboot_set_temp_rom(1);
@@ -756,7 +829,7 @@ static void auto_reboot_run() {
 
 bool wifi_config_connect() {
     char *wifi_ssid = NULL;
-    sysparam_get_string("wifi_ssid", &wifi_ssid);
+    sysparam_get_string(WIFI_SSID_SYSPARAM, &wifi_ssid);
     
     if (wifi_ssid) {
         struct sdk_station_config sta_config;
@@ -766,16 +839,16 @@ bool wifi_config_connect() {
         sta_config.ssid[sizeof(sta_config.ssid) - 1] = 0;
 
         char *wifi_password = NULL;
-        sysparam_get_string("wifi_password", &wifi_password);
+        sysparam_get_string(WIFI_PASSWORD_SYSPARAM, &wifi_password);
         if (wifi_password) {
            strncpy((char *)sta_config.password, wifi_password, sizeof(sta_config.password));
         }
 
         int8_t wifi_mode = 0;
-        sysparam_get_int8("wifi_mode", &wifi_mode);
+        sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
         if (wifi_mode == 1) {
             char *wifi_bssid = NULL;
-            sysparam_get_string("wifi_bssid", &wifi_bssid);
+            sysparam_get_string(WIFI_BSSID_SYSPARAM, &wifi_bssid);
             if (wifi_bssid) {
                 sta_config.bssid_set = 1;
                 strncpy((char *)sta_config.bssid, wifi_bssid, sizeof(sta_config.bssid));
@@ -817,9 +890,9 @@ static void wifi_config_station_connect() {
             INFO("HAA Setup");
             
             int8_t mode = 0;
-            sysparam_get_int8("setup", &mode);
+            sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &mode);
             
-            sysparam_set_int8("setup", 0);
+            sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
 
             if (mode == 1) {
                 INFO("Enabling auto reboot");
@@ -845,11 +918,13 @@ void wifi_config_init(const char *ssid_prefix, const char *password, void (*on_w
     memset(context, 0, sizeof(*context));
 
     context->ssid_prefix = strndup(ssid_prefix, 33-7);
-    if (password)
+    if (password) {
         context->password = strdup(password);
+    }
     
-    if (custom_hostname)
+    if (custom_hostname) {
         context->custom_hostname = strdup(custom_hostname);
+    }
 
     context->on_wifi_ready = on_wifi_ready;
 

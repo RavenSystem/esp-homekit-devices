@@ -294,7 +294,7 @@ void setup_mode_call(const uint8_t gpio, void *args, const uint8_t param) {
     INFO2("Setup mode call");
     
     if (setup_mode_time == 0 || xTaskGetTickCountFromISR() < setup_mode_time * 1000 / portTICK_PERIOD_MS) {
-        sysparam_set_int8("setup", 1);
+        sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
         xTaskCreate(reboot_task, "reboot_task", REBOOT_TASK_SIZE, NULL, 1, NULL);
     } else {
         ERROR2("Not allowed after %i secs since boot", setup_mode_time);
@@ -375,19 +375,20 @@ void hkc_group_notify(ch_group_t *ch_group) {
     
     if (ch_group->ch1) {
         homekit_characteristic_notify(ch_group->ch1, ch_group->ch1->value);
-        if (ch_group->ch2) {
-            homekit_characteristic_notify(ch_group->ch2, ch_group->ch2->value);
-            if (ch_group->ch3) {
-                homekit_characteristic_notify(ch_group->ch3, ch_group->ch3->value);
-                if (ch_group->ch4) {
-                    homekit_characteristic_notify(ch_group->ch4, ch_group->ch4->value);
-                    if (ch_group->ch5) {
-                        homekit_characteristic_notify(ch_group->ch5, ch_group->ch5->value);
-                        if (ch_group->ch6) {
-                            homekit_characteristic_notify(ch_group->ch6, ch_group->ch6->value);
-                            if (ch_group->ch7) {
-                                homekit_characteristic_notify(ch_group->ch7, ch_group->ch7->value);
-                            }
+    }
+    
+    if (ch_group->ch2) {
+        homekit_characteristic_notify(ch_group->ch2, ch_group->ch2->value);
+        if (ch_group->ch3) {
+            homekit_characteristic_notify(ch_group->ch3, ch_group->ch3->value);
+            if (ch_group->ch4) {
+                homekit_characteristic_notify(ch_group->ch4, ch_group->ch4->value);
+                if (ch_group->ch5) {
+                    homekit_characteristic_notify(ch_group->ch5, ch_group->ch5->value);
+                    if (ch_group->ch6) {
+                        homekit_characteristic_notify(ch_group->ch6, ch_group->ch6->value);
+                        if (ch_group->ch7) {
+                            homekit_characteristic_notify(ch_group->ch7, ch_group->ch7->value);
                         }
                     }
                 }
@@ -713,56 +714,56 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
         
         ch->value = value;
         
-        if (ch_group->ch1->value.int_value) {
-            const float mid_target_temp = (ch_group->ch5->value.float_value + ch_group->ch6->value.float_value) / 2;
+        if (ch_group->ch2->value.int_value) {
+            const float mid_target_temp = (ch_group->ch6->value.float_value + ch_group->ch7->value.float_value) / 2;
             
-            switch (ch_group->ch4->value.int_value) {
+            switch (ch_group->ch5->value.int_value) {
                 case THERMOSTAT_TARGET_MODE_HEATER:
-                    if (ch_group->ch3->value.int_value <= THERMOSTAT_MODE_IDLE) {
-                        if (ch_group->ch0->value.float_value < (ch_group->ch5->value.float_value - TH_DEADBAND)) {
-                            ch_group->ch3->value.int_value = THERMOSTAT_MODE_HEATER;
+                    if (ch_group->ch4->value.int_value <= THERMOSTAT_MODE_IDLE) {
+                        if (ch_group->ch0->value.float_value < (ch_group->ch6->value.float_value - TH_DEADBAND)) {
+                            ch_group->ch4->value.int_value = THERMOSTAT_MODE_HEATER;
                             do_actions(ch_group, THERMOSTAT_ACTION_HEATER_ON);
                         }
-                    } else if (ch_group->ch0->value.float_value >= ch_group->ch5->value.float_value) {
-                        ch_group->ch3->value.int_value = THERMOSTAT_MODE_IDLE;
+                    } else if (ch_group->ch0->value.float_value >= ch_group->ch6->value.float_value) {
+                        ch_group->ch4->value.int_value = THERMOSTAT_MODE_IDLE;
                         do_actions(ch_group, THERMOSTAT_ACTION_HEATER_IDLE);
                     }
                     break;
                 
                 case THERMOSTAT_TARGET_MODE_COOLER:
-                    if (ch_group->ch3->value.int_value <= THERMOSTAT_MODE_IDLE) {
-                        if (ch_group->ch0->value.float_value > (ch_group->ch6->value.float_value + TH_DEADBAND)) {
-                            ch_group->ch3->value.int_value = THERMOSTAT_MODE_COOLER;
+                    if (ch_group->ch4->value.int_value <= THERMOSTAT_MODE_IDLE) {
+                        if (ch_group->ch0->value.float_value > (ch_group->ch7->value.float_value + TH_DEADBAND)) {
+                            ch_group->ch4->value.int_value = THERMOSTAT_MODE_COOLER;
                             do_actions(ch_group, THERMOSTAT_ACTION_COOLER_ON);
                         }
-                    } else if (ch_group->ch0->value.float_value <= ch_group->ch6->value.float_value) {
-                        ch_group->ch3->value.int_value = THERMOSTAT_MODE_IDLE;
+                    } else if (ch_group->ch0->value.float_value <= ch_group->ch7->value.float_value) {
+                        ch_group->ch4->value.int_value = THERMOSTAT_MODE_IDLE;
                         do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
                     }
                     break;
                 
                 default:    // case THERMOSTAT_TARGET_MODE_AUTO:
-                    switch (ch_group->ch3->value.int_value) {
+                    switch (ch_group->ch4->value.int_value) {
                         case THERMOSTAT_MODE_HEATER:
                             if (ch_group->ch0->value.float_value >= mid_target_temp) {
-                                ch_group->ch3->value.int_value = THERMOSTAT_MODE_IDLE;
+                                ch_group->ch4->value.int_value = THERMOSTAT_MODE_IDLE;
                                 do_actions(ch_group, THERMOSTAT_ACTION_HEATER_IDLE);
                             }
                             break;
                             
                         case THERMOSTAT_MODE_COOLER:
                             if (ch_group->ch0->value.float_value <= mid_target_temp) {
-                                ch_group->ch3->value.int_value = THERMOSTAT_MODE_IDLE;
+                                ch_group->ch4->value.int_value = THERMOSTAT_MODE_IDLE;
                                 do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
                             }
                             break;
                             
                         default:    // cases THERMOSTAT_MODE_IDLE, THERMOSTAT_MODE_OFF:
-                            if (ch_group->ch0->value.float_value < ch_group->ch5->value.float_value) {
-                                ch_group->ch3->value.int_value = THERMOSTAT_MODE_HEATER;
+                            if (ch_group->ch0->value.float_value < ch_group->ch6->value.float_value) {
+                                ch_group->ch4->value.int_value = THERMOSTAT_MODE_HEATER;
                                 do_actions(ch_group, THERMOSTAT_ACTION_HEATER_ON);
-                            } else if (ch_group->ch0->value.float_value > ch_group->ch6->value.float_value) {
-                                ch_group->ch3->value.int_value = THERMOSTAT_MODE_COOLER;
+                            } else if (ch_group->ch0->value.float_value > ch_group->ch7->value.float_value) {
+                                ch_group->ch4->value.int_value = THERMOSTAT_MODE_COOLER;
                                 do_actions(ch_group, THERMOSTAT_ACTION_COOLER_ON);
                             }
                             break;
@@ -771,7 +772,7 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
             }
             
         } else {
-            ch_group->ch3->value.int_value = THERMOSTAT_MODE_OFF;
+            ch_group->ch4->value.int_value = THERMOSTAT_MODE_OFF;
             do_actions(ch_group, THERMOSTAT_ACTION_TOTAL_OFF);
         }
         
@@ -791,45 +792,45 @@ void th_input(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_child || ch_group->ch_child->value.bool_value) {
-        switch ((uint8_t) TH_TYPE) {
+        switch (type) {
             case 0:
-                ch_group->ch1->value.int_value = 0;
+                ch_group->ch2->value.int_value = 0;
                 break;
                 
             case 1:
-                ch_group->ch1->value.int_value = 1;
+                ch_group->ch2->value.int_value = 1;
                 break;
                 
             case 5:
-                ch_group->ch1->value.int_value = 1;
-                ch_group->ch4->value.int_value = 2;
+                ch_group->ch2->value.int_value = 1;
+                ch_group->ch5->value.int_value = 2;
                 break;
                 
             case 6:
-                ch_group->ch1->value.int_value = 1;
-                ch_group->ch4->value.int_value = 1;
+                ch_group->ch2->value.int_value = 1;
+                ch_group->ch5->value.int_value = 1;
                 break;
                 
             case 7:
-                ch_group->ch1->value.int_value = 1;
-                ch_group->ch4->value.int_value = 0;
+                ch_group->ch2->value.int_value = 1;
+                ch_group->ch5->value.int_value = 0;
                 break;
                 
             default:    // case 9:  // Cyclic
-                if (ch_group->ch1->value.int_value) {
+                if (ch_group->ch2->value.int_value) {
                     if (TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
-                        if (ch_group->ch4->value.int_value > 0) {
-                            ch_group->ch4->value.int_value--;
+                        if (ch_group->ch5->value.int_value > 0) {
+                            ch_group->ch5->value.int_value--;
                         } else {
-                            ch_group->ch1->value.int_value = 0;
+                            ch_group->ch2->value.int_value = 0;
                         }
                     } else {
-                        ch_group->ch1->value.int_value = 0;
+                        ch_group->ch2->value.int_value = 0;
                     }
                 } else {
-                    ch_group->ch1->value.int_value = 1;
+                    ch_group->ch2->value.int_value = 1;
                     if (TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
-                        ch_group->ch4->value.int_value = THERMOSTAT_TARGET_MODE_COOLER;
+                        ch_group->ch5->value.int_value = THERMOSTAT_TARGET_MODE_COOLER;
                     }
                 }
                 break;
@@ -843,8 +844,8 @@ void th_input_temp(const uint8_t gpio, void *args, const uint8_t type) {
     homekit_characteristic_t *ch = args;
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_child || ch_group->ch_child->value.bool_value) {
-        float set_h_temp = ch_group->ch5->value.float_value;
-        float set_c_temp = ch_group->ch6->value.float_value;
+        float set_h_temp = ch_group->ch6->value.float_value;
+        float set_c_temp = ch_group->ch7->value.float_value;
         
         if (type == THERMOSTAT_TEMP_UP) {
             set_h_temp += 0.5;
@@ -866,10 +867,17 @@ void th_input_temp(const uint8_t gpio, void *args, const uint8_t type) {
             }
         }
         
-        ch_group->ch5->value.float_value = set_h_temp;
-        ch_group->ch6->value.float_value = set_c_temp;
+        ch_group->ch6->value.float_value = set_h_temp;
+        ch_group->ch7->value.float_value = set_c_temp;
         
         update_th(ch_group->ch0, ch_group->ch0->value);
+        
+        // Extra actions
+        if (type == THERMOSTAT_TEMP_UP) {
+            do_actions(ch_group, 6);
+        } else {    // type == THERMOSTAT_TEMP_DOWN
+            do_actions(ch_group, 7);
+        }
     }
 }
 
@@ -913,6 +921,8 @@ void temperature_timer_worker(void *args) {
                 temperature_value = 200;
             }
             
+            INFO2("TEMP %g", temperature_value);
+            
             if (temperature_value != ch_group->ch0->value.float_value) {
                 ch_group->ch0->value = HOMEKIT_FLOAT(temperature_value);
                 
@@ -924,7 +934,7 @@ void temperature_timer_worker(void *args) {
             }
         }
         
-        if (ch_group->ch1 && !ch_group->ch5) {
+        if (ch_group->ch1) {
             humidity_value += TH_SENSOR_HUM_OFFSET;
             if (humidity_value < 0) {
                 humidity_value = 0;
@@ -932,6 +942,8 @@ void temperature_timer_worker(void *args) {
                 humidity_value = 100;
             }
 
+            INFO2("HUM %g", humidity_value);
+            
             if (humidity_value != ch_group->ch1->value.float_value) {
                 ch_group->ch1->value = HOMEKIT_FLOAT(humidity_value);
                 
@@ -939,13 +951,12 @@ void temperature_timer_worker(void *args) {
             }
         }
         
-        INFO2("TEMP %g, HUM %g", temperature_value, humidity_value);
     } else {
         led_blink(5);
         ERROR2("Sensor");
         
-        if (ch_group->ch5) {
-            ch_group->ch3->value = HOMEKIT_UINT8(THERMOSTAT_MODE_OFF);
+        if (ch_group->ch6) {
+            ch_group->ch4->value = HOMEKIT_UINT8(THERMOSTAT_MODE_OFF);
             
             do_actions(ch_group, THERMOSTAT_ACTION_SENSOR_ERROR);
         }
@@ -2485,6 +2496,8 @@ void do_actions(ch_group_t *ch_group, uint8_t action) {
             ch_group_t *ch_group = ch_group_find_by_acc(action_acc_manager->accessory);
             if (ch_group) {
                 if (action_acc_manager->is_kill_switch) {
+                    INFO2("Kill Sw Manager %i -> %.2f", action_acc_manager->accessory, action_acc_manager->value);
+                    
                     switch ((uint8_t) action_acc_manager->value) {
                         case 1:
                             if (ch_group->ch_child) {
@@ -2510,10 +2523,10 @@ void do_actions(ch_group_t *ch_group, uint8_t action) {
                             }
                             break;
                     }
-                    
-                    INFO2("Kill Sw Manager %i -> %.2f", action_acc_manager->accessory, action_acc_manager->value);
-                    
+
                 } else {
+                    INFO2("Acc Manager %i -> %.2f", action_acc_manager->accessory, action_acc_manager->value);
+                    
                     switch (ch_group->acc_type) {
                         case ACC_TYPE_BUTTON:
                             button_event(0, ch_group->ch0, (uint8_t) action_acc_manager->value);
@@ -2540,7 +2553,7 @@ void do_actions(ch_group_t *ch_group, uint8_t action) {
                             break;
                             
                         case ACC_TYPE_WATER_VALVE:
-                            if (action_acc_manager->value == -1) {
+                            if ((int8_t) action_acc_manager->value == -1) {
                                 if (ch_group->ch3) {
                                     ch_group->ch3->value = ch_group->ch2->value;
                                 }
@@ -2550,26 +2563,32 @@ void do_actions(ch_group_t *ch_group, uint8_t action) {
                             break;
                             
                         case ACC_TYPE_THERMOSTAT:
-                            if (action_acc_manager->value == 0.02 || action_acc_manager->value == 0.03) {
-                                update_th(ch_group->ch1, HOMEKIT_UINT8((uint8_t) ((action_acc_manager->value - 0.02) * 100)));
-                            } else if (action_acc_manager->value == 0.04 || action_acc_manager->value == 0.05 || action_acc_manager->value == 0.06) {
-                                update_th(ch_group->ch4, HOMEKIT_UINT8((uint8_t) ((action_acc_manager->value - 0.04) * 100)));
+                            if (action_acc_manager->value == 0.02f) {
+                                update_th(ch_group->ch2, HOMEKIT_UINT8(0));
+                            } else if (action_acc_manager->value == 0.03f) {
+                                update_th(ch_group->ch2, HOMEKIT_UINT8(1));
+                            } else if (action_acc_manager->value == 0.04f) {
+                                update_th(ch_group->ch5, HOMEKIT_UINT8(2));
+                            } else if (action_acc_manager->value == 0.05f) {
+                                update_th(ch_group->ch5, HOMEKIT_UINT8(1));
+                            } else if (action_acc_manager->value == 0.06f) {
+                                update_th(ch_group->ch5, HOMEKIT_UINT8(0));
                             } else {
                                 if (((uint16_t) (action_acc_manager->value * 100) % 2) == 0) {
-                                    update_th(ch_group->ch5, HOMEKIT_FLOAT(action_acc_manager->value));
+                                    update_th(ch_group->ch6, HOMEKIT_FLOAT(action_acc_manager->value));
                                 } else {
-                                    update_th(ch_group->ch6, HOMEKIT_FLOAT(action_acc_manager->value - 0.01));
+                                    update_th(ch_group->ch7, HOMEKIT_FLOAT(action_acc_manager->value - 0.01f));
                                 }
                             }
                             break;
                             
                         case ACC_TYPE_GARAGE_DOOR:
-                            if (action_acc_manager->value < 2) {
+                            if ((uint8_t) action_acc_manager->value < 2) {
                                 hkc_garage_door_setter(ch_group->ch1, HOMEKIT_UINT8((uint8_t) action_acc_manager->value));
-                            } else if (action_acc_manager->value == 2) {
+                            } else if ((uint8_t) action_acc_manager->value == 2) {
                                 garage_door_stop(0, ch_group->ch0, 0);
                             } else {
-                                garage_door_obstruction(0, ch_group->ch0, action_acc_manager->value - 3);
+                                garage_door_obstruction(0, ch_group->ch0, (uint8_t) action_acc_manager->value - 3);
                             }
                             break;
                             
@@ -2578,9 +2597,9 @@ void do_actions(ch_group_t *ch_group, uint8_t action) {
                             break;
                             
                         case ACC_TYPE_WINDOW_COVER:
-                            if (action_acc_manager->value < 0) {
-                                window_cover_obstruction(0, ch_group->ch0, action_acc_manager->value + 2);
-                            } else if (action_acc_manager->value > 100) {
+                            if ((int8_t) action_acc_manager->value < 0) {
+                                window_cover_obstruction(0, ch_group->ch0, (uint8_t) action_acc_manager->value + 2);
+                            } else if ((uint8_t) action_acc_manager->value > 100) {
                                 hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
                             } else {
                                 hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, HOMEKIT_UINT8(action_acc_manager->value));
@@ -2588,9 +2607,9 @@ void do_actions(ch_group_t *ch_group, uint8_t action) {
                             break;
                             
                         case ACC_TYPE_FAN:
-                            if (action_acc_manager->value == 0) {
+                            if ((uint8_t) action_acc_manager->value == 0) {
                                 hkc_fan_setter(ch_group->ch0, HOMEKIT_BOOL(false));
-                            } else if (action_acc_manager->value > 100) {
+                            } else if ((uint8_t) action_acc_manager->value > 100) {
                                 hkc_fan_setter(ch_group->ch0, HOMEKIT_BOOL(true));
                             } else {
                                 hkc_fan_speed_setter(ch_group->ch1, HOMEKIT_FLOAT(action_acc_manager->value));
@@ -2598,23 +2617,23 @@ void do_actions(ch_group_t *ch_group, uint8_t action) {
                             break;
                             
                         case ACC_TYPE_TV:
-                            if (action_acc_manager->value < 2 && action_acc_manager->value >= 0) {
+                            if ((uint8_t) action_acc_manager->value < 2 && (uint8_t) action_acc_manager->value >= 0) {
                                 hkc_tv_active(ch_group->ch0, HOMEKIT_UINT8(action_acc_manager->value));
-                            } else if (action_acc_manager->value < 20) {
-                                hkc_tv_key(ch_group->ch3, HOMEKIT_UINT8(action_acc_manager->value - 2));
-                            } else if (action_acc_manager->value < 22) {
+                            } else if ((uint8_t) action_acc_manager->value < 20) {
+                                hkc_tv_key(ch_group->ch3, HOMEKIT_UINT8((uint8_t) action_acc_manager->value - 2));
+                            } else if ((uint8_t) action_acc_manager->value < 22) {
                                 hkc_tv_mute(ch_group->ch5, HOMEKIT_BOOL((bool) (action_acc_manager->value - 20)));
-                            } else if (action_acc_manager->value < 24) {
-                                hkc_tv_volume(ch_group->ch7, HOMEKIT_UINT8(action_acc_manager->value - 22));
-                            } else if (action_acc_manager->value < 32) {
-                                hkc_tv_power_mode(ch_group->ch4, HOMEKIT_UINT8(action_acc_manager->value - 30));
-                            } else if (action_acc_manager->value > 100) {
-                                hkc_tv_active_identifier(ch_group->ch2, HOMEKIT_UINT8(action_acc_manager->value - 100));
+                            } else if ((uint8_t) action_acc_manager->value < 24) {
+                                hkc_tv_volume(ch_group->ch7, HOMEKIT_UINT8((uint8_t) action_acc_manager->value - 22));
+                            } else if ((uint8_t) action_acc_manager->value < 32) {
+                                hkc_tv_power_mode(ch_group->ch4, HOMEKIT_UINT8((uint8_t) action_acc_manager->value - 30));
+                            } else if ((uint8_t) action_acc_manager->value > 100) {
+                                hkc_tv_active_identifier(ch_group->ch2, HOMEKIT_UINT8((uint8_t) action_acc_manager->value - 100));
                             }
                             break;
                             
                         default:    // ON Type ch
-                            if (action_acc_manager->value == -1) {
+                            if ((int8_t) action_acc_manager->value == -1) {
                                 if (ch_group->ch2) {
                                     ch_group->ch2->value = ch_group->ch1->value;
                                 }
@@ -2623,8 +2642,6 @@ void do_actions(ch_group_t *ch_group, uint8_t action) {
                             }
                             break;
                     }
-                    
-                    INFO2("Acc Manager %i -> %.2f", action_acc_manager->accessory, action_acc_manager->value);
                 }
             } else {
                 ERROR2("No acc found: %i", action_acc_manager->accessory);
@@ -2725,7 +2742,7 @@ void delayed_sensor_starter_task(void *args) {
     INFO2("Starting delayed sensor");
     ch_group_t *ch_group = args;
     
-    vTaskDelay(ch_group->accessory * MS_TO_TICK(TH_SENSOR_POLL_PERIOD_MIN * 1000));
+    vTaskDelay(ch_group->accessory * MS_TO_TICK(TH_SENSOR_POLL_PERIOD_MIN * 2000));
     
     temperature_timer_worker(ch_group);
     sdk_os_timer_arm(ch_group->timer, TH_SENSOR_POLL_PERIOD * 1000, 1);
@@ -2779,7 +2796,7 @@ void printf_header() {
 
 void normal_mode_init() {
     char *txt_config = NULL;
-    sysparam_get_string("haa_conf", &txt_config);
+    sysparam_get_string(HAA_JSON_SYSPARAM, &txt_config);
 
     cJSON *json_haa = cJSON_Parse(txt_config);
 
@@ -2791,8 +2808,8 @@ void normal_mode_init() {
     if (total_accessories == 0) {
         uart_set_baud(0, 115200);
         printf("\n\n\n! Invalid JSON\n");
-        sysparam_set_int8("total_ac", 0);
-        sysparam_set_int8("setup", 2);
+        sysparam_set_int8(TOTAL_ACC_SYSPARAM, 0);
+        sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);
         xTaskCreate(reboot_task, "reboot_task", REBOOT_TASK_SIZE, NULL, 1, NULL);
         
         vTaskDelete(NULL);
@@ -4145,8 +4162,13 @@ void normal_mode_init() {
         return new_accessory_count;
     }
     
-    uint8_t new_thermostat(uint8_t accessory, cJSON *json_context) {
-        new_accessory(accessory, 3);
+    uint8_t new_thermostat(uint8_t accessory, cJSON *json_context, const uint8_t acc_type) {
+        uint8_t th_accesories = 3;
+        if (acc_type == ACC_TYPE_THERMOSTAT_WITH_HUM) {
+            th_accesories++;
+        }
+            
+        new_accessory(accessory, th_accesories);
         
         ch_group_t *ch_group = malloc(sizeof(ch_group_t));
         memset(ch_group, 0, sizeof(*ch_group));
@@ -4189,11 +4211,11 @@ void normal_mode_init() {
         
         // HomeKit Characteristics
         homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200});
-        homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_th_target_setter);
-        homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(TEMPERATURE_DISPLAY_UNITS, 0, .setter_ex=hkc_setter);
-        homekit_characteristic_t *ch3 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_HEATER_COOLER_STATE, 0);
-        homekit_characteristic_t *ch5 = NEW_HOMEKIT_CHARACTERISTIC(HEATING_THRESHOLD_TEMPERATURE, default_target_temp -1, .min_value=(float[]) {TH_MIN_TEMP}, .max_value=(float[]) {TH_MAX_TEMP}, .setter_ex=update_th);
-        homekit_characteristic_t *ch6 = NEW_HOMEKIT_CHARACTERISTIC(COOLING_THRESHOLD_TEMPERATURE, default_target_temp +1, .min_value=(float[]) {TH_MIN_TEMP}, .max_value=(float[]) {TH_MAX_TEMP}, .setter_ex=update_th);
+        homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_th_target_setter);
+        homekit_characteristic_t *ch3 = NEW_HOMEKIT_CHARACTERISTIC(TEMPERATURE_DISPLAY_UNITS, 0, .setter_ex=hkc_setter);
+        homekit_characteristic_t *ch4 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_HEATER_COOLER_STATE, 0);
+        homekit_characteristic_t *ch6 = NEW_HOMEKIT_CHARACTERISTIC(HEATING_THRESHOLD_TEMPERATURE, default_target_temp -1, .min_value=(float[]) {TH_MIN_TEMP}, .max_value=(float[]) {TH_MAX_TEMP}, .setter_ex=update_th);
+        homekit_characteristic_t *ch7 = NEW_HOMEKIT_CHARACTERISTIC(COOLING_THRESHOLD_TEMPERATURE, default_target_temp +1, .min_value=(float[]) {TH_MIN_TEMP}, .max_value=(float[]) {TH_MAX_TEMP}, .setter_ex=update_th);
         
         uint8_t ch_calloc = 7;
         if (TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
@@ -4204,57 +4226,69 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->primary = true;
         accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_HEATER_COOLER;
         accessories[accessory]->services[1]->characteristics = calloc(ch_calloc, sizeof(homekit_characteristic_t*));
-        accessories[accessory]->services[1]->characteristics[0] = ch1;
+        accessories[accessory]->services[1]->characteristics[0] = ch2;
         accessories[accessory]->services[1]->characteristics[1] = ch0;
-        accessories[accessory]->services[1]->characteristics[2] = ch2;
-        accessories[accessory]->services[1]->characteristics[3] = ch3;
+        accessories[accessory]->services[1]->characteristics[2] = ch3;
+        accessories[accessory]->services[1]->characteristics[3] = ch4;
         
-        homekit_characteristic_t *ch4;
+        homekit_characteristic_t *ch5;
         
-        const float initial_h_target_temp = set_initial_state(accessory, 5, cJSON_Parse(INIT_STATE_LAST_STR), ch5, CH_TYPE_FLOAT, default_target_temp -1);
+        const float initial_h_target_temp = set_initial_state(accessory, 6, cJSON_Parse(INIT_STATE_LAST_STR), ch6, CH_TYPE_FLOAT, default_target_temp -1);
         if (initial_h_target_temp > TH_MAX_TEMP || initial_h_target_temp < TH_MIN_TEMP) {
-            ch5->value.float_value = default_target_temp -1;
+            ch6->value.float_value = default_target_temp -1;
         } else {
-            ch5->value.float_value = initial_h_target_temp;
+            ch6->value.float_value = initial_h_target_temp;
         }
         
-        const float initial_c_target_temp = set_initial_state(accessory, 6, cJSON_Parse(INIT_STATE_LAST_STR), ch6, CH_TYPE_FLOAT, default_target_temp +1);
+        const float initial_c_target_temp = set_initial_state(accessory, 7, cJSON_Parse(INIT_STATE_LAST_STR), ch7, CH_TYPE_FLOAT, default_target_temp +1);
         if (initial_c_target_temp > TH_MAX_TEMP || initial_c_target_temp < TH_MIN_TEMP) {
-            ch6->value.float_value = default_target_temp +1;
+            ch7->value.float_value = default_target_temp +1;
         } else {
-            ch6->value.float_value = initial_c_target_temp;
+            ch7->value.float_value = initial_c_target_temp;
         }
         
         switch ((uint8_t) TH_TYPE) {
             case THERMOSTAT_TYPE_COOLER:
-                ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_COOLER, .min_value=(float[]) {THERMOSTAT_TARGET_MODE_COOLER}, .max_value=(float[]) {THERMOSTAT_TARGET_MODE_COOLER}, .valid_values={.count=1, .values=(uint8_t[]) {THERMOSTAT_TARGET_MODE_COOLER}});
+                ch5 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_COOLER, .min_value=(float[]) {THERMOSTAT_TARGET_MODE_COOLER}, .max_value=(float[]) {THERMOSTAT_TARGET_MODE_COOLER}, .valid_values={.count=1, .values=(uint8_t[]) {THERMOSTAT_TARGET_MODE_COOLER}});
                 
-                accessories[accessory]->services[1]->characteristics[5] = ch6;
+                accessories[accessory]->services[1]->characteristics[5] = ch7;
                 break;
                 
             case THERMOSTAT_TYPE_HEATERCOOLER:
-                ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_AUTO, .setter_ex=update_th);
+                ch5 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_AUTO, .setter_ex=update_th);
                 
-                accessories[accessory]->services[1]->characteristics[5] = ch5;
-                accessories[accessory]->services[1]->characteristics[6] = ch6;
+                accessories[accessory]->services[1]->characteristics[5] = ch6;
+                accessories[accessory]->services[1]->characteristics[6] = ch7;
                 break;
                 
             default:        // case THERMOSTAT_TYPE_HEATER:
-                ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_HEATER, .min_value=(float[]) {THERMOSTAT_TARGET_MODE_HEATER}, .max_value=(float[]) {THERMOSTAT_TARGET_MODE_HEATER}, .valid_values={.count=1, .values=(uint8_t[]) {THERMOSTAT_TARGET_MODE_HEATER}});
+                ch5 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_HEATER, .min_value=(float[]) {THERMOSTAT_TARGET_MODE_HEATER}, .max_value=(float[]) {THERMOSTAT_TARGET_MODE_HEATER}, .valid_values={.count=1, .values=(uint8_t[]) {THERMOSTAT_TARGET_MODE_HEATER}});
 
-                accessories[accessory]->services[1]->characteristics[5] = ch5;
+                accessories[accessory]->services[1]->characteristics[5] = ch6;
                 break;
         }
         
-        accessories[accessory]->services[1]->characteristics[4] = ch4;
+        accessories[accessory]->services[1]->characteristics[4] = ch5;
+        
+        if (acc_type == ACC_TYPE_THERMOSTAT_WITH_HUM) {
+            homekit_characteristic_t *ch1 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0);
+            ch_group->ch1 = ch1;
+            
+            accessories[accessory]->services[2] = calloc(1, sizeof(homekit_service_t));
+            accessories[accessory]->services[2]->id = 18;
+            accessories[accessory]->services[2]->primary = false;
+            accessories[accessory]->services[2]->type = HOMEKIT_SERVICE_HUMIDITY_SENSOR;
+            accessories[accessory]->services[2]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[2]->characteristics[0] = ch1;
+        }
         
         ch_group->ch0 = ch0;
-        ch_group->ch1 = ch1;
         ch_group->ch2 = ch2;
         ch_group->ch3 = ch3;
         ch_group->ch4 = ch4;
         ch_group->ch5 = ch5;
         ch_group->ch6 = ch6;
+        ch_group->ch7 = ch7;
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
@@ -4268,10 +4302,10 @@ void normal_mode_init() {
             th_sensor_starter(ch_group);
         }
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), th_input, ch1, 9);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), th_input, ch0, 9);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), th_input_temp, ch0, THERMOSTAT_TEMP_UP);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), th_input_temp, ch0, THERMOSTAT_TEMP_DOWN);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), th_input, ch1, 9);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), th_input, ch0, 9);
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_3), th_input_temp, ch0, THERMOSTAT_TEMP_UP);
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_4), th_input_temp, ch0, THERMOSTAT_TEMP_DOWN);
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), th_input, ch0, 1);
@@ -4285,22 +4319,22 @@ void normal_mode_init() {
             ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), th_input, ch0, 6);
             ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_7), th_input, ch0, 7);
             
-            ch4->value.int_value = set_initial_state(accessory, 4, cJSON_Parse(INIT_STATE_LAST_STR), ch4, CH_TYPE_INT8, 0);
+            ch5->value.int_value = set_initial_state(accessory, 5, cJSON_Parse(INIT_STATE_LAST_STR), ch5, CH_TYPE_INT8, 0);
         }
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
             diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), th_input, ch0, 1);
             diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), th_input, ch0, 0);
             
-            ch1->value.int_value = !((uint8_t) set_initial_state(accessory, 1, json_context, ch1, CH_TYPE_INT8, 0));
-            update_th(ch1, HOMEKIT_UINT8(!ch1->value.int_value));
+            ch2->value.int_value = !((uint8_t) set_initial_state(accessory, 2, json_context, ch2, CH_TYPE_INT8, 0));
+            update_th(ch2, HOMEKIT_UINT8(!ch2->value.int_value));
         } else {
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), th_input, ch0, 1)) {
-                th_input(0, ch1, 1);
+                th_input(0, ch0, 1);
             }
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), th_input, ch0, 0)) {
-                ch1->value = HOMEKIT_UINT8(1);
-                th_input(0, ch1, 0);
+                ch2->value = HOMEKIT_UINT8(1);
+                th_input(0, ch0, 0);
             }
         }
         
@@ -5156,8 +5190,8 @@ void normal_mode_init() {
         } else if (acc_type == ACC_TYPE_WATER_VALVE) {
             acc_count = new_water_valve(acc_count, json_accessory);
         
-        } else if (acc_type == ACC_TYPE_THERMOSTAT) {
-            acc_count = new_thermostat(acc_count, json_accessory);
+        } else if (acc_type == ACC_TYPE_THERMOSTAT || acc_type == ACC_TYPE_THERMOSTAT_WITH_HUM) {
+            acc_count = new_thermostat(acc_count, json_accessory, acc_type);
             
         } else if (acc_type == ACC_TYPE_TEMP_SENSOR) {
             acc_count = new_temp_sensor(acc_count, json_accessory);
@@ -5195,7 +5229,7 @@ void normal_mode_init() {
         taskYIELD();
     }
     
-    sysparam_set_int8("total_ac", hk_total_ac);
+    sysparam_set_int8(TOTAL_ACC_SYSPARAM, hk_total_ac);
     
     INFO2("");
     
@@ -5260,10 +5294,15 @@ void user_init(void) {
     status = sysparam_init(SYSPARAMSECTOR, 0);
     if (status == SYSPARAM_NOTFOUND) {
         printf("Creating sysparam\n");
+
         sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
         sysparam_init(SYSPARAMSECTOR, 0);
     } else if (status == SYSPARAM_OK) {
+#ifndef HAALCM
         printf("Sysparam ready\n");
+#else
+        printf("Sysparam LCM ready\n");
+#endif  // HAALCM
     }
 
     uint8_t macaddr[6];
@@ -5274,10 +5313,10 @@ void user_init(void) {
     
     int8_t haa_setup = 0;
     
-    //sysparam_set_int8("setup", 2);            // Force to enter always in setup mode. Only for tests. Keep comment for releases
+    //sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);            // Force to enter always in setup mode. Only for tests. Keep comment for releases
     //sysparam_set_string("ota_repo", "1");     // Simulates Installation with OTA. Only for tests. Keep comment for releases
     
-    sysparam_get_int8("setup", &haa_setup);
+    sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &haa_setup);
     if (haa_setup > 0) {
         uart_set_baud(0, 115200);
         printf_header();
@@ -5286,7 +5325,7 @@ void user_init(void) {
         
     } else {
         // Arming emergency Setup Mode
-        sysparam_set_int8("setup", 1);
+        sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
         
         xTaskCreate(normal_mode_init, "normal_mode_init", INITIAL_SETUP_TASK_SIZE, NULL, INITIAL_SETUP_TASK_PRIORITY, NULL);
     }

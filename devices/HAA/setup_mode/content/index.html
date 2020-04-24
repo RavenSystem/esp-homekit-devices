@@ -22,7 +22,7 @@ input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
 .nonetworks{text-align:center;margin:1em 0;}
 .field{margin-bottom:0.5em;}
 .field.required label::before{content:"*";color:red;}
-</style></head><body><div class="container"><h1>Home Accessory Architect v1.10.0</h1>
+    </style></head><body><div class="container"><h1>Home Accessory Architect v2.0.0</h1>
 <form action="/settings" method="post">
 <div class="field required conf">
 <label for="conf">JSON Config:</label>
@@ -45,7 +45,7 @@ No networks found
 <!-- part HTML_NETWORK_ITEM -->{% for network in networks %}
 <li class="{{ network.secure | ternary('secure', 'unsecure') }}" id="{{ network.bssid }}" title="{{ network.ssid }}">{{ network.ssid }} ({{ network.rssi }} Ch{{ network.channel }}) {{ network.bssid }}</li>
 {% endfor %}
-<!-- part HTML_SETTINGS_FOOTER --><li class="other">Enter SSID manually</li>
+<!-- part HTML_SETTINGS_WIFI --><li class="other">Enter SSID manually</li>
 </ul>
 <div class="field bssid" style="display:none;">
 <label for="bssid">BSSID:</label>
@@ -58,6 +58,13 @@ No networks found
 <div class="field required password" style="display:none;">
 <label for="password">Password:</label>
 <input type="password" id="password" name="password" />
+</div>
+<div class="field">
+<label for="repo">Custom server for updates:</label>
+<input type="text" id="reposerver" name="reposerver" value="<!-- part HTML_SETTINGS_REPOSERVER -->" />
+<label for="repo">Port:</label>
+<input type="text" id="repoport" name="repoport" maxlength="5" value="<!-- part HTML_SETTINGS_REPOPORT -->" />
+<input type="checkbox" name="repossl" value="y" <!-- part HTML_SETTINGS_REPOSSL -->> Secure connection<br>
 </div>
 </form>
 <center>© 2018-2020 Jos&eacute; A. Jim&eacute;nez Campos</center>

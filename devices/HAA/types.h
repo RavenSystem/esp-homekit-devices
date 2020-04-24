@@ -40,7 +40,6 @@ typedef struct _last_state {
 
 typedef struct _action_copy {
     uint8_t action;
-    
     uint8_t new_action;
     
     struct _action_copy *next;
@@ -68,7 +67,6 @@ typedef struct _action_acc_manager {
 
 typedef struct _action_system {
     uint8_t action;
-    
     uint8_t value;
     
     struct _action_system *next;
@@ -76,11 +74,10 @@ typedef struct _action_system {
 
 typedef struct _action_http {
     uint8_t action;
-    
+    uint8_t method_n;
+    uint16_t port_n;
     char *host;
     char *url;
-    uint16_t port_n;
-    uint8_t method_n;
     char *content;
     
     struct _action_http *next;
@@ -88,24 +85,24 @@ typedef struct _action_http {
 
 typedef struct _action_ir_tx {
     uint8_t action;
+    uint8_t freq;
+    uint8_t repeats;
+    
+    uint16_t pause;
     
     char *prot;
     char *prot_code;
     char *raw_code;
-    uint8_t freq;
-    uint8_t repeats;
-    uint16_t pause;
-    
+
     struct _action_ir_tx *next;
 } action_ir_tx_t;
 
 typedef struct _wildcard_action {
     uint8_t index;
-    float value;
-    
     uint8_t target_action;
     bool repeat;
-    
+    float value;
+
     struct _wildcard_action *next;
 } wildcard_action_t;
 
@@ -150,24 +147,28 @@ typedef struct _action_task {
 } action_task_t;
 
 typedef struct _lightbulb_group {
-    homekit_characteristic_t *ch0;
-
-    bool is_pwm;
-    
     uint8_t pwm_r;
     uint8_t pwm_g;
     uint8_t pwm_b;
     uint8_t pwm_w;
+    
     uint8_t pwm_cw;
     uint8_t pwm_ww;
+    uint8_t autodimmer;
+    uint8_t autodimmer_task_step;
     
     uint16_t target_r;
     uint16_t target_g;
+    
     uint16_t target_b;
     uint16_t target_w;
+    
     uint16_t target_cw;
     uint16_t target_ww;
     
+    uint16_t step;
+    uint16_t autodimmer_task_delay;
+
     float factor_r;
     float factor_g;
     float factor_b;
@@ -175,12 +176,10 @@ typedef struct _lightbulb_group {
     float factor_cw;
     float factor_ww;
     
-    uint16_t step;
-    
-    uint8_t autodimmer;
+    bool is_pwm;
     bool armed_autodimmer;
-    uint16_t autodimmer_task_delay;
-    uint8_t autodimmer_task_step;
+
+    homekit_characteristic_t *ch0;
     
     struct _lightbulb_group *next;
 } lightbulb_group_t;
@@ -188,16 +187,18 @@ typedef struct _lightbulb_group {
 typedef void (*ping_callback_fn)(uint8_t gpio, void *args, uint8_t param);
 
 typedef struct _ping_input_callback_fn {
-    ping_callback_fn callback;
-    homekit_characteristic_t *ch;
     uint8_t param;
     
+    ping_callback_fn callback;
+    homekit_characteristic_t *ch;
+
     struct _ping_input_callback_fn *next;
 } ping_input_callback_fn_t;
 
 typedef struct _ping_input {
-    char *host;
     bool last_response;
+    
+    char *host;
     
     ping_input_callback_fn_t *callback_0;
     ping_input_callback_fn_t *callback_1;

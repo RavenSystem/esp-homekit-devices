@@ -20,12 +20,21 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "1.10.0"
-#define FIRMWARE_VERSION_OCTAL              011200      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "2.0.0"
+#define FIRMWARE_VERSION_OCTAL              020000      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
+#ifndef HAALCM
 #define SYSPARAMSECTOR                      0xF3000
 #define SYSPARAMSIZE                        8
+#else
+#define SYSPARAMSECTOR                      0xF7000
+#define SYSPARAMSIZE                        2
+#endif  // HAALCM
+
+#define TOTAL_ACC_SYSPARAM                  "total_ac"
+#define HAA_JSON_SYSPARAM                   "haa_conf"
+#define HAA_SETUP_MODE_SYSPARAM             "setup"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        0
@@ -167,7 +176,7 @@
 #define TEMPERATURE_SENSOR_POLL_PERIOD      "j"
 #define TH_SENSOR_POLL_PERIOD               ch_group->num[2]
 #define TH_SENSOR_POLL_PERIOD_DEFAULT       30
-#define TH_SENSOR_POLL_PERIOD_MIN           3.2
+#define TH_SENSOR_POLL_PERIOD_MIN           2.5
 #define TEMPERATURE_OFFSET                  "z"
 #define TH_SENSOR_TEMP_OFFSET               ch_group->num[3]
 #define HUMIDITY_OFFSET                     "h"
@@ -313,6 +322,7 @@
 #define ACC_TYPE_TEMP_SENSOR                22
 #define ACC_TYPE_HUM_SENSOR                 23
 #define ACC_TYPE_TH_SENSOR                  24
+#define ACC_TYPE_THERMOSTAT_WITH_HUM        25
 #define ACC_TYPE_LIGHTBULB                  30
 #define ACC_TYPE_GARAGE_DOOR                40
 #define ACC_TYPE_WINDOW_COVER               45

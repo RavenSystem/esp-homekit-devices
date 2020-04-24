@@ -103,7 +103,7 @@ typedef struct {
     int listen_fd;
     fd_set fds;
     int max_fd;
-    int nfds;
+    int client_count;
 
     client_context_t *clients;
 } homekit_server_t;
@@ -160,7 +160,7 @@ homekit_server_t *server_new() {
     homekit_server_t *server = malloc(sizeof(homekit_server_t));
     FD_ZERO(&server->fds);
     server->max_fd = 0;
-    server->nfds = 0;
+    server->client_count = 0;
     server->accessory_id = NULL;
     server->accessory_key = NULL;
     server->config = NULL;
@@ -3100,28 +3100,17 @@ void homekit_server_close_client(homekit_server_t *server, client_context_t *con
     CLIENT_INFO(context, "Closing connection");
 
     FD_CLR(context->socket, &server->fds);
-    // TODO: recalc server->max_fd ?
-    server->nfds--;
+    server->client_count--;
 
     close(context->socket);
 
-    if (context->server->pairing_context && context->server->pairing_context->client == context) {
-        pairing_context_free(context->server->pairing_context);
-        context->server->pairing_context = NULL;
-    }
-
-    if (context->server->clients == context) {
-        context->server->clients = context->next;
-    } else {
-        client_context_t *c = context->server->clients;
-        while (c->next && c->next != context)
-            c = c->next;
-        if (c->next)
-            c->next = c->next->next;
+    if (server->pairing_context && server->pairing_context->client == context) {
+        pairing_context_free(server->pairing_context);
+        server->pairing_context = NULL;
     }
 
     homekit_accessories_clear_notify_callbacks(
-        context->server->config->accessories,
+        server->config->accessories,
         client_notify_characteristic,
         context
     );
@@ -3137,7 +3126,7 @@ client_context_t *homekit_server_accept_client(homekit_server_t *server) {
     if (s < 0)
         return NULL;
 
-    if (server->nfds > HOMEKIT_MAX_CLIENTS) {
+    if (server->client_count >= HOMEKIT_MAX_CLIENTS) {
         HOMEKIT_INFO("Max client connections reached (%d)", HOMEKIT_MAX_CLIENTS);
         close(s);
         return NULL;
@@ -3183,7 +3172,7 @@ client_context_t *homekit_server_accept_client(homekit_server_t *server) {
     const int idle = 180; /* 180 sec iddle before start sending probes */
     setsockopt(s, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
 
-    const int interval = 30; /* 30 sec between probes */
+    const int interval = 120; /* 30 sec between probes */
     setsockopt(s, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval));
 
     const int maxpkt = 4; /* Drop connection after 4 probes without response */
@@ -3197,7 +3186,7 @@ client_context_t *homekit_server_accept_client(homekit_server_t *server) {
     server->clients = context;
 
     FD_SET(s, &server->fds);
-    server->nfds++;
+    server->client_count++;
     if (s > server->max_fd)
         server->max_fd = s;
 
@@ -3280,15 +3269,28 @@ void homekit_server_process_notifications(homekit_server_t *server) {
 
 
 void homekit_server_close_clients(homekit_server_t *server) {
-    client_context_t *context = server->clients;
-    while (context) {
-        client_context_t *next = context->next;
+    int max_fd = server->listen_fd;
 
-        if (context->disconnect)
-            homekit_server_close_client(server, context);
+    client_context_t head;
+    head.next = server->clients;
 
-        context = next;
+    client_context_t *context = &head;
+    while (context->next) {
+        client_context_t *tmp = context->next;
+
+        if (tmp->disconnect) {
+            context->next = tmp->next;
+            homekit_server_close_client(server, tmp);
+        } else {
+            if (tmp->socket > max_fd)
+                max_fd = tmp->socket;
+
+            context = tmp;
+        }
     }
+    
+    server->clients = head.next;
+    server->max_fd = max_fd;
 }
 
 
@@ -3307,13 +3309,13 @@ static void homekit_run_server(homekit_server_t *server)
 
     FD_SET(server->listen_fd, &server->fds);
     server->max_fd = server->listen_fd;
-    server->nfds = 1;
+    server->client_count = 0;
 
     for (;;) {
         fd_set read_fds;
         memcpy(&read_fds, &server->fds, sizeof(read_fds));
 
-        struct timeval timeout = { 0, 500000 }; /* 0.5 second timeout (orig: 1) */
+        struct timeval timeout = { 0, 500000 }; /* 0.5 seconds timeout (orig: 1) */
         int triggered_nfds = select(server->max_fd + 1, &read_fds, NULL, NULL, &timeout);
         if (triggered_nfds > 0) {
             if (FD_ISSET(server->listen_fd, &read_fds)) {
