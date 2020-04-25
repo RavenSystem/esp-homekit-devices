@@ -39,6 +39,10 @@
 
 #define WIFI_CONFIG_SERVER_PORT         80
 
+#ifndef AUTO_REBOOT_TIMEOUT
+#define AUTO_REBOOT_TIMEOUT             90000
+#endif
+
 #define INFO(message, ...)              printf(message "\n", ##__VA_ARGS__);
 #define ERROR(message, ...)             printf("! " message "\n", ##__VA_ARGS__);
 
@@ -70,6 +74,8 @@ typedef struct _client {
     uint8_t *body;
     size_t body_length;
 } client_t;
+
+ETSTimer auto_reboot_timer;
 
 static void wifi_config_station_connect();
 static void wifi_config_softap_start();
@@ -214,6 +220,8 @@ static void wifi_scan_task(void *arg) {
 #include "index.html.h"
 
 static void wifi_config_server_on_settings(client_t *client) {
+    sdk_os_timer_disarm(&auto_reboot_timer);
+    
     static const char http_prologue[] =
         "HTTP/1.1 200 \r\n"
         "Content-Type: text/html; charset=utf-8\r\n"
@@ -291,9 +299,9 @@ static void wifi_config_server_on_settings(client_t *client) {
     
     status = sysparam_get_int32(PORT_NUMBER_SYSPARAM, &int32_value);
     if (status == SYSPARAM_OK) {
-        itoa(int32_value, text, 10);
-        client_send_chunk(client, text);
-        free(text);
+        char str_port[6];
+        itoa(int32_value, str_port, 10);
+        client_send_chunk(client, str_port);
     }
     client_send_chunk(client, html_settings_repoport);
     
@@ -358,10 +366,12 @@ static void wifi_config_server_on_settings_update(client_t *client) {
     
     if (reposerver_param->value) {
         sysparam_set_string(CUSTOM_REPO_SYSPARAM, reposerver_param->value);
+    } else {
+        sysparam_set_string(CUSTOM_REPO_SYSPARAM, "");
     }
     
     if (repoport_param->value) {
-        int32_t port = strtol(repoport_param->value, NULL, 10);
+        const int32_t port = strtol(repoport_param->value, NULL, 10);
         sysparam_set_int32(PORT_NUMBER_SYSPARAM, port);
     }
     
@@ -768,6 +778,13 @@ static void wifi_config_sta_connect_timeout_callback(void *arg) {
     }
 }
 
+static void auto_reboot_run() {
+    INFO("Auto Reboot");
+    vTaskDelay(150 / portTICK_PERIOD_MS);
+    
+    sdk_system_restart();
+}
+
 bool wifi_config_connect() {
     char *wifi_ssid = NULL;
     sysparam_set_string(OTA_VERSION_SYSPARAM, OTAVERSION);
@@ -825,15 +842,25 @@ bool wifi_config_connect() {
 static void wifi_config_station_connect() {
     int8_t mode = 0;
     sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &mode);
-    sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
     
     if (wifi_config_connect() && mode == 0) {
+        INFO("\nHAA OTA - NORMAL MODE\n");
+        sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
+        
         wifi_config_sta_connect_timeout_callback(context);
         
         sdk_os_timer_setfn(&context->sta_connect_timeout, wifi_config_sta_connect_timeout_callback, context);
         sdk_os_timer_arm(&context->sta_connect_timeout, 1000, 1);
         
     } else {
+        INFO("\nHAA OTA - SETUP MODE\n");
+        sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
+        
+        if (mode == 1) {
+            sdk_os_timer_setfn(&auto_reboot_timer, auto_reboot_run, NULL);
+            sdk_os_timer_arm(&auto_reboot_timer, AUTO_REBOOT_TIMEOUT, 0);
+        }
+        
         wifi_config_softap_start();
     }
 }

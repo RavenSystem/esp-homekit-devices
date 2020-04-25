@@ -110,6 +110,8 @@ static void ota_get_location(const char* repo) {
 
     if (found) {
         memcpy(last_location, found + 1, strlen(found) - 1);
+    } else {
+        last_location[0] = 0;
     }
 }
 
@@ -162,7 +164,7 @@ void ota_init(char* repo, const bool is_ssl) {
         wolfSSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
     }
     
-    UDPLGP("DNS ");
+    UDPLGP("DNS check result  = ");
     
     ota_get_host(repo);
     if (netconn_gethostbyname(last_host, &target_ip)) {
@@ -170,11 +172,10 @@ void ota_init(char* repo, const bool is_ssl) {
         ota_reboot();
     }
 
-    if (is_ssl) {
-        word32 idx = 0;
-        wc_ecc_init(&public_key);
-        wc_EccPublicKeyDecode(raw_public_key, &idx, &public_key, sizeof(raw_public_key));
-    }
+    word32 idx = 0;
+    wc_ecc_init(&public_key);
+    wc_EccPublicKeyDecode(raw_public_key, &idx, &public_key, sizeof(raw_public_key));
+
 
     UDPLGP("OK\n");
 }
@@ -192,10 +193,10 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
         local_port = (256 * initial_port[0] + initial_port[1]) | 0xc000;
     }
     
-    UDPLGP("%04x DNS",local_port);
+    UDPLGP("%04x DNS", local_port);
     ret = netconn_gethostbyname(host, &target_ip);
     while(ret) {
-        printf("%d",ret);
+        printf("%d", ret);
         vTaskDelay(200);
         ret = netconn_gethostbyname(host, &target_ip);
     }
@@ -219,7 +220,7 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
         local_port = 0xc000;
     }
     
-    ret = bind(*socket, (struct sockaddr*)&sock_addr, sizeof(sock_addr));
+    ret = bind(*socket, (struct sockaddr*) &sock_addr, sizeof(sock_addr));
     if (ret) {
         UDPLGP(FAILED);
         return -2;
@@ -264,8 +265,10 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
             UDPLGP("wolfSSL_send error = %d\n", ret);
             return -1;
         }
-        UDPLGP("OK\n");
+        UDPLGP("OK");
     }
+    
+    UDPLGP("\n");
     
     return 0;
 }
@@ -283,7 +286,11 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
     ota_get_host(repo);
     ota_get_location(repo);
     
-    strcat(strcat(last_location, "/"), file);
+    if (strlen(last_location) > 0) {
+        strcat(strcat(last_location, "/"), file);
+    } else {
+        strcat(last_location, file);
+    }
     
     uint8_t i = 0;
     while (i < MAX_302_JUMPS) {
@@ -326,33 +333,43 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
                 UDPLGP("ret = %i\n", ret);
                 
                 if (ret > 0) {
-                    recv_buf[ret] = 0; //error checking, e.g. not result=206
+                    recv_buf[ret] = 0; // Error checking, e.g. not result = 206
                     printf("\n%s\n\n", recv_buf);
                     location = strstr_lc(recv_buf, "http/1.1 ");
-                    //strchr(location,' ')[0] = 0;
-                    location += 9; //flush "HTTP/1.1 "
-                    slash = atoi(location);
-                    UDPLGP("HTTP returns %d\n\n", slash);
-                    if (slash == 200 || slash == 206) {
-                        i = MAX_302_JUMPS;
-                        
-                    } else if (slash == 302) {
-                        //recv_buf[strlen(recv_buf)] = ' '; //for further headers
-                        location = strstr_lc(recv_buf, "\nlocation:");
-                        strchr(location, '\r')[0] = 0;
-                        if (location[10] == ' ') {
-                            location++;
-                        }
-                        
-                        location = strstr(location , "//");
-                        location += 2; //flush: //
+                    if (location) {
+                        location += 9; // Flush "HTTP/1.1 "
+                        slash = atoi(location);
+                        UDPLGP("HTTP returns %d\n\n", slash);
+                        if (slash == 200 || slash == 206) {
+                            i = MAX_302_JUMPS;
+                            
+                        } else if (slash == 302) {
+                            location = strstr_lc(recv_buf, "\nlocation:");
+                            if (location) {
+                                strchr(location, '\r')[0] = 0;
+                                if (location[10] == ' ') {
+                                    location++;
+                                }
+                                
+                                location = strstr(location , "//");
+                                location += 2; // Flush: //
 
-                        ota_get_host(location);
-                        ota_get_location(location);
-                        
+                                ota_get_host(location);
+                                ota_get_location(location);
+                                
+                            } else {
+                                i = MAX_302_JUMPS;
+                                ret = -1;
+                            }
+                            
+                        } else {
+                            i = MAX_302_JUMPS;
+                            ret = -2;
+                        }
+
                     } else {
                         i = MAX_302_JUMPS;
-                        ret = -1;
+                        ret = -3;
                     }
 
                 } else {
@@ -404,10 +421,10 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
     int recv_bytes = 0;
     int send_bytes;     // = sizeof(send_data);
     int length = 1;
-    int clength;
+    int clength = 0;
     int collected = 0;
     int writespace = 0;
-    int header;
+    int left, header;
 
     if (sector == 0 && buffer == NULL) {
         return -5;      // Needs to be either a sector or a signature/version file
@@ -458,43 +475,69 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                 if (ret > 0) {
                     if (header) {
                         //printf("%s\n-------- %d\n", recv_buf, ret);
-                        //parse Content-Length: xxxx
-                        location = strstr_lc(recv_buf, "content-length:");
-                        strchr(location, '\r')[0] = 0;
-                        if (location[15] == ' ') {
-                            location++;
+                        // Parse Content-Length: xxxx
+                        location = strstr_lc(recv_buf, "\ncontent-length:");
+                        if (!location) {
+                            UDPLGP("\n!!! ERROR No content-length found\n\n");
+                            length = 0;
+                            break;
                         }
-                        location += 15; //flush Content-Length: //
-                        clength = atoi(location);
-                        location[strlen(location)] = '\r'; //in case the order changes
-                        //parse Content-Range: bytes xxxx-yyyy/zzzz
-                        location = strstr_lc(recv_buf, "content-range: bytes ");
                         strchr(location, '\r')[0] = 0;
-                        location += 21; //flush Content-Range: bytes //
-                        location = strstr(location, "/"); location++; //flush /
-                        length = atoi(location);
-                        //verify if last bytes are crlfcrlf else header=1
-                    } else {
+                        location += 16; // Flush Content-Length:
+                        clength = atoi(location);
+                        location[strlen(location)] = '\r'; // In case the order changes
+                        // Parse Content-Range: bytes xxxx-yyyy/zzzz
+                        location = strstr_lc(recv_buf, "\ncontent-range:");
+                        if (location) {
+                            strchr(location,'\r')[0] = 0;
+                            location += 15; // Flush Content-Range:
+                            location = strstr_lc(recv_buf, "bytes ");
+                            location += 6; // bytes
+                            
+                            location = strstr(location, "/");
+                            location++; // Flush /
+                            
+                            length = atoi(location);
+                            
+                            location[strlen(location)] = '\r'; // Search the entire buffer again
+                        } else if (buffer) {
+                            length = clength;
+                        } else {
+                            UDPLGP("\n!!! ERROR No content-range found\n\n");
+                            length = 0;
+                            break;
+                        }
+                        
+                        location = strstr(recv_buf, CRLFCRLF) + 4; // Go to end of header
+                        if ((left = ret - (location - recv_buf))) {
+                            header = 0; // We have body in the same IP packet as the header so we need to process it already
+                            ret = left;
+                            memmove(recv_buf, location, left); // Move this payload to the head of the recv_buf
+                        }
+                    }
+                    
+                    if (!header) {
                         recv_bytes += ret;
-                        if (sector) { //write to flash
+                        if (sector) { // Write to flash
                             if (writespace < ret) {
                                 UDPLGP("Sector 0x%05x ", sector + collected);
-                                if (!spiflash_erase_sector(sector + collected)) return -6; //erase error
+                                if (!spiflash_erase_sector(sector + collected)) return -6; // Erase error
                                 writespace += SECTORSIZE;
                             }
                             if (collected) {
-                                if (!spiflash_write(sector + collected, (byte *)recv_buf, ret)) return -7; //write error
-                            } else { //at the very beginning, do not write the first byte yet but store it for later
+                                if (!spiflash_write(sector + collected, (byte *)recv_buf, ret)) return -7; // Write error
+                            } else { // At the very beginning, do not write the first byte yet but store it for later
                                 file_first_byte[0] = (byte)recv_buf[0];
-                                if (!spiflash_write(sector + 1, (byte *)recv_buf + 1, ret - 1)) return -7; //write error
+                                if (!spiflash_write(sector + 1, (byte *)recv_buf + 1, ret - 1)) return -7; // Write error
                             }
                             writespace -= ret;
-                        } else { //buffer
-                            if (ret > bufsz) return -8; //too big
+                        } else { // Buffer
+                            if (ret > bufsz) return -8; // Too big
                             memcpy(buffer, recv_buf, ret);
                         }
                         collected += ret;
                     }
+                    
                 } else {
                     if (ret && is_ssl) {
                         ret = wolfSSL_get_error(ssl, ret);
@@ -502,11 +545,12 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                     }
                     
                     if (!ret && collected < length)
-                        retc = ota_connect(last_host, port, &socket, &ssl, is_ssl); //memory leak?
+                        retc = ota_connect(last_host, port, &socket, &ssl, is_ssl);
                     
                     break;
                 }
-                header = 0; //move to header section itself
+                
+                header = 0; // Move to header section itself
             } while (recv_bytes < clength);
             
             printf(" Downloaded %d Bytes\n", collected);
@@ -581,7 +625,7 @@ int ota_get_sign(char* repo, char* file, byte* signature, uint16_t port, bool is
     memset(signature, 0, SIGNSIZE);
     ret = ota_get_file_ex(repo, signame, 0, signature, SIGNSIZE, port, is_ssl);
     free(signame);
-
+    
     return ret;
 }
 

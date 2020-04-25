@@ -176,8 +176,6 @@ void user_init(void) {
     sdk_wifi_set_opmode(STATION_MODE);
     sdk_wifi_station_disconnect();
 
-    sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
-    
     uart_set_baud(0, 115200);
     printf("\n\n\n");
     
