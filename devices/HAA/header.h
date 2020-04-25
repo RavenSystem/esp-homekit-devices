@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "2.0.0"
-#define FIRMWARE_VERSION_OCTAL              020000      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "2.0.1"
+#define FIRMWARE_VERSION_OCTAL              020001      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #ifndef HAALCM

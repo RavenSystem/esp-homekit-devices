@@ -323,9 +323,9 @@ static void wifi_config_server_on_settings(client_t *client) {
     
     status = sysparam_get_int32(PORT_NUMBER_SYSPARAM, &int32_value);
     if (status == SYSPARAM_OK) {
-        itoa(int32_value, text, 10);
-        client_send_chunk(client, text);
-        free(text);
+        char str_port[6];
+        itoa(int32_value, str_port, 10);
+        client_send_chunk(client, str_port);
     }
     client_send_chunk(client, html_settings_repoport);
     

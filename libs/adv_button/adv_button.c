@@ -46,16 +46,27 @@
 #define MAX(x, y)                   (((x) > (y)) ? (x) : (y))
 
 typedef struct _adv_button_callback_fn {
-    button_callback_fn callback;
-    void *args;
     uint8_t param;
+    button_callback_fn callback;
     
+    void *args;
+
     struct _adv_button_callback_fn *next;
 } adv_button_callback_fn_t;
 
 typedef struct _adv_button {
     uint8_t gpio;
+    uint8_t press_count;
+    volatile uint8_t value;
+    
     bool inverted;
+    bool state;
+    bool old_state;
+    
+    ETSTimer press_timer;
+    ETSTimer hold_timer;
+    
+    volatile uint32_t last_event_time;
     
     adv_button_callback_fn_t *singlepress0_callback_fn;
     adv_button_callback_fn_t *singlepress_callback_fn;
@@ -63,15 +74,6 @@ typedef struct _adv_button {
     adv_button_callback_fn_t *longpress_callback_fn;
     adv_button_callback_fn_t *verylongpress_callback_fn;
     adv_button_callback_fn_t *holdpress_callback_fn;
-    
-    bool state;
-    bool old_state;
-    volatile uint8_t value;
-
-    uint8_t press_count;
-    ETSTimer press_timer;
-    ETSTimer hold_timer;
-    volatile uint32_t last_event_time;
 
     struct _adv_button *next;
 } adv_button_t;
