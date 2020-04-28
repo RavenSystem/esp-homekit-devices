@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "2.0.1"
-#define FIRMWARE_VERSION_OCTAL              020001      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "2.1.0"
+#define FIRMWARE_VERSION_OCTAL              020100      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #ifndef HAALCM
@@ -64,6 +64,7 @@
 #define AUTOOFF_SETTER_TASK_SIZE            (configMINIMAL_STACK_SIZE * 2)
 #define AUTODIMMER_TASK_SIZE                (configMINIMAL_STACK_SIZE * 1)
 #define IR_TX_TASK_SIZE                     (configMINIMAL_STACK_SIZE * 4)
+#define UART_ACTION_TASK_SIZE               (configMINIMAL_STACK_SIZE * 2)
 #define HTTP_GET_TASK_SIZE                  (configMINIMAL_STACK_SIZE * 2)
 #define DELAYED_SENSOR_START_TASK_SIZE      (configMINIMAL_STACK_SIZE * 1)
 
@@ -71,6 +72,8 @@
 #define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
 #define PING_TASK_PRIORITY                  (tskIDLE_PRIORITY + 0)
 #define IR_TX_TASK_PRIORITY                 (tskIDLE_PRIORITY + 10)
+#define UART_ACTION_TASK_PRIORITY           (tskIDLE_PRIORITY + 1)
+#define HTTP_GET_TASK_PRIORITY              (0)
 
 // Button Events
 #define SINGLEPRESS_EVENT                   0
@@ -94,6 +97,11 @@
 #define PWM_FREQ                            "q"
 #define ENABLE_HOMEKIT_SERVER               "h"
 #define ALLOW_INSECURE_CONNECTIONS          "u"
+#define UART_CONFIG_ARRAY                   "r"
+#define UART_CONFIG_ENABLE                  "n"
+#define UART_CONFIG_STOPBITS                "b"
+#define UART_CONFIG_PARITY                  "p"
+#define UART_CONFIG_SPEED                   "s"
 #define ACCESSORIES                         "a"
 #define BUTTONS_ARRAY                       "b"
 #define FIXED_BUTTONS_ARRAY_0               "f0"
@@ -303,6 +311,9 @@
 #define SYSTEM_ACTION_REBOOT                0
 #define SYSTEM_ACTION_SETUP_MODE            1
 #define SYSTEM_ACTION_OTA_UPDATE            2
+#define UART_ACTIONS_ARRAY                  "u"
+#define UART_ACTION_UART                    "n"
+#define UART_ACTION_PAUSE                   "d"
 
 #define ACCESSORY_TYPE                      "t"
 #define ACC_TYPE_SWITCH                     1

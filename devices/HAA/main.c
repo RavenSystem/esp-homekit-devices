@@ -61,7 +61,7 @@ int8_t setup_mode_toggle_counter = INT8_MIN;
 int8_t setup_mode_toggle_counter_max = SETUP_MODE_DEFAULT_ACTIVATE_COUNT;
 uint8_t led_gpio = 255;
 uint16_t setup_mode_time = 0;
-ETSTimer *setup_mode_toggle_timer;
+ETSTimer* setup_mode_toggle_timer;
 ETSTimer save_states_timer, wifi_watchdog_timer;
 bool used_gpio[17];
 bool led_inverted = true;
@@ -69,28 +69,29 @@ bool enable_homekit_server = true;
 bool allow_insecure = false;
 bool log_output = false;
 
+bool uart_action_is_running = false;
 bool ir_tx_is_running = false;
 uint8_t ir_tx_freq = 13;
 uint8_t ir_tx_gpio = 255;
 bool ir_tx_inv = false;
-char *ir_protocol = NULL;
+char* ir_protocol = NULL;
 
 bool setpwm_is_running = false;
 bool setpwm_bool_semaphore = true;
-ETSTimer *pwm_timer;
-pwm_info_t *pwm_info;
+ETSTimer* pwm_timer;
+pwm_info_t* pwm_info;
 uint16_t multipwm_duty[MULTIPWM_MAX_CHANNELS];
 uint16_t pwm_freq = 0;
 
 char name_value[11];
 char serial_value[13];
 
-ETSTimer *ping_task_timer;
+ETSTimer* ping_task_timer;
 
-last_state_t *last_states = NULL;
-ch_group_t *ch_groups = NULL;
-lightbulb_group_t *lightbulb_groups = NULL;
-ping_input_t *ping_inputs = NULL;
+last_state_t* last_states = NULL;
+ch_group_t* ch_groups = NULL;
+lightbulb_group_t* lightbulb_groups = NULL;
+ping_input_t* ping_inputs = NULL;
 
 #ifdef HAA_DEBUG
 ETSTimer free_heap_timer;
@@ -103,6 +104,38 @@ void free_heap_watchdog() {
     }
 }
 #endif  // HAA_DEBUG
+
+void change_uart_gpio(const uint8_t gpio) {
+    if (gpio == 1) {
+        gpio_set_iomux_function(1, IOMUX_GPIO1_FUNC_GPIO);
+    } else if (gpio == 3) {
+        gpio_set_iomux_function(3, IOMUX_GPIO3_FUNC_GPIO);
+    }
+}
+
+void IRAM alternate_putc(char c) {
+    uart_putc(1, c);
+}
+
+uint16_t process_hexstr(const char* string, char** output_hex_string) {
+    const uint16_t len = strlen(string) >> 1;
+    char* hex_string = malloc(len + 1);
+    memset(hex_string, 0, len + 1);
+    
+    char buffer[3];
+    buffer[2] = 0;
+    
+    for (uint16_t i = 0; i < len; i++) {
+        buffer[0] = string[i << 1];
+        buffer[1] = string[(i << 1) + 1];
+                           
+        hex_string[i] = (uint8_t) strtol(buffer, NULL, 16);
+    }
+    
+    *output_hex_string = hex_string;
+    
+    return len;
+}
 
 ch_group_t *ch_group_find(homekit_characteristic_t *ch) {
     ch_group_t *ch_group = ch_groups;
@@ -419,7 +452,7 @@ void hkc_setter_with_setup(homekit_characteristic_t *ch, const homekit_value_t v
 }
 
 void hkc_autooff_setter_task(void *pvParameters);
-void do_actions(ch_group_t *ch_group, const uint8_t int_action);
+void do_actions(ch_group_t *ch_group, uint8_t int_action);
 void do_wildcard_actions(ch_group_t *ch_group, uint8_t index, const float action_value);
 
 // --- ON
@@ -1240,6 +1273,8 @@ void hkc_rgbw_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
         
         if (ch_group->ch0->value.bool_value) {
             do_wildcard_actions(ch_group, 0, ch_group->ch1->value.int_value);
+        } else {
+            ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
         }
         
         hkc_group_notify(ch_group);
@@ -2142,14 +2177,14 @@ void hkc_autooff_setter_task(void *pvParameters) {
     vTaskDelete(NULL);
 }
 
-// --- HTTP GET task
+// --- HTTP/TCP task
 void http_get_task(void *pvParameters) {
     action_task_t *action_task = pvParameters;
     action_http_t *action_http = action_task->ch_group->action_http;
     
     while(action_http) {
         if (action_http->action == action_task->action) {
-            INFO2("HTTP Action http://%s:%i/%s", action_http->host, action_http->port_n, action_http->url);
+            INFO2("HTTP/TCP Action %s:%i", action_http->host, action_http->port_n);
             
             const struct addrinfo hints = {
                 .ai_family = AF_UNSPEC,
@@ -2157,7 +2192,8 @@ void http_get_task(void *pvParameters) {
             };
             struct addrinfo *res;
             
-            char port[5];
+            char port[6];
+            memset(port, 0, 6);
             itoa(action_http->port_n, port, 10);
             
             if (getaddrinfo(action_http->host, port, &hints, &res) == 0) {
@@ -2170,41 +2206,50 @@ void http_get_task(void *pvParameters) {
                         char *method_req = NULL;
                         if (action_http->method_n > 0) {
                             content_len_n = strlen(action_http->content);
-
-                            char content_len[4];
-                            itoa(content_len_n, content_len, 10);
-                            method_req = malloc(48);
-                            snprintf(method_req, 48, "Content-type: text/html\r\nContent-length: %s\r\n", content_len);
                             
-                            if (action_http->method_n == 1) {
-                                method = "PUT";
-                            } else if (action_http->method_n == 2) {
-                                method = "POST";
+                            if (action_http->method_n < 3) {
+                                char content_len[4];
+                                itoa(content_len_n, content_len, 10);
+                                method_req = malloc(48);
+                                snprintf(method_req, 48, "Content-type: text/html\r\nContent-length: %s\r\n", content_len);
+                                
+                                if (action_http->method_n == 1) {
+                                    method = "PUT";
+                                } else if (action_http->method_n == 2) {
+                                    method = "POST";
+                                }
                             }
                         }
                         
-                        uint16_t req_len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(action_http->host) +  strlen(action_http->url) + content_len_n;
+                        char *req = NULL;
+                        if (action_http->method_n == 3) {
+                            req = action_http->content;
+                        } else {
+                            action_http->len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(action_http->host) +  strlen(action_http->url) + content_len_n;
+                            
+                            req = malloc(action_http->len);
+                            snprintf(req, action_http->len, "%s /%s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HAA/"FIRMWARE_VERSION" esp8266\r\nConnection: close\r\n%s\r\n%s",
+                                     method,
+                                     action_http->url,
+                                     action_http->host,
+                                     (method_req != NULL) ? method_req : "",
+                                     action_http->content);
+                        }
                         
-                        char *req = malloc(req_len);
-                        snprintf(req, req_len, "%s /%s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HAA/"FIRMWARE_VERSION" esp8266\r\nConnection: close\r\n%s\r\n%s",
-                                 method,
-                                 action_http->url,
-                                 action_http->host,
-                                 (method_req != NULL) ? method_req : "",
-                                 action_http->content);
-                        
-                        if (write(s, req, strlen(req)) >= 0) {
+                        if (write(s, req, action_http->len) >= 0) {
                             INFO2("%s", req);
                             
                         } else {
                             ERROR2("HTTP");
                         }
                         
-                        if (method_req != NULL) {
+                        if (method_req) {
                             free(method_req);
                         }
                         
-                        free(req);
+                        if (req && action_http->method_n != 3) {
+                            free(req);
+                        }
                     } else {
                         ERROR2("Connection");
                     }
@@ -2437,6 +2482,41 @@ void ir_tx_task(void *pvParameters) {
         }
         
         action_ir_tx = action_ir_tx->next;
+    }
+    
+    free(pvParameters);
+    vTaskDelete(NULL);
+}
+
+// --- UART action task
+void uart_action_task(void *pvParameters) {
+    action_task_t *action_task = pvParameters;
+    action_uart_t *action_uart = action_task->ch_group->action_uart;
+
+    while (action_uart) {
+        if (action_uart->action == action_task->action) {
+            INFO2("UART Action");
+            
+            while (uart_action_is_running) {
+                vTaskDelay(MS_TO_TICK(200));
+            }
+            
+            uart_action_is_running = true;
+            
+            for (uint8_t i = 0; i < action_uart->len; i++) {
+                uart_putc(action_uart->uart, action_uart->command[i]);
+            }
+
+            uart_flush_txfifo(action_uart->uart);
+            
+            uart_action_is_running = false;
+        }
+        
+        if (action_uart->pause > 0) {
+            vTaskDelay(MS_TO_TICK(action_uart->pause));
+        }
+        
+        action_uart = action_uart->next;
     }
     
     free(pvParameters);
@@ -2680,6 +2760,16 @@ void do_actions(ch_group_t *ch_group, uint8_t action) {
         action_system = action_system->next;
     }
     
+    // UART actions
+    if (ch_group->action_uart) {
+        action_task_t *action_task = malloc(sizeof(action_task_t));
+        memset(action_task, 0, sizeof(*action_task));
+        action_task->action = action;
+        action_task->ch_group = ch_group;
+        
+        xTaskCreate(uart_action_task, "uart_action_task", UART_ACTION_TASK_SIZE, action_task, UART_ACTION_TASK_PRIORITY, NULL);
+    }
+    
     // HTTP GET actions
     if (ch_group->action_http) {
         action_task_t *action_task = malloc(sizeof(action_task_t));
@@ -2687,7 +2777,7 @@ void do_actions(ch_group_t *ch_group, uint8_t action) {
         action_task->action = action;
         action_task->ch_group = ch_group;
         
-        xTaskCreate(http_get_task, "http_get_task", HTTP_GET_TASK_SIZE, action_task, 0, NULL);
+        xTaskCreate(http_get_task, "http_get_task", HTTP_GET_TASK_SIZE, action_task, HTTP_GET_TASK_PRIORITY, NULL);
     }
     
     // IR TX actions
@@ -2818,7 +2908,7 @@ void normal_mode_init() {
     xTaskCreate(exit_emergency_setup_mode_task, "exit_emergency_setup_mode_task", configMINIMAL_STACK_SIZE, NULL, 1, NULL);
     
     // Filling Used GPIO Array
-    for (uint8_t g=0; g<18; g++) {
+    for (uint8_t g = 0; g < 18; g++) {
         used_gpio[g] = false;
     }
     
@@ -2846,6 +2936,7 @@ void normal_mode_init() {
             }
             
             if (!used_gpio[gpio]) {
+                change_uart_gpio(gpio);
                 adv_button_create(gpio, pullup_resistor, inverted);
                 used_gpio[gpio] = true;
             }
@@ -3036,7 +3127,7 @@ void normal_mode_init() {
             if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
                 if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), DIGITAL_OUTPUTS_ARRAY) != NULL) {
                     cJSON *json_relays = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), DIGITAL_OUTPUTS_ARRAY);
-                    for(int16_t i = cJSON_GetArraySize(json_relays) - 1; i >= 0; i--) {
+                    for (int16_t i = cJSON_GetArraySize(json_relays) - 1; i >= 0; i--) {
                         action_relay_t *action_relay = malloc(sizeof(action_relay_t));
                         memset(action_relay, 0, sizeof(*action_relay));
                         
@@ -3046,6 +3137,7 @@ void normal_mode_init() {
                         
                         action_relay->gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuedouble;
                         if (!used_gpio[action_relay->gpio]) {
+                            change_uart_gpio(action_relay->gpio);
                             gpio_enable(action_relay->gpio, GPIO_OUTPUT);
                             gpio_write(action_relay->gpio, false);
                             
@@ -3092,7 +3184,7 @@ void normal_mode_init() {
                 if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), MANAGE_OTHERS_ACC_ARRAY) != NULL) {
                     cJSON *json_acc_managers = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), MANAGE_OTHERS_ACC_ARRAY);
                     
-                    for(int16_t i = cJSON_GetArraySize(json_acc_managers) - 1; i >= 0; i--) {
+                    for (int16_t i = cJSON_GetArraySize(json_acc_managers) - 1; i >= 0; i--) {
                         action_acc_manager_t *action_acc_manager = malloc(sizeof(action_acc_manager_t));
                         memset(action_acc_manager, 0, sizeof(*action_acc_manager));
                         
@@ -3142,7 +3234,7 @@ void normal_mode_init() {
             if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
                 if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SYSTEM_ACTIONS_ARRAY) != NULL) {
                     cJSON *json_action_systems = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SYSTEM_ACTIONS_ARRAY);
-                    for(int16_t i = cJSON_GetArraySize(json_action_systems) - 1; i >= 0; i--) {
+                    for (int16_t i = cJSON_GetArraySize(json_action_systems) - 1; i >= 0; i--) {
                         action_system_t *action_system = malloc(sizeof(action_system_t));
                         memset(action_system, 0, sizeof(*action_system));
                         
@@ -3170,7 +3262,7 @@ void normal_mode_init() {
         ch_group->action_system = last_action;
     }
     
-    // HTTP GET Actions
+    // HTTP/TCP Actions
     void new_action_http(ch_group_t *ch_group, cJSON *json_context, uint8_t fixed_action) {
         action_http_t *last_action = ch_group->action_http;
         
@@ -3180,7 +3272,7 @@ void normal_mode_init() {
             if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
                 if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), HTTP_ACTIONS_ARRAY) != NULL) {
                     cJSON *json_action_https = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), HTTP_ACTIONS_ARRAY);
-                    for(int16_t i = cJSON_GetArraySize(json_action_https) - 1; i >= 0; i--) {
+                    for (int16_t i = cJSON_GetArraySize(json_action_https) - 1; i >= 0; i--) {
                         action_http_t *action_http = malloc(sizeof(action_http_t));
                         memset(action_http, 0, sizeof(*action_http));
                         
@@ -3212,6 +3304,14 @@ void normal_mode_init() {
                             action_http->content = strdup("");
                         }
                         
+                        if (action_http->method_n == 3 ) {
+                            action_http->len = strlen(action_http->content);
+                        } else if (action_http->method_n == 4) {
+                            action_http->method_n = 3;
+                            free(action_http->content);
+                            action_http->len = process_hexstr(cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_CONTENT)->valuestring, &action_http->content);
+                        }
+                        
                         action_http->next = last_action;
                         last_action = action_http;
                     }
@@ -3240,7 +3340,7 @@ void normal_mode_init() {
             if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
                 if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), IR_ACTIONS_ARRAY) != NULL) {
                     cJSON *json_action_ir_txs = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), IR_ACTIONS_ARRAY);
-                    for(int16_t i = cJSON_GetArraySize(json_action_ir_txs) - 1; i >= 0; i--) {
+                    for (int16_t i = cJSON_GetArraySize(json_action_ir_txs) - 1; i >= 0; i--) {
                         action_ir_tx_t *action_ir_tx = malloc(sizeof(action_ir_tx_t));
                         memset(action_ir_tx, 0, sizeof(*action_ir_tx));
                         
@@ -3293,6 +3393,56 @@ void normal_mode_init() {
         ch_group->action_ir_tx = last_action;
     }
     
+    // UART Actions
+    void new_action_uart(ch_group_t *ch_group, cJSON *json_context, uint8_t fixed_action) {
+        action_uart_t *last_action = ch_group->action_uart;
+        
+        void register_action(cJSON *json_accessory, uint8_t new_int_action) {
+            char action[3];
+            itoa(new_int_action, action, 10);
+            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), UART_ACTIONS_ARRAY) != NULL) {
+                    cJSON *json_action_uarts = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), UART_ACTIONS_ARRAY);
+                    for (int16_t i = cJSON_GetArraySize(json_action_uarts) - 1; i >= 0; i--) {
+                        action_uart_t *action_uart = malloc(sizeof(action_uart_t));
+                        memset(action_uart, 0, sizeof(*action_uart));
+                        
+                        cJSON *json_action_uart = cJSON_GetArrayItem(json_action_uarts, i);
+                        
+                        action_uart->action = new_int_action;
+                        
+                        action_uart->uart = 0;
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_UART) != NULL) {
+                            action_uart->uart = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_UART)->valuedouble;
+                        }
+                        
+                        action_uart->pause = 0;
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_PAUSE) != NULL) {
+                            action_uart->uart = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_PAUSE)->valuedouble;
+                        }
+                        
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_uart, VALUE) != NULL) {
+                            action_uart->len = process_hexstr(cJSON_GetObjectItemCaseSensitive(json_action_uart, VALUE)->valuestring, &action_uart->command);
+                        }
+                        
+                        action_uart->next = last_action;
+                        last_action = action_uart;
+                    }
+                }
+            }
+        }
+        
+        if (fixed_action < MAX_ACTIONS) {
+            for (uint8_t int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+                register_action(json_context, int_action);
+            }
+        } else {
+            register_action(json_context, fixed_action);
+        }
+        
+        ch_group->action_uart = last_action;
+    }
+    
     void register_actions(ch_group_t *ch_group, cJSON *json_accessory, uint8_t fixed_action) {
         new_action_copy(ch_group, json_accessory, fixed_action);
         new_action_relay(ch_group, json_accessory, fixed_action);
@@ -3300,6 +3450,7 @@ void normal_mode_init() {
         new_action_system(ch_group, json_accessory, fixed_action);
         new_action_http(ch_group, json_accessory, fixed_action);
         new_action_ir_tx(ch_group, json_accessory, fixed_action);
+        new_action_uart(ch_group, json_accessory, fixed_action);
     }
     
     void register_wildcard_actions(ch_group_t *ch_group, cJSON *json_accessory) {
@@ -3416,23 +3567,111 @@ void normal_mode_init() {
     
     // ----- CONFIG SECTION
     
-    // Log output type
-    if (cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT) != NULL &&
-        cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT)->valuedouble == 1) {
-        log_output = true;
-        uart_set_baud(0, 115200);
-        printf_header();
-        printf("NORMAL MODE\n\nJSON:\n %s\n\n", txt_config);
+    // UART configuration
+    bool used_uart[2];
+    used_uart[0] = false;
+    used_uart[1] = false;
+
+    if (cJSON_GetObjectItemCaseSensitive(json_config, UART_CONFIG_ARRAY) != NULL) {
+        cJSON *json_uarts = cJSON_GetObjectItemCaseSensitive(json_config, UART_CONFIG_ARRAY);
+        for (uint8_t i = 0; i < cJSON_GetArraySize(json_uarts); i++) {
+            cJSON *json_uart = cJSON_GetArrayItem(json_uarts, i);
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_ENABLE) != NULL) {
+                uint8_t uart_config = (int8_t) cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_ENABLE)->valuedouble;
+                
+                if (uart_config == 2) {
+                    sdk_system_uart_swap();
+                    uart_config = 0;
+                }
+                
+                uint32_t speed = 115200;
+                if (cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_SPEED) != NULL) {
+                    speed = (uint32_t) cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_SPEED)->valuedouble;
+                }
+                
+                uint8_t stopbits = 0;
+                if (cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_STOPBITS) != NULL) {
+                    stopbits = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_STOPBITS)->valuedouble;
+                }
+                
+                uint8_t parity = 0;
+                if (cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_PARITY) != NULL) {
+                    parity = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_PARITY)->valuedouble;
+                }
+                
+                if (uart_config == 1) {
+                    gpio_set_iomux_function(2, IOMUX_GPIO2_FUNC_UART1_TXD);
+                }
+                
+                uart_set_baud(uart_config, speed);
+                
+                switch (stopbits) {
+                    case 1:
+                        uart_set_stopbits(uart_config, UART_STOPBITS_1);
+                        break;
+                        
+                    case 2:
+                        uart_set_stopbits(uart_config, UART_STOPBITS_1_5);
+                        break;
+                        
+                    case 3:
+                        uart_set_stopbits(uart_config, UART_STOPBITS_2);
+                        break;
+                        
+                    default:    // case 0:
+                        uart_set_stopbits(uart_config, UART_STOPBITS_0);
+                        break;
+                }
+
+                switch (parity) {
+                    case 1:
+                        uart_set_parity_enabled(uart_config, true);
+                        uart_set_parity(uart_config, UART_PARITY_ODD);
+                        break;
+                        
+                    case 2:
+                        uart_set_parity_enabled(uart_config, true);
+                        uart_set_parity(uart_config, UART_PARITY_EVEN);
+                        break;
+                        
+                    default:    // case 0:
+                        uart_set_parity_enabled(uart_config, false);
+                        break;
+                }
+                
+                if (uart_config == 0) {
+                    used_uart[0] = true;
+                } else {    // uart_config == 1
+                    used_uart[1] = true;
+                }
+            }
+        
+        }
     }
     
-#ifdef HAA_DEBUG
-    if (!log_output) {
-        log_output = true;
-        uart_set_baud(0, 115200);
-        printf_header();
-        printf("NORMAL MODE\n\nJSON:\n %s\n\n", txt_config);
+    // Log output type
+    uint8_t log_output_type = 0;
+    if (cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT) != NULL) {
+        log_output_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT)->valuedouble;
+        if (log_output_type > 0) {
+            log_output = true;
+
+            if (log_output_type == 1 && !used_uart[0]) {
+                uart_set_baud(0, 115200);
+            } else if (log_output_type == 2 && !used_uart[1]) {
+                sdk_os_install_putc1(alternate_putc);
+                uart_set_baud(1, 115200);
+            }
+            
+            printf_header();
+            printf("NORMAL MODE\n\nJSON:\n %s\n\n", txt_config);
+        }
     }
-#endif  // HAA_DEBUG
+    
+    if (log_output_type == 0 && used_uart[0]) {
+        sdk_os_install_putc1(alternate_putc);
+    }
     
     free(txt_config);
 
@@ -3451,6 +3690,7 @@ void normal_mode_init() {
                 led_inverted = (bool) cJSON_GetObjectItemCaseSensitive(json_config, INVERTED)->valuedouble;
         }
         
+        change_uart_gpio(led_gpio);
         gpio_enable(led_gpio, GPIO_OUTPUT);
         used_gpio[led_gpio] = true;
         gpio_write(led_gpio, false ^ led_inverted);
@@ -3472,6 +3712,7 @@ void normal_mode_init() {
     // IR TX LED GPIO
     if (cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO) != NULL) {
         ir_tx_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO)->valuedouble;
+        change_uart_gpio(ir_tx_gpio);
         gpio_enable(ir_tx_gpio, GPIO_OUTPUT);
         used_gpio[ir_tx_gpio] = true;
         gpio_write(ir_tx_gpio, false ^ ir_tx_inv);

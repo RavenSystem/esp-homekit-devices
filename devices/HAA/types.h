@@ -67,6 +67,7 @@ typedef struct _action_acc_manager {
 
 typedef struct _action_system {
     uint8_t action;
+    
     uint8_t value;
     
     struct _action_system *next;
@@ -74,8 +75,12 @@ typedef struct _action_system {
 
 typedef struct _action_http {
     uint8_t action;
+    
     uint8_t method_n;
     uint16_t port_n;
+    
+    uint16_t len;
+    
     char *host;
     char *url;
     char *content;
@@ -96,6 +101,18 @@ typedef struct _action_ir_tx {
 
     struct _action_ir_tx *next;
 } action_ir_tx_t;
+
+typedef struct _action_uart {
+    uint8_t action;
+    
+    uint8_t uart;
+    uint16_t len;
+    
+    uint16_t pause;
+    char *command;
+    
+    struct _action_uart *next;
+} action_uart_t;
 
 typedef struct _wildcard_action {
     uint8_t index;
@@ -133,6 +150,7 @@ typedef struct _ch_group {
     action_system_t *action_system;
     action_http_t *action_http;
     action_ir_tx_t *action_ir_tx;
+    action_uart_t *action_uart;
     
     wildcard_action_t *wildcard_action;
     
