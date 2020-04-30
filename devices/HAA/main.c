@@ -748,7 +748,7 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
         ch->value = value;
         
         if (ch_group->ch2->value.int_value) {
-            const float mid_target_temp = (ch_group->ch6->value.float_value + ch_group->ch7->value.float_value) / 2;
+            const float mid_target_temp = (ch_group->ch6->value.float_value + ch_group->ch7->value.float_value) / 2.00f;
             
             switch (ch_group->ch5->value.int_value) {
                 case THERMOSTAT_TARGET_MODE_HEATER:
@@ -756,6 +756,9 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
                         if (ch_group->ch0->value.float_value < (ch_group->ch6->value.float_value - TH_DEADBAND)) {
                             ch_group->ch4->value.int_value = THERMOSTAT_MODE_HEATER;
                             do_actions(ch_group, THERMOSTAT_ACTION_HEATER_ON);
+                        } else if (ch_group->ch4->value.int_value <= THERMOSTAT_MODE_OFF) {
+                            ch_group->ch4->value.int_value = THERMOSTAT_MODE_IDLE;
+                            do_actions(ch_group, THERMOSTAT_ACTION_HEATER_IDLE);
                         }
                     } else if (ch_group->ch0->value.float_value >= ch_group->ch6->value.float_value) {
                         ch_group->ch4->value.int_value = THERMOSTAT_MODE_IDLE;
@@ -768,6 +771,9 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
                         if (ch_group->ch0->value.float_value > (ch_group->ch7->value.float_value + TH_DEADBAND)) {
                             ch_group->ch4->value.int_value = THERMOSTAT_MODE_COOLER;
                             do_actions(ch_group, THERMOSTAT_ACTION_COOLER_ON);
+                        } else if (ch_group->ch4->value.int_value <= THERMOSTAT_MODE_OFF) {
+                            ch_group->ch4->value.int_value = THERMOSTAT_MODE_IDLE;
+                            do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
                         }
                     } else if (ch_group->ch0->value.float_value <= ch_group->ch7->value.float_value) {
                         ch_group->ch4->value.int_value = THERMOSTAT_MODE_IDLE;
@@ -798,6 +804,14 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
                             } else if (ch_group->ch0->value.float_value > ch_group->ch7->value.float_value) {
                                 ch_group->ch4->value.int_value = THERMOSTAT_MODE_COOLER;
                                 do_actions(ch_group, THERMOSTAT_ACTION_COOLER_ON);
+                            } else if (ch_group->ch4->value.int_value == THERMOSTAT_MODE_OFF) {
+                                ch_group->ch4->value.int_value = THERMOSTAT_MODE_IDLE;
+
+                                if (ch_group->ch0->value.float_value < mid_target_temp) {
+                                    do_actions(ch_group, THERMOSTAT_ACTION_HEATER_IDLE);
+                                } else {
+                                    do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
+                                }
                             }
                             break;
                     }
@@ -1360,7 +1374,7 @@ void autodimmer_call(homekit_characteristic_t *ch0, const homekit_value_t value)
         if (lightbulb_group->armed_autodimmer) {
             lightbulb_group->armed_autodimmer = false;
             sdk_os_timer_disarm(ch_group->timer);
-            xTaskCreate(autodimmer_task, "autodimmer_task", AUTODIMMER_TASK_SIZE, (void *) ch0, 1, NULL);
+            xTaskCreate(autodimmer_task, "autodimmer_task", AUTODIMMER_TASK_SIZE, (void *) ch0, AUTODIMMER_TASK_PRIORITY, NULL);
         } else {
             sdk_os_timer_arm(ch_group->timer, AUTODIMMER_DELAY, 0);
             lightbulb_group->armed_autodimmer = true;

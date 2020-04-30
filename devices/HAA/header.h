@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "2.1.0"
-#define FIRMWARE_VERSION_OCTAL              020100      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "2.1.1"
+#define FIRMWARE_VERSION_OCTAL              020101      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #ifndef HAALCM
@@ -70,10 +70,11 @@
 
 // Task Priorities
 #define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
+#define AUTODIMMER_TASK_PRIORITY            (tskIDLE_PRIORITY + 1)
 #define PING_TASK_PRIORITY                  (tskIDLE_PRIORITY + 0)
 #define IR_TX_TASK_PRIORITY                 (tskIDLE_PRIORITY + 10)
-#define UART_ACTION_TASK_PRIORITY           (tskIDLE_PRIORITY + 1)
-#define HTTP_GET_TASK_PRIORITY              (0)
+#define UART_ACTION_TASK_PRIORITY           (tskIDLE_PRIORITY + 8)
+#define HTTP_GET_TASK_PRIORITY              (tskIDLE_PRIORITY + 1)
 
 // Button Events
 #define SINGLEPRESS_EVENT                   0
