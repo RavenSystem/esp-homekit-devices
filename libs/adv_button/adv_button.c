@@ -27,7 +27,7 @@
 #include "adv_button.h"
 
 #ifndef ADV_BUTTON_MAX_EVAL
-#define ADV_BUTTON_MAX_EVAL         6       // Must be an odd number
+#define ADV_BUTTON_MAX_EVAL         8       // Must be an odd number
 #endif
 
 #define DOUBLEPRESS_TIME            400

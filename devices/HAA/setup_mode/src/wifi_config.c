@@ -584,7 +584,7 @@ static void http_task(void *arg) {
             continue;
         }
 
-        const struct timeval timeout = { 2, 0 };
+        const struct timeval timeout = { 1, 400000 };
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
         client_t *client = client_new();

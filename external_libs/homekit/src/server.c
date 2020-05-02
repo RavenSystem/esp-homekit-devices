@@ -2329,17 +2329,28 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         }
                     }
 
+                    // Old style
+                    if (ch->min_value)
+                        min_value = (int) *ch->min_value;
+                    if (ch->max_value)
+                        max_value = (int) *ch->max_value;
+
+                    int value = j_value->valueint;
+
+                    // New style
+                    /*
                     if (ch->min_value)
                         min_value = *ch->min_value;
                     if (ch->max_value)
                         max_value = *ch->max_value;
-
+                    
                     double value = j_value->valuedouble;
                     if (j_value->type == cJSON_True) {
                         value = 1;
                     } else if (j_value->type == cJSON_False) {
                         value = 0;
                     }
+                    */
                     
                     if (value < min_value || value > max_value) {
                         CLIENT_ERROR(context, "Failed to update %d.%d: value is not in range", aid, iid);
@@ -2379,6 +2390,12 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 
                     CLIENT_DEBUG(context, "Updating characteristic %d.%d with integer %d", aid, iid, value);
 
+                    // Old style
+                    h_value = HOMEKIT_INT(value);
+                    h_value.format = ch->format;
+                    
+                    /*
+                    // New style
                     switch (ch->format) {
                         case homekit_format_uint8:
                             h_value = HOMEKIT_UINT8(value);
@@ -2400,6 +2417,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                             CLIENT_ERROR(context, "Unexpected format when updating numeric value: %d", ch->format);
                             return HAPStatus_InvalidValue;
                     }
+                    */
                     
                     if (ch->setter_ex) {
                         ch->setter_ex(ch, h_value);
@@ -2410,14 +2428,14 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                 }
                 case homekit_format_float: {
                     if (j_value->type != cJSON_Number) {
-                        CLIENT_ERROR(context, "Failed to update %d.%d: value is not a number", aid, iid);
+                        CLIENT_ERROR(context, "Failed to update %d.%d: not a number", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 
                     float value = j_value->valuedouble;
                     if ((ch->min_value && value < *ch->min_value) ||
                             (ch->max_value && value > *ch->max_value)) {
-                        CLIENT_ERROR(context, "Failed to update %d.%d: value is not in range", aid, iid);
+                        CLIENT_ERROR(context, "Failed to update %d.%d: not in range", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 
@@ -2433,7 +2451,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                 }
                 case homekit_format_string: {
                     if (j_value->type != cJSON_String) {
-                        CLIENT_ERROR(context, "Failed to update %d.%d: value is not a string", aid, iid);
+                        CLIENT_ERROR(context, "Failed to update %d.%d: not a string", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 
@@ -2441,7 +2459,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 
                     char *value = j_value->valuestring;
                     if (strlen(value) > max_len) {
-                        CLIENT_ERROR(context, "Failed to update %d.%d: value is too long", aid, iid);
+                        CLIENT_ERROR(context, "Failed to update %d.%d: too long", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 
@@ -2458,7 +2476,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                 }
                 case homekit_format_tlv: {
                     if (j_value->type != cJSON_String) {
-                        CLIENT_ERROR(context, "Failed to update %d.%d: value is not a string", aid, iid);
+                        CLIENT_ERROR(context, "Failed to update %d.%d: not a string", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 
@@ -2467,7 +2485,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     char *value = j_value->valuestring;
                     size_t value_len = strlen(value);
                     if (value_len > max_len) {
-                        CLIENT_ERROR(context, "Failed to update %d.%d: value is too long", aid, iid);
+                        CLIENT_ERROR(context, "Failed to update %d.%d: too long", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 
@@ -3315,7 +3333,7 @@ static void homekit_run_server(homekit_server_t *server)
         fd_set read_fds;
         memcpy(&read_fds, &server->fds, sizeof(read_fds));
 
-        struct timeval timeout = { 0, 500000 }; /* 0.5 seconds timeout (orig: 1) */
+        struct timeval timeout = { 0, 400000 }; /* 0.4 seconds timeout (orig: 1) */
         int triggered_nfds = select(server->max_fd + 1, &read_fds, NULL, NULL, &timeout);
         if (triggered_nfds > 0) {
             if (FD_ISSET(server->listen_fd, &read_fds)) {

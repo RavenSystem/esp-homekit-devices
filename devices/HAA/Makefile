@@ -1,5 +1,6 @@
 PROGRAM = haamain
 
+
 EXTRA_COMPONENTS = \
 	$(abspath setup_mode) \
     extras/onewire \
@@ -40,6 +41,7 @@ EXTRA_CFLAGS += -DDEFAULT_RAW_RECVMBOX_SIZE=5
 
 ## Create HAA_LCM compatible binary
 #EXTRA_CFLAGS += -DHAALCM
+#PROGRAM = haa_lcm
 
 ## HAA_DEBUG
 #EXTRA_CFLAGS += -DHAA_DEBUG
