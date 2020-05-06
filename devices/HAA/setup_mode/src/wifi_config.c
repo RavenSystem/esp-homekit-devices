@@ -397,10 +397,12 @@ static void wifi_config_server_on_settings_update(client_t *client) {
     
     if (reposerver_param->value) {
         sysparam_set_string(CUSTOM_REPO_SYSPARAM, reposerver_param->value);
+    } else {
+        sysparam_set_string(CUSTOM_REPO_SYSPARAM, "");
     }
     
     if (repoport_param->value) {
-        int32_t port = strtol(repoport_param->value, NULL, 10);
+        const int32_t port = strtol(repoport_param->value, NULL, 10);
         sysparam_set_int32(PORT_NUMBER_SYSPARAM, port);
     }
     
