@@ -31,6 +31,8 @@ typedef struct {
     // Used for pairing using QR code
     char *setupId;
     
+    uint16_t mdns_ttl;
+    
     bool insecure;
     bool log_output;
 
@@ -49,6 +51,7 @@ void homekit_server_reset();
 void homekit_mdns_announce();
 
 int  homekit_get_accessory_id(char *buffer, size_t size);
+bool homekit_is_pairing();
 bool homekit_is_paired();
 
 // Client related stuff

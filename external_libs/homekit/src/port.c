@@ -8,10 +8,6 @@
 #include <esplibs/libmain.h>
 #include "mdnsresponder.h"
 
-#ifndef MDNS_TTL
-#define MDNS_TTL 2500
-#endif
-
 uint32_t homekit_random() {
     return hwrand();
 }
@@ -52,12 +48,11 @@ void homekit_mdns_add_txt(const char *key, const char *format, ...) {
     }
 }
 
-void homekit_mdns_configure_finalize() {
+void homekit_mdns_configure_finalize(const uint16_t mdns_ttl) {
     mdns_clear();
-    mdns_add_facility(mdns_instance_name, "_hap", mdns_txt_rec, mdns_TCP, mdns_port, MDNS_TTL);
+    mdns_add_facility(mdns_instance_name, "_hap", mdns_txt_rec, mdns_TCP, mdns_port, mdns_ttl);
 
-    printf("mDNS announcement: Name=%s %s Port=%d TTL=%d\n",
-           mdns_instance_name, mdns_txt_rec, mdns_port, MDNS_TTL);
+    printf("mDNS announcement: Name=%s %s Port=%d TTL=%d\n", mdns_instance_name, mdns_txt_rec, mdns_port, mdns_ttl);
 }
 
 
@@ -119,7 +114,7 @@ void homekit_mdns_add_txt(const char *key, const char *format, ...) {
     }
 }
 
-void homekit_mdns_configure_finalize() {
+void homekit_mdns_configure_finalize(const uint16_t mdns_ttl) {
     /*
     printf("mDNS announcement: Name=%s %s Port=%d TTL=%d\n",
            name->value.string_value, txt_rec, PORT, 0);

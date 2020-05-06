@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "2.1.2"
-#define FIRMWARE_VERSION_OCTAL              020102      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "2.2.0"
+#define FIRMWARE_VERSION_OCTAL              020200      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #ifndef HAALCM
@@ -72,8 +72,8 @@
 #define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
 #define AUTODIMMER_TASK_PRIORITY            (tskIDLE_PRIORITY + 1)
 #define PING_TASK_PRIORITY                  (tskIDLE_PRIORITY + 0)
-#define IR_TX_TASK_PRIORITY                 (tskIDLE_PRIORITY + 10)
-#define UART_ACTION_TASK_PRIORITY           (tskIDLE_PRIORITY + 8)
+#define IR_TX_TASK_PRIORITY                 (configMAX_PRIORITIES - 1)
+#define UART_ACTION_TASK_PRIORITY           (tskIDLE_PRIORITY + 6)
 #define HTTP_GET_TASK_PRIORITY              (tskIDLE_PRIORITY + 1)
 
 // Button Events
@@ -89,6 +89,8 @@
 
 // JSON
 #define GENERAL_CONFIG                      "c"
+#define MDNS_TTL                            "ttl"
+#define MDNS_TTL_DEFAULT                    4500
 #define CUSTOM_HOSTNAME                     "n"
 #define LOG_OUTPUT                          "o"
 #define ALLOWED_SETUP_MODE_TIME             "m"
@@ -131,7 +133,8 @@
 #define PING_HOST                           "h"
 #define PING_RESPONSE_TYPE                  "r"
 #define PING_RETRIES                        3
-#define PING_POLL_DELAY                     5000
+#define PING_POLL_PERIOD                    "pt"
+#define PING_POLL_PERIOD_DEFAULT            4.9
 #define BUTTON_PRESS_TYPE                   "t"
 #define PULLUP_RESISTOR                     "p"
 #define VALUE                               "v"
@@ -177,6 +180,8 @@
 #define THERMOSTAT_ACTION_SENSOR_ERROR      5
 #define THERMOSTAT_TEMP_UP                  0
 #define THERMOSTAT_TEMP_DOWN                1
+#define TH_SENSOR_MAX_ALLOWED_ERRORS        3
+#define TH_SENSOR_ERROR_COUNT               ch_group->num[9]
 
 #define TEMPERATURE_SENSOR_GPIO             "g"
 #define TH_SENSOR_GPIO                      ch_group->num[0]

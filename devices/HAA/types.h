@@ -138,7 +138,7 @@ typedef struct _ch_group {
     homekit_characteristic_t *ch_child;
     homekit_characteristic_t *ch_sec;
     
-    float num[9];
+    float num[10];
     
     ETSTimer *timer;
     

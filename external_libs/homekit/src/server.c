@@ -56,6 +56,7 @@ typedef struct _client_context_t client_context_t;
   if ((server)->config->on_event) \
       (server)->config->on_event(event);
 
+bool is_pairing = false;
 
 typedef enum {
     HOMEKIT_ENDPOINT_UNKNOWN = 0,
@@ -1021,6 +1022,8 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
     sdk_system_overclock();
 #endif
 
+    is_pairing = true;
+    
     tlv_values_t *message = tlv_new();
     tlv_parse(data, size, message);
 
@@ -1503,6 +1506,8 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
         }
     }
 
+    is_pairing = false;
+    
     tlv_free(message);
 
 #ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
@@ -3436,7 +3441,7 @@ void homekit_setup_mdns(homekit_server_t *server) {
         homekit_mdns_add_txt("sh", "%s", encodedHash);
     }
 
-    homekit_mdns_configure_finalize();
+    homekit_mdns_configure_finalize(server->config->mdns_ttl);
 }
 
 char *homekit_accessory_id_generate() {
@@ -3571,4 +3576,8 @@ int homekit_get_accessory_id(char *buffer, size_t size) {
     free(accessory_id);
 
     return 0;
+}
+
+bool homekit_is_pairing() {
+    return is_pairing;
 }

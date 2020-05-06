@@ -87,6 +87,8 @@ char name_value[11];
 char serial_value[13];
 
 ETSTimer* ping_task_timer;
+float ping_poll_period = PING_POLL_PERIOD_DEFAULT;
+bool ping_is_running = false;
 
 last_state_t* last_states = NULL;
 ch_group_t* ch_groups = NULL;
@@ -246,6 +248,8 @@ ping_input_t *ping_input_find_by_host(char *host) {
 void ping_task() {
     INFO2("Ping...");
     
+    ping_is_running = true;
+    
     void ping_input_run_callback_fn(ping_input_callback_fn_t *callbacks) {
         ping_input_callback_fn_t *ping_input_callback_fn = callbacks;
         
@@ -308,11 +312,15 @@ void ping_task() {
         ping_input = ping_input->next;
     }
     
+    ping_is_running = false;
+    
     vTaskDelete(NULL);
 }
 
 void ping_task_timer_worker() {
-    xTaskCreate(ping_task, "ping_task", PING_TASK_SIZE, NULL, PING_TASK_PRIORITY, NULL);
+    if (!ping_is_running && !homekit_is_pairing()) {
+        xTaskCreate(ping_task, "ping_task", PING_TASK_SIZE, NULL, PING_TASK_PRIORITY, NULL);
+    }
 }
 
 // -----
@@ -1003,9 +1011,21 @@ void temperature_timer_worker(void *args) {
         ERROR2("Sensor");
         
         if (ch_group->ch6) {
-            ch_group->ch4->value = HOMEKIT_UINT8(THERMOSTAT_MODE_OFF);
-            
-            do_actions(ch_group, THERMOSTAT_ACTION_SENSOR_ERROR);
+            TH_SENSOR_ERROR_COUNT++;
+
+            if ((uint8_t) TH_SENSOR_ERROR_COUNT > TH_SENSOR_MAX_ALLOWED_ERRORS) {
+                ERROR2("Turning off TH...");
+                
+                TH_SENSOR_ERROR_COUNT = 0;
+                
+                ch_group->ch0->value.float_value = 0;
+                if (ch_group->ch1) {
+                    ch_group->ch1->value.float_value = 0;
+                }
+                
+                update_th(ch_group->ch2, HOMEKIT_UINT8(0));
+            }
+
         }
     }
     
@@ -1112,10 +1132,10 @@ void hsi2rgbw(uint16_t h, uint16_t s, uint16_t v, lightbulb_group_t *lightbulb_g
     const uint32_t cw = cw_f * PWM_SCALE;
     const uint32_t ww = ww_f * PWM_SCALE;
     
-    lightbulb_group->target_r = lightbulb_group->factor_r * ((r > PWM_SCALE) ? PWM_SCALE : r);
-    lightbulb_group->target_g = lightbulb_group->factor_g * ((g > PWM_SCALE) ? PWM_SCALE : g);
-    lightbulb_group->target_b = lightbulb_group->factor_b * ((b > PWM_SCALE) ? PWM_SCALE : b);
-    lightbulb_group->target_w = lightbulb_group->factor_w * ((rgb_min > PWM_SCALE) ? PWM_SCALE : rgb_min);
+    lightbulb_group->target_r  = lightbulb_group->factor_r  * ((r  > PWM_SCALE) ? PWM_SCALE : r);
+    lightbulb_group->target_g  = lightbulb_group->factor_g  * ((g  > PWM_SCALE) ? PWM_SCALE : g);
+    lightbulb_group->target_b  = lightbulb_group->factor_b  * ((b  > PWM_SCALE) ? PWM_SCALE : b);
+    lightbulb_group->target_w  = lightbulb_group->factor_w  * ((rgb_min > PWM_SCALE) ? PWM_SCALE : rgb_min);
     lightbulb_group->target_cw = lightbulb_group->factor_cw * ((cw > PWM_SCALE) ? PWM_SCALE : cw);
     lightbulb_group->target_ww = lightbulb_group->factor_ww * ((ww > PWM_SCALE) ? PWM_SCALE : ww);
 }
@@ -1207,7 +1227,13 @@ void rgbw_set_timer_worker() {
             if (channels_to_set == 0) {
                 setpwm_is_running = false;
                 sdk_os_timer_disarm(pwm_timer);
-                INFO2("Color fixed");
+                
+                if (log_output) {
+                    printf("Color fixed\n");
+                    for (uint8_t i = 0; i < pwm_info->channels; i++) {
+                        printf("PWM Ch %i = %i\n", i, multipwm_duty[i]);
+                    }
+                }
             }
             
             lightbulb_group = lightbulb_group->next;
@@ -2450,9 +2476,9 @@ void ir_tx_task(void *pvParameters) {
             const bool ir_true = true ^ ir_tx_inv;
             const bool ir_false = false ^ ir_tx_inv;
             
-            while (ir_tx_is_running) {
-                vTaskDelay(MS_TO_TICK(200));
-            }
+            do {
+                vTaskDelay(MS_TO_TICK(100));
+            } while (ir_tx_is_running);
             
             ir_tx_is_running = true;
             
@@ -2491,8 +2517,6 @@ void ir_tx_task(void *pvParameters) {
             if (ir_code) {
                 free(ir_code);
             }
-            
-            vTaskDelay(MS_TO_TICK(100));
         }
         
         action_ir_tx = action_ir_tx->next;
@@ -2882,7 +2906,7 @@ void run_homekit_server() {
         ping_task_timer = malloc(sizeof(ETSTimer));
         memset(ping_task_timer, 0, sizeof(*ping_task_timer));
         sdk_os_timer_setfn(ping_task_timer, ping_task_timer_worker, NULL);
-        sdk_os_timer_arm(ping_task_timer, PING_POLL_DELAY, 1);
+        sdk_os_timer_arm(ping_task_timer, ping_poll_period * 1000.000f, 1);
     }
     
     led_blink(6);
@@ -3746,10 +3770,16 @@ void normal_mode_init() {
         INFO2("Button filter: %i", button_filter_value);
     }
     
-    // PWM Frequency
+    // PWM frequency
     if (cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ) != NULL) {
         pwm_freq = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ)->valuedouble;
         INFO2("PWM Freq: %i", pwm_freq);
+    }
+    
+    // Ping poll period
+    if (cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD) != NULL) {
+        ping_poll_period = (float) cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD)->valuedouble;
+        INFO2("Ping period: %g secs", ping_poll_period);
     }
     
     // Allowed Setup Mode Time
@@ -3766,9 +3796,15 @@ void normal_mode_init() {
     
     // Allow unsecure connections
     if (cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS) != NULL) {
-        bool allow_insecure = (bool) cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS)->valuedouble;
-        config.insecure = allow_insecure;
-        INFO2("Unsecure connections: %i", allow_insecure);
+        config.insecure = (bool) cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS)->valuedouble;
+        INFO2("Unsecure connections: %i", config.insecure);
+    }
+    
+    // mDNS TTL
+    config.mdns_ttl = MDNS_TTL_DEFAULT;
+    if (cJSON_GetObjectItemCaseSensitive(json_config, MDNS_TTL) != NULL) {
+        config.mdns_ttl = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, MDNS_TTL)->valuedouble;
+        INFO2("mDNS TTL: %i secs", config.mdns_ttl);
     }
     
     // Times to toggle quickly an accessory status to enter setup mode
@@ -4463,6 +4499,9 @@ void normal_mode_init() {
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TYPE) != NULL) {
             TH_TYPE = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TYPE)->valuedouble;
         }
+        
+        // Initial error counter
+        TH_SENSOR_ERROR_COUNT = 0;
         
         // HomeKit Characteristics
         homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200});
