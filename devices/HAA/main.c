@@ -938,12 +938,34 @@ void th_input_temp(const uint8_t gpio, void *args, const uint8_t type) {
 
 // --- TEMPERATURE
 void temperature_timer_worker(void *args) {
+    float taylor_log(float x) {
+        // https://stackoverflow.com/questions/46879166/finding-the-natural-logarithm-of-a-number-using-taylor-series-in-c
+        if (x <= 0.0) {
+            return x;
+        }
+        
+        float z = (x + 1) / (x - 1);
+        const float step = ((x - 1) * (x - 1)) / ((x + 1) * (x + 1));
+        float totalValue = 0;
+        float powe = 1;
+        for (uint8_t i = 0; i < 10; i++) {
+            z *= step;
+            const float y = (1 / powe) * z;
+            totalValue = totalValue + y;
+            powe = powe + 2;
+        }
+        
+        totalValue *= 2;
+        
+        return totalValue;
+    }
+    
     ch_group_t *ch_group = args;
     
     float humidity_value, temperature_value;
     bool get_temp = false;
     
-    if (TH_SENSOR_TYPE != 3) {
+    if (TH_SENSOR_TYPE != 3 && TH_SENSOR_TYPE < 5) {
         dht_sensor_type_t current_sensor_type = DHT_TYPE_DHT22; // TH_SENSOR_TYPE == 2
         
         if (TH_SENSOR_TYPE == 1) {
@@ -953,7 +975,8 @@ void temperature_timer_worker(void *args) {
         }
         
         get_temp = dht_read_float_data(current_sensor_type, TH_SENSOR_GPIO, &humidity_value, &temperature_value);
-    } else {    // TH_SENSOR_TYPE == 3
+        
+    } else if (TH_SENSOR_TYPE == 3) {
         ds18b20_addr_t ds18b20_addr[1];
         
         if (ds18b20_scan_devices(TH_SENSOR_GPIO, ds18b20_addr, 1) == 1) {
@@ -963,6 +986,25 @@ void temperature_timer_worker(void *args) {
             humidity_value = 0.0;
             get_temp = true;
         }
+        
+    } else {
+        float adc = sdk_system_adc_read();
+        if (TH_SENSOR_TYPE == 5) {
+            // https://github.com/arendst/Tasmota/blob/7177c7d8e003bb420d8cae39f544c2b8a9af09fe/tasmota/xsns_02_analog.ino#L201
+            temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 + taylor_log(((32000 * adc) / ((1024 * 3.3) - adc)) / 10000)));
+            
+        } else if (TH_SENSOR_TYPE == 6) {
+            temperature_value = adc;
+            
+        } else {    // TH_SENSOR_TYPE == 7
+            temperature_value = 1024 - adc;
+        }
+        
+        if (TH_SENSOR_HUM_OFFSET != 0.000000f) {
+            temperature_value *= TH_SENSOR_HUM_OFFSET;
+        }
+        
+        get_temp = true;
     }
     
     //get_temp = true; temperature_value = 21;      // Only for tests. Keep comment for releases
@@ -2870,7 +2912,7 @@ void delayed_sensor_starter_task(void *args) {
     INFO2("Starting delayed sensor");
     ch_group_t *ch_group = args;
     
-    vTaskDelay(ch_group->accessory * MS_TO_TICK(TH_SENSOR_POLL_PERIOD_MIN * 2000));
+    vTaskDelay(((ch_group->accessory - 1) * MS_TO_TICK(5000)) + 1);
     
     temperature_timer_worker(ch_group);
     sdk_os_timer_arm(ch_group->timer, TH_SENSOR_POLL_PERIOD * 1000, 1);
@@ -4592,7 +4634,7 @@ void normal_mode_init() {
         ch_group->next = ch_groups;
         ch_groups = ch_group;
             
-        if (TH_SENSOR_GPIO != -1) {
+        if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 4) {
             th_sensor_starter(ch_group);
         }
         
@@ -4660,7 +4702,7 @@ void normal_mode_init() {
         accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
         accessories[accessory]->services[1]->characteristics[0] = ch0;
             
-        if (TH_SENSOR_GPIO != -1) {
+        if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 4) {
             th_sensor_starter(ch_group);
         }
         
@@ -5583,6 +5625,7 @@ void user_init(void) {
 
     printf("\n\n\n\n");
     
+#ifndef HAALCM
     // Sysparam starter
     sysparam_status_t status;
     status = sysparam_init(SYSPARAMSECTOR, 0);
@@ -5592,12 +5635,9 @@ void user_init(void) {
         sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
         sysparam_init(SYSPARAMSECTOR, 0);
     } else if (status == SYSPARAM_OK) {
-#ifndef HAALCM
         printf("Sysparam ready\n");
-#else
-        printf("Sysparam LCM ready\n");
-#endif  // HAALCM
     }
+#endif  // HAALCM
 
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);

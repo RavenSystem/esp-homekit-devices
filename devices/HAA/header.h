@@ -20,17 +20,12 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "2.2.1"
-#define FIRMWARE_VERSION_OCTAL              020201      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "2.3.0"
+#define FIRMWARE_VERSION_OCTAL              020300      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
-#ifndef HAALCM
 #define SYSPARAMSECTOR                      0xF3000
 #define SYSPARAMSIZE                        8
-#else
-#define SYSPARAMSECTOR                      0xF7000
-#define SYSPARAMSIZE                        2
-#endif  // HAALCM
 
 #define TOTAL_ACC_SYSPARAM                  "total_ac"
 #define HAA_JSON_SYSPARAM                   "haa_conf"
@@ -190,7 +185,7 @@
 #define TEMPERATURE_SENSOR_POLL_PERIOD      "j"
 #define TH_SENSOR_POLL_PERIOD               ch_group->num[2]
 #define TH_SENSOR_POLL_PERIOD_DEFAULT       30
-#define TH_SENSOR_POLL_PERIOD_MIN           2.5
+#define TH_SENSOR_POLL_PERIOD_MIN           0.05
 #define TEMPERATURE_OFFSET                  "z"
 #define TH_SENSOR_TEMP_OFFSET               ch_group->num[3]
 #define HUMIDITY_OFFSET                     "h"
@@ -365,6 +360,8 @@
 
 #define MIN(x, y)                           (((x) < (y)) ? (x) : (y))
 #define MAX(x, y)                           (((x) > (y)) ? (x) : (y))
+
+#define KELVIN_TO_CELSIUS(x)                ((x) - 273.15)
 
 #define DEBUG(cond, message, ...)           if (cond) printf("%s: " message "\n", __func__, ##__VA_ARGS__);
 #define INFO(cond, message, ...)            if (cond) printf(message "\n", ##__VA_ARGS__);
