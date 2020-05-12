@@ -1,7 +1,7 @@
 /*
  * Advanced Button Manager
  *
- * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
+ * Copyright 2018-2020 José A. Jiménez (@RavenSystem)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,20 +27,19 @@
 #include "adv_button.h"
 
 #ifndef ADV_BUTTON_MAX_EVAL
-#define ADV_BUTTON_MAX_EVAL         8       // Must be an odd number
+#define ADV_BUTTON_MAX_EVAL         (6)
 #endif
 
-#define DOUBLEPRESS_TIME            400
+#define DOUBLEPRESS_TIME            (400)
 #define LONGPRESS_TIME              (DOUBLEPRESS_TIME + 10)
-#define VERYLONGPRESS_TIME          1500
-#define HOLDPRESS_TIME              8000
+#define VERYLONGPRESS_TIME          (1500)
+#define HOLDPRESS_TIME              (8000)
 
-#define BUTTON_EVAL_DELAY_MIN       10
+#define BUTTON_EVAL_DELAY_MIN       (10)
 #define BUTTON_EVAL_DELAY_MAX       (BUTTON_EVAL_DELAY_MIN + 200)
 
-#define DISABLE_PRESS_COUNT         200
+#define DISABLE_PRESS_COUNT         (200)
 
-#define EVALUATE_MID                (ADV_BUTTON_MAX_EVAL >> 1)
 #define DISABLE_TIME                (ADV_BUTTON_MAX_EVAL * 10)
 #define MIN(x, y)                   (((x) < (y)) ? (x) : (y))
 #define MAX(x, y)                   (((x) > (y)) ? (x) : (y))
@@ -202,18 +201,22 @@ IRAM static void button_evaluate_fn() {
         while (button) {
             if (gpio_read(button->gpio)) {
                 button->value = MIN(button->value++, ADV_BUTTON_MAX_EVAL);
+                if (button->value == ADV_BUTTON_MAX_EVAL) {
+                    button->state = true;
+                }
             } else {
                 button->value = MAX(button->value--, 0);
+                if (button->value == 0) {
+                    button->state = false;
+                }
             }
-            
-            button->state = (button->value > EVALUATE_MID);
-            
+
             if (button->state != button->old_state) {
                 button->old_state = button->state;
                 
-                if (gpio_read(button->gpio) ^ button->inverted) {   // 1 HIGH
+                if (button->state ^ button->inverted) {     // 1 HIGH
                     push_up(button->gpio);
-                } else {                                            // 0 LOW
+                } else {                                    // 0 LOW
                     push_down(button->gpio);
                 }
             }
@@ -253,8 +256,13 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
         button->state = gpio_read(button->gpio);
         
         button->old_state = button->state;
-        button->value = EVALUATE_MID;
         
+        if (button->state) {
+            button->value = ADV_BUTTON_MAX_EVAL;
+        } else {
+            button->value = 0;
+        }
+
         sdk_os_timer_setfn(&button->hold_timer, adv_button_hold_callback, button);
         sdk_os_timer_setfn(&button->press_timer, adv_button_single_callback, button);
         

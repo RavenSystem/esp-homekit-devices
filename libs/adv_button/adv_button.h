@@ -1,7 +1,7 @@
 /*
  * Advanced Button Manager
  *
- * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
+ * Copyright 2018-2020 José A. Jiménez (@RavenSystem)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,12 +24,12 @@
 #ifndef __ADVANCED_BUTTON__
 #define __ADVANCED_BUTTON__
 
-#define INVSINGLEPRESS_TYPE         0
-#define SINGLEPRESS_TYPE            1
-#define DOUBLEPRESS_TYPE            2
-#define LONGPRESS_TYPE              3
-#define VERYLONGPRESS_TYPE          4
-#define HOLDPRESS_TYPE              5
+#define INVSINGLEPRESS_TYPE         (0)
+#define SINGLEPRESS_TYPE            (1)
+#define DOUBLEPRESS_TYPE            (2)
+#define LONGPRESS_TYPE              (3)
+#define VERYLONGPRESS_TYPE          (4)
+#define HOLDPRESS_TYPE              (5)
 
 typedef void (*button_callback_fn)(uint8_t gpio, void *args, uint8_t param);
 

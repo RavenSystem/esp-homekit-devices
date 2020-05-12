@@ -1,7 +1,7 @@
 /*
  * Advanced Button Manager Example
  *
- * Copyright 2018-2019 José A. Jiménez (@RavenSystem)
+ * Copyright 2018-2020 José A. Jiménez (@RavenSystem)
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -72,6 +72,6 @@ void user_init(void) {
     adv_button_register_callback_fn(BUTTON_GPIO, holdpress_callback, HOLDPRESS_TYPE, NULL, 0);
     
     adv_button_create(TOGGLE_GPIO, true, false);
-    adv_button_register_callback_fn(TOGGLE_GPIO, toggle_callback, INVSINGLEPRESS_TYPE, NULL, 0);     // Low
-    adv_button_register_callback_fn(TOGGLE_GPIO, toggle_callback, SINGLEPRESS_TYPE, NULL, 0);     // High
+    adv_button_register_callback_fn(TOGGLE_GPIO, toggle_callback, INVSINGLEPRESS_TYPE, NULL, 0);    // Low
+    adv_button_register_callback_fn(TOGGLE_GPIO, toggle_callback, SINGLEPRESS_TYPE, NULL, 0);       // High
 }

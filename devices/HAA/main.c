@@ -991,7 +991,7 @@ void temperature_timer_worker(void *args) {
         float adc = sdk_system_adc_read();
         if (TH_SENSOR_TYPE == 5) {
             // https://github.com/arendst/Tasmota/blob/7177c7d8e003bb420d8cae39f544c2b8a9af09fe/tasmota/xsns_02_analog.ino#L201
-            temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 + taylor_log(((32000 * adc) / ((1024 * 3.3) - adc)) / 10000)));
+            temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 + taylor_log(((32000 * adc) / ((1024 * 3.3) - adc)) / 10000))) - 15;
             
         } else if (TH_SENSOR_TYPE == 6) {
             temperature_value = adc;
