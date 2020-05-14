@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "2.3.1"
-#define FIRMWARE_VERSION_OCTAL              020301      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "2.3.2"
+#define FIRMWARE_VERSION_OCTAL              020302      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMSECTOR                      0xF3000
@@ -50,7 +50,7 @@
 #define TYPE_FAN                            8
 #define TYPE_TV                             9
 
-// Task Stack Sizes
+// Task Stack Sizes                         configMINIMAL_STACK_SIZE = 256
 #define INITIAL_SETUP_TASK_SIZE             (configMINIMAL_STACK_SIZE * 4)
 #define LED_TASK_SIZE                       (configMINIMAL_STACK_SIZE * 1)
 #define REBOOT_TASK_SIZE                    (configMINIMAL_STACK_SIZE * 2)
@@ -61,10 +61,10 @@
 #define IR_TX_TASK_SIZE                     (configMINIMAL_STACK_SIZE * 4)
 #define UART_ACTION_TASK_SIZE               (configMINIMAL_STACK_SIZE * 2)
 #define HTTP_GET_TASK_SIZE                  (configMINIMAL_STACK_SIZE * 2)
-#define DELAYED_SENSOR_START_TASK_SIZE      (configMINIMAL_STACK_SIZE * 1)
+#define DELAYED_SENSOR_START_TASK_SIZE      (configMINIMAL_STACK_SIZE * 2)
 
 // Task Priorities
-#define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
+#define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 0)
 #define AUTODIMMER_TASK_PRIORITY            (tskIDLE_PRIORITY + 1)
 #define PING_TASK_PRIORITY                  (tskIDLE_PRIORITY + 0)
 #define IR_TX_TASK_PRIORITY                 (configMAX_PRIORITIES - 1)
@@ -276,8 +276,16 @@
 
 #define FAN_SPEED_STEPS                     "e"
 
+#define PM_SENSOR_TYPE                      "n"
+#define PM_POLL_PERIOD                      "j"
+#define PM_POLL_PERIOD_DEFAULT              1
+#define PM_VOLTAGE_FACTOR                   "vf"
+#define PM_VOLTAGE_OFFSET                   "vo"
+#define PM_CURRENT_FACTOR                   "cf"
+#define PM_CURRENT_OFFSET                   "co"
+
 #define MAX_ACTIONS                         32      // from 0 to (MAX_ACTIONS - 1)
-#define MAX_WILDCARD_ACTIONS                2       // from 0 to (MAX_WILDCARD_ACTIONS - 1)
+#define MAX_WILDCARD_ACTIONS                3       // from 0 to (MAX_WILDCARD_ACTIONS - 1)
 #define WILDCARD_ACTIONS_ARRAY_HEADER       "y"
 #define NO_LAST_WILDCARD_ACTION             (-1000)
 #define WILDCARD_ACTIONS                    "0"
@@ -341,6 +349,8 @@
 #define ACC_TYPE_LIGHT_SENSOR               50
 #define ACC_TYPE_TV                         60
 #define ACC_TYPE_FAN                        65
+#define ACC_POWER_MONITOR_INIT              75
+#define ACC_POWER_MONITOR_END               82
 
 #define ACC_CREATION_DELAY                  30
 #define EXIT_EMERGENCY_SETUP_MODE_TIME      2200

@@ -141,6 +141,7 @@ typedef struct _ch_group {
     float num[10];
     
     ETSTimer *timer;
+    ETSTimer *timer2;
     
     char *ir_protocol;
     
@@ -154,7 +155,7 @@ typedef struct _ch_group {
     
     wildcard_action_t *wildcard_action;
     
-    float last_wildcard_action[2];
+    float last_wildcard_action[3];
     
     struct _ch_group *next;
 } ch_group_t;
