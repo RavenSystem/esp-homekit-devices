@@ -76,7 +76,6 @@ typedef struct _client {
 } client_t;
 
 ETSTimer auto_reboot_timer;
-ETSTimer wifi_scan_timer;
 
 static void wifi_config_station_connect();
 static void wifi_config_softap_start();
@@ -196,12 +195,13 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
 }
 
 static void wifi_scan_task(void *arg) {
-    sdk_wifi_station_scan(NULL, wifi_scan_done_cb);
+    INFO("Start WiFi scan");
+    
+    while (context != NULL) {
+        sdk_wifi_station_scan(NULL, wifi_scan_done_cb);
+        vTaskDelay(10000 / portTICK_PERIOD_MS);
+    }
 
-    vTaskDelete(NULL);
-}
-
-static void wifi_scan_finish_task(void *arg) {
     xSemaphoreTake(wifi_networks_mutex, portMAX_DELAY);
 
     wifi_network_info_t *wifi_network = wifi_networks;
@@ -213,17 +213,8 @@ static void wifi_scan_finish_task(void *arg) {
     wifi_networks = NULL;
 
     xSemaphoreGive(wifi_networks_mutex);
-    
-    vTaskDelete(NULL);
-}
 
-static void wifi_scan() {
-    if (context != NULL) {
-        xTaskCreate(wifi_scan_task, "wifi_scan_task", (configMINIMAL_STACK_SIZE * 1), NULL, (tskIDLE_PRIORITY + 0), NULL);
-    } else {
-        sdk_os_timer_disarm(&wifi_scan_timer);
-        xTaskCreate(wifi_scan_finish_task, "wifi_scan_finish_task", (configMINIMAL_STACK_SIZE * 1), NULL, (tskIDLE_PRIORITY + 0), NULL);
-    }
+    vTaskDelete(NULL);
 }
 
 #include "index.html.h"
@@ -503,16 +494,19 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
             client_send_redirect(client, 301, "/settings");
             break;
         }
+            
         case ENDPOINT_SETTINGS: {
             wifi_config_server_on_settings(client);
             break;
         }
+            
         case ENDPOINT_SETTINGS_UPDATE: {
             wifi_config_context_free(context);
             xTaskCreate(wifi_config_server_on_settings_update_task, "on_settings_update_task", (configMINIMAL_STACK_SIZE * 2), client, (tskIDLE_PRIORITY + 0), NULL);
             return 0;
             break;
         }
+            
         case ENDPOINT_UNKNOWN: {
             INFO("Unknown");
             client_send_redirect(client, 302, "http://192.168.4.1/settings");
@@ -621,12 +615,7 @@ static void http_task(void *arg) {
     vTaskDelete(NULL);
 }
 
-static void http_start() {
-    xTaskCreate(http_task, "http_task", 512, NULL, 2, &context->http_task_handle);
-}
-
-static void dns_task(void *arg)
-{
+static void dns_task(void *arg) {
     INFO("Start DNS server");
 
     ip4_addr_t server_addr;
@@ -708,11 +697,6 @@ static void dns_task(void *arg)
     vTaskDelete(NULL);
 }
 
-
-static void dns_start() {
-    xTaskCreate(dns_task, "dns_task", 384, NULL, 2, &context->dns_task_handle);
-}
-
 static void dns_stop() {
     if (!context->dns_task_handle)
         return;
@@ -759,17 +743,15 @@ static void wifi_config_softap_start() {
     wifi_networks_mutex = xSemaphoreCreateBinary();
     xSemaphoreGive(wifi_networks_mutex);
 
-    sdk_os_timer_setfn(&wifi_scan_timer, wifi_scan, NULL);
-    sdk_os_timer_arm(&wifi_scan_timer, 10000, true);
-    wifi_scan();
+    xTaskCreate(wifi_scan_task, "wifi_scan_task", (configMINIMAL_STACK_SIZE * 1), NULL, (tskIDLE_PRIORITY + 0), NULL);
 
     INFO("Start DHCP server");
     dhcpserver_start(&first_client_ip, 4);
     dhcpserver_set_router(&ap_ip.ip);
     dhcpserver_set_dns(&ap_ip.ip);
 
-    dns_start();
-    http_start();
+    xTaskCreate(dns_task, "dns_task", (configMINIMAL_STACK_SIZE * 2), NULL, (tskIDLE_PRIORITY + 1), &context->dns_task_handle);
+    xTaskCreate(http_task, "http_task", (configMINIMAL_STACK_SIZE * 2), NULL, (tskIDLE_PRIORITY + 1), &context->http_task_handle);
 }
 
 static void wifi_config_softap_stop() {
