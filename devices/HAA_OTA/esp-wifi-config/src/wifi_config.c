@@ -76,6 +76,7 @@ typedef struct _client {
 } client_t;
 
 ETSTimer auto_reboot_timer;
+ETSTimer wifi_scan_timer;
 
 static void wifi_config_station_connect();
 static void wifi_config_softap_start();
@@ -132,7 +133,7 @@ typedef struct _wifi_network_info {
     struct _wifi_network_info *next;
 } wifi_network_info_t;
 
-void wifi_config_reset() {
+static void wifi_config_reset() {
     struct sdk_station_config sta_config;
     memset(&sta_config, 0, sizeof(sta_config));
 
@@ -195,13 +196,12 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
 }
 
 static void wifi_scan_task(void *arg) {
-    INFO("Start WiFi scan");
-    
-    while (context != NULL) {
-        sdk_wifi_station_scan(NULL, wifi_scan_done_cb);
-        vTaskDelay(10000 / portTICK_PERIOD_MS);
-    }
+    sdk_wifi_station_scan(NULL, wifi_scan_done_cb);
 
+    vTaskDelete(NULL);
+}
+
+static void wifi_scan_finish_task(void *arg) {
     xSemaphoreTake(wifi_networks_mutex, portMAX_DELAY);
 
     wifi_network_info_t *wifi_network = wifi_networks;
@@ -213,8 +213,17 @@ static void wifi_scan_task(void *arg) {
     wifi_networks = NULL;
 
     xSemaphoreGive(wifi_networks_mutex);
-
+    
     vTaskDelete(NULL);
+}
+
+static void wifi_scan() {
+    if (context != NULL) {
+        xTaskCreate(wifi_scan_task, "wifi_scan_task", (configMINIMAL_STACK_SIZE * 1), NULL, (tskIDLE_PRIORITY + 0), NULL);
+    } else {
+        sdk_os_timer_disarm(&wifi_scan_timer);
+        xTaskCreate(wifi_scan_finish_task, "wifi_scan_finish_task", (configMINIMAL_STACK_SIZE * 1), NULL, (tskIDLE_PRIORITY + 0), NULL);
+    }
 }
 
 #include "index.html.h"
@@ -230,7 +239,7 @@ static void wifi_config_server_on_settings(client_t *client) {
         "Connection: close\r\n"
         "\r\n";
 
-    client_send(client, http_prologue, sizeof(http_prologue)-1);
+    client_send(client, http_prologue, sizeof(http_prologue) - 1);
     client_send_chunk(client, html_settings_header);
     
     sysparam_status_t status;
@@ -314,8 +323,17 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send_chunk(client, "");
 }
 
+static void http_stop() {
+    if (! context->http_task_handle) {
+        return;
+    }
 
-static void wifi_config_server_on_settings_update(client_t *client) {
+    xTaskNotify(context->http_task_handle, 1, eSetValueWithOverwrite);
+}
+
+static void wifi_config_server_on_settings_update_task(void* args) {
+    client_t* client = args;
+    
     INFO("Update settings, body = %s", client->body);
 
     form_param_t *form = form_params_parse((char *)client->body);
@@ -342,6 +360,7 @@ static void wifi_config_server_on_settings_update(client_t *client) {
     int8_t hk_total_ac = 0;
     sysparam_get_int8(TOTAL_ACC_SYSPARAM, &hk_total_ac);
     char saved_state_id[5];
+    memset(saved_state_id, 0, 5);
     for (uint16_t int_saved_state_id = 100; int_saved_state_id <= hk_total_ac * 100; int_saved_state_id++) {
         itoa(int_saved_state_id, saved_state_id, 10);
         sysparam_set_data(saved_state_id, NULL, 0, false);
@@ -385,8 +404,10 @@ static void wifi_config_server_on_settings_update(client_t *client) {
         sysparam_set_string(WIFI_SSID_SYSPARAM, ssid_param->value);
 
         if (bssid_param->value && strlen(bssid_param->value) == 12) {
-            char *bssid = malloc(7);
-            char *hex = malloc(3);
+            char bssid[7];
+            memset(bssid, 0, 7);
+            char hex[3];
+            memset(hex, 0, 3);
             
             for (uint8_t i = 0; i < 6; i++) {
                 hex[0] = bssid_param->value[(i * 2)];
@@ -396,8 +417,6 @@ static void wifi_config_server_on_settings_update(client_t *client) {
 
             sysparam_set_string(WIFI_BSSID_SYSPARAM, bssid);
             
-            free(hex);
-            free(bssid);
         } else {
             sysparam_set_string(WIFI_BSSID_SYSPARAM, "");
         }
@@ -422,9 +441,11 @@ static void wifi_config_server_on_settings_update(client_t *client) {
         }
     }
     
-    INFO("Rebooting...");
+    INFO("\nRebooting...\n\n");
     vTaskDelay(250 / portTICK_PERIOD_MS);
     sdk_system_restart();
+    
+    vTaskDelete(NULL);
 }
 
 
@@ -488,7 +509,8 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
         }
         case ENDPOINT_SETTINGS_UPDATE: {
             wifi_config_context_free(context);
-            wifi_config_server_on_settings_update(client);
+            xTaskCreate(wifi_config_server_on_settings_update_task, "on_settings_update_task", (configMINIMAL_STACK_SIZE * 2), client, (tskIDLE_PRIORITY + 0), NULL);
+            return 0;
             break;
         }
         case ENDPOINT_UNKNOWN: {
@@ -538,7 +560,7 @@ static void http_task(void *arg) {
     bind(listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
     listen(listenfd, 2);
 
-    char data[64];
+    char data[128];
 
     bool running = true;
     while (running) {
@@ -562,9 +584,13 @@ static void http_task(void *arg) {
         client_t *client = client_new();
         client->fd = fd;
 
+        int data_total = 0;
+        
         for (;;) {
             int data_len = lwip_read(client->fd, data, sizeof(data));
-            INFO("lwip_read %d", data_len);
+            
+            data_total += data_len;
+            INFO("lwip_read %d, %d", data_len, data_total);
 
             if (data_len > 0) {
                 http_parser_execute(
@@ -597,14 +623,6 @@ static void http_task(void *arg) {
 
 static void http_start() {
     xTaskCreate(http_task, "http_task", 512, NULL, 2, &context->http_task_handle);
-}
-
-static void http_stop() {
-    if (! context->http_task_handle) {
-        return;
-    }
-
-    xTaskNotify(context->http_task_handle, 1, eSetValueWithOverwrite);
 }
 
 static void dns_task(void *arg)
@@ -741,7 +759,9 @@ static void wifi_config_softap_start() {
     wifi_networks_mutex = xSemaphoreCreateBinary();
     xSemaphoreGive(wifi_networks_mutex);
 
-    xTaskCreate(wifi_scan_task, "wifi_scan_task", 384, NULL, 2, NULL);
+    sdk_os_timer_setfn(&wifi_scan_timer, wifi_scan, NULL);
+    sdk_os_timer_arm(&wifi_scan_timer, 10000, true);
+    wifi_scan();
 
     INFO("Start DHCP server");
     dhcpserver_start(&first_client_ip, 4);
@@ -785,7 +805,7 @@ static void auto_reboot_run() {
     sdk_system_restart();
 }
 
-bool wifi_config_connect() {
+static uint8_t wifi_config_connect() {
     char *wifi_ssid = NULL;
     sysparam_set_string(OTA_VERSION_SYSPARAM, OTAVERSION);
     
@@ -806,16 +826,18 @@ bool wifi_config_connect() {
 
         int8_t wifi_mode = 0;
         sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
-        if (wifi_mode == 1) {
-            char *wifi_bssid = NULL;
-            sysparam_get_string(WIFI_BSSID_SYSPARAM, &wifi_bssid);
-            if (wifi_bssid) {
-                sta_config.bssid_set = 1;
-                strncpy((char *)sta_config.bssid, wifi_bssid, sizeof(sta_config.bssid));
-                printf("WiFi Mode: Forced BSSID %02x%02x%02x%02x%02x%02x\n", sta_config.bssid[0], sta_config.bssid[1], sta_config.bssid[2], sta_config.bssid[3], sta_config.bssid[4], sta_config.bssid[5]);
-               
-                free(wifi_bssid);
-            }
+        
+        char *wifi_bssid = NULL;
+        sysparam_get_string(WIFI_BSSID_SYSPARAM, &wifi_bssid);
+        INFO("Saved BSSID: %02x%02x%02x%02x%02x%02x", wifi_bssid[0], wifi_bssid[1], wifi_bssid[2], wifi_bssid[3], wifi_bssid[4], wifi_bssid[5]);
+        
+        if (wifi_mode == 1 && wifi_bssid) {
+            sta_config.bssid_set = 1;
+            strncpy((char *)sta_config.bssid, wifi_bssid, sizeof(sta_config.bssid));
+            INFO("WiFi Mode: Forced BSSID");
+            
+            //INFO("WiFi Mode: Forced BSSID %02x%02x%02x%02x%02x%02x", sta_config.bssid[0], sta_config.bssid[1], sta_config.bssid[2], sta_config.bssid[3], sta_config.bssid[4], sta_config.bssid[5]);
+
         } else {
             INFO("WiFi Mode: Normal");
             sta_config.bssid_set = 0;
@@ -831,12 +853,17 @@ bool wifi_config_connect() {
             free(wifi_password);
         }
         
-        return true;
+        if (wifi_bssid) {
+            free(wifi_bssid);
+        }
+        
+        return 1;
+        
     } else {
         INFO("No WiFi config found");
     }
     
-    return false;
+    return 0;
 }
 
 static void wifi_config_station_connect() {
