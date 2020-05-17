@@ -74,6 +74,8 @@ typedef struct {
     ETSTimer sta_connect_timeout;
     TaskHandle_t http_task_handle;
     TaskHandle_t dns_task_handle;
+    
+    bool scan_is_running;
 } wifi_config_context_t;
 
 static wifi_config_context_t *context;
@@ -133,7 +135,7 @@ static void client_send_redirect(client_t *client, int code, const char *redirec
 
 typedef struct _wifi_network_info {
     char ssid[33];
-    char bssid[7];
+    uint8_t bssid[6];
     char rssi[4];
     char channel[3];
     bool secure;
@@ -152,7 +154,7 @@ void wifi_config_reset() {
     sdk_wifi_station_set_auto_connect(false);
 }
 
-wifi_network_info_t *wifi_networks = NULL;
+wifi_network_info_t* wifi_networks = NULL;
 SemaphoreHandle_t wifi_networks_mutex;
 
 static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
@@ -180,15 +182,17 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
 
         wifi_network_info_t *net = wifi_networks;
         while (net) {
-            if (!strncmp(net->bssid, (char *)bss->bssid, sizeof(net->bssid)))
+            if (!memcmp(net->bssid, bss->bssid, 6)) {
                 break;
+            }
             net = net->next;
         }
+        
         if (!net) {
             wifi_network_info_t *net = malloc(sizeof(wifi_network_info_t));
             memset(net, 0, sizeof(*net));
             strncpy(net->ssid, (char *)bss->ssid, sizeof(net->ssid));
-            strncpy(net->bssid, (char *)bss->bssid, sizeof(net->bssid));
+            memcpy(net->bssid, bss->bssid, 6);
             itoa(bss->rssi, net->rssi, 10);
             itoa(bss->channel, net->channel, 10);
             net->secure = bss->authmode != AUTH_OPEN;
@@ -206,7 +210,7 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
 static void wifi_scan_task(void *arg) {
     INFO("Start WiFi scan");
     
-    while (context != NULL) {
+    while (context != NULL && context->scan_is_running) {
         sdk_wifi_station_scan(NULL, wifi_scan_done_cb);
         vTaskDelay(10000 / portTICK_PERIOD_MS);
     }
@@ -339,8 +343,21 @@ static void http_stop() {
     xTaskNotify(context->http_task_handle, 1, eSetValueWithOverwrite);
 }
 
+static void wifi_config_context_free(wifi_config_context_t *context) {
+    if (context->ssid_prefix)
+        free(context->ssid_prefix);
+
+    if (context->password)
+        free(context->password);
+
+    free(context);
+    context = NULL;
+}
+
 static void wifi_config_server_on_settings_update_task(void* args) {
     client_t* client = args;
+    
+    context->scan_is_running = false;
     
     INFO("Update settings, body = %s", client->body);
     
@@ -375,7 +392,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         itoa(int_saved_state_id, saved_state_id, 10);
         sysparam_set_data(saved_state_id, NULL, 0, false);
     }
-
+    
     if (conf_param->value) {
         sysparam_set_string(HAA_JSON_SYSPARAM, conf_param->value);
     }
@@ -420,21 +437,20 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         sysparam_set_string(WIFI_SSID_SYSPARAM, ssid_param->value);
 
         if (bssid_param->value && strlen(bssid_param->value) == 12) {
-            char bssid[7];
-            memset(bssid, 0, 7);
+            uint8_t bssid[6];
             char hex[3];
             memset(hex, 0, 3);
             
             for (uint8_t i = 0; i < 6; i++) {
                 hex[0] = bssid_param->value[(i * 2)];
                 hex[1] = bssid_param->value[(i * 2) + 1];
-                bssid[i] = (char) strtol(hex, NULL, 16);
+                bssid[i] = (uint8_t) strtol(hex, NULL, 16);
             }
 
-            sysparam_set_string(WIFI_BSSID_SYSPARAM, bssid);
+            sysparam_set_data(WIFI_BSSID_SYSPARAM, bssid, (size_t) 6, true);
             
         } else {
-            sysparam_set_string(WIFI_BSSID_SYSPARAM, "");
+            sysparam_set_data(WIFI_BSSID_SYSPARAM, NULL, 0, true);
         }
         
         if (password_param->value) {
@@ -497,17 +513,6 @@ static int wifi_config_server_on_body(http_parser *parser, const char *data, siz
     client->body[client->body_length] = 0;
 
     return 0;
-}
-
-static void wifi_config_context_free(wifi_config_context_t *context) {
-    if (context->ssid_prefix)
-        free(context->ssid_prefix);
-
-    if (context->password)
-        free(context->password);
-
-    free(context);
-    context = NULL;
 }
 
 static int wifi_config_server_on_message_complete(http_parser *parser) {
@@ -599,13 +604,13 @@ static void http_task(void *arg) {
         client_t *client = client_new();
         client->fd = fd;
 
-        int data_total = 0;
+        //int data_total = 0;
         
         for (;;) {
             int data_len = lwip_read(client->fd, data, sizeof(data));
             
-            data_total += data_len;
-            INFO("lwip_read %d, %d", data_len, data_total);
+            //data_total += data_len;
+            //INFO("lwip_read %d, %d", data_len, data_total);
 
             if (data_len > 0) {
                 http_parser_execute(
@@ -764,6 +769,7 @@ static void wifi_config_softap_start() {
     wifi_networks_mutex = xSemaphoreCreateBinary();
     xSemaphoreGive(wifi_networks_mutex);
 
+    context->scan_is_running = true;
     xTaskCreate(wifi_scan_task, "wifi_scan_task", (configMINIMAL_STACK_SIZE * 1), NULL, (tskIDLE_PRIORITY + 0), NULL);
 
     INFO("Start DHCP server");
@@ -843,13 +849,15 @@ uint8_t wifi_config_connect() {
         int8_t wifi_mode = 0;
         sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
         
-        char *wifi_bssid = NULL;
-        sysparam_get_string(WIFI_BSSID_SYSPARAM, &wifi_bssid);
+        uint8_t *wifi_bssid = NULL;
+        size_t len = 6;
+        bool is_binary = true;
+        sysparam_get_data(WIFI_BSSID_SYSPARAM, &wifi_bssid, &len, &is_binary);
         INFO("Saved BSSID: %02x%02x%02x%02x%02x%02x", wifi_bssid[0], wifi_bssid[1], wifi_bssid[2], wifi_bssid[3], wifi_bssid[4], wifi_bssid[5]);
         
         if (wifi_mode == 1 && wifi_bssid) {
             sta_config.bssid_set = 1;
-            strncpy((char *)sta_config.bssid, wifi_bssid, sizeof(sta_config.bssid));
+            memcpy(sta_config.bssid, wifi_bssid, 6);
             INFO("WiFi Mode: Forced BSSID");
             
             //INFO("WiFi Mode: Forced BSSID %02x%02x%02x%02x%02x%02x", sta_config.bssid[0], sta_config.bssid[1], sta_config.bssid[2], sta_config.bssid[3], sta_config.bssid[4], sta_config.bssid[5]);
@@ -883,7 +891,7 @@ uint8_t wifi_config_connect() {
 }
 
 static void wifi_config_station_connect() {
-    if (wifi_config_connect()) {
+    if (wifi_config_connect() == 1) {
         wifi_config_sta_connect_timeout_callback(context);
         
         sdk_os_timer_setfn(&context->sta_connect_timeout, wifi_config_sta_connect_timeout_callback, context);
@@ -892,12 +900,12 @@ static void wifi_config_station_connect() {
         if (!context->on_wifi_ready) {
             INFO("HAA Setup");
             
-            int8_t mode = 0;
-            sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &mode);
+            int8_t setup_mode = 0;
+            sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &setup_mode);
             
             sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
 
-            if (mode == 1) {
+            if (setup_mode == 1) {
                 INFO("Enabling auto reboot");
                 sdk_os_timer_setfn(&auto_reboot_timer, auto_reboot_run, NULL);
                 sdk_os_timer_arm(&auto_reboot_timer, AUTO_REBOOT_TIMEOUT, false);
@@ -905,6 +913,7 @@ static void wifi_config_station_connect() {
             
             wifi_config_softap_start();
         }
+        
     } else {
         wifi_config_softap_start();
     }

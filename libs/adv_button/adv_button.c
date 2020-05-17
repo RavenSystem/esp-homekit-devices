@@ -26,9 +26,7 @@
 #include <esplibs/libmain.h>
 #include "adv_button.h"
 
-#ifndef ADV_BUTTON_MAX_EVAL
 #define ADV_BUTTON_MAX_EVAL         (6)
-#endif
 
 #define DOUBLEPRESS_TIME            (400)
 #define LONGPRESS_TIME              (DOUBLEPRESS_TIME + 10)
@@ -36,7 +34,8 @@
 #define HOLDPRESS_TIME              (8000)
 
 #define BUTTON_EVAL_DELAY_MIN       (10)
-#define BUTTON_EVAL_DELAY_MAX       (BUTTON_EVAL_DELAY_MIN + 200)
+#define BUTTON_EVAL_DELAY_DEFAULT   (10)
+#define BUTTON_EVAL_DELAY_MAX       (BUTTON_EVAL_DELAY_MIN + 245)
 
 #define DISABLE_PRESS_COUNT         (200)
 
@@ -78,7 +77,8 @@ typedef struct _adv_button {
 } adv_button_t;
 
 static uint32_t disable_time = 0;
-static uint8_t button_evaluate_delay = BUTTON_EVAL_DELAY_MIN;
+static uint8_t button_evaluate_delay = BUTTON_EVAL_DELAY_DEFAULT;
+static int8_t button_evaluate_count = ADV_BUTTON_MAX_EVAL;
 static bool button_evaluate_is_working = false;
 static ETSTimer button_evaluate_timer;
 
@@ -106,6 +106,11 @@ static void adv_button_run_callback_fn(adv_button_callback_fn_t *callbacks, cons
 void adv_button_set_evaluate_delay(const uint8_t new_delay) {
     if (new_delay < BUTTON_EVAL_DELAY_MIN) {
         button_evaluate_delay = BUTTON_EVAL_DELAY_MIN;
+        
+        button_evaluate_count -= (10 - new_delay);
+        if (button_evaluate_count < 1) {
+            button_evaluate_count = 1;
+        }
     } else if (new_delay > BUTTON_EVAL_DELAY_MAX) {
         button_evaluate_delay = BUTTON_EVAL_DELAY_MAX;
     } else {

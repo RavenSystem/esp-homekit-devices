@@ -3338,7 +3338,7 @@ static void homekit_run_server(homekit_server_t *server)
         fd_set read_fds;
         memcpy(&read_fds, &server->fds, sizeof(read_fds));
 
-        struct timeval timeout = { 0, 400000 }; /* 0.4 seconds timeout (orig: 1) */
+        struct timeval timeout = { 0, 100000 }; /* 0.1 seconds timeout (orig: 1) */
         int triggered_nfds = select(server->max_fd + 1, &read_fds, NULL, NULL, &timeout);
         if (triggered_nfds > 0) {
             if (FD_ISSET(server->listen_fd, &read_fds)) {
