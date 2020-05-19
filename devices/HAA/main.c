@@ -2982,6 +2982,7 @@ homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, "J
 homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "RavenSystem HAA");
 homekit_characteristic_t identify_function = HOMEKIT_CHARACTERISTIC_(IDENTIFY, identify);
 homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, FIRMWARE_VERSION);
+homekit_characteristic_t hap_version = HOMEKIT_CHARACTERISTIC_(VERSION, "1.1.0");
 
 homekit_server_config_t config;
 
@@ -3970,8 +3971,13 @@ void normal_mode_init() {
     
     // Define services and characteristics
     uint8_t accessory_numerator = 1;
+    uint8_t acc_count = 0;
     
-    void new_accessory(const uint8_t accessory, const uint8_t services) {
+    void new_accessory(const uint8_t accessory, uint8_t services) {
+        if (acc_count == 0) {
+            services++;
+        }
+
         accessories[accessory] = calloc(1, sizeof(homekit_accessory_t));
         accessories[accessory]->id = accessory + 1;
         accessories[accessory]->services = calloc(services, sizeof(homekit_service_t*));
@@ -3986,6 +3992,16 @@ void normal_mode_init() {
         accessories[accessory]->services[0]->characteristics[3] = &model;
         accessories[accessory]->services[0]->characteristics[4] = &firmware;
         accessories[accessory]->services[0]->characteristics[5] = &identify_function;
+        
+        if (acc_count == 0) {
+            INFO2("HAP v1.1.0");
+            services -= 2;
+            accessories[accessory]->services[services] = calloc(1, sizeof(homekit_service_t));
+            accessories[accessory]->services[services]->id = 100;
+            accessories[accessory]->services[services]->type = HOMEKIT_SERVICE_HAP_INFORMATION;
+            accessories[accessory]->services[services]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[services]->characteristics[0] = &hap_version;
+        }
     }
     
     homekit_characteristic_t *new_kill_switch(const uint8_t accessory) {
@@ -5587,8 +5603,6 @@ void normal_mode_init() {
         const uint8_t new_accessory_count = build_kill_switches(accessory + 1, ch_group, json_context);
         return new_accessory_count;
     }
-    
-    uint8_t acc_count = 0;
     
     // Accessory Builder
     if (bridge_needed) {

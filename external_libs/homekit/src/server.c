@@ -3398,7 +3398,7 @@ void homekit_setup_mdns(homekit_server_t *server) {
     // accessory model name (required)
     homekit_mdns_add_txt("md", "%s", model->value.string_value);
     // protocol version (required)
-    homekit_mdns_add_txt("pv", "1.0");
+    homekit_mdns_add_txt("pv", "1.1");
     // device ID (required)
     // should be in format XX:XX:XX:XX:XX:XX, otherwise devices will ignore it
     homekit_mdns_add_txt("id", "%s", server->accessory_id);

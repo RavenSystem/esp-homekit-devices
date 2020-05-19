@@ -47,6 +47,14 @@
 #define HOMEKIT_SERVICE_ACCESSORY_INFORMATION HOMEKIT_APPLE_UUID2("3E")
 
 /**
+ Defines information about HAP information.
+ 
+ Required Characteristics:
+ - VERSION
+ */
+#define HOMEKIT_SERVICE_HAP_INFORMATION HOMEKIT_APPLE_UUID2("A2")
+
+/**
  Defines that the accessory constains a fan. For more features see FAN2.
  
  Required Characteristics:
