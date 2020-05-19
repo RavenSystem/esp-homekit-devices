@@ -68,6 +68,7 @@ typedef enum {
     HOMEKIT_ENDPOINT_UPDATE_CHARACTERISTICS,
     HOMEKIT_ENDPOINT_PAIRINGS,
     HOMEKIT_ENDPOINT_RESOURCE,
+    HOMEKIT_ENDPOINT_PREPARE,
 } homekit_endpoint_t;
 
 
@@ -785,7 +786,6 @@ void send_404_response(client_context_t *context) {
     static char response[] = "HTTP/1.1 404 Not Found\r\n\r\n";
     client_send(context, (byte *)response, sizeof(response)-1);
 }
-
 
 typedef struct _client_event {
     const homekit_characteristic_t *characteristic;
@@ -2910,6 +2910,13 @@ void homekit_server_on_resource(client_context_t *context) {
     context->server->config->on_resource(context->body, context->body_length);
 }
 
+void homekit_server_on_prepare(client_context_t *context) {
+    CLIENT_INFO(context, "Prepare");
+    DEBUG_HEAP();
+
+    send_json_error_response(context, 200, HAPStatus_Success);
+}
+
 
 int homekit_server_on_url(http_parser *parser, const char *data, size_t length) {
     client_context_t *context = (client_context_t*) parser->data;
@@ -2948,6 +2955,8 @@ int homekit_server_on_url(http_parser *parser, const char *data, size_t length) 
     } else if (parser->method == HTTP_PUT) {
         if (!strncmp(data, "/characteristics", length)) {
             context->endpoint = HOMEKIT_ENDPOINT_UPDATE_CHARACTERISTICS;
+        } else if (!strncmp(data, "/prepare", length)) {
+            context->endpoint = HOMEKIT_ENDPOINT_PREPARE;
         }
     }
 
@@ -3017,6 +3026,12 @@ int homekit_server_on_message_complete(http_parser *parser) {
         case HOMEKIT_ENDPOINT_RESOURCE: {
             if (context->encrypted || allow_insecure_connections) {
                 homekit_server_on_resource(context);
+            }
+            break;
+        }
+        case HOMEKIT_ENDPOINT_PREPARE: {
+            if (context->encrypted || allow_insecure_connections) {
+                homekit_server_on_prepare(context);
             }
             break;
         }

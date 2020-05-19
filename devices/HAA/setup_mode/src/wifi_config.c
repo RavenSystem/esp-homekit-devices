@@ -74,8 +74,6 @@ typedef struct {
     ETSTimer sta_connect_timeout;
     TaskHandle_t http_task_handle;
     TaskHandle_t dns_task_handle;
-    
-    bool scan_is_running;
 } wifi_config_context_t;
 
 static wifi_config_context_t *context;
@@ -210,7 +208,7 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
 static void wifi_scan_task(void *arg) {
     INFO("Start WiFi scan");
     
-    while (context != NULL && context->scan_is_running) {
+    while (context != NULL) {
         sdk_wifi_station_scan(NULL, wifi_scan_done_cb);
         vTaskDelay(10000 / portTICK_PERIOD_MS);
     }
@@ -357,8 +355,6 @@ static void wifi_config_context_free(wifi_config_context_t *context) {
 static void wifi_config_server_on_settings_update_task(void* args) {
     client_t* client = args;
     
-    context->scan_is_running = false;
-    
     INFO("Update settings, body = %s", client->body);
     
     form_param_t *form = form_params_parse((char *)client->body);
@@ -379,9 +375,6 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     form_param_t *reposerver_param = form_params_find(form, "reposerver");
     form_param_t *repoport_param = form_params_find(form, "repoport");
     form_param_t *repossl_param = form_params_find(form, "repossl");
-    
-    static const char payload[] = "HTTP/1.1 204 \r\nContent-Type: text/html\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-    client_send(client, payload, sizeof(payload) - 1);
     
     // Remove saved states
     int8_t hk_total_ac = 0;
@@ -474,7 +467,12 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     }
     
     INFO("\nRebooting...\n\n");
+    
+    static const char payload[] = "HTTP/1.1 204 \r\nContent-Type: text/html\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+    client_send(client, payload, sizeof(payload) - 1);
+    
     vTaskDelay(250 / portTICK_PERIOD_MS);
+    
     sdk_system_restart();
     
     vTaskDelete(NULL);
@@ -769,7 +767,6 @@ static void wifi_config_softap_start() {
     wifi_networks_mutex = xSemaphoreCreateBinary();
     xSemaphoreGive(wifi_networks_mutex);
 
-    context->scan_is_running = true;
     xTaskCreate(wifi_scan_task, "wifi_scan_task", (configMINIMAL_STACK_SIZE * 1), NULL, (tskIDLE_PRIORITY + 0), NULL);
 
     INFO("Start DHCP server");
