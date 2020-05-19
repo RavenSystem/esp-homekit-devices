@@ -630,6 +630,8 @@ int ota_get_sign(char* repo, char* file, byte* signature, uint16_t port, bool is
 }
 
 int ota_verify_sign(int start_sector, int filesize, byte* signature) {
+    UDPLGP("Verifying sign... ");
+    
     int bytes;
     byte hash[HASHSIZE];
     byte buffer[1024];
@@ -660,7 +662,7 @@ int ota_verify_sign(int start_sector, int filesize, byte* signature) {
     int verify = 0;
     wc_ecc_verify_hash(signature, SIGNSIZE, hash, HASHSIZE, &verify, &public_key);
     
-    UDPLGP("Verify sign result = %s (%d)\n", verify == 1 ? "OK" : "ERROR" , verify);
+    UDPLGP("%s (%d)\n", verify == 1 ? "OK" : "ERROR" , verify);
 
     return verify - 1;
 }

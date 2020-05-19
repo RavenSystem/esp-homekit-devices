@@ -51,9 +51,7 @@ void ota_task(void *arg) {
     UDPLGP("\nHAA Installer Version: %s\n\n", OTAVERSION);
 
 #ifdef HAABOOT
-//  if (ota_boot()) {
-        sysparam_set_string(USER_VERSION_SYSPARAM, "none");
-//  }
+    sysparam_set_string(USER_VERSION_SYSPARAM, "none");
 #endif  // HAABOOT
     
     sysparam_status_t status;
@@ -98,66 +96,63 @@ void ota_task(void *arg) {
             ota_version = ota_get_version(user_repo, OTAVERSIONFILE, port, is_ssl);
             
 #ifdef HAABOOT
-//          if (ota_boot()) {
-                UDPLGP("\nRunning HAABOOT\n\n");
+            UDPLGP("\nRunning HAABOOT\n\n");
 
-                if (ota_get_sign(user_repo, OTAMAINFILE, signature, port, is_ssl) > 0) {
-                    file_size = ota_get_file(user_repo, OTAMAINFILE, BOOT1SECTOR, port, is_ssl);
-                    if (file_size > 0 && ota_verify_sign(BOOT1SECTOR, file_size, signature) == 0) {
-                        ota_finalize_file(BOOT1SECTOR);
-                        UDPLGP("\n*** OTAMAIN installed\n\n");
-                        sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
-                        ota_temp_boot();
-                    } else {
-                        UDPLGP("\n!!! Error installing OTAMAIN\n\n");
-                        sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
-                    }
+            if (ota_get_sign(user_repo, OTAMAINFILE, signature, port, is_ssl) > 0) {
+                file_size = ota_get_file(user_repo, OTAMAINFILE, BOOT1SECTOR, port, is_ssl);
+                if (file_size > 0 && ota_verify_sign(BOOT1SECTOR, file_size, signature) == 0) {
+                    ota_finalize_file(BOOT1SECTOR);
+                    UDPLGP("\n*** OTAMAIN installed\n\n");
+                    sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
+                    ota_temp_boot();
                 } else {
-                    UDPLGP("\n!!! Error downloading OTAMAIN signature\n\n");
+                    UDPLGP("\n!!! Error installing OTAMAIN\n\n");
                     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
                 }
+            } else {
+                UDPLGP("\n!!! Error downloading OTAMAIN signature\n\n");
+                sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
+            }
 #else   // HAABOOT
-//          } else {
-                UDPLGP("\nRunning OTAMAIN\n\n");
-                
-                if (strcmp(ota_version, OTAVERSION) != 0) {
-                    if (ota_get_sign(user_repo, OTABOOTFILE, signature, port, is_ssl) > 0) {
-                        file_size = ota_get_file(user_repo, OTABOOTFILE, BOOT0SECTOR, port, is_ssl);
-                        if (file_size > 0 && ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
-                            ota_finalize_file(BOOT0SECTOR);
-                            UDPLGP("\n*** HAABOOT new version installed\n\n");
-                        } else {
-                            UDPLGP("\n!!! Error installing HAABOOT new version\n\n");
-                        }
-                        
-                        break;
+            UDPLGP("\nRunning OTAMAIN\n\n");
+            
+            if (strcmp(ota_version, OTAVERSION) != 0) {
+                if (ota_get_sign(user_repo, OTABOOTFILE, signature, port, is_ssl) > 0) {
+                    file_size = ota_get_file(user_repo, OTABOOTFILE, BOOT0SECTOR, port, is_ssl);
+                    if (file_size > 0 && ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
+                        ota_finalize_file(BOOT0SECTOR);
+                        UDPLGP("\n*** HAABOOT new version installed\n\n");
                     } else {
-                        UDPLGP("\n!!! Error downloading HAABOOT new version signature\n\n");
+                        UDPLGP("\n!!! Error installing HAABOOT new version\n\n");
                     }
+                    
+                    break;
+                } else {
+                    UDPLGP("\n!!! Error downloading HAABOOT new version signature\n\n");
                 }
-                
-                if (new_version) {
-                    free(new_version);
-                }
-                new_version = ota_get_version(user_repo, HAAVERSIONFILE, port, is_ssl);
-                
-                if (strcmp(new_version, user_version) != 0) {
-                    if (ota_get_sign(user_repo, HAAMAINFILE, signature, port, is_ssl) > 0) {
-                        file_size = ota_get_file(user_repo, HAAMAINFILE, BOOT0SECTOR, port, is_ssl);
-                        if (file_size > 0 && ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
-                            ota_finalize_file(BOOT0SECTOR);
-                            sysparam_set_string(USER_VERSION_SYSPARAM, new_version);
-                            UDPLGP("\n*** HAAMAIN v%s installed\n\n", new_version);
-                        } else {
-                            UDPLGP("\n!!! Error installing HAAMAIN\n\n");
-                        }
+            }
+            
+            if (new_version) {
+                free(new_version);
+            }
+            new_version = ota_get_version(user_repo, HAAVERSIONFILE, port, is_ssl);
+            
+            if (strcmp(new_version, user_version) != 0) {
+                if (ota_get_sign(user_repo, HAAMAINFILE, signature, port, is_ssl) > 0) {
+                    file_size = ota_get_file(user_repo, HAAMAINFILE, BOOT0SECTOR, port, is_ssl);
+                    if (file_size > 0 && ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
+                        ota_finalize_file(BOOT0SECTOR);
+                        sysparam_set_string(USER_VERSION_SYSPARAM, new_version);
+                        UDPLGP("\n*** HAAMAIN v%s installed\n\n", new_version);
                     } else {
-                        UDPLGP("\n!!! Error downloading HAAMAIN signature\n\n");
+                        UDPLGP("\n!!! Error installing HAAMAIN\n\n");
                     }
+                } else {
+                    UDPLGP("\n!!! Error downloading HAAMAIN signature\n\n");
                 }
-                
-                break;
-//          }
+            }
+            
+            break;
 #endif  // HAABOOT
             
             vTaskDelay(5000 / portTICK_PERIOD_MS);

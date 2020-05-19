@@ -819,7 +819,11 @@ static uint8_t wifi_config_connect() {
         size_t len = 6;
         bool is_binary = true;
         sysparam_get_data(WIFI_BSSID_SYSPARAM, &wifi_bssid, &len, &is_binary);
-        INFO("Saved BSSID: %02x%02x%02x%02x%02x%02x", wifi_bssid[0], wifi_bssid[1], wifi_bssid[2], wifi_bssid[3], wifi_bssid[4], wifi_bssid[5]);
+        if (wifi_bssid) {
+            INFO("Saved BSSID: %02x%02x%02x%02x%02x%02x", wifi_bssid[0], wifi_bssid[1], wifi_bssid[2], wifi_bssid[3], wifi_bssid[4], wifi_bssid[5]);
+        } else {
+            INFO("Saved BSSID: none");
+        }
         
         if (wifi_mode == 1 && wifi_bssid) {
             sta_config.bssid_set = 1;
