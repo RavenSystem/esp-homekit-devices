@@ -193,14 +193,20 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
         local_port = (256 * initial_port[0] + initial_port[1]) | 0xc000;
     }
     
-    UDPLGP("%04x DNS", local_port);
-    ret = netconn_gethostbyname(host, &target_ip);
-    while(ret) {
-        printf("%d", ret);
-        vTaskDelay(200);
+    UDPLGP("%04x DNS ", local_port);
+    
+    uint8_t count = 0;
+    do {
+        if (count > 5) {
+            return -5;
+        }
         ret = netconn_gethostbyname(host, &target_ip);
-    }
-    UDPLGP(" IP addr: %d.%d.%d.%d ", (unsigned char) ((target_ip.addr & 0x000000ff) >> 0),
+        printf("(%d) ", ret);
+        count++;
+        vTaskDelay(1500 / portTICK_PERIOD_MS);
+    } while (ret);
+    
+    UDPLGP("IP addr: %d.%d.%d.%d ", (unsigned char) ((target_ip.addr & 0x000000ff) >> 0),
                                      (unsigned char) ((target_ip.addr & 0x0000ff00) >> 8),
                                      (unsigned char) ((target_ip.addr & 0x00ff0000) >> 16),
                                      (unsigned char) ((target_ip.addr & 0xff000000) >> 24));
