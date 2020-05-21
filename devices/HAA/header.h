@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "2.3.5"
-#define FIRMWARE_VERSION_OCTAL              020305      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "2.3.6"
+#define FIRMWARE_VERSION_OCTAL              020306      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMSECTOR                      0xF3000
@@ -58,7 +58,7 @@
 #define AUTOSWITCH_TASK_SIZE                (configMINIMAL_STACK_SIZE * 2)
 #define AUTOOFF_SETTER_TASK_SIZE            (configMINIMAL_STACK_SIZE * 2)
 #define AUTODIMMER_TASK_SIZE                (configMINIMAL_STACK_SIZE * 1)
-#define IR_TX_TASK_SIZE                     (configMINIMAL_STACK_SIZE * 4)
+#define IR_TX_TASK_SIZE                     (configMINIMAL_STACK_SIZE * 2)
 #define UART_ACTION_TASK_SIZE               (configMINIMAL_STACK_SIZE * 2)
 #define HTTP_GET_TASK_SIZE                  (configMINIMAL_STACK_SIZE * 2)
 #define DELAYED_SENSOR_START_TASK_SIZE      (configMINIMAL_STACK_SIZE * 2)
