@@ -760,9 +760,7 @@ void process_th(void *args) {
         switch (ch_group->ch5->value.int_value) {
             case THERMOSTAT_TARGET_MODE_HEATER:
                 if (ch_group->ch4->value.int_value <= THERMOSTAT_MODE_IDLE) {
-                    INFO2("ch0 %g, ch6 %g", ch_group->ch0->value.float_value, ch_group->ch6->value.float_value - TH_DEADBAND);
                     if (ch_group->ch0->value.float_value < (ch_group->ch6->value.float_value - TH_DEADBAND)) {
-                        INFO2("THERMOSTAT_MODE_HEATER");
                         ch_group->ch4->value.int_value = THERMOSTAT_MODE_HEATER;
                         if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_ON) {
                             ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_ON;
