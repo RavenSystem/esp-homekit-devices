@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "2.3.6"
-#define FIRMWARE_VERSION_OCTAL              020306      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "2.3.7"
+#define FIRMWARE_VERSION_OCTAL              020307      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMSECTOR                      0xF3000
@@ -160,6 +160,8 @@
 #define THERMOSTAT_DEFAULT_MAX_TEMP         38
 #define THERMOSTAT_DEADBAND                 "d"
 #define TH_DEADBAND                         ch_group->num[6]
+#define THERMOSTAT_DEADBAND_FORCE_IDLE      "df"
+#define TH_DEADBAND_FORCE_IDLE              ch_group->num[10]
 #define THERMOSTAT_MODE_OFF                 0
 #define THERMOSTAT_MODE_IDLE                1
 #define THERMOSTAT_MODE_HEATER              2
@@ -173,6 +175,8 @@
 #define THERMOSTAT_ACTION_HEATER_ON         3
 #define THERMOSTAT_ACTION_COOLER_ON         4
 #define THERMOSTAT_ACTION_SENSOR_ERROR      5
+#define THERMOSTAT_ACTION_HEATER_FORCE_IDLE 8
+#define THERMOSTAT_ACTION_COOLER_FORCE_IDLE 9
 #define THERMOSTAT_TEMP_UP                  0
 #define THERMOSTAT_TEMP_DOWN                1
 #define TH_SENSOR_MAX_ALLOWED_ERRORS        3
@@ -185,7 +189,7 @@
 #define TEMPERATURE_SENSOR_POLL_PERIOD      "j"
 #define TH_SENSOR_POLL_PERIOD               ch_group->num[2]
 #define TH_SENSOR_POLL_PERIOD_DEFAULT       30
-#define TH_SENSOR_POLL_PERIOD_MIN           0.05
+#define TH_SENSOR_POLL_PERIOD_MIN           0.1f
 #define TEMPERATURE_OFFSET                  "z"
 #define TH_SENSOR_TEMP_OFFSET               ch_group->num[3]
 #define HUMIDITY_OFFSET                     "h"
