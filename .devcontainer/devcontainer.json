@@ -1,0 +1,14 @@
+//Refer to https://code.visualstudio.com/remote-tutorials/containers/how-it-works
+{
+  "name": "RavenSystem HAA Build Environment",
+  "dockerFile": "Dockerfile",
+  //"appPort": 3000,
+  "extensions": ["ms-vscode.cpptools"],
+  "settings": {
+    "terminal.integrated.shell.linux": "/bin/bash"
+  },
+  //"postCreateCommand": "yarn install",
+  // Comment out the next line to run as root instead. Linux users, update
+  // Dockerfile with your user's UID/GID if not 1000.
+  "runArgs": []
+}
