@@ -1,0 +1,7 @@
+{
+  "files.associations": {
+    "*.json": "jsonc",
+    "freertos.h": "c",
+    "string.h": "c"
+  }
+}
