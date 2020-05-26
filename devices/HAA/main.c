@@ -750,139 +750,154 @@ void valve_timer_worker(void *args) {
 
 // --- THERMOSTAT
 void process_th(void *args) {
-    INFO2("Process TH");
-    
     ch_group_t *ch_group = args;
     
+    void heating(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
+        INFO2("TH Heater");
+        if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband_soft_on)) {
+            THERMOSTAT_MODE_INT = THERMOSTAT_MODE_HEATER;
+            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_ON) {
+                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_ON;
+                do_actions(ch_group, THERMOSTAT_ACTION_HEATER_ON);
+            }
+            
+        } else if (SENSOR_TEMPERATURE_FLOAT < TH_HEATER_TARGET_TEMP_FLOAT) {
+            THERMOSTAT_MODE_INT = THERMOSTAT_MODE_HEATER;
+            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_SOFT_ON) {
+                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_SOFT_ON;
+                do_actions(ch_group, THERMOSTAT_ACTION_HEATER_SOFT_ON);
+            }
+            
+        } else if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT + deadband)) {
+            if (THERMOSTAT_MODE_INT == THERMOSTAT_MODE_HEATER) {
+                if (TH_DEADBAND_SOFT_ON > 0.00f) {
+                    if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_SOFT_ON) {
+                        ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_SOFT_ON;
+                        do_actions(ch_group, THERMOSTAT_ACTION_HEATER_SOFT_ON);
+                    }
+                } else {
+                    if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_ON) {
+                        ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_ON;
+                        do_actions(ch_group, THERMOSTAT_ACTION_HEATER_ON);
+                    }
+                }
+                
+            } else {
+                if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_IDLE) {
+                    ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_IDLE;
+                    do_actions(ch_group, THERMOSTAT_ACTION_HEATER_IDLE);
+                }
+            }
+            
+        } else if (SENSOR_TEMPERATURE_FLOAT >= (TH_HEATER_TARGET_TEMP_FLOAT + deadband_force_idle) &&
+                   TH_DEADBAND_FORCE_IDLE > 0.00f) {
+            THERMOSTAT_MODE_INT = THERMOSTAT_MODE_IDLE;
+            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_FORCE_IDLE) {
+                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_FORCE_IDLE;
+                do_actions(ch_group, THERMOSTAT_ACTION_HEATER_FORCE_IDLE);
+            }
+            
+        } else {
+            THERMOSTAT_MODE_INT = THERMOSTAT_MODE_IDLE;
+            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_IDLE) {
+                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_IDLE;
+                do_actions(ch_group, THERMOSTAT_ACTION_HEATER_IDLE);
+            }
+        }
+    }
+    
+    void cooling(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
+        INFO2("TH Cooler");
+        if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband_soft_on)) {
+            THERMOSTAT_MODE_INT = THERMOSTAT_MODE_COOLER;
+            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_ON) {
+                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_ON;
+                do_actions(ch_group, THERMOSTAT_ACTION_COOLER_ON);
+            }
+            
+        } else if (SENSOR_TEMPERATURE_FLOAT > TH_COOLER_TARGET_TEMP_FLOAT) {
+            THERMOSTAT_MODE_INT = THERMOSTAT_MODE_COOLER;
+            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_SOFT_ON) {
+                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_SOFT_ON;
+                do_actions(ch_group, THERMOSTAT_ACTION_COOLER_SOFT_ON);
+            }
+            
+        } else if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT - deadband)) {
+            if (THERMOSTAT_MODE_INT == THERMOSTAT_MODE_COOLER) {
+                if (TH_DEADBAND_SOFT_ON > 0.00f) {
+                    if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_SOFT_ON) {
+                        ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_SOFT_ON;
+                        do_actions(ch_group, THERMOSTAT_ACTION_COOLER_SOFT_ON);
+                    }
+                } else {
+                    if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_ON) {
+                        ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_ON;
+                        do_actions(ch_group, THERMOSTAT_ACTION_COOLER_ON);
+                    }
+                }
+                
+            } else {
+                if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_IDLE) {
+                    ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_IDLE;
+                    do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
+                }
+            }
+            
+        } else if (SENSOR_TEMPERATURE_FLOAT <= (TH_COOLER_TARGET_TEMP_FLOAT - deadband_force_idle) &&
+                   TH_DEADBAND_FORCE_IDLE > 0.00f) {
+            THERMOSTAT_MODE_INT = THERMOSTAT_MODE_IDLE;
+            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_FORCE_IDLE) {
+                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_FORCE_IDLE;
+                do_actions(ch_group, THERMOSTAT_ACTION_COOLER_FORCE_IDLE);
+            }
+            
+        } else {
+            THERMOSTAT_MODE_INT = THERMOSTAT_MODE_IDLE;
+            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_IDLE) {
+                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_IDLE;
+                do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
+            }
+        }
+    }
+    
     if (ch_group->ch2->value.int_value) {
-        const float mid_target_temp = (ch_group->ch6->value.float_value + ch_group->ch7->value.float_value) / 2.00f;
-        
-        switch (ch_group->ch5->value.int_value) {
-            case THERMOSTAT_TARGET_MODE_HEATER:
-                if (ch_group->ch4->value.int_value <= THERMOSTAT_MODE_IDLE) {
-                    if (ch_group->ch0->value.float_value < (ch_group->ch6->value.float_value - TH_DEADBAND)) {
-                        ch_group->ch4->value.int_value = THERMOSTAT_MODE_HEATER;
-                        if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_ON) {
-                            ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_ON;
-                            do_actions(ch_group, THERMOSTAT_ACTION_HEATER_ON);
-                        }
-                    } else if (ch_group->ch4->value.int_value == THERMOSTAT_MODE_OFF) {
-                        ch_group->ch4->value.int_value = THERMOSTAT_MODE_IDLE;
-                        if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_IDLE) {
-                            ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_IDLE;
-                            do_actions(ch_group, THERMOSTAT_ACTION_HEATER_IDLE);
-                        }
-                    } else if (ch_group->ch0->value.float_value >= (ch_group->ch6->value.float_value + TH_DEADBAND_FORCE_IDLE) &&
-                               ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_FORCE_IDLE) {
-                        ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_FORCE_IDLE;
-                        do_actions(ch_group, THERMOSTAT_ACTION_HEATER_FORCE_IDLE);
-                    }
-                } else if (ch_group->ch0->value.float_value >= ch_group->ch6->value.float_value) {
-                    ch_group->ch4->value.int_value = THERMOSTAT_MODE_IDLE;
-                    if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_IDLE &&
-                        ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_FORCE_IDLE) {
-                        ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_IDLE;
-                        do_actions(ch_group, THERMOSTAT_ACTION_HEATER_IDLE);
-                    }
-                }
-                break;
+        if (ch_group->ch5->value.int_value == THERMOSTAT_TARGET_MODE_HEATER) {
+            heating(TH_DEADBAND, TH_DEADBAND_SOFT_ON, TH_DEADBAND_FORCE_IDLE);
+                    
+        } else if (ch_group->ch5->value.int_value == THERMOSTAT_TARGET_MODE_COOLER) {
+            cooling(TH_DEADBAND, TH_DEADBAND_SOFT_ON, TH_DEADBAND_FORCE_IDLE);
             
-            case THERMOSTAT_TARGET_MODE_COOLER:
-                if (ch_group->ch4->value.int_value <= THERMOSTAT_MODE_IDLE) {
-                    if (ch_group->ch0->value.float_value > (ch_group->ch7->value.float_value + TH_DEADBAND)) {
-                        ch_group->ch4->value.int_value = THERMOSTAT_MODE_COOLER;
-                        if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_ON) {
-                            ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_ON;
-                            do_actions(ch_group, THERMOSTAT_ACTION_COOLER_ON);
-                        }
-                    } else if (ch_group->ch4->value.int_value == THERMOSTAT_MODE_OFF) {
-                        ch_group->ch4->value.int_value = THERMOSTAT_MODE_IDLE;
-                        if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_IDLE) {
-                            ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_IDLE;
-                            do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
-                        }
-                    } else if (ch_group->ch0->value.float_value <= (ch_group->ch7->value.float_value - TH_DEADBAND_FORCE_IDLE) &&
-                               ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_FORCE_IDLE) {
-                        ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_FORCE_IDLE;
-                        do_actions(ch_group, THERMOSTAT_ACTION_COOLER_FORCE_IDLE);
-                    }
-                } else if (ch_group->ch0->value.float_value <= ch_group->ch7->value.float_value) {
-                    ch_group->ch4->value.int_value = THERMOSTAT_MODE_IDLE;
-                    if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_IDLE &&
-                        ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_FORCE_IDLE) {
-                        ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_IDLE;
-                        do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
-                    }
-                }
-                break;
+        } else {    // THERMOSTAT_TARGET_MODE_AUTO
+            const float mid_target_temp = (TH_HEATER_TARGET_TEMP_FLOAT + TH_COOLER_TARGET_TEMP_FLOAT) / 2.00f;
             
-            default:    // case THERMOSTAT_TARGET_MODE_AUTO:
-                switch (ch_group->ch4->value.int_value) {
-                    case THERMOSTAT_MODE_HEATER:
-                        if (ch_group->ch0->value.float_value >= (mid_target_temp + ch_group->ch6->value.float_value) / 2) {
-                            ch_group->ch4->value.int_value = THERMOSTAT_MODE_IDLE;
-                            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_IDLE &&
-                                ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_FORCE_IDLE) {
-                                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_IDLE;
-                                do_actions(ch_group, THERMOSTAT_ACTION_HEATER_IDLE);
-                            }
-                        }
-                        break;
-                        
-                    case THERMOSTAT_MODE_COOLER:
-                        if (ch_group->ch0->value.float_value <= (mid_target_temp + ch_group->ch7->value.float_value) / 2) {
-                            ch_group->ch4->value.int_value = THERMOSTAT_MODE_IDLE;
-                            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_IDLE &&
-                                ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_IDLE) {
-                                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_IDLE;
-                                do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
-                            }
-                        }
-                        break;
-                        
-                    default:    // cases THERMOSTAT_MODE_IDLE, THERMOSTAT_MODE_OFF:
-                        if (ch_group->ch0->value.float_value < ch_group->ch6->value.float_value) {
-                            ch_group->ch4->value.int_value = THERMOSTAT_MODE_HEATER;
-                            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_ON) {
-                                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_ON;
-                                do_actions(ch_group, THERMOSTAT_ACTION_HEATER_ON);
-                            }
-                        } else if (ch_group->ch0->value.float_value > ch_group->ch7->value.float_value) {
-                            ch_group->ch4->value.int_value = THERMOSTAT_MODE_COOLER;
-                            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_ON) {
-                                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_ON;
-                                do_actions(ch_group, THERMOSTAT_ACTION_COOLER_ON);
-                            }
-                        } else if (ch_group->ch4->value.int_value == THERMOSTAT_MODE_OFF) {
-                            ch_group->ch4->value.int_value = THERMOSTAT_MODE_IDLE;
-
-                            if (ch_group->ch0->value.float_value < mid_target_temp) {
-                                if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_IDLE) {
-                                    ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_IDLE;
-                                    do_actions(ch_group, THERMOSTAT_ACTION_HEATER_IDLE);
-                                }
-                            } else {
-                                if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_IDLE) {
-                                    ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_IDLE;
-                                    do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
-                                }
-                            }
-                        } else if (ch_group->last_wildcard_action[2] == THERMOSTAT_ACTION_HEATER_IDLE &&
-                                   ch_group->ch0->value.float_value >= mid_target_temp) {
-                            ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_FORCE_IDLE;
-                            do_actions(ch_group, THERMOSTAT_ACTION_HEATER_FORCE_IDLE);
-                        }  else if (ch_group->last_wildcard_action[2] == THERMOSTAT_ACTION_COOLER_IDLE &&
-                                    ch_group->ch0->value.float_value <= mid_target_temp) {
-                            ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_FORCE_IDLE;
-                            do_actions(ch_group, THERMOSTAT_ACTION_COOLER_FORCE_IDLE);
-                        }
-                        break;
+            bool is_heater = false;
+            if (THERMOSTAT_MODE_INT == THERMOSTAT_MODE_OFF) {
+                if (SENSOR_TEMPERATURE_FLOAT < mid_target_temp) {
+                    is_heater = true;
                 }
-                break;
+            } else if (SENSOR_TEMPERATURE_FLOAT <= TH_HEATER_TARGET_TEMP_FLOAT) {
+                is_heater = true;
+            } else if (SENSOR_TEMPERATURE_FLOAT < TH_COOLER_TARGET_TEMP_FLOAT &&
+                       (ch_group->last_wildcard_action[2] == THERMOSTAT_ACTION_HEATER_IDLE ||
+                       ch_group->last_wildcard_action[2] == THERMOSTAT_ACTION_HEATER_ON ||
+                       ch_group->last_wildcard_action[2] == THERMOSTAT_ACTION_HEATER_FORCE_IDLE ||
+                       ch_group->last_wildcard_action[2] == THERMOSTAT_ACTION_HEATER_SOFT_ON)) {
+                is_heater = true;
+            }
+            
+            const float th_deadband_force_idle = TH_COOLER_TARGET_TEMP_FLOAT - mid_target_temp;
+            const float th_deadband = th_deadband_force_idle / 1.50f;
+            
+            if (is_heater) {
+                heating(th_deadband, th_deadband_force_idle - th_deadband, th_deadband_force_idle);
+            } else {
+                cooling(th_deadband, th_deadband_force_idle - th_deadband, th_deadband_force_idle);
+            }
         }
         
     } else {
-        ch_group->ch4->value.int_value = THERMOSTAT_MODE_OFF;
+        INFO2("TH Off");
+        THERMOSTAT_MODE_INT = THERMOSTAT_MODE_OFF;
         if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_TOTAL_OFF) {
             ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_TOTAL_OFF;
             do_actions(ch_group, THERMOSTAT_ACTION_TOTAL_OFF);
@@ -1001,9 +1016,9 @@ void th_input_temp(const uint8_t gpio, void *args, const uint8_t type) {
         
         // Extra actions
         if (type == THERMOSTAT_TEMP_UP) {
-            do_actions(ch_group, 6);
+            do_actions(ch_group, THERMOSTAT_ACTION_TEMP_UP);
         } else {    // type == THERMOSTAT_TEMP_DOWN
-            do_actions(ch_group, 7);
+            do_actions(ch_group, THERMOSTAT_ACTION_TEMP_DOWN);
         }
     }
 }
@@ -1083,7 +1098,7 @@ void temperature_timer_worker(void *args) {
     /*
      * Only for tests. Keep comment for releases
      */
-    //get_temp = true; temperature_value = 21;
+    //get_temp = true; temperature_value = 23;
     
     if (get_temp) {
         if (ch_group->ch0) {
@@ -4664,7 +4679,12 @@ void normal_mode_init() {
         
         TH_DEADBAND_FORCE_IDLE = 0;
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_FORCE_IDLE) != NULL) {
-            TH_DEADBAND_FORCE_IDLE = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_FORCE_IDLE)->valuedouble;
+            TH_DEADBAND_FORCE_IDLE = TH_DEADBAND + ((float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_FORCE_IDLE)->valuedouble);
+        }
+        
+        TH_DEADBAND_SOFT_ON = 0;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_SOFT_ON) != NULL) {
+            TH_DEADBAND_SOFT_ON = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_SOFT_ON)->valuedouble;
         }
         
         // Thermostat Type

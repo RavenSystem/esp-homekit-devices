@@ -20,8 +20,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "2.3.7"
-#define FIRMWARE_VERSION_OCTAL              020307      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "2.3.8"
+#define FIRMWARE_VERSION_OCTAL              020310      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMSECTOR                      0xF3000
@@ -162,6 +162,9 @@
 #define TH_DEADBAND                         ch_group->num[6]
 #define THERMOSTAT_DEADBAND_FORCE_IDLE      "df"
 #define TH_DEADBAND_FORCE_IDLE              ch_group->num[10]
+#define THERMOSTAT_DEADBAND_SOFT_ON         "ds"
+#define TH_DEADBAND_SOFT_ON                 ch_group->num[11]
+#define THERMOSTAT_MODE_INT                 ch_group->ch4->value.int_value
 #define THERMOSTAT_MODE_OFF                 0
 #define THERMOSTAT_MODE_IDLE                1
 #define THERMOSTAT_MODE_HEATER              2
@@ -175,12 +178,18 @@
 #define THERMOSTAT_ACTION_HEATER_ON         3
 #define THERMOSTAT_ACTION_COOLER_ON         4
 #define THERMOSTAT_ACTION_SENSOR_ERROR      5
+#define THERMOSTAT_ACTION_TEMP_UP           6
+#define THERMOSTAT_ACTION_TEMP_DOWN         7
 #define THERMOSTAT_ACTION_HEATER_FORCE_IDLE 8
 #define THERMOSTAT_ACTION_COOLER_FORCE_IDLE 9
+#define THERMOSTAT_ACTION_HEATER_SOFT_ON    10
+#define THERMOSTAT_ACTION_COOLER_SOFT_ON    11
 #define THERMOSTAT_TEMP_UP                  0
 #define THERMOSTAT_TEMP_DOWN                1
 #define TH_SENSOR_MAX_ALLOWED_ERRORS        3
 #define TH_SENSOR_ERROR_COUNT               ch_group->num[9]
+#define TH_HEATER_TARGET_TEMP_FLOAT         ch_group->ch6->value.float_value
+#define TH_COOLER_TARGET_TEMP_FLOAT         ch_group->ch7->value.float_value
 
 #define TEMPERATURE_SENSOR_GPIO             "g"
 #define TH_SENSOR_GPIO                      ch_group->num[0]
@@ -194,6 +203,7 @@
 #define TH_SENSOR_TEMP_OFFSET               ch_group->num[3]
 #define HUMIDITY_OFFSET                     "h"
 #define TH_SENSOR_HUM_OFFSET                ch_group->num[4]
+#define SENSOR_TEMPERATURE_FLOAT            ch_group->ch0->value.float_value
 
 #define LIGHTBULB_PWM_GPIO_R                "r"
 #define LIGHTBULB_PWM_GPIO_G                "g"
