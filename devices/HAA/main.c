@@ -783,6 +783,7 @@ void process_th(void *args) {
                 }
                 
             } else {
+                THERMOSTAT_MODE_INT = THERMOSTAT_MODE_IDLE;
                 if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_IDLE) {
                     ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_IDLE;
                     do_actions(ch_group, THERMOSTAT_ACTION_HEATER_IDLE);
@@ -840,6 +841,7 @@ void process_th(void *args) {
                 }
                 
             } else {
+                THERMOSTAT_MODE_INT = THERMOSTAT_MODE_IDLE;
                 if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_IDLE) {
                     ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_IDLE;
                     do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
