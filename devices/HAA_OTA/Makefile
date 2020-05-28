@@ -7,7 +7,8 @@ EXTRA_COMPONENTS = \
 	extras/dhcpserver \
     extras/rboot-ota \
 	$(abspath esp-wifi-config) \
-	$(abspath esp-wolfssl)
+	$(abspath esp-wolfssl) \
+	$(abspath ../../libs/adv_logger)
 
 FLASH_SIZE ?= 8
 

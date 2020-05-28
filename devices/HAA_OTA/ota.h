@@ -30,6 +30,8 @@
 #define SIGNFILESUFIX           ".sec"
 #define VERSIONFILESIZE         9
 
+#define MAX_TRIES               2
+
 #define SYSPARAMSECTOR          0xF3000
 #define SYSPARAMSIZE            8
 
@@ -45,7 +47,7 @@
 #define RECV_BUF_LEN            1025  // current length of amazon URL 724
 #define HOST_LEN                256
 #define RANGE                   "\r\nRange: bytes="
-#define MAXVERSIONLEN           16
+
 #define SNTP_SERVERS            "0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org", "3.pool.ntp.org"
 #define MAX_302_JUMPS           6
 

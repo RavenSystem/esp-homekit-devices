@@ -31,9 +31,9 @@
 #include <wifi_config.h>
 #include <sysparam.h>
 
-#include <ota.h>
-#include <udplogger.h>
+#include <adv_logger.h>
 
+#include "ota.h"
 #include "header.h"
 
 char* user_repo = NULL;
@@ -46,9 +46,10 @@ int file_size = 0;
 
 uint16_t port = 443;
 bool is_ssl = true;
+uint8_t tries_count = 0;
 
 void ota_task(void *arg) {
-    UDPLGP("\nHAA Installer Version: %s\n\n", OTAVERSION);
+    printf("\nHAA Installer Version: %s\n\n", OTAVERSION);
 
 #ifdef HAABOOT
     sysparam_set_string(USER_VERSION_SYSPARAM, "none");
@@ -73,13 +74,13 @@ void ota_task(void *arg) {
         }
     }
     
-    UDPLGP("- Server: %s\n", user_repo);
-    UDPLGP("- Port:   %i\n", port);
-    UDPLGP("- SSL:    %s\n\n", is_ssl ? "yes" : "no");
+    printf("- Server: %s\n", user_repo);
+    printf("- Port:   %i\n", port);
+    printf("- SSL:    %s\n\n", is_ssl ? "yes" : "no");
 
     status = sysparam_get_string(USER_VERSION_SYSPARAM, &user_version);
     if (status == SYSPARAM_OK) {
-        UDPLGP("Current HAAMAIN version installed: %s\n\n", user_version);
+        printf("Current HAAMAIN version installed: %s\n\n", user_version);
 
         ota_init(user_repo, is_ssl);
         
@@ -88,72 +89,79 @@ void ota_task(void *arg) {
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
         
         for (;;) {
-            UDPLGP("\n*** STARTING UPDATE PROCESS\n\n");
-
-            if (ota_version) {
-                free(ota_version);
-            }
-            ota_version = ota_get_version(user_repo, OTAVERSIONFILE, port, is_ssl);
+            printf("\n*** STARTING UPDATE PROCESS\n\n");
+            tries_count++;
             
 #ifdef HAABOOT
-            UDPLGP("\nRunning HAABOOT\n\n");
+            printf("\nRunning HAABOOT\n\n");
 
             if (ota_get_sign(user_repo, OTAMAINFILE, signature, port, is_ssl) > 0) {
                 file_size = ota_get_file(user_repo, OTAMAINFILE, BOOT1SECTOR, port, is_ssl);
                 if (file_size > 0 && ota_verify_sign(BOOT1SECTOR, file_size, signature) == 0) {
                     ota_finalize_file(BOOT1SECTOR);
-                    UDPLGP("\n*** OTAMAIN installed\n\n");
+                    printf("\n*** OTAMAIN installed\n\n");
                     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
                     ota_temp_boot();
                 } else {
-                    UDPLGP("\n!!! Error installing OTAMAIN\n\n");
+                    printf("\n!!! Error installing OTAMAIN\n\n");
                     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
                 }
             } else {
-                UDPLGP("\n!!! Error downloading OTAMAIN signature\n\n");
+                printf("\n!!! Error downloading OTAMAIN signature\n\n");
                 sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
             }
 #else   // HAABOOT
-            UDPLGP("\nRunning OTAMAIN\n\n");
+            printf("\nRunning OTAMAIN\n\n");
             
-            if (strcmp(ota_version, OTAVERSION) != 0) {
+            if (ota_version) {
+                free(ota_version);
+                ota_version = NULL;
+            }
+            ota_version = ota_get_version(user_repo, OTAVERSIONFILE, port, is_ssl);
+            
+            if (ota_version && strcmp(ota_version, OTAVERSION) != 0) {
                 if (ota_get_sign(user_repo, OTABOOTFILE, signature, port, is_ssl) > 0) {
                     file_size = ota_get_file(user_repo, OTABOOTFILE, BOOT0SECTOR, port, is_ssl);
                     if (file_size > 0 && ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
                         ota_finalize_file(BOOT0SECTOR);
-                        UDPLGP("\n*** HAABOOT new version installed\n\n");
+                        printf("\n*** HAABOOT new version installed\n\n");
                     } else {
-                        UDPLGP("\n!!! Error installing HAABOOT new version\n\n");
+                        printf("\n!!! Error installing HAABOOT new version\n\n");
                     }
                     
                     break;
                 } else {
-                    UDPLGP("\n!!! Error downloading HAABOOT new version signature\n\n");
+                    printf("\n!!! Error downloading HAABOOT new version signature\n\n");
                 }
             }
             
             if (new_version) {
                 free(new_version);
+                new_version = NULL;
             }
             new_version = ota_get_version(user_repo, HAAVERSIONFILE, port, is_ssl);
             
-            if (strcmp(new_version, user_version) != 0) {
+            if (new_version && strcmp(new_version, user_version) != 0) {
                 if (ota_get_sign(user_repo, HAAMAINFILE, signature, port, is_ssl) > 0) {
                     file_size = ota_get_file(user_repo, HAAMAINFILE, BOOT0SECTOR, port, is_ssl);
                     if (file_size > 0 && ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
                         ota_finalize_file(BOOT0SECTOR);
                         sysparam_set_string(USER_VERSION_SYSPARAM, new_version);
-                        UDPLGP("\n*** HAAMAIN v%s installed\n\n", new_version);
+                        printf("\n*** HAAMAIN v%s installed\n\n", new_version);
                     } else {
-                        UDPLGP("\n!!! Error installing HAAMAIN\n\n");
+                        printf("\n!!! Error installing HAAMAIN\n\n");
                     }
                 } else {
-                    UDPLGP("\n!!! Error downloading HAAMAIN signature\n\n");
+                    printf("\n!!! Error downloading HAAMAIN signature\n\n");
                 }
             }
             
             break;
 #endif  // HAABOOT
+            
+            if (tries_count == MAX_TRIES) {
+                break;
+            }
             
             vTaskDelay(5000 / portTICK_PERIOD_MS);
         }
@@ -163,14 +171,15 @@ void ota_task(void *arg) {
 }
 
 void on_wifi_ready() {
-    xTaskCreate(udplog_send, "logsend", 256, NULL, 2, NULL);
+    adv_logger_init(ADV_LOGGER_UART0_UDP);
+    
     xTaskCreate(ota_task, "ota_task", 4096, NULL, 1, NULL);
 }
 
 void user_init(void) {
     sdk_wifi_set_opmode(STATION_MODE);
     sdk_wifi_station_disconnect();
-
+    
     uart_set_baud(0, 115200);
     printf("\n\n\n");
     
