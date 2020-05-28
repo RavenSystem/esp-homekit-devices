@@ -3,17 +3,6 @@
 *
 * Copyright 2020 José Antonio Jiménez Campos (@RavenSystem)
 *
-* Licensed under the Apache License, Version 2.0 (the "License");
-* you may not use this file except in compliance with the License.
-* You may obtain a copy of the License at
-*
-* http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
 */
 
 /*  (c) 2018-2019 HomeAccessoryKid */
@@ -601,11 +590,11 @@ char* ota_get_version(char* repo, char* version_file, uint16_t port, const bool 
     memset(version, 0, VERSIONFILESIZE + 1);
 
     if (ota_get_file_ex(repo, version_file, 0, version, VERSIONFILESIZE, port, is_ssl)) {
+        printf("VERSION of %s: %s\n", version_file, (char*) version);
+    } else {
         free(version);
         version = NULL;
         printf("ERROR\n");
-    } else {
-        printf("VERSION of %s: %s\n", version_file, (char*) version);
     }
     
     return (char*) version;
