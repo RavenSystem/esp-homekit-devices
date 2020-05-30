@@ -739,14 +739,14 @@ void process_th(void *args) {
     
     void heating(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
         INFO("TH Heater");
-        if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband_soft_on)) {
+        if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband - deadband_soft_on)) {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_HEATER;
             if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_ON) {
                 ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_ON;
                 do_actions(ch_group, THERMOSTAT_ACTION_HEATER_ON);
             }
             
-        } else if (SENSOR_TEMPERATURE_FLOAT < TH_HEATER_TARGET_TEMP_FLOAT) {
+        } else if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband)) {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_HEATER;
             if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_SOFT_ON) {
                 ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_SOFT_ON;
@@ -755,7 +755,7 @@ void process_th(void *args) {
             
         } else if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT + deadband)) {
             if (THERMOSTAT_MODE_INT == THERMOSTAT_MODE_HEATER) {
-                if (TH_DEADBAND_SOFT_ON > 0.00f) {
+                if (TH_DEADBAND_SOFT_ON > 0.000f) {
                     if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_SOFT_ON) {
                         ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_SOFT_ON;
                         do_actions(ch_group, THERMOSTAT_ACTION_HEATER_SOFT_ON);
@@ -775,8 +775,8 @@ void process_th(void *args) {
                 }
             }
             
-        } else if (SENSOR_TEMPERATURE_FLOAT >= (TH_HEATER_TARGET_TEMP_FLOAT + deadband_force_idle) &&
-                   TH_DEADBAND_FORCE_IDLE > 0.00f) {
+        } else if (SENSOR_TEMPERATURE_FLOAT >= (TH_HEATER_TARGET_TEMP_FLOAT + deadband + deadband_force_idle) &&
+                   TH_DEADBAND_FORCE_IDLE > 0.000f) {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_IDLE;
             if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_FORCE_IDLE) {
                 ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_FORCE_IDLE;
@@ -785,7 +785,7 @@ void process_th(void *args) {
             
         } else {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_IDLE;
-            if (TH_DEADBAND_FORCE_IDLE == 0.00f ||
+            if (TH_DEADBAND_FORCE_IDLE == 0.000f ||
                 ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_FORCE_IDLE) {
                 if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_IDLE) {
                     ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_IDLE;
@@ -797,14 +797,14 @@ void process_th(void *args) {
     
     void cooling(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
         INFO("TH Cooler");
-        if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband_soft_on)) {
+        if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband + deadband_soft_on)) {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_COOLER;
             if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_ON) {
                 ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_ON;
                 do_actions(ch_group, THERMOSTAT_ACTION_COOLER_ON);
             }
             
-        } else if (SENSOR_TEMPERATURE_FLOAT > TH_COOLER_TARGET_TEMP_FLOAT) {
+        } else if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband)) {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_COOLER;
             if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_SOFT_ON) {
                 ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_SOFT_ON;
@@ -813,7 +813,7 @@ void process_th(void *args) {
             
         } else if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT - deadband)) {
             if (THERMOSTAT_MODE_INT == THERMOSTAT_MODE_COOLER) {
-                if (TH_DEADBAND_SOFT_ON > 0.00f) {
+                if (TH_DEADBAND_SOFT_ON > 0.000f) {
                     if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_SOFT_ON) {
                         ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_SOFT_ON;
                         do_actions(ch_group, THERMOSTAT_ACTION_COOLER_SOFT_ON);
@@ -833,8 +833,8 @@ void process_th(void *args) {
                 }
             }
             
-        } else if (SENSOR_TEMPERATURE_FLOAT <= (TH_COOLER_TARGET_TEMP_FLOAT - deadband_force_idle) &&
-                   TH_DEADBAND_FORCE_IDLE > 0.00f) {
+        } else if (SENSOR_TEMPERATURE_FLOAT <= (TH_COOLER_TARGET_TEMP_FLOAT - deadband - deadband_force_idle) &&
+                   TH_DEADBAND_FORCE_IDLE > 0.000f) {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_IDLE;
             if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_FORCE_IDLE) {
                 ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_FORCE_IDLE;
@@ -843,7 +843,7 @@ void process_th(void *args) {
             
         } else {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_IDLE;
-            if (TH_DEADBAND_FORCE_IDLE == 0.00f ||
+            if (TH_DEADBAND_FORCE_IDLE == 0.000f ||
                 ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_FORCE_IDLE) {
                 if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_IDLE) {
                     ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_IDLE;
@@ -861,7 +861,7 @@ void process_th(void *args) {
             cooling(TH_DEADBAND, TH_DEADBAND_SOFT_ON, TH_DEADBAND_FORCE_IDLE);
             
         } else {    // THERMOSTAT_TARGET_MODE_AUTO
-            const float mid_target_temp = (TH_HEATER_TARGET_TEMP_FLOAT + TH_COOLER_TARGET_TEMP_FLOAT) / 2.00f;
+            const float mid_target_temp = (TH_HEATER_TARGET_TEMP_FLOAT + TH_COOLER_TARGET_TEMP_FLOAT) / 2.000f;
             
             bool is_heater = false;
             if (THERMOSTAT_MODE_INT == THERMOSTAT_MODE_OFF) {
@@ -879,7 +879,7 @@ void process_th(void *args) {
             }
             
             const float th_deadband_force_idle = TH_COOLER_TARGET_TEMP_FLOAT - mid_target_temp;
-            const float th_deadband = th_deadband_force_idle / 1.50f;
+            const float th_deadband = th_deadband_force_idle / 1.500f;
             
             if (is_heater) {
                 heating(th_deadband, th_deadband_force_idle - th_deadband, th_deadband_force_idle);
@@ -4663,12 +4663,12 @@ void normal_mode_init() {
         // Temperature Deadbands
         TH_DEADBAND = 0;
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND) != NULL) {
-            TH_DEADBAND = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND)->valuedouble;
+            TH_DEADBAND = (float) (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND)->valuedouble / 2.000f);
         }
         
         TH_DEADBAND_FORCE_IDLE = 0;
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_FORCE_IDLE) != NULL) {
-            TH_DEADBAND_FORCE_IDLE = TH_DEADBAND + ((float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_FORCE_IDLE)->valuedouble);
+            TH_DEADBAND_FORCE_IDLE = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_FORCE_IDLE)->valuedouble;
         }
         
         TH_DEADBAND_SOFT_ON = 0;
