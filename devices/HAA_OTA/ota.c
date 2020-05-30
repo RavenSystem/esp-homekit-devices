@@ -664,13 +664,7 @@ void ota_finalize_file(int sector) {
 void ota_reboot() {
     printf("\nRestarting...\n");
 
-    vTaskDelay(200 / portTICK_PERIOD_MS);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
     sdk_system_restart();
 }
 
-void ota_temp_boot() {
-    printf("Select OTAMAIN for next boot\n");
-    
-    rboot_set_temp_rom(1);
-    ota_reboot();
-}

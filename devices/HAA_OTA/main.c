@@ -93,7 +93,8 @@ void ota_task(void *arg) {
                     ota_finalize_file(BOOT1SECTOR);
                     printf("\n*** OTAMAIN installed\n\n");
                     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
-                    ota_temp_boot();
+                    rboot_set_temp_rom(1);
+                    ota_reboot();
                 } else {
                     printf("\n!!! Error installing OTAMAIN\n\n");
                     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);

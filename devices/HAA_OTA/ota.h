@@ -54,7 +54,6 @@ int ota_get_file(char* repo, char* file, int sector, uint16_t port, const bool i
 void ota_finalize_file(int sector);
 int ota_get_sign(char* repo, char* file, byte* signature, uint16_t port, const bool is_ssl);
 int ota_verify_sign(int address, int file_size, byte* signature);
-void ota_temp_boot();
 void ota_reboot();
 
 #endif // __HAA_OTA_H__
