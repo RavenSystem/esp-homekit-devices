@@ -1017,8 +1017,9 @@ void th_input_temp(const uint8_t gpio, void *args, const uint8_t type) {
 }
 
 // --- TEMPERATURE
-void temperature_timer_worker(void *args) {
+void temperature_task(void *args) {
     INFO("Read TH sensor");
+    
     float taylor_log(float x) {
         // https://stackoverflow.com/questions/46879166/finding-the-natural-logarithm-of-a-number-using-taylor-series-in-c
         if (x <= 0.0) {
@@ -1155,6 +1156,14 @@ void temperature_timer_worker(void *args) {
     }
     
     hkc_group_notify(ch_group);
+    
+    vTaskDelete(NULL);
+}
+
+void temperature_timer_worker(void *args) {
+    if (!homekit_is_pairing()) {
+        xTaskCreate(temperature_task, "temperature_task", TEMPERATURE_TASK_SIZE, args, TEMPERATURE_TASK_PRIORITY, NULL);
+    }
 }
 
 // --- LIGHTBULBS

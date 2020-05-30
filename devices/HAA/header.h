@@ -9,8 +9,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "2.4.1"
-#define FIRMWARE_VERSION_OCTAL              020401      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "2.4.2"
+#define FIRMWARE_VERSION_OCTAL              020402      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMSECTOR                      0xF3000
@@ -51,6 +51,7 @@
 #define UART_ACTION_TASK_SIZE               (configMINIMAL_STACK_SIZE * 2)
 #define HTTP_GET_TASK_SIZE                  (configMINIMAL_STACK_SIZE * 2)
 #define DELAYED_SENSOR_START_TASK_SIZE      (configMINIMAL_STACK_SIZE * 2)
+#define TEMPERATURE_TASK_SIZE               (configMINIMAL_STACK_SIZE * 2)
 
 // Task Priorities
 #define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 0)
@@ -59,6 +60,7 @@
 #define IR_TX_TASK_PRIORITY                 (configMAX_PRIORITIES - 1)
 #define UART_ACTION_TASK_PRIORITY           (tskIDLE_PRIORITY + 6)
 #define HTTP_GET_TASK_PRIORITY              (tskIDLE_PRIORITY + 1)
+#define TEMPERATURE_TASK_PRIORITY           (tskIDLE_PRIORITY + 1)
 
 // Button Events
 #define SINGLEPRESS_EVENT                   0
