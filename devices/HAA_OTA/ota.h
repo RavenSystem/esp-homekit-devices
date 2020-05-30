@@ -1,11 +1,14 @@
 /*
-* Home Accessory Architect OTA Update
-*
-* Copyright 2020 José Antonio Jiménez Campos (@RavenSystem)
-*
-*/
+ * Home Accessory Architect OTA Update
+ *
+ * Copyright 2020 José Antonio Jiménez Campos (@RavenSystem)
+ *
+ */
 
-/*  (c) 2018-2019 HomeAccessoryKid */
+/*
+ * Based on Life-Cycle-Manager (LCM) by HomeAccessoryKid (@HomeACcessoryKid), licensed under Apache License 2.0.
+ * https://github.com/HomeACcessoryKid/life-cycle-manager
+ */
 
 #ifndef __HAA_OTA_H__
 #define __HAA_OTA_H__

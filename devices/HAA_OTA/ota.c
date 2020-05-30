@@ -5,7 +5,10 @@
 *
 */
 
-/*  (c) 2018-2019 HomeAccessoryKid */
+/*
+ * Based on Life-Cycle-Manager (LCM) by HomeAccessoryKid (@HomeACcessoryKid), licensed under Apache License 2.0.
+ * https://github.com/HomeACcessoryKid/life-cycle-manager
+ */
 
 #include <stdlib.h>
 #include <stdio.h>

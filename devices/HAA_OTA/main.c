@@ -1,11 +1,14 @@
 /*
-* Home Accessory Architect OTA Update
-*
-* Copyright 2020 José Antonio Jiménez Campos (@RavenSystem)
-*
-*/
+ * Home Accessory Architect OTA Update
+ *
+ * Copyright 2020 José Antonio Jiménez Campos (@RavenSystem)
+ *
+ */
 
-/*  (c) 2018-2019 HomeAccessoryKid */
+/*
+ * Based on Life-Cycle-Manager (LCM) by HomeAccessoryKid (@HomeACcessoryKid), licensed under Apache License 2.0.
+ * https://github.com/HomeACcessoryKid/life-cycle-manager
+ */
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -160,8 +163,6 @@ void ota_task(void *arg) {
 }
 
 void on_wifi_ready() {
-    adv_logger_init(ADV_LOGGER_UART0_UDP);
-    
     xTaskCreate(ota_task, "ota_task", 4096, NULL, 1, NULL);
 }
 
@@ -170,6 +171,9 @@ void user_init(void) {
     sdk_wifi_station_disconnect();
     
     uart_set_baud(0, 115200);
+    
+    adv_logger_init(ADV_LOGGER_UART0_UDP);
+    
     printf("\n\n\n");
     
     sysparam_status_t status;

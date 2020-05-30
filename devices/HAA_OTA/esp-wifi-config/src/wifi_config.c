@@ -5,6 +5,11 @@
 *
 */
 
+/*
+ * Based on esp-wifi-config library by Maxim Kulkin (@MaximKulkin), licensed under the MIT License.
+ * https://github.com/maximkulkin/esp-wifi-config
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
