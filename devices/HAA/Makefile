@@ -14,7 +14,8 @@ EXTRA_COMPONENTS = \
     $(abspath ../../external_libs/homekit) \
     $(abspath ../../libs/adv_button) \
 	$(abspath ../../libs/new_dht) \
-	$(abspath ../../libs/ping)
+	$(abspath ../../libs/ping) \
+	$(abspath ../../libs/adv_logger)
 	
 
 FLASH_SIZE = 8

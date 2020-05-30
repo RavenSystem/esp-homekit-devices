@@ -3,25 +3,14 @@
  *
  * Copyright 2019-2020 José Antonio Jiménez Campos (@RavenSystem)
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
 
 #ifndef __HAA_HEADER_H__
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "2.3.10"
-#define FIRMWARE_VERSION_OCTAL              020312      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "2.4.0"
+#define FIRMWARE_VERSION_OCTAL              020400      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMSECTOR                      0xF3000
@@ -187,7 +176,6 @@
 #define THERMOSTAT_TEMP_UP                  0
 #define THERMOSTAT_TEMP_DOWN                1
 #define TH_SENSOR_MAX_ALLOWED_ERRORS        3
-#define TH_SENSOR_ERROR_COUNT               ch_group->num[9]
 #define TH_HEATER_TARGET_TEMP_FLOAT         ch_group->ch6->value.float_value
 #define TH_COOLER_TARGET_TEMP_FLOAT         ch_group->ch7->value.float_value
 
@@ -204,6 +192,7 @@
 #define HUMIDITY_OFFSET                     "h"
 #define TH_SENSOR_HUM_OFFSET                ch_group->num[4]
 #define SENSOR_TEMPERATURE_FLOAT            ch_group->ch0->value.float_value
+#define TH_SENSOR_ERROR_COUNT               ch_group->num[9]
 
 #define LIGHTBULB_PWM_GPIO_R                "r"
 #define LIGHTBULB_PWM_GPIO_G                "g"
@@ -387,13 +376,9 @@
 
 #define KELVIN_TO_CELSIUS(x)                ((x) - 273.15)
 
-#define DEBUG(cond, message, ...)           if (cond) printf("%s: " message "\n", __func__, ##__VA_ARGS__);
-#define INFO(cond, message, ...)            if (cond) printf(message "\n", ##__VA_ARGS__);
-#define ERROR(cond, message, ...)           if (cond) printf("! " message "\n", ##__VA_ARGS__);
-
-#define DEBUG2(message, ...)                DEBUG(log_output, message, ##__VA_ARGS__);
-#define INFO2(message, ...)                 INFO(log_output, message, ##__VA_ARGS__);
-#define ERROR2(message, ...)                ERROR(log_output, message, ##__VA_ARGS__);
+#define DEBUG(message, ...)                 printf("%s: " message "\n", __func__, ##__VA_ARGS__)
+#define INFO(message, ...)                  printf(message "\n", ##__VA_ARGS__)
+#define ERROR(message, ...)                 printf("! " message "\n", ##__VA_ARGS__)
 
 #define FREEHEAP()                          printf("Free Heap: %d\n", xPortGetFreeHeapSize())
 

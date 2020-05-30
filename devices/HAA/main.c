@@ -2,18 +2,7 @@
  * Home Accessory Architect
  * 
  * Copyright 2019-2020 José Antonio Jiménez Campos (@RavenSystem)
- *  
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * 
- * http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
  */
 
 //#include <stdio.h>
@@ -42,6 +31,7 @@
 #include <homekit/characteristics.h>
 #include <adv_button.h>
 #include <ping.h>
+#include <adv_logger.h>
 
 #include <multipwm/multipwm.h>
 
@@ -69,7 +59,6 @@ bool used_gpio[17];
 bool led_inverted = true;
 bool enable_homekit_server = true;
 bool allow_insecure = false;
-bool log_output = false;
 
 bool uart_action_is_running = false;
 bool ir_tx_is_running = false;
@@ -104,7 +93,7 @@ void free_heap_watchdog() {
     uint32_t new_free_heap = xPortGetFreeHeapSize();
     if (new_free_heap != free_heap) {
         free_heap = new_free_heap;
-        INFO2("Free Heap: %d", free_heap);
+        INFO("Free Heap: %d", free_heap);
     }
 }
 #endif  // HAA_DEBUG
@@ -115,10 +104,6 @@ void change_uart_gpio(const uint8_t gpio) {
     } else if (gpio == 3) {
         gpio_set_iomux_function(3, IOMUX_GPIO3_FUNC_GPIO);
     }
-}
-
-void IRAM alternate_putc(char c) {
-    uart_putc(1, c);
 }
 
 uint16_t process_hexstr(const char* string, char** output_hex_string) {
@@ -204,32 +189,32 @@ void wifi_watchdog() {
         uint8_t current_channel = sdk_wifi_get_channel();
         if (wifi_channel != current_channel) {
             wifi_status = WIFI_STATUS_PRECONNECTED;
-            INFO2("WiFi new Ch%i", current_channel);
+            INFO("WiFi new Ch%i", current_channel);
             wifi_channel = current_channel;
             homekit_mdns_announce();
         }
     } else if (wifi_status == WIFI_STATUS_DISCONNECTED) {
         wifi_status = WIFI_STATUS_CONNECTING;
-        INFO2("WiFi connecting...");
+        INFO("WiFi connecting...");
         wifi_config_connect();
         
     } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         if (wifi_status == WIFI_STATUS_CONNECTING) {
             wifi_status = WIFI_STATUS_PRECONNECTED;
-            INFO2("WiFi connected");
+            INFO("WiFi connected");
             homekit_mdns_announce();
             
         } else if (wifi_status == WIFI_STATUS_PRECONNECTED) {
             wifi_status = WIFI_STATUS_CONNECTED;
             wifi_channel = sdk_wifi_get_channel();
-            INFO2("mDNS reannounced");
+            INFO("mDNS reannounced");
             homekit_mdns_announce();
         }
         
     } else {
         sdk_wifi_station_disconnect();
         led_blink(8);
-        ERROR2("WiFi disconnected");
+        ERROR("WiFi disconnected");
 
         wifi_status = WIFI_STATUS_DISCONNECTED;
         
@@ -248,7 +233,7 @@ ping_input_t *ping_input_find_by_host(char *host) {
 }
 
 void ping_task() {
-    INFO2("Ping...");
+    INFO("Ping...");
     
     ping_is_running = true;
     
@@ -302,12 +287,12 @@ void ping_task() {
         
         if (ping_result && !ping_input->last_response) {
             ping_input->last_response = true;
-            INFO2("Ping %s", ping_input->host);
+            INFO("Ping %s", ping_input->host);
             ping_input_run_callback_fn(ping_input->callback_1);
 
         } else if (!ping_result && ping_input->last_response) {
             ping_input->last_response = false;
-            ERROR2("Ping %s", ping_input->host);
+            ERROR("Ping %s", ping_input->host);
             ping_input_run_callback_fn(ping_input->callback_0);
         }
         
@@ -334,13 +319,13 @@ void reboot_task() {
 }
 
 void setup_mode_call(const uint8_t gpio, void *args, const uint8_t param) {
-    INFO2("Setup mode call");
+    INFO("Setup mode call");
     
     if (setup_mode_time == 0 || xTaskGetTickCountFromISR() < setup_mode_time * 1000 / portTICK_PERIOD_MS) {
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
         xTaskCreate(reboot_task, "reboot_task", REBOOT_TASK_SIZE, NULL, 1, NULL);
     } else {
-        ERROR2("Not allowed after %i secs since boot", setup_mode_time);
+        ERROR("Not allowed after %i secs since boot", setup_mode_time);
     }
 }
 
@@ -362,7 +347,7 @@ void setup_mode_toggle() {
 void exit_emergency_setup_mode_task() {
     vTaskDelay(MS_TO_TICK(EXIT_EMERGENCY_SETUP_MODE_TIME));
     
-    INFO2("Disarming Emergency Setup Mode");
+    INFO("Disarming Emergency Setup Mode");
     sysparam_set_int8("setup", 0);
 
     // vTaskDelay(MS_TO_TICK(8000)); sdk_wifi_station_disconnect(); sdk_wifi_station_connect();      // Emulates a WiFi disconnection. Keep comment for releases
@@ -372,7 +357,7 @@ void exit_emergency_setup_mode_task() {
 
 // -----
 void save_states() {
-    INFO2("Saving states");
+    INFO("Saving states");
     last_state_t *last_state = last_states;
     sysparam_status_t status;
     
@@ -400,7 +385,7 @@ void save_states() {
         }
         
         if (status != SYSPARAM_OK) {
-            ERROR2("Flash saving states");
+            ERROR("Flash saving states");
         }
         
         last_state = last_state->next;
@@ -448,7 +433,7 @@ void hkc_group_notify(ch_group_t *ch_group) {
 }
 
 void hkc_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
-    INFO2("Setter");
+    INFO("Setter");
     ch->value = value;
     hkc_group_notify(ch_group_find(ch));
     
@@ -471,7 +456,7 @@ void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         if (ch->value.bool_value != value.bool_value) {
             led_blink(1);
-            INFO2("Setter ON");
+            INFO("Setter ON");
             
             ch->value = value;
             
@@ -506,7 +491,7 @@ void hkc_on_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
 void hkc_on_status_setter(homekit_characteristic_t *ch0, const homekit_value_t value) {
     if (ch0->value.bool_value != value.bool_value) {
         led_blink(1);
-        INFO2("Setter Status ON");
+        INFO("Setter Status ON");
         ch0->value = value;
         
         hkc_group_notify(ch_group_find(ch0));
@@ -532,7 +517,7 @@ void hkc_lock_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            INFO2("Setter LOCK");
+            INFO("Setter LOCK");
             
             ch->value = value;
             ch_group->ch0->value = value;
@@ -558,7 +543,7 @@ void hkc_lock_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
 void hkc_lock_status_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
     if (ch->value.int_value != value.int_value) {
         led_blink(1);
-        INFO2("Setter Status LOCK");
+        INFO("Setter Status LOCK");
         ch->value = value;
         ch_group_t *ch_group = ch_group_find(ch);
         ch_group->ch0->value = value;
@@ -574,7 +559,7 @@ void button_event(const uint8_t gpio, void *args, const uint8_t event_type) {
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_child || ch_group->ch_child->value.bool_value) {
         led_blink(event_type + 1);
-        INFO2("Setter EVENT %i", event_type);
+        INFO("Setter EVENT %i", event_type);
         
         homekit_characteristic_notify(ch, HOMEKIT_UINT8(event_type));
         
@@ -595,7 +580,7 @@ void sensor_1(const uint8_t gpio, void *args, const uint8_t type) {
             (type == TYPE_SENSOR_BOOL &&
             ch->value.bool_value == false)) {
             led_blink(1);
-            INFO2("Sensor ON");
+            INFO("Sensor ON");
             
             if (type == TYPE_SENSOR) {
                 ch->value = HOMEKIT_UINT8(1);
@@ -626,7 +611,7 @@ void sensor_status_1(const uint8_t gpio, void *args, const uint8_t type) {
         (type == TYPE_SENSOR_BOOL &&
         ch->value.bool_value == false)) {
         led_blink(1);
-        INFO2("Sensor Status ON");
+        INFO("Sensor Status ON");
         
         if (type == TYPE_SENSOR) {
             ch->value = HOMEKIT_UINT8(1);
@@ -648,7 +633,7 @@ void sensor_0(const uint8_t gpio, void *args, const uint8_t type) {
             (type == TYPE_SENSOR_BOOL &&
             ch->value.bool_value == true)) {
             led_blink(1);
-            INFO2("Sensor OFF");
+            INFO("Sensor OFF");
             
             if (type == TYPE_SENSOR) {
                 ch->value = HOMEKIT_UINT8(0);
@@ -671,7 +656,7 @@ void sensor_status_0(const uint8_t gpio, void *args, const uint8_t type) {
         (type == TYPE_SENSOR_BOOL &&
         ch->value.bool_value == true)) {
         led_blink(1);
-        INFO2("Sensor Status OFF");
+        INFO("Sensor Status OFF");
         
         if (type == TYPE_SENSOR) {
             ch->value = HOMEKIT_UINT8(0);
@@ -689,7 +674,7 @@ void hkc_valve_setter(homekit_characteristic_t *ch, const homekit_value_t value)
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            INFO2("Setter VALVE");
+            INFO("Setter VALVE");
             
             ch->value = value;
             ch_group->ch1->value = value;
@@ -725,7 +710,7 @@ void hkc_valve_setter(homekit_characteristic_t *ch, const homekit_value_t value)
 void hkc_valve_status_setter(homekit_characteristic_t *ch, const homekit_value_t value) {
     if (ch->value.int_value != value.int_value) {
         led_blink(1);
-        INFO2("Setter Status VALVE");
+        INFO("Setter Status VALVE");
         
         ch->value = value;
         ch_group_t *ch_group = ch_group_find(ch);
@@ -753,7 +738,7 @@ void process_th(void *args) {
     ch_group_t *ch_group = args;
     
     void heating(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
-        INFO2("TH Heater");
+        INFO("TH Heater");
         if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband_soft_on)) {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_HEATER;
             if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_ON) {
@@ -811,7 +796,7 @@ void process_th(void *args) {
     }
     
     void cooling(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
-        INFO2("TH Cooler");
+        INFO("TH Cooler");
         if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband_soft_on)) {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_COOLER;
             if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_ON) {
@@ -904,7 +889,7 @@ void process_th(void *args) {
         }
         
     } else {
-        INFO2("TH Off");
+        INFO("TH Off");
         THERMOSTAT_MODE_INT = THERMOSTAT_MODE_OFF;
         if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_TOTAL_OFF) {
             ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_TOTAL_OFF;
@@ -921,7 +906,7 @@ void update_th(homekit_characteristic_t *ch, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         led_blink(1);
-        INFO2("Setter TH");
+        INFO("Setter TH");
         
         ch->value = value;
         
@@ -1033,7 +1018,7 @@ void th_input_temp(const uint8_t gpio, void *args, const uint8_t type) {
 
 // --- TEMPERATURE
 void temperature_timer_worker(void *args) {
-    INFO2("Read TH sensor");
+    INFO("Read TH sensor");
     float taylor_log(float x) {
         // https://stackoverflow.com/questions/46879166/finding-the-natural-logarithm-of-a-number-using-taylor-series-in-c
         if (x <= 0.0) {
@@ -1090,10 +1075,13 @@ void temperature_timer_worker(void *args) {
             temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 + taylor_log(((32000 * adc) / ((1024 * 3.3) - adc)) / 10000))) - 15;
             
         } else if (TH_SENSOR_TYPE == 6) {
-            temperature_value = adc;
+            temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 - taylor_log(((32000 * adc) / ((1024 * 3.3) - adc)) / 10000))) + 15;
             
-        } else {    // TH_SENSOR_TYPE == 7
+        } else if (TH_SENSOR_TYPE == 7) {
             temperature_value = 1024 - adc;
+            
+        } else {    // TH_SENSOR_TYPE == 8
+            temperature_value = adc;
         }
         
         if (TH_SENSOR_HUM_OFFSET != 0.000000f) {
@@ -1117,7 +1105,7 @@ void temperature_timer_worker(void *args) {
                 temperature_value = 200;
             }
             
-            INFO2("TEMP %g", temperature_value);
+            INFO("TEMP %g", temperature_value);
             
             if (temperature_value != ch_group->ch0->value.float_value) {
                 ch_group->ch0->value = HOMEKIT_FLOAT(temperature_value);
@@ -1138,7 +1126,7 @@ void temperature_timer_worker(void *args) {
                 humidity_value = 100;
             }
 
-            INFO2("HUM %g", humidity_value);
+            INFO("HUM %g", humidity_value);
             
             if (humidity_value != ch_group->ch1->value.float_value) {
                 ch_group->ch1->value = HOMEKIT_FLOAT(humidity_value);
@@ -1149,25 +1137,21 @@ void temperature_timer_worker(void *args) {
         
     } else {
         led_blink(5);
-        ERROR2("Sensor");
+        ERROR("Sensor");
         
-        if (ch_group->ch6) {
-            TH_SENSOR_ERROR_COUNT++;
+        TH_SENSOR_ERROR_COUNT++;
 
-            if ((uint8_t) TH_SENSOR_ERROR_COUNT > TH_SENSOR_MAX_ALLOWED_ERRORS) {
-                ERROR2("Turning off TH...");
-                
-                TH_SENSOR_ERROR_COUNT = 0;
-                
-                ch_group->ch0->value.float_value = 0;
-                if (ch_group->ch1) {
-                    ch_group->ch1->value.float_value = 0;
-                }
-                
-                update_th(ch_group->ch2, HOMEKIT_UINT8(0));
+        if ((uint8_t) TH_SENSOR_ERROR_COUNT > TH_SENSOR_MAX_ALLOWED_ERRORS) {
+            TH_SENSOR_ERROR_COUNT = 0;
+            
+            ch_group->ch0->value.float_value = 0;
+            if (ch_group->ch1) {
+                ch_group->ch1->value.float_value = 0;
             }
 
+            do_actions(ch_group, THERMOSTAT_ACTION_SENSOR_ERROR);
         }
+
     }
     
     hkc_group_notify(ch_group);
@@ -1227,7 +1211,7 @@ void hsi2rgbw(uint16_t h, uint16_t s, uint16_t v, lightbulb_group_t *lightbulb_g
 
     uint32_t r, g, b;
     
-    INFO2("light switch %i", i);
+    INFO("light switch %i", i);
     switch (i) {
         case 0:
             r = rgb_max;
@@ -1363,17 +1347,15 @@ void rgbw_set_timer_worker() {
                 }
             }
             
-            //INFO2("RGBW-CW-WW -> %i, %i, %i, %i, %i, %i", multipwm_duty[lightbulb_group->pwm_r], multipwm_duty[lightbulb_group->pwm_g], multipwm_duty[lightbulb_group->pwm_b], multipwm_duty[lightbulb_group->pwm_w], multipwm_duty[lightbulb_group->pwm_cw], multipwm_duty[lightbulb_group->pwm_ww]);
+            //INFO("RGBW-CW-WW -> %i, %i, %i, %i, %i, %i", multipwm_duty[lightbulb_group->pwm_r], multipwm_duty[lightbulb_group->pwm_g], multipwm_duty[lightbulb_group->pwm_b], multipwm_duty[lightbulb_group->pwm_w], multipwm_duty[lightbulb_group->pwm_cw], multipwm_duty[lightbulb_group->pwm_ww]);
 
             if (channels_to_set == 0) {
                 setpwm_is_running = false;
                 sdk_os_timer_disarm(pwm_timer);
                 
-                if (log_output) {
-                    printf("Color fixed\n");
-                    for (uint8_t i = 0; i < pwm_info->channels; i++) {
-                        printf("PWM Ch %i = %i\n", i, multipwm_duty[i]);
-                    }
+                INFO("Color fixed");
+                for (uint8_t i = 0; i < pwm_info->channels; i++) {
+                    INFO("PWM Ch %i = %i", i, multipwm_duty[i]);
                 }
             }
             
@@ -1384,7 +1366,7 @@ void rgbw_set_timer_worker() {
 
         setpwm_bool_semaphore = false;
     } else {
-        ERROR2("MISSED Color set");
+        ERROR("MISSED Color set");
     }
 }
 
@@ -1443,7 +1425,7 @@ void hkc_rgbw_setter(homekit_characteristic_t *ch, const homekit_value_t value) 
         }
         
         led_blink(1);
-        INFO2("Target RGBW = %i, %i, %i, %i, %i, %i", lightbulb_group->target_r, lightbulb_group->target_g, lightbulb_group->target_b, lightbulb_group->target_w, lightbulb_group->target_cw, lightbulb_group->target_ww);
+        INFO("Target RGBW = %i, %i, %i, %i, %i, %i", lightbulb_group->target_r, lightbulb_group->target_g, lightbulb_group->target_b, lightbulb_group->target_w, lightbulb_group->target_cw, lightbulb_group->target_ww);
         
         if (lightbulb_group->is_pwm && !setpwm_is_running) {
             setpwm_is_running = true;
@@ -1490,7 +1472,7 @@ void rgbw_brightness(const uint8_t gpio, void *args, const uint8_t type) {
 }
 
 void autodimmer_task(void *args) {
-    INFO2("AUTODimmer started");
+    INFO("AUTODimmer started");
     
     homekit_characteristic_t *ch = args;
     ch_group_t *ch_group = ch_group_find(ch);
@@ -1517,7 +1499,7 @@ void autodimmer_task(void *args) {
         }
     }
     
-    INFO2("AUTODimmer stopped");
+    INFO("AUTODimmer stopped");
     
     vTaskDelete(NULL);
 }
@@ -1556,7 +1538,7 @@ void garage_door_stop(const uint8_t gpio, void *args, const uint8_t type) {
     
     if (ch0->value.int_value == GARAGE_DOOR_OPENING || ch0->value.int_value == GARAGE_DOOR_CLOSING) {
         led_blink(1);
-        INFO2("GD stop");
+        INFO("GD stop");
         
         ch0->value.int_value = GARAGE_DOOR_STOPPED;
         
@@ -1573,7 +1555,7 @@ void garage_door_obstruction(const uint8_t gpio, void *args, const uint8_t type)
     ch_group_t *ch_group = ch_group_find(ch);
     
     led_blink(1);
-    INFO2("GD obstr: %i", type);
+    INFO("GD obstr: %i", type);
     
     ch_group->ch2->value.bool_value = (bool) type;
     
@@ -1587,7 +1569,7 @@ void garage_door_sensor(const uint8_t gpio, void *args, const uint8_t type) {
     ch_group_t *ch_group = ch_group_find(ch);
     
     led_blink(1);
-    INFO2("GD sensor: %i", type);
+    INFO("GD sensor: %i", type);
     
     ch->value.int_value = type;
     
@@ -1626,7 +1608,7 @@ void hkc_garage_door_setter(homekit_characteristic_t *ch1, const homekit_value_t
 
         if (value.int_value != current_door_state) {
             led_blink(1);
-            INFO2("Setter GD");
+            INFO("Setter GD");
             
             ch1->value = value;
 
@@ -1704,7 +1686,7 @@ void window_cover_stop(homekit_characteristic_t *ch) {
     ch_group_t *ch_group = ch_group_find(ch);
     
     led_blink(1);
-    INFO2("WC Stopped at %f, real %f", WINDOW_COVER_POSITION, WINDOW_COVER_REAL_POSITION);
+    INFO("WC Stopped at %f, real %f", WINDOW_COVER_POSITION, WINDOW_COVER_REAL_POSITION);
     
     sdk_os_timer_disarm(ch_group->timer);
     normalize_position(ch);
@@ -1734,7 +1716,7 @@ void window_cover_obstruction(const uint8_t gpio, void *args, const uint8_t type
     ch_group_t *ch_group = ch_group_find(ch);
     
     led_blink(1);
-    INFO2("WC obstr: %i", type);
+    INFO("WC obstr: %i", type);
     
     ch_group->ch3->value.bool_value = (bool) type;
     
@@ -1747,7 +1729,7 @@ void hkc_window_cover_setter(homekit_characteristic_t *ch1, const homekit_value_
     ch_group_t *ch_group = ch_group_find(ch1);
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         led_blink(1);
-        INFO2("Setter WC: Current: %i, Target: %i", WINDOW_COVER_CH_CURRENT_POSITION->value.int_value, value.int_value);
+        INFO("Setter WC: Current: %i, Target: %i", WINDOW_COVER_CH_CURRENT_POSITION->value.int_value, value.int_value);
         
         ch1->value = value;
 
@@ -1810,7 +1792,7 @@ void window_cover_timer_worker(void *args) {
             WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = 100;
         } else {
             if ((WINDOW_COVER_CH_CURRENT_POSITION->value.int_value >> 2) != (uint8_t) WINDOW_COVER_POSITION >> 2) {
-                INFO2("WC Moving at %f, real %f", WINDOW_COVER_POSITION, WINDOW_COVER_REAL_POSITION);
+                INFO("WC Moving at %f, real %f", WINDOW_COVER_POSITION, WINDOW_COVER_REAL_POSITION);
                 WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_POSITION;
                 homekit_characteristic_notify(WINDOW_COVER_CH_CURRENT_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
             } else {
@@ -1862,7 +1844,7 @@ void hkc_fan_setter(homekit_characteristic_t *ch0, const homekit_value_t value) 
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         if (ch0->value.bool_value != value.bool_value) {
             led_blink(1);
-            INFO2("Setter FAN");
+            INFO("Setter FAN");
             
             ch0->value = value;
             
@@ -1896,7 +1878,7 @@ void hkc_fan_speed_setter(homekit_characteristic_t *ch1, const homekit_value_t v
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         if (ch1->value.float_value != value.float_value) {
             led_blink(1);
-            INFO2("Setter Speed FAN");
+            INFO("Setter Speed FAN");
             
             ch1->value = value;
             
@@ -1914,7 +1896,7 @@ void hkc_fan_speed_setter(homekit_characteristic_t *ch1, const homekit_value_t v
 void hkc_fan_status_setter(homekit_characteristic_t *ch0, const homekit_value_t value) {
     if (ch0->value.int_value != value.int_value) {
         led_blink(1);
-        INFO2("Setter Status FAN");
+        INFO("Setter Status FAN");
         
         ch0->value = value;
         
@@ -1930,7 +1912,7 @@ void hkc_tv_active(homekit_characteristic_t *ch0, const homekit_value_t value) {
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         if (ch0->value.int_value != value.int_value) {
             led_blink(1);
-            INFO2("Setter TV ON %i", value.int_value);
+            INFO("Setter TV ON %i", value.int_value);
             
             ch0->value = value;
             
@@ -1947,7 +1929,7 @@ void hkc_tv_active(homekit_characteristic_t *ch0, const homekit_value_t value) {
 void hkc_tv_status_active(homekit_characteristic_t *ch0, const homekit_value_t value) {
     if (ch0->value.int_value != value.int_value) {
         led_blink(1);
-        INFO2("Setter Status TV ON %i", value.int_value);
+        INFO("Setter Status TV ON %i", value.int_value);
         
         ch0->value = value;
         
@@ -1962,7 +1944,7 @@ void hkc_tv_active_identifier(homekit_characteristic_t *ch, const homekit_value_
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            INFO2("Setter TV Input %i", value.int_value);
+            INFO("Setter TV Input %i", value.int_value);
             
             ch->value = value;
 
@@ -1977,7 +1959,7 @@ void hkc_tv_key(homekit_characteristic_t *ch, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         led_blink(1);
-        INFO2("Setter TV Key %i", value.int_value + 2);
+        INFO("Setter TV Key %i", value.int_value + 2);
         
         ch->value = value;
         
@@ -1991,7 +1973,7 @@ void hkc_tv_power_mode(homekit_characteristic_t *ch, const homekit_value_t value
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         led_blink(1);
-        INFO2("Setter TV Settings %i", value.int_value + 30);
+        INFO("Setter TV Settings %i", value.int_value + 30);
         
         ch->value = value;
         
@@ -2005,7 +1987,7 @@ void hkc_tv_mute(homekit_characteristic_t *ch, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         led_blink(1);
-        INFO2("Setter TV Mute %i", value.int_value + 20);
+        INFO("Setter TV Mute %i", value.int_value + 20);
         
         ch->value = value;
         
@@ -2019,7 +2001,7 @@ void hkc_tv_volume(homekit_characteristic_t *ch, const homekit_value_t value) {
     ch_group_t *ch_group = ch_group_find(ch);
     if (!ch_group->ch_sec || ch_group->ch_sec->value.bool_value) {
         led_blink(1);
-        INFO2("Setter TV Volume %i", value.int_value + 22);
+        INFO("Setter TV Volume %i", value.int_value + 22);
         
         ch->value = value;
         
@@ -2030,7 +2012,7 @@ void hkc_tv_volume(homekit_characteristic_t *ch, const homekit_value_t value) {
 }
 
 void hkc_tv_configured_name(homekit_characteristic_t *ch1, const homekit_value_t value) {
-    INFO2("Setter TV Name %s", value.string_value);
+    INFO("Setter TV Name %s", value.string_value);
     
     char *new_name = strdup(value.string_value);
     
@@ -2365,7 +2347,7 @@ void http_get_task(void *pvParameters) {
     
     while(action_http) {
         if (action_http->action == action_task->action) {
-            INFO2("HTTP/TCP Action %s:%i", action_http->host, action_http->port_n);
+            INFO("HTTP/TCP Action %s:%i", action_http->host, action_http->port_n);
             
             const struct addrinfo hints = {
                 .ai_family = AF_UNSPEC,
@@ -2418,10 +2400,10 @@ void http_get_task(void *pvParameters) {
                         }
                         
                         if (write(s, req, action_http->len) >= 0) {
-                            INFO2("%s", req);
+                            INFO("%s", req);
                             
                         } else {
-                            ERROR2("HTTP");
+                            ERROR("HTTP");
                         }
                         
                         if (method_req) {
@@ -2432,15 +2414,15 @@ void http_get_task(void *pvParameters) {
                             free(req);
                         }
                     } else {
-                        ERROR2("Connection");
+                        ERROR("Connection");
                     }
                 } else {
-                    ERROR2("Socket");
+                    ERROR("Socket");
                 }
                 
                 close(s);
             } else {
-                ERROR2("DNS");
+                ERROR("DNS");
             }
             
             freeaddrinfo(res);
@@ -2498,7 +2480,7 @@ void ir_tx_task(void *pvParameters) {
                 
                 ir_code = malloc(sizeof(uint16_t) * ir_code_len);
                 
-                INFO2("IR Code Len: %i\nIR Protocol: %s", ir_code_len, prot);
+                INFO("IR Code Len: %i\nIR Protocol: %s", ir_code_len, prot);
                 
                 uint16_t bit0_mark = 0, bit0_space = 0, bit1_mark = 0, bit1_space = 0, packet;
                 uint8_t index;
@@ -2510,8 +2492,7 @@ void ir_tx_task(void *pvParameters) {
                     found = strchr(baseRaw_dic, prot[index + 1]);
                     packet += (found - baseRaw_dic) * IR_CODE_SCALE;
 
-                    if (log_output)
-                        printf("%s%5d ", i & 1 ? "-" : "+", packet);
+                    printf("%s%5d ", i & 1 ? "-" : "+", packet);
                     
                     switch (i) {
                         case IR_CODE_HEADER_MARK_POS:
@@ -2570,17 +2551,15 @@ void ir_tx_task(void *pvParameters) {
                     }
                 }
                 
-                if (log_output) {
-                    printf("\nIR code: %s\n", action_ir_tx->prot_code);
-                    for (uint16_t i = 0; i < ir_code_len; i++) {
-                        printf("%s%5d ", i & 1 ? "-" : "+", ir_code[i]);
-                        if (i % 16 == 15) {
-                            printf("\n");
-                        }
-
+                printf("\nIR code: %s\n", action_ir_tx->prot_code);
+                for (uint16_t i = 0; i < ir_code_len; i++) {
+                    printf("%s%5d ", i & 1 ? "-" : "+", ir_code[i]);
+                    if (i % 16 == 15) {
+                        printf("\n");
                     }
-                    printf("\n");
+
                 }
+                printf("\n");
                 
             } else {    // IR_ACTION_RAW_CODE
                 const uint16_t json_ir_code_len = strlen(action_ir_tx->raw_code);
@@ -2588,7 +2567,7 @@ void ir_tx_task(void *pvParameters) {
                 
                 ir_code = malloc(sizeof(uint16_t) * ir_code_len);
                 
-                INFO2("IR packet (%i)", ir_code_len);
+                INFO("IR packet (%i)", ir_code_len);
 
                 uint16_t index, packet;
                 for (uint16_t i = 0; i < ir_code_len; i++) {
@@ -2601,15 +2580,13 @@ void ir_tx_task(void *pvParameters) {
 
                     ir_code[i] = packet;
 
-                    if (log_output) {
-                        printf("%s%5d ", i & 1 ? "-" : "+", packet);
-                        if (i % 16 == 15) {
-                            printf("\n");
-                        }
+                    printf("%s%5d ", i & 1 ? "-" : "+", packet);
+                    if (i % 16 == 15) {
+                        printf("\n");
                     }
                 }
                 
-                INFO2("");
+                INFO("");
             }
             
             // IR TRANSMITTER
@@ -2643,7 +2620,7 @@ void ir_tx_task(void *pvParameters) {
                 
                 gpio_write(ir_tx_gpio, ir_false);
                 
-                INFO2("IR %i sent", r);
+                INFO("IR %i sent", r);
                 
                 if (action_ir_tx->pause > 0) {
                     sdk_os_delay_us(action_ir_tx->pause);
@@ -2674,7 +2651,7 @@ void uart_action_task(void *pvParameters) {
 
     while (action_uart) {
         if (action_uart->action == action_task->action) {
-            INFO2("UART Action");
+            INFO("UART Action");
             
             while (uart_action_is_running) {
                 vTaskDelay(MS_TO_TICK(200));
@@ -2709,14 +2686,14 @@ void autoswitch_task(void *pvParameters) {
     vTaskDelay(MS_TO_TICK(autoswitch_params->time * 1000));
     
     gpio_write(autoswitch_params->gpio, autoswitch_params->value);
-    INFO2("AutoSw digO GPIO %i -> %i", autoswitch_params->gpio, autoswitch_params->value);
+    INFO("AutoSw digO GPIO %i -> %i", autoswitch_params->gpio, autoswitch_params->value);
     
     free(autoswitch_params);
     vTaskDelete(NULL);
 }
 
 void do_actions(ch_group_t *ch_group, uint8_t action) {
-    INFO2("Exec action %i", action);
+    INFO("Exec action %i", action);
     
     // Copy actions
     action_copy_t *action_copy = ch_group->action_copy;
@@ -2734,7 +2711,7 @@ void do_actions(ch_group_t *ch_group, uint8_t action) {
     while(action_relay) {
         if (action_relay->action == action) {
             gpio_write(action_relay->gpio, action_relay->value);
-            INFO2("DigO GPIO %i -> %i", action_relay->gpio, action_relay->value);
+            INFO("DigO GPIO %i -> %i", action_relay->gpio, action_relay->value);
             
             if (action_relay->inching > 0) {
                 autoswitch_params_t *autoswitch_params = malloc(sizeof(autoswitch_params_t));
@@ -2755,7 +2732,7 @@ void do_actions(ch_group_t *ch_group, uint8_t action) {
             ch_group_t *ch_group = ch_group_find_by_acc(action_acc_manager->accessory);
             if (ch_group) {
                 if (action_acc_manager->is_kill_switch) {
-                    INFO2("Kill Sw Manager %i -> %.2f", action_acc_manager->accessory, action_acc_manager->value);
+                    INFO("Kill Sw Manager %i -> %.2f", action_acc_manager->accessory, action_acc_manager->value);
                     
                     switch ((uint8_t) action_acc_manager->value) {
                         case 1:
@@ -2784,7 +2761,7 @@ void do_actions(ch_group_t *ch_group, uint8_t action) {
                     }
 
                 } else {
-                    INFO2("Acc Manager %i -> %.2f", action_acc_manager->accessory, action_acc_manager->value);
+                    INFO("Acc Manager %i -> %.2f", action_acc_manager->accessory, action_acc_manager->value);
                     
                     switch (ch_group->acc_type) {
                         case ACC_TYPE_BUTTON:
@@ -2903,7 +2880,7 @@ void do_actions(ch_group_t *ch_group, uint8_t action) {
                     }
                 }
             } else {
-                ERROR2("No acc found: %i", action_acc_manager->accessory);
+                ERROR("No acc found: %i", action_acc_manager->accessory);
             }
         }
 
@@ -2914,7 +2891,7 @@ void do_actions(ch_group_t *ch_group, uint8_t action) {
     action_system_t *action_system = ch_group->action_system;
     while(action_system) {
         if (action_system->action == action) {
-            INFO2("Sys Action %i", action_system->value);
+            INFO("Sys Action %i", action_system->value);
             
             char *ota = NULL;
             
@@ -2971,7 +2948,7 @@ void do_actions(ch_group_t *ch_group, uint8_t action) {
 }
 
 void do_wildcard_actions(ch_group_t *ch_group, uint8_t index, const float action_value) {
-    INFO2("Wildcard %i %.2f", index, action_value);
+    INFO("Wildcard %i %.2f", index, action_value);
     float last_value, last_diff = 10000;
     wildcard_action_t *wildcard_action = ch_group->wildcard_action;
     wildcard_action_t *last_wildcard_action = NULL;
@@ -2993,7 +2970,7 @@ void do_wildcard_actions(ch_group_t *ch_group, uint8_t index, const float action
     if (last_wildcard_action != NULL) {
         if (ch_group->last_wildcard_action[index] != last_value || last_wildcard_action->repeat) {
             ch_group->last_wildcard_action[index] = last_value;
-            INFO2("Wilcard Action %i %.2f", index, last_value);
+            INFO("Wilcard Action %i %.2f", index, last_value);
             do_actions(ch_group, last_wildcard_action->target_action);
         }
     }
@@ -3002,13 +2979,13 @@ void do_wildcard_actions(ch_group_t *ch_group, uint8_t index, const float action
 // --- IDENTIFY
 void identify(homekit_value_t _value) {
     led_blink(6);
-    INFO2("ID");
+    INFO("ID");
 }
 
 // ---------
 
 void delayed_sensor_starter_task(void *args) {
-    INFO2("Starting delayed sensor");
+    INFO("Starting delayed sensor");
     ch_group_t *ch_group = args;
     
     vTaskDelay(((ch_group->accessory - 1) * MS_TO_TICK(5000)) + 1);
@@ -3035,7 +3012,7 @@ void run_homekit_server() {
     FREEHEAP();
     
     if (enable_homekit_server) {
-        INFO2("Start HK Server");
+        INFO("Start HK Server");
 
         homekit_server_init(&config);
         FREEHEAP();
@@ -3122,7 +3099,7 @@ void normal_mode_init() {
             }
             adv_button_register_callback_fn(gpio, callback, button_type, (void *) hk_ch, param);
             
-            INFO2("Digital input GPIO: %i, type: %i, inv: %i", gpio, button_type, inverted);
+            INFO("Digital input GPIO: %i, type: %i, inv: %i", gpio, button_type, inverted);
              
             if (gpio_read(gpio) == button_type) {
                 run_at_launch = true;
@@ -3170,14 +3147,14 @@ void normal_mode_init() {
                 ping_input->callback_0 = ping_input_callback_fn;
             }
             
-            INFO2("Ping input: %s, res: %i", ping_input->host, response_type);
+            INFO("Ping input: %s, res: %i", ping_input->host, response_type);
         }
     }
     
     // Initial state function
     double set_initial_state(const uint8_t accessory, const uint8_t ch_number, cJSON *json_context, homekit_characteristic_t *ch, const uint8_t ch_type, const double default_value) {
         double state = default_value;
-        INFO2("Set init state");
+        INFO("Set init state");
         if (cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
             const uint8_t initial_state = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE)->valuedouble;
             if (initial_state < INIT_STATE_LAST) {
@@ -3248,13 +3225,13 @@ void normal_mode_init() {
                 }
                 
                 if (status != SYSPARAM_OK) {
-                    ERROR2("No saved state found");
+                    ERROR("No saved state found");
                 }
                 
                 if (ch_type == CH_TYPE_STRING && state > 0) {
-                    INFO2("Init state = %s", (char *) (uint32_t) state);
+                    INFO("Init state = %s", (char *) (uint32_t) state);
                 } else {
-                    INFO2("Init state = %.2f", state);
+                    INFO("Init state = %.2f", state);
                 }
                 
             }
@@ -3322,7 +3299,7 @@ void normal_mode_init() {
                             gpio_write(action_relay->gpio, false);
                             
                             used_gpio[action_relay->gpio] = true;
-                            INFO2("DigO GPIO: %i", action_relay->gpio);
+                            INFO("DigO GPIO: %i", action_relay->gpio);
                         }
                         
                         action_relay->value = false;
@@ -3735,6 +3712,7 @@ void normal_mode_init() {
         TH_SENSOR_TEMP_OFFSET = th_sensor_temp_offset(json_accessory);
         TH_SENSOR_HUM_OFFSET = th_sensor_hum_offset(json_accessory);
         TH_SENSOR_POLL_PERIOD = th_sensor_poll_period(json_accessory);
+        TH_SENSOR_ERROR_COUNT = 0;
     }
     
     void th_sensor_starter(ch_group_t *ch_group) {
@@ -3834,23 +3812,17 @@ void normal_mode_init() {
     uint8_t log_output_type = 0;
     if (cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT) != NULL) {
         log_output_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT)->valuedouble;
-        if (log_output_type > 0) {
-            log_output = true;
-
-            if (log_output_type == 1 && !used_uart[0]) {
-                uart_set_baud(0, 115200);
-            } else if (log_output_type == 2 && !used_uart[1]) {
-                sdk_os_install_putc1(alternate_putc);
-                uart_set_baud(1, 115200);
-            }
-            
-            printf_header();
-            printf("NORMAL MODE\n\nJSON:\n %s\n\n", txt_config);
+        
+        if ((log_output_type == 1 || log_output_type == 4) && !used_uart[0]) {
+            uart_set_baud(0, 115200);
+        } else if ((log_output_type == 2 || log_output_type == 5) && !used_uart[1]) {
+            uart_set_baud(1, 115200);
         }
-    }
-    
-    if (log_output_type == 0 && used_uart[0]) {
-        sdk_os_install_putc1(alternate_putc);
+        
+        adv_logger_init(log_output_type);
+
+        printf_header();
+        printf("NORMAL MODE\n\nJSON:\n %s\n\n", txt_config);
     }
     
     free(txt_config);
@@ -3859,7 +3831,7 @@ void normal_mode_init() {
     char *custom_hostname = name.value.string_value;
     if (cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME) != NULL) {
         custom_hostname = strdup(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring);
-        INFO2("Hostname: %s", custom_hostname);
+        INFO("Hostname: %s", custom_hostname);
     }
     
     // Status LED
@@ -3874,19 +3846,19 @@ void normal_mode_init() {
         gpio_enable(led_gpio, GPIO_OUTPUT);
         used_gpio[led_gpio] = true;
         gpio_write(led_gpio, false ^ led_inverted);
-        INFO2("Status LED GPIO: %i, inv: %i", led_gpio, led_inverted);
+        INFO("Status LED GPIO: %i, inv: %i", led_gpio, led_inverted);
     }
     
     // IR TX LED Frequency
     if (cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_FREQ) != NULL) {
         ir_tx_freq = 1000 / cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_FREQ)->valuedouble / 2;
-        INFO2("IR TX Freq: %i", ir_tx_freq);
+        INFO("IR TX Freq: %i", ir_tx_freq);
     }
     
     // IR TX LED Inverted
     if (cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO_INVERTED) != NULL) {
         ir_tx_inv = (bool) cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO_INVERTED)->valuedouble;
-        INFO2("IR TX Inv: %i", ir_tx_inv);
+        INFO("IR TX Inv: %i", ir_tx_inv);
     }
     
     // IR TX LED GPIO
@@ -3896,63 +3868,63 @@ void normal_mode_init() {
         gpio_enable(ir_tx_gpio, GPIO_OUTPUT);
         used_gpio[ir_tx_gpio] = true;
         gpio_write(ir_tx_gpio, false ^ ir_tx_inv);
-        INFO2("IR TX GPIO: %i", ir_tx_gpio);
+        INFO("IR TX GPIO: %i", ir_tx_gpio);
     }
     
     // IR Protocol
     if (cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_PROTOCOL) != NULL) {
         ir_protocol = strdup(cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_PROTOCOL)->valuestring);
-        INFO2("IR Protocol: %s", ir_protocol);
+        INFO("IR Protocol: %s", ir_protocol);
     }
     
     // Button filter
     if (cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER) != NULL) {
         uint8_t button_filter_value = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER)->valuedouble;
         adv_button_set_evaluate_delay(button_filter_value);
-        INFO2("Button filter: %i", button_filter_value);
+        INFO("Button filter: %i", button_filter_value);
     }
     
     // PWM frequency
     if (cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ) != NULL) {
         pwm_freq = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ)->valuedouble;
-        INFO2("PWM Freq: %i", pwm_freq);
+        INFO("PWM Freq: %i", pwm_freq);
     }
     
     // Ping poll period
     if (cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD) != NULL) {
         ping_poll_period = (float) cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD)->valuedouble;
-        INFO2("Ping period: %g secs", ping_poll_period);
+        INFO("Ping period: %g secs", ping_poll_period);
     }
     
     // Allowed Setup Mode Time
     if (cJSON_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME) != NULL) {
         setup_mode_time = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME)->valuedouble;
-        INFO2("Setup mode time: %i secs", setup_mode_time);
+        INFO("Setup mode time: %i secs", setup_mode_time);
     }
     
     // Run HomeKit Server
     if (cJSON_GetObjectItemCaseSensitive(json_config, ENABLE_HOMEKIT_SERVER) != NULL) {
         enable_homekit_server = (bool) cJSON_GetObjectItemCaseSensitive(json_config, ENABLE_HOMEKIT_SERVER)->valuedouble;
-        INFO2("Run HomeKit Server: %i", enable_homekit_server);
+        INFO("Run HomeKit Server: %i", enable_homekit_server);
     }
     
     // Allow unsecure connections
     if (cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS) != NULL) {
         config.insecure = (bool) cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS)->valuedouble;
-        INFO2("Unsecure connections: %i", config.insecure);
+        INFO("Unsecure connections: %i", config.insecure);
     }
     
     // mDNS TTL
     config.mdns_ttl = MDNS_TTL_DEFAULT;
     if (cJSON_GetObjectItemCaseSensitive(json_config, MDNS_TTL) != NULL) {
         config.mdns_ttl = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, MDNS_TTL)->valuedouble;
-        INFO2("mDNS TTL: %i secs", config.mdns_ttl);
+        INFO("mDNS TTL: %i secs", config.mdns_ttl);
     }
     
     // Times to toggle quickly an accessory status to enter setup mode
     if (cJSON_GetObjectItemCaseSensitive(json_config, SETUP_MODE_ACTIVATE_COUNT) != NULL) {
         setup_mode_toggle_counter_max = (int8_t) cJSON_GetObjectItemCaseSensitive(json_config, SETUP_MODE_ACTIVATE_COUNT)->valuedouble;
-        INFO2("Toggles to enter setup mode: %i", setup_mode_toggle_counter_max);
+        INFO("Toggles to enter setup mode: %i", setup_mode_toggle_counter_max);
     }
     
     if (setup_mode_toggle_counter_max > 0) {
@@ -4037,7 +4009,7 @@ void normal_mode_init() {
         accessories[accessory]->services[0]->characteristics[5] = &identify_function;
         
         if (acc_count == 0) {
-            INFO2("HAP v1.1.0");
+            INFO("HAP v1.1.0");
             services -= 2;
             accessories[accessory]->services[services] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[services]->id = 100;
@@ -4069,19 +4041,19 @@ void normal_mode_init() {
             const uint8_t kill_switch = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, KILL_SWITCH)->valuedouble;
             
             if (kill_switch == 1) {
-                INFO2("Secure Switch");
+                INFO("Secure Switch");
                 ch_group->ch_sec = new_kill_switch(accessory);
                 return accessory + 1;
                 
             } else if (kill_switch == 2) {
-                INFO2("Kids Switch");
+                INFO("Kids Switch");
                 ch_group->ch_child = new_kill_switch(accessory);
                 return accessory + 1;
                 
             } else if (kill_switch == 3) {
-                INFO2("Secure Switch");
+                INFO("Secure Switch");
                 ch_group->ch_sec = new_kill_switch(accessory);
-                INFO2("Kids Switch");
+                INFO("Kids Switch");
                 ch_group->ch_child = new_kill_switch(accessory + 1);
                 return accessory + 2;
             }
@@ -4102,7 +4074,7 @@ void normal_mode_init() {
             exec_actions_on_boot = (bool) cJSON_GetObjectItemCaseSensitive(json_context, EXEC_ACTIONS_ON_BOOT)->valuedouble;
         }
         
-        INFO2("Exec Ac on Boot: %i", exec_actions_on_boot);
+        INFO("Exec Ac on Boot: %i", exec_actions_on_boot);
         
         return exec_actions_on_boot;
     }
@@ -4113,7 +4085,7 @@ void normal_mode_init() {
             initial_state = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE)->valuedouble;
         }
         
-        INFO2("Init State: %i", initial_state);
+        INFO("Init State: %i", initial_state);
         
         return initial_state;
     }
@@ -4701,9 +4673,6 @@ void normal_mode_init() {
             TH_TYPE = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TYPE)->valuedouble;
         }
         
-        // Initial error counter
-        TH_SENSOR_ERROR_COUNT = 0;
-        
         // HomeKit Characteristics
         homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200});
         homekit_characteristic_t *ch2 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_th_target_setter);
@@ -4955,7 +4924,7 @@ void normal_mode_init() {
         }
 
         if (is_pwm && !lightbulb_groups) {
-            INFO2("PWM Init");
+            INFO("PWM Init");
             pwm_timer = malloc(sizeof(ETSTimer));
             memset(pwm_timer, 0, sizeof(*pwm_timer));
             sdk_os_timer_setfn(pwm_timer, rgbw_set_timer_worker, NULL);
@@ -5530,7 +5499,7 @@ void normal_mode_init() {
         ch_groups = ch_group;
         
         homekit_service_t *new_tv_input_service(const uint8_t service_number, char *name) {
-            INFO2("TV Input: %s", name);
+            INFO("TV Input: %s", name);
             
             homekit_service_t **service = calloc(1, sizeof(homekit_service_t*));
             
@@ -5659,13 +5628,13 @@ void normal_mode_init() {
     
     // Accessory Builder
     if (bridge_needed) {
-        INFO2("BRIDGE CREATED");
+        INFO("BRIDGE CREATED");
         new_accessory(0, 2);
         acc_count++;
     }
     
     for(uint8_t i = 0; i < total_accessories; i++) {
-        INFO2("\nACCESSORY %i", accessory_numerator);
+        INFO("\nACCESSORY %i", accessory_numerator);
         
         uint8_t acc_type = ACC_TYPE_SWITCH;
         if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE) != NULL) {
@@ -5675,7 +5644,7 @@ void normal_mode_init() {
         cJSON *json_accessory = cJSON_GetArrayItem(json_accessories, i);
         
         // Creating HomeKit Accessory
-        INFO2("Type %i", acc_type);
+        INFO("Type %i", acc_type);
         if (acc_type == ACC_TYPE_BUTTON) {
             acc_count = new_button_event(acc_count, json_accessory);
             
@@ -5731,11 +5700,11 @@ void normal_mode_init() {
     
     sysparam_set_int8(TOTAL_ACC_SYSPARAM, hk_total_ac);
     
-    INFO2("");
+    INFO("");
     
     // --- LIGHTBULBS INIT
     if (lightbulb_groups) {
-        INFO2("Init Lights");
+        INFO("Init Lights");
         
         setpwm_bool_semaphore = false;
         
@@ -5757,7 +5726,7 @@ void normal_mode_init() {
             lightbulb_group = lightbulb_group->next;
         }
         
-        INFO2("");
+        INFO("");
     }
     
     // --- HOMEKIT SET CONFIG
@@ -5766,7 +5735,7 @@ void normal_mode_init() {
     config.setupId = "JOSE";
     config.category = homekit_accessory_category_other;
     config.config_number = FIRMWARE_VERSION_OCTAL;
-    config.log_output = log_output;
+    config.log_output = (bool) log_output_type;
     
     setup_mode_toggle_counter = 0;
     
