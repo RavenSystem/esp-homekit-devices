@@ -32,7 +32,7 @@
 #define TRIES_BEFORE_FORCE_SEND     (20)
 
 // Task Stack Size                  configMINIMAL_STACK_SIZE = 256
-#define ADV_LOGGER_TASK_SIZE        (configMINIMAL_STACK_SIZE * 1)
+#define ADV_LOGGER_TASK_SIZE        (configMINIMAL_STACK_SIZE * 2)
 #define ADV_LOGGER_TASK_PRIORITY    (tskIDLE_PRIORITY + 2)
 
 #define DESTINATION_PORT            (28338)     // 45678 in reversed bytes
