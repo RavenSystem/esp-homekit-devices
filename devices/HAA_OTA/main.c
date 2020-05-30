@@ -23,6 +23,8 @@
 #include <wifi_config.h>
 #include <sysparam.h>
 
+#include <rboot-api.h>
+
 #include <adv_logger.h>
 
 #include "ota.h"
