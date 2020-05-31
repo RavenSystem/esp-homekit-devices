@@ -26,8 +26,8 @@
 #include <lwip/sockets.h>
 #include <stdout_redirect.h>
 
-#define IP_ADDR_LEN                 (16)
-#define UDP_LOG_LEN                 (2048 - IP_ADDR_LEN)
+#define HEADER_LEN                  (23)
+#define UDP_LOG_LEN                 (2048 - HEADER_LEN)
 #define UDP_LOG_SEND_MIN_LEN        (UDP_LOG_LEN / 4)
 #define TRIES_BEFORE_FORCE_SEND     (20)
 
@@ -40,7 +40,7 @@
 
 typedef struct _adv_logger_data {
     char* udplogstring;
-    char* ip_addr;
+    char* header;
     uint16_t udplogstring_len;
     int8_t log_type;
     bool is_wifi_ready;
@@ -74,13 +74,13 @@ static ssize_t adv_logger_write(struct _reent *r, int fd, const void *ptr, size_
             uart_putc(adv_logger_data->log_type, ((char *)ptr)[i]);
         }
         
-        if (adv_logger_data->is_wifi_ready && adv_logger_data->udplogstring_len < (UDP_LOG_LEN - IP_ADDR_LEN)) {
+        if (adv_logger_data->is_wifi_ready && adv_logger_data->udplogstring_len < (UDP_LOG_LEN - HEADER_LEN)) {
             adv_logger_data->udplogstring[adv_logger_data->udplogstring_len] = ((char *)ptr)[i];
             adv_logger_data->udplogstring_len++;
             
             if (((char *)ptr)[i] == '\n') {
                 adv_logger_data->udplogstring[adv_logger_data->udplogstring_len] = 0;
-                strcat(strcat(adv_logger_data->udplogstring, adv_logger_data->ip_addr), ": ");
+                strcat(strcat(adv_logger_data->udplogstring, adv_logger_data->header), ": ");
                 adv_logger_data->udplogstring_len = strlen(adv_logger_data->udplogstring);
             }
         }
@@ -100,12 +100,14 @@ static void adv_logger_task() {
     }
     
     if (sdk_wifi_get_ip_info(STATION_IF, &info)) {
-        snprintf(adv_logger_data->ip_addr, IP_ADDR_LEN, IPSTR, IP2STR(&info.ip));
-        adv_logger_data->udplogstring_len = snprintf(adv_logger_data->udplogstring, IP_ADDR_LEN + 2, "%s: ", adv_logger_data->ip_addr);
+        uint8_t macaddr[6];
+        sdk_wifi_get_macaddr(STATION_IF, macaddr);
+        snprintf(adv_logger_data->header, HEADER_LEN, IPSTR"-%02X%02X%02X", IP2STR(&info.ip), macaddr[3], macaddr[4], macaddr[5]);
+        adv_logger_data->udplogstring_len = snprintf(adv_logger_data->udplogstring, HEADER_LEN + 2, "%s-: ", adv_logger_data->header);
     } else {
-        free(adv_logger_data->ip_addr);
-        adv_logger_data->ip_addr = malloc(1);
-        adv_logger_data->ip_addr[0] = 0;
+        free(adv_logger_data->header);
+        adv_logger_data->header = malloc(1);
+        adv_logger_data->header[0] = 0;
         adv_logger_data->udplogstring_len = 0;
     }
     
@@ -159,8 +161,9 @@ void adv_logger_init(const uint8_t log_type) {
         }
         
         if (log_type > 2) {
-            adv_logger_data->ip_addr = malloc(IP_ADDR_LEN);
+            adv_logger_data->header = malloc(HEADER_LEN);
             adv_logger_data->udplogstring = malloc(UDP_LOG_LEN);
+            
             xTaskCreate(adv_logger_task, "adv_logger_task", ADV_LOGGER_TASK_SIZE, NULL, ADV_LOGGER_TASK_PRIORITY, NULL);
         }
         

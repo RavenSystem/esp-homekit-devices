@@ -3827,12 +3827,12 @@ void normal_mode_init() {
         } else if ((log_output_type == 2 || log_output_type == 5) && !used_uart[1]) {
             uart_set_baud(1, 115200);
         }
-        
-        adv_logger_init(log_output_type);
-
-        printf_header();
-        printf("NORMAL MODE\n\nJSON:\n %s\n\n", txt_config);
     }
+    
+    adv_logger_init(log_output_type);
+
+    printf_header();
+    printf("NORMAL MODE\n\nJSON:\n %s\n\n", txt_config);
     
     free(txt_config);
 
