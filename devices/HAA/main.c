@@ -2395,7 +2395,8 @@ void hkc_autooff_setter_task(void *pvParameters) {
 // --- HTTP/TCP task
 void http_get_task(void *pvParameters) {
     action_task_t *action_task = pvParameters;
-    action_http_t *action_http = action_task->ch_group->action_http;
+    ch_group_t *ch_group = action_task->ch_group;
+    action_http_t *action_http = ch_group->action_http;
     
     while(action_http) {
         if (action_http->action == action_task->action) {
@@ -2420,8 +2421,29 @@ void http_get_task(void *pvParameters) {
                         char *method = "GET";
                         char *method_req = NULL;
                         if (action_http->method_n > 0) {
-                            content_len_n = strlen(action_http->content);
-                            
+                            content_req = malloc(strlen(action_http->content) + (2*6)+1);
+                            char *original_content_ptr = action_http->content;
+                            char *modified_content_ptr = content_req;
+                            // Search content for temperature & humidity content specifiers and
+                            // replace them with sensor values
+                            while (*original_content_ptr != '\0') {
+                                if (original_content_ptr[0] == '{' && original_content_ptr[1] == 'T' && original_content_ptr[2] == '}') {
+                                    if (ch_group->ch0 != NULL) {
+                                        modified_content_ptr += sprintf(modified_content_ptr, "%.2f", ch_group->ch0->value.float_value);
+                                    }
+                                    original_content_ptr += 3;
+                                } else if (original_content_ptr[0] == '{' && original_content_ptr[1] == 'H' && original_content_ptr[2] == '}') {
+                                    if (ch_group->ch1 != NULL) {
+                                        modified_content_ptr += sprintf(modified_content_ptr, "%.2f", ch_group->ch1->value.float_value);
+                                    }
+                                    original_content_ptr += 3;
+                                }
+                                *modified_content_ptr++ = *original_content_ptr++;
+                            }
+                            *modified_content_ptr = '\0';
+
+                            content_len_n = (content_req != NULL) ? strlen(content_req) : strlen(action_http->content);
+
                             if (action_http->method_n < 3) {
                                 char content_len[4];
                                 itoa(content_len_n, content_len, 10);
@@ -2438,7 +2460,7 @@ void http_get_task(void *pvParameters) {
                         
                         char *req = NULL;
                         if (action_http->method_n == 3) {
-                            req = action_http->content;
+                            req = (content_req != NULL) ? content_req : action_http->content;
                         } else {
                             action_http->len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(action_http->host) +  strlen(action_http->url) + content_len_n;
                             
@@ -2448,7 +2470,7 @@ void http_get_task(void *pvParameters) {
                                      action_http->url,
                                      action_http->host,
                                      (method_req != NULL) ? method_req : "",
-                                     action_http->content);
+                                     (content_req != NULL) ? content_req : action_http->content);
                         }
                         
                         if (write(s, req, action_http->len) >= 0) {
@@ -2458,6 +2480,7 @@ void http_get_task(void *pvParameters) {
                             ERROR("HTTP");
                         }
                         
+                        if (content_req) free(content_req);
                         if (method_req) {
                             free(method_req);
                         }
