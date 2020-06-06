@@ -1,4 +1,6 @@
 {
+  "editor.minimap.enabled": false,
+  "files.trimTrailingWhitespace": false,
   "files.associations": {
     "*.json": "jsonc",
     "freertos.h": "c",
