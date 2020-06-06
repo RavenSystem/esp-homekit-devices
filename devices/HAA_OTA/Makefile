@@ -64,6 +64,7 @@ EXTRA_CFLAGS += -Os
 #EXTRA_CFLAGS += -DLWIP_DEBUG
 EXTRA_CFLAGS += -DDNS_TABLE_SIZE=4
 EXTRA_CFLAGS += -DDNS_MAX_SERVERS=4
+EXTRA_CFLAGS += -DWIFI_PARAM_SAVE=0
 
 include $(abspath ../../sdk/esp-open-rtos/common.mk)
 
