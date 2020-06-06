@@ -30,24 +30,27 @@ char *url_unescape(const char *buffer, size_t size) {
         }
     }
 
-    char *result = malloc(len+1);
-    i = j = 0;
-    while (i < size) {
-        if (buffer[i] == '+') {
-            result[j++] = ' ';
-            i++;
-        } else if (buffer[i] != '%') {
-            result[j++] = buffer[i++];
-        } else {
-            if (i+2 < size && ishex(buffer[i+1]) && ishex(buffer[i+2])) {
-                result[j++] = hexvalue(buffer[i+1])*16 + hexvalue(buffer[i+2]);
-                i += 3;
-            } else {
+    char *result = malloc(len + 1);
+    if (result) {
+        i = j = 0;
+        while (i < size) {
+            if (buffer[i] == '+') {
+                result[j++] = ' ';
+                i++;
+            } else if (buffer[i] != '%') {
                 result[j++] = buffer[i++];
+            } else {
+                if (i+2 < size && ishex(buffer[i+1]) && ishex(buffer[i+2])) {
+                    result[j++] = hexvalue(buffer[i+1])*16 + hexvalue(buffer[i+2]);
+                    i += 3;
+                } else {
+                    result[j++] = buffer[i++];
+                }
             }
         }
+        result[j] = 0;
     }
-    result[j] = 0;
+    
     return result;
 }
 
@@ -56,7 +59,7 @@ form_param_t *form_params_parse(const char *s) {
     form_param_t *params = NULL;
 
     int i = 0;
-    while (1) {
+    for (;;) {
         int pos = i;
         while (s[i] && s[i] != '=' && s[i] != '&') i++;
         if (i == pos) {

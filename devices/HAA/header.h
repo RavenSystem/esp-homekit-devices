@@ -9,8 +9,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "2.4.4"
-#define FIRMWARE_VERSION_OCTAL              020404      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "2.4.5"
+#define FIRMWARE_VERSION_OCTAL              020405      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMSECTOR                      0xF3000
@@ -42,15 +42,15 @@
 // Task Stack Sizes                         configMINIMAL_STACK_SIZE = 256
 #define INITIAL_SETUP_TASK_SIZE             (configMINIMAL_STACK_SIZE * 4)
 #define LED_TASK_SIZE                       (configMINIMAL_STACK_SIZE * 1)
-#define REBOOT_TASK_SIZE                    (configMINIMAL_STACK_SIZE * 2)
+#define REBOOT_TASK_SIZE                    (configMINIMAL_STACK_SIZE * 1.5)
 #define PING_TASK_SIZE                      (configMINIMAL_STACK_SIZE * 2)
-#define AUTOSWITCH_TASK_SIZE                (configMINIMAL_STACK_SIZE * 2)
-#define AUTOOFF_SETTER_TASK_SIZE            (configMINIMAL_STACK_SIZE * 2)
+#define AUTOSWITCH_TASK_SIZE                (configMINIMAL_STACK_SIZE * 1.5)
+#define AUTOOFF_SETTER_TASK_SIZE            (configMINIMAL_STACK_SIZE * 1.5)
 #define AUTODIMMER_TASK_SIZE                (configMINIMAL_STACK_SIZE * 1)
 #define IR_TX_TASK_SIZE                     (configMINIMAL_STACK_SIZE * 2)
-#define UART_ACTION_TASK_SIZE               (configMINIMAL_STACK_SIZE * 2)
+#define UART_ACTION_TASK_SIZE               (configMINIMAL_STACK_SIZE * 1.5)
 #define HTTP_GET_TASK_SIZE                  (configMINIMAL_STACK_SIZE * 2)
-#define DELAYED_SENSOR_START_TASK_SIZE      (configMINIMAL_STACK_SIZE * 2)
+#define DELAYED_SENSOR_START_TASK_SIZE      (configMINIMAL_STACK_SIZE * 1.5)
 #define TEMPERATURE_TASK_SIZE               (configMINIMAL_STACK_SIZE * 2)
 
 // Task Priorities
@@ -357,7 +357,7 @@
 #define ACC_POWER_MONITOR_INIT              75
 #define ACC_POWER_MONITOR_END               82
 
-#define ACC_CREATION_DELAY                  30
+#define ACC_CREATION_DELAY                  "cd"
 #define EXIT_EMERGENCY_SETUP_MODE_TIME      2200
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   8

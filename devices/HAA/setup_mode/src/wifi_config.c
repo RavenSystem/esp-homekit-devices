@@ -45,9 +45,9 @@
 
 #define WIFI_CONFIG_SERVER_PORT         80
 
-#ifndef AUTO_REBOOT_TIMEOUT
 #define AUTO_REBOOT_TIMEOUT             90000
-#endif
+
+#define MAX_BODY_LEN                    14336
 
 #define INFO(message, ...)              printf(message "\n", ##__VA_ARGS__);
 #define ERROR(message, ...)             printf("! " message "\n", ##__VA_ARGS__);
@@ -87,9 +87,19 @@ static void wifi_config_station_connect();
 static void wifi_config_softap_start();
 static void wifi_config_softap_stop();
 
+static void body_malloc(client_t* client) {
+    uint16_t body_size = MAX_BODY_LEN;
+    do {
+        client->body = malloc(body_size);
+        body_size -= 200;
+    } while (!client->body);
+}
+
 static client_t *client_new() {
     client_t *client = malloc(sizeof(client_t));
     memset(client, 0, sizeof(client_t));
+    
+    body_malloc(client);
 
     http_parser_init(&client->parser, HTTP_REQUEST);
     client->parser.data = client;
@@ -348,15 +358,26 @@ static void wifi_config_context_free(wifi_config_context_t *context) {
 
 static void wifi_config_server_on_settings_update_task(void* args) {
     client_t* client = args;
+
+    uint8_t* new_body = malloc(client->body_length + 1);
+    if (new_body) {
+        memcpy(new_body, client->body, client->body_length + 1);
+        free(client->body);
+        client->body = new_body;
+    }
     
     INFO("Update settings, body = %s", client->body);
+
+    form_param_t *form = form_params_parse((char *) client->body);
+    free(client->body);
     
-    form_param_t *form = form_params_parse((char *)client->body);
     if (!form) {
+        body_malloc(client);
+        client->body_length = 0;
         client_send_redirect(client, 302, "/settings");
         return;
     }
-
+    
     form_param_t *conf_param = form_params_find(form, "conf");
     form_param_t *reset_param = form_params_find(form, "reset");
     form_param_t *nowifi_param = form_params_find(form, "nowifi");
@@ -380,7 +401,8 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         sysparam_set_data(saved_state_id, NULL, 0, false);
     }
     
-    if (conf_param->value) {
+    if (conf_param && conf_param->value) {
+        taskYIELD();
         sysparam_set_string(HAA_JSON_SYSPARAM, conf_param->value);
     }
     
@@ -403,13 +425,13 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         homekit_server_reset();
     }
     
-    if (reposerver_param->value) {
+    if (reposerver_param && reposerver_param->value) {
         sysparam_set_string(CUSTOM_REPO_SYSPARAM, reposerver_param->value);
     } else {
         sysparam_set_string(CUSTOM_REPO_SYSPARAM, "");
     }
     
-    if (repoport_param->value) {
+    if (repoport_param && repoport_param->value) {
         const int32_t port = strtol(repoport_param->value, NULL, 10);
         sysparam_set_int32(PORT_NUMBER_SYSPARAM, port);
     }
@@ -420,10 +442,10 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         sysparam_set_int8(PORT_SECURE_SYSPARAM, 0);
     }
     
-    if (ssid_param->value) {
+    if (ssid_param && ssid_param->value) {
         sysparam_set_string(WIFI_SSID_SYSPARAM, ssid_param->value);
 
-        if (bssid_param->value && strlen(bssid_param->value) == 12) {
+        if (bssid_param && bssid_param->value && strlen(bssid_param->value) == 12) {
             uint8_t bssid[6];
             char hex[3];
             memset(hex, 0, 3);
@@ -449,7 +471,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     
     sysparam_compact();
     
-    if (wifimode_param->value) {
+    if (wifimode_param && wifimode_param->value) {
         int8_t current_wifi_mode = 0;
         int8_t new_wifi_mode = strtol(wifimode_param->value, NULL, 10);
         sysparam_get_int8(WIFI_MODE_SYSPARAM, &current_wifi_mode);
@@ -468,8 +490,6 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     vTaskDelay(250 / portTICK_PERIOD_MS);
     
     sdk_system_restart();
-    
-    vTaskDelete(NULL);
 }
 
 static int wifi_config_server_on_url(http_parser *parser, const char *data, size_t length) {
@@ -499,7 +519,7 @@ static int wifi_config_server_on_url(http_parser *parser, const char *data, size
 
 static int wifi_config_server_on_body(http_parser *parser, const char *data, size_t length) {
     client_t *client = parser->data;
-    client->body = realloc(client->body, client->body_length + length + 1);
+    //client->body = realloc(client->body, client->body_length + length + 1);
     memcpy(client->body + client->body_length, data, length);
     client->body_length += length;
     client->body[client->body_length] = 0;
@@ -590,7 +610,7 @@ static void http_task(void *arg) {
             continue;
         }
 
-        const struct timeval timeout = { 1, 400000 };
+        const struct timeval timeout = { 1, 200000 };
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
         client_t *client = client_new();
@@ -605,6 +625,7 @@ static void http_task(void *arg) {
             //INFO("lwip_read %d, %d", data_len, data_total);
 
             if (data_len > 0) {
+                taskYIELD();
                 http_parser_execute(
                     &client->parser, &wifi_config_http_parser_settings,
                     data, data_len
@@ -761,14 +782,14 @@ static void wifi_config_softap_start() {
     wifi_networks_mutex = xSemaphoreCreateBinary();
     xSemaphoreGive(wifi_networks_mutex);
 
-    xTaskCreate(wifi_scan_task, "wifi_scan_task", (configMINIMAL_STACK_SIZE * 1), NULL, (tskIDLE_PRIORITY + 0), NULL);
+    xTaskCreate(wifi_scan_task, "wifi_scan_task", (configMINIMAL_STACK_SIZE * 1.5), NULL, (tskIDLE_PRIORITY + 0), NULL);
 
     INFO("Start DHCP server");
     dhcpserver_start(&first_client_ip, 4);
     dhcpserver_set_router(&ap_ip.ip);
     dhcpserver_set_dns(&ap_ip.ip);
 
-    xTaskCreate(dns_task, "dns_task", (configMINIMAL_STACK_SIZE * 2), NULL, (tskIDLE_PRIORITY + 1), &context->dns_task_handle);
+    xTaskCreate(dns_task, "dns_task", (configMINIMAL_STACK_SIZE * 1.5), NULL, (tskIDLE_PRIORITY + 1), &context->dns_task_handle);
     xTaskCreate(http_task, "http_task", (configMINIMAL_STACK_SIZE * 2), NULL, (tskIDLE_PRIORITY + 1), &context->http_task_handle);
 }
 

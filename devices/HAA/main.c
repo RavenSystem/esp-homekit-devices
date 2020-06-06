@@ -3063,7 +3063,9 @@ void normal_mode_init() {
     
     if (total_accessories == 0) {
         uart_set_baud(0, 115200);
-        printf("\n\n\n! Invalid JSON\n");
+        printf_header();
+        printf("JSON:\n %s\n\n\n", txt_config);
+        printf("! Invalid JSON\n");
         sysparam_set_int8(TOTAL_ACC_SYSPARAM, 0);
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);
         xTaskCreate(reboot_task, "reboot_task", REBOOT_TASK_SIZE, NULL, 1, NULL);
@@ -4098,8 +4100,14 @@ void normal_mode_init() {
         
         return initial_state;
     }
+    
+    void acc_creation_delay(cJSON* json_accessory) {
+        if (cJSON_GetObjectItemCaseSensitive(json_accessory, ACC_CREATION_DELAY) != NULL) {
+            vTaskDelay(MS_TO_TICK((uint16_t) cJSON_GetObjectItemCaseSensitive(json_accessory, ACC_CREATION_DELAY)->valuedouble));
+        }
+    }
 
-    uint8_t new_switch(uint8_t accessory, cJSON *json_context, const uint8_t acc_type) {
+    uint8_t new_switch(uint8_t accessory, cJSON* json_context, const uint8_t acc_type) {
         new_accessory(accessory, 3);
         
         homekit_characteristic_t *ch0 = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .setter_ex=hkc_on_setter);
@@ -5703,6 +5711,10 @@ void normal_mode_init() {
         }
         
         setup_mode_toggle_counter = INT8_MIN;
+        
+        FREEHEAP();
+        
+        acc_creation_delay(json_accessory);
         
         taskYIELD();
     }
