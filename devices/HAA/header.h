@@ -9,8 +9,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "2.4.5"
-#define FIRMWARE_VERSION_OCTAL              020405      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "2.4.6"
+#define FIRMWARE_VERSION_OCTAL              020406      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMSECTOR                      0xF3000
@@ -264,13 +264,15 @@
 #define WINDOW_COVER_CORRECTION_SET         "f"
 #define WINDOW_COVER_CORRECTION_DEFAULT     0
 #define WINDOW_COVER_POLL_PERIOD_MS         333
-#define WINDOW_COVER_MARGIN_SYNC            15
+#define WINDOW_COVER_MARGIN_SYNC_SET        "m"
+#define WINDOW_COVER_MARGIN_SYNC_DEFAULT    15
 #define WINDOW_COVER_STEP_TIME(x)           ((100.0 / (x)) * (WINDOW_COVER_POLL_PERIOD_MS / 1000.0))
 #define WINDOW_COVER_STEP_TIME_UP           ch_group->num[0]
 #define WINDOW_COVER_STEP_TIME_DOWN         ch_group->num[1]
 #define WINDOW_COVER_POSITION               ch_group->num[2]
 #define WINDOW_COVER_REAL_POSITION          ch_group->num[3]
 #define WINDOW_COVER_CORRECTION             ch_group->num[4]
+#define WINDOW_COVER_MARGIN_SYNC            ch_group->num[5]
 #define WINDOW_COVER_CH_CURRENT_POSITION    ch_group->ch0
 #define WINDOW_COVER_CH_TARGET_POSITION     ch_group->ch1
 #define WINDOW_COVER_CH_STATE               ch_group->ch2
