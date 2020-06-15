@@ -2420,21 +2420,47 @@ void http_get_task(void *pvParameters) {
                         
                         char *method = "GET";
                         char *method_req = NULL;
+                        char *content_req = NULL;
                         if (action_http->method_n > 0) {
-                            content_req = malloc(strlen(action_http->content) + (2*6)+1);
+                            content_req = malloc(strlen(action_http->content) + 200);
+                            // TODO: Work out how to allocate enough memory
                             char *original_content_ptr = action_http->content;
                             char *modified_content_ptr = content_req;
-                            // Search content for temperature & humidity content specifiers and
-                            // replace them with sensor values
+                            // Search content for characteristic value and convert to string
                             while (*original_content_ptr != '\0') {
-                                if (original_content_ptr[0] == '{' && original_content_ptr[1] == 'T' && original_content_ptr[2] == '}') {
-                                    if (ch_group->ch0 != NULL) {
-                                        modified_content_ptr += sprintf(modified_content_ptr, "%.2f", ch_group->ch0->value.float_value);
+                                if (original_content_ptr[0] == '{' && isdigit(original_content_ptr[1]) && original_content_ptr[2] == '}') {
+                                    homekit_characteristic_t *ch;
+                                    switch (original_content_ptr[1]) {
+                                        case '0':
+                                            ch = ch_group->ch0;
+                                            break;
+                                        case '1':
+                                            ch = ch_group->ch1;
+                                            break;
+                                        case '2':
+                                            ch = ch_group->ch2;
+                                            break;
+                                        case '3':
+                                            ch = ch_group->ch3;
+                                            break;
+                                        case '4':
+                                            ch = ch_group->ch4;
+                                            break;
+                                        case '5':
+                                            ch = ch_group->ch5;
+                                            break;
+                                        case '6':
+                                            ch = ch_group->ch6;
+                                            break;
+                                        case '7':
+                                            ch = ch_group->ch7;
+                                            break;
                                     }
-                                    original_content_ptr += 3;
-                                } else if (original_content_ptr[0] == '{' && original_content_ptr[1] == 'H' && original_content_ptr[2] == '}') {
-                                    if (ch_group->ch1 != NULL) {
-                                        modified_content_ptr += sprintf(modified_content_ptr, "%.2f", ch_group->ch1->value.float_value);
+                                    if (ch != NULL) {
+                                        char *str_val = homekit_value_to_string(&ch->value);
+                                        modified_content_ptr += sprintf(modified_content_ptr, "%s", str_val);
+                                        free(str_val);
+                                        // TODO: Make sure we do not overrun the content_req buffer
                                     }
                                     original_content_ptr += 3;
                                 }

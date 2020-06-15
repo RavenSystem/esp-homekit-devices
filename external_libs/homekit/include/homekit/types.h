@@ -95,6 +95,7 @@ typedef struct {
 } homekit_value_t;
 
 bool homekit_value_equal(homekit_value_t *a, homekit_value_t *b);
+char *homekit_value_to_string(homekit_value_t *val);
 void homekit_value_copy(homekit_value_t *dst, homekit_value_t *src);
 homekit_value_t *homekit_value_clone(homekit_value_t *value);
 void homekit_value_destruct(homekit_value_t *value);

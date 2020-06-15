@@ -47,6 +47,41 @@ bool homekit_value_equal(homekit_value_t *a, homekit_value_t *b) {
     return false;
 }
 
+char *homekit_value_to_string(homekit_value_t *val) {
+    char *value_string = malloc(100);
+    if (val->is_null)
+        *value_string = '\0';
+
+    switch (val->format) {
+        case homekit_format_bool:
+            snprintf(value_string, 100, "%u", val->bool_value);
+            break;
+        case homekit_format_uint8:
+        case homekit_format_uint16:
+        case homekit_format_uint32:
+        case homekit_format_uint64:
+            snprintf(value_string, 100, "%u", val->int_value);
+            break;
+        case homekit_format_int:
+            snprintf(value_string, 100, "%i", val->int_value);
+            break;
+        case homekit_format_float:
+            snprintf(value_string, 100, "%.2f", val->float_value);
+            break;
+        case homekit_format_string:
+            snprintf(value_string, 100, "%s", val->string_value);
+            break;
+        case homekit_format_tlv: 
+            // TODO: Implement tlv to string
+            *value_string = '\0';
+        case homekit_format_data:
+            // TODO: implement comparison
+            *value_string = '\0';
+    }
+
+    return value_string;
+}
+
 void homekit_value_copy(homekit_value_t *dst, homekit_value_t *src) {
     memset(dst, 0, sizeof(*dst));
 
