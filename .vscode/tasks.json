@@ -1,0 +1,80 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "C/C++: build active project",
+			"command": "/usr/local/bin/docker",
+			"args": [
+				"run",
+				"-it",
+				"--rm",
+				"-v",
+				"${workspaceFolder}:${workspaceFolder}",
+				"-w",
+				"${workspaceFolder}",
+				"esp-rtos",
+				"make",
+				"-j4",
+				"-C",
+				"devices/HAA"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		},
+		{
+			"type": "shell",
+			"label": "Test",
+			"command": "make",
+			"args": [
+				"-C",
+				"devices/HAA",
+				"flash",
+				"monitor"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"group": "none",
+			"problemMatcher": []
+		},
+		{
+			"type": "shell",
+			"label": "Clean",
+			"command": "make",
+			"args": [
+				"-C",
+				"devices/HAA",
+				"clean"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"group": "none",
+			"problemMatcher": []
+		},
+		{
+			"type": "shell",
+			"label": "Monitor",
+			"command": "make",
+			"args": [
+				"-C",
+				"devices/HAA",
+				"monitor"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}"
+			},
+			"group": "none",
+			"problemMatcher": []
+		}
+	]
+}
