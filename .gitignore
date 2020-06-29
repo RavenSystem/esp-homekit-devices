@@ -55,3 +55,6 @@ dkms.conf
 # esp tools remove files
 *.remove
 devices/HAA/build/wifi_config/content/index.html.h
+
+# macOS files
+.DS_Store
