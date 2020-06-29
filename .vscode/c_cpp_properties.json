@@ -1,15 +1,21 @@
 {
+    "env": {
+      "myDefaultIncludePath": ["${workspaceFolder}/**"]
+    },
     "configurations": [
         {
-            "name": "Linux",
-            "includePath": [
-                "${workspaceFolder}/**"
-            ],
+            "name": "esp-open-rtos",
+            "includePath": ["${myDefaultIncludePath}"],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c11",
             "cppStandard": "c++17",
-            "intelliSenseMode": "clang-x64"
+            "intelliSenseMode": "gcc-x64",
+            "browse": {
+                "path": ["${myDefaultIncludePath}"],
+                "limitSymbolsToIncludedHeaders": true,
+                "databaseFilename": "${env:HOME}/.vscode-dbs/esp-homekit-devices.db"
+            }
         }
     ],
     "version": 4
