@@ -9,8 +9,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "2.4.7"
-#define FIRMWARE_VERSION_OCTAL              020407      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "2.5.0"
+#define FIRMWARE_VERSION_OCTAL              020500      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMSECTOR                      0xF3000
@@ -47,7 +47,7 @@
 #define AUTOSWITCH_TASK_SIZE                (configMINIMAL_STACK_SIZE * 1.5)
 #define AUTOOFF_SETTER_TASK_SIZE            (configMINIMAL_STACK_SIZE * 1.5)
 #define AUTODIMMER_TASK_SIZE                (configMINIMAL_STACK_SIZE * 1)
-#define IR_TX_TASK_SIZE                     (configMINIMAL_STACK_SIZE * 2)
+#define IR_TX_TASK_SIZE                     (configMINIMAL_STACK_SIZE * 2.5)
 #define UART_ACTION_TASK_SIZE               (configMINIMAL_STACK_SIZE * 1.5)
 #define HTTP_GET_TASK_SIZE                  (configMINIMAL_STACK_SIZE * 2)
 #define DELAYED_SENSOR_START_TASK_SIZE      (configMINIMAL_STACK_SIZE * 1.5)
@@ -55,6 +55,7 @@
 
 // Task Priorities
 #define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 0)
+#define LED_TASK_PRIORITY                   (tskIDLE_PRIORITY + 1)
 #define AUTODIMMER_TASK_PRIORITY            (tskIDLE_PRIORITY + 1)
 #define PING_TASK_PRIORITY                  (tskIDLE_PRIORITY + 0)
 #define IR_TX_TASK_PRIORITY                 (configMAX_PRIORITIES - 1)
@@ -187,6 +188,7 @@
 #define TH_SENSOR_MAX_ALLOWED_ERRORS        3
 #define TH_HEATER_TARGET_TEMP_FLOAT         ch_group->ch6->value.float_value
 #define TH_COOLER_TARGET_TEMP_FLOAT         ch_group->ch7->value.float_value
+#define TH_UPDATE_DELAY_MS                  4000
 
 #define TEMPERATURE_SENSOR_GPIO             "g"
 #define TH_SENSOR_GPIO                      ch_group->num[0]
@@ -276,8 +278,8 @@
 #define WINDOW_COVER_STEP_TIME(x)           ((100.0 / (x)) * (WINDOW_COVER_POLL_PERIOD_MS / 1000.0))
 #define WINDOW_COVER_STEP_TIME_UP           ch_group->num[0]
 #define WINDOW_COVER_STEP_TIME_DOWN         ch_group->num[1]
-#define WINDOW_COVER_POSITION               ch_group->num[2]
-#define WINDOW_COVER_REAL_POSITION          ch_group->num[3]
+#define WINDOW_COVER_MOTOR_POSITION         ch_group->num[2]
+#define WINDOW_COVER_HOMEKIT_POSITION       ch_group->num[3]
 #define WINDOW_COVER_CORRECTION             ch_group->num[4]
 #define WINDOW_COVER_MARGIN_SYNC            ch_group->num[5]
 #define WINDOW_COVER_CH_CURRENT_POSITION    ch_group->ch0
@@ -310,14 +312,26 @@
 #define HTTP_ACTIONS_ARRAY                  "h"
 #define IR_ACTIONS_ARRAY                    "i"
 #define IR_ACTION_PROTOCOL                  "p"
-#define IR_ACTION_PROTOCOL_LEN              14
+#define IR_ACTION_PROTOCOL_LEN_2BITS        14
+#define IR_ACTION_PROTOCOL_LEN_4BITS        22
+#define IR_ACTION_PROTOCOL_LEN_6BITS        30
 #define IR_CODE_HEADER_MARK_POS             0
 #define IR_CODE_HEADER_SPACE_POS            1
 #define IR_CODE_BIT0_MARK_POS               2
 #define IR_CODE_BIT0_SPACE_POS              3
 #define IR_CODE_BIT1_MARK_POS               4
 #define IR_CODE_BIT1_SPACE_POS              5
-#define IR_CODE_FOOTER_MARK_POS             6
+#define IR_CODE_BIT2_MARK_POS               6
+#define IR_CODE_BIT2_SPACE_POS              7
+#define IR_CODE_BIT3_MARK_POS               8
+#define IR_CODE_BIT3_SPACE_POS              9
+#define IR_CODE_BIT4_MARK_POS               10
+#define IR_CODE_BIT4_SPACE_POS              11
+#define IR_CODE_BIT5_MARK_POS               12
+#define IR_CODE_BIT5_SPACE_POS              13
+#define IR_CODE_FOOTER_MARK_POS_2BITS       6
+#define IR_CODE_FOOTER_MARK_POS_4BITS       10
+#define IR_CODE_FOOTER_MARK_POS_6BITS       14
 #define IR_ACTION_PROTOCOL_CODE             "c"
 #define IR_ACTION_RAW_CODE                  "w"
 #define IR_ACTION_TX_GPIO                   "t"
@@ -331,6 +345,7 @@
 #define HTTP_ACTION_URL                     "u"
 #define HTTP_ACTION_METHOD                  "m"
 #define HTTP_ACTION_CONTENT                 "c"
+#define HTTP_ACTION_WILDCARD_VALUE          "#HAA@"
 #define SYSTEM_ACTION_REBOOT                0
 #define SYSTEM_ACTION_SETUP_MODE            1
 #define SYSTEM_ACTION_OTA_UPDATE            2
@@ -378,7 +393,8 @@
 #define WIFI_STATUS_PRECONNECTED            2
 #define WIFI_STATUS_CONNECTED               3
 #define WIFI_WATCHDOG_POLL_PERIOD_MS        1000
-#define WIFI_RECONNECTION_POLL_PERIOD_MS    5000
+#define WIFI_RECONNECTION_POLL_PERIOD_MS    7000
+#define WIFI_PING_ERRORS                    "w"
 
 #define ACCESSORIES_WITHOUT_BRIDGE          4   // Max number of accessories before using a bridge
 
