@@ -2,7 +2,7 @@ html,
 input,
 textarea {
 	font-size: 38px;
-	font-family: Arial;
+	font-family: system-ui, -apple-system, "Helvetica Neue", Arial;
 }
 
 h1, h2, .center {
