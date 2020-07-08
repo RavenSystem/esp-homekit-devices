@@ -6,7 +6,7 @@ textarea {
 }
 
 h1, h2, .center {
-    text-align: center;
+	text-align: center;
 }
 
 h1 {
@@ -24,8 +24,8 @@ body .container {
 }
 
 label {
-    display: block;
-    padding: 0.1rem 0;
+	display: block;
+	padding: 0.1rem 0;
 }
 
 input[type=text],
@@ -35,9 +35,9 @@ input[type=password] {
 }
 
 input[type=checkbox] {
-    transform: scale(1.8);
-    position: relative;
-    top: -6px;
+	transform: scale(1.8);
+	position: relative;
+	top: -6px;
 }
 
 textarea {
@@ -46,13 +46,13 @@ textarea {
 }
 
 select {
-	border: 1px solid black;
+	border: 1px solid #000;
 	font-size: 70%;
 	text-decoration: none;
 	padding: 0.25rem 0.25rem;
 	color: white;
 	margin: 0;
-	background-color: #ac0000;
+	background-color: #A00;
 	cursor: pointer;
 	border-radius: 0;
 	-webkit-appearance: none;
@@ -61,27 +61,27 @@ select {
 input[type=submit],
 input[type=button] {
 	width: 100%;
-	border: 1px solid black;
+	border: 1px solid #000;
 	text-decoration: none;
 	padding: 0.25rem 5rem;
 	color: white;
-	background-color: #4caf50;
+	background-color: #4A5;
 	cursor: pointer;
 	border-radius: 0;
 	-webkit-appearance: none;
 }
 
 input[type=button]#refresh {
-	background-color: #44bbe3;
+	background-color: #4BD;
 }
 
 input[type=submit]#join {
-	background-color: #4caf50;
+	background-color: #4A5;
 }
 
 input[type=submit][disabled] {
-	color: #aaaaaa;
-	background-color: #eeeeee !important;
+	color: #aaa;
+	background-color: #eee !important;
 }
 
 .networkheader {
