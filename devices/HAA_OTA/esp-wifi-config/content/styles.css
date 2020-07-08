@@ -5,14 +5,16 @@ textarea {
 	font-family: Arial;
 }
 
+h1, h2, .center {
+    text-align: center;
+}
+
 h1 {
 	font-size: 120%;
-	text-align: center;
 }
 
 h2 {
 	font-size: 75%;
-	text-align: center;
 }
 
 body .container {
