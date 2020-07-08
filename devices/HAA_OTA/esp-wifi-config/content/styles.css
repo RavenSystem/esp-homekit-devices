@@ -18,13 +18,13 @@ h2 {
 }
 
 body .container {
-	width: 22em;
+	width: 22rem;
 	margin: 0 auto;
-	padding: 0.5em;
+	padding: 0.5rem;
 }
 
 label {
-	display: block;
+    display: block;
 }
 
 input[type=text],
@@ -48,7 +48,7 @@ select {
 	border: 1px solid black;
 	font-size: 70%;
 	text-decoration: none;
-	padding: 0.25em 0.25em;
+	padding: 0.25rem 0.25rem;
 	color: white;
 	margin: 0;
 	background-color: #ac0000;
@@ -62,7 +62,7 @@ input[type=button] {
 	width: 100%;
 	border: 1px solid black;
 	text-decoration: none;
-	padding: 0.25em 5em;
+	padding: 0.25rem 5rem;
 	color: white;
 	background-color: #4caf50;
 	cursor: pointer;
@@ -86,7 +86,7 @@ input[type=submit][disabled] {
 .networkheader {
 	font-size: 75%;
 	font-weight: bold;
-	margin: 0.25em 0 0 0;
+	margin: 0.25rem 0 0 0;
 	padding: 0;
 	border-bottom: 2px solid #aaa;
 	text-align: center;
@@ -95,19 +95,19 @@ input[type=submit][disabled] {
 .networks {
 	font-size: 75%;
 	list-style: none;
-	margin: 0.4em 0.4em;
+	margin: 0.4rem 0.4rem;
 	padding: 0;
 }
 
 .networks li {
 	cursor: pointer;
-	padding: 0.25em;
-	margin-bottom: 0.25em;
+	padding: 0.25rem;
+	margin-bottom: 0.25rem;
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
 	position: relative;
-	padding-left: 1.1em;
+	padding-left: 1.1rem;
 }
 
 .networks li.secure::before {
@@ -132,11 +132,11 @@ input[type=submit][disabled] {
 
 .nonetworks {
 	text-align: center;
-	margin: 1em 0;
+	margin: 1rem 0;
 }
 
 .field {
-	margin-bottom: 0.5em;
+	margin-bottom: 0.5rem;
 }
 
 .asterisk::before {
