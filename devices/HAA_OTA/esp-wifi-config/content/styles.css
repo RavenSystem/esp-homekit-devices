@@ -34,7 +34,9 @@ input[type=password] {
 }
 
 input[type=checkbox] {
-	transform: scale(1.8);
+    transform: scale(1.8);
+    position: relative;
+    top: -6px;
 }
 
 textarea {
