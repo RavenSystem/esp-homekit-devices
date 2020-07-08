@@ -53,8 +53,8 @@ select {
 	margin: 0;
 	background-color: #ac0000;
 	cursor: pointer;
+	border-radius: 0;
 	-webkit-appearance: none;
-	-webkit-border-radius: 0;
 }
 
 input[type=submit],
@@ -66,8 +66,8 @@ input[type=button] {
 	color: white;
 	background-color: #4caf50;
 	cursor: pointer;
+	border-radius: 0;
 	-webkit-appearance: none;
-	-webkit-border-radius: 0;
 }
 
 input[type=button]#refresh {
