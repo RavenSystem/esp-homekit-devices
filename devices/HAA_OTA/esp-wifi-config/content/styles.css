@@ -24,7 +24,8 @@ body .container {
 }
 
 label {
-    display: block;
+	display: block;
+	padding: 0.1rem 0;
 }
 
 input[type=text],
