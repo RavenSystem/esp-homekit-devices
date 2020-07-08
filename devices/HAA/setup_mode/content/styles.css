@@ -77,6 +77,7 @@ input[type=button] {
 
 #join {
 	background-color: #4A5;
+	padding: 0.408rem;
 }
 
 input[type=submit][disabled] {
