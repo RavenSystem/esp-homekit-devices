@@ -11,12 +11,15 @@
 		 <h1>Home Accessory Architect<br>Installer v3.2.0</h1>
 		 <form action="/settings" method="post">
 			<div class="field required conf">
-				<label for="conf">JSON Config:</label>
+				<label class="asterisk" for="conf">JSON Config:</label>
 				<textarea id="conf" name="conf"><!-- part HTML_SETTINGS_MIDDLE --></textarea>
-				<br>
-				<input type="checkbox" name="nowifi" value="y"> Remove WiFi Settings<br>
-				<input type="checkbox" name="autoota" value="y" <!-- part HTML_SETTINGS_AUTOOTA -->> Auto OTA Updates<br>
-				<label for="wifimode">
+				<label>
+					<input type="checkbox" name="nowifi" value="y"> Remove WiFi Settings
+				</label>
+				<label>
+					<input type="checkbox" name="autoota" value="y" <!-- part HTML_SETTINGS_AUTOOTA -->> Auto OTA Updates<br>
+				</label>
+				<label class="asterisk" for="wifimode">
 					WiFi connection mode 
 					<select name="wifimode">
 						<option value="0" <!-- part HTML_WIFI_MODE_0 -->>Normal</option>
@@ -50,11 +53,13 @@
 			   <input type="password" id="password" name="password" />
 			</div>
 			<div class="field">
-			   <label for="repo">Custom server for updates:</label>
-			   <input type="text" id="reposerver" name="reposerver" value="<!-- part HTML_SETTINGS_REPOSERVER -->" />
-			   <label for="repo">Port:</label>
-			   <input type="text" id="repoport" name="repoport" maxlength="5" value="<!-- part HTML_SETTINGS_REPOPORT -->" />
-			   <input type="checkbox" name="repossl" value="y" <!-- part HTML_SETTINGS_REPOSSL -->> Secure connection<br>
+				<label for="repo">Custom server for updates:</label>
+				<input type="text" id="reposerver" name="reposerver" value="<!-- part HTML_SETTINGS_REPOSERVER -->" />
+				<label for="repo">Port:</label>
+				<input type="text" id="repoport" name="repoport" maxlength="5" value="<!-- part HTML_SETTINGS_REPOPORT -->" />
+				<label>
+					<input type="checkbox" name="repossl" value="y" <!-- part HTML_SETTINGS_REPOSSL -->> Secure connection<br>
+				</label>
 			</div>
 		 </form>
 		 <div class="center">© 2018-2020 Jos&eacute; A. Jim&eacute;nez Campos</div>

@@ -139,7 +139,7 @@ input[type=submit][disabled] {
 	margin-bottom: 0.5em;
 }
 
-.field.required label::before {
+.asterisk::before {
 	content: "*";
 	color: red;
 }
