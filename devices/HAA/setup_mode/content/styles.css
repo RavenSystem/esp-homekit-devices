@@ -71,11 +71,11 @@ input[type=button] {
 	-webkit-appearance: none;
 }
 
-input[type=button]#refresh {
+#refresh {
 	background-color: #4BD;
 }
 
-input[type=submit]#join {
+#join {
 	background-color: #4A5;
 }
 
