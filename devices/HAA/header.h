@@ -9,8 +9,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "2.5.1"
-#define FIRMWARE_VERSION_OCTAL              020501      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "2.5.2"
+#define FIRMWARE_VERSION_OCTAL              020502      // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMSECTOR                      0xF3000
@@ -77,7 +77,7 @@
 // JSON
 #define GENERAL_CONFIG                      "c"
 #define MDNS_TTL                            "ttl"
-#define MDNS_TTL_DEFAULT                    4500
+#define MDNS_TTL_DEFAULT                    120
 #define CUSTOM_HOSTNAME                     "n"
 #define LOG_OUTPUT                          "o"
 #define ALLOWED_SETUP_MODE_TIME             "m"
