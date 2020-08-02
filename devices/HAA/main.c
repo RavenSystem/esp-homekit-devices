@@ -444,7 +444,7 @@ void exit_emergency_setup_mode_task() {
     vTaskDelay(MS_TO_TICK(EXIT_EMERGENCY_SETUP_MODE_TIME));
     
     INFO("Disarming Emergency Setup Mode");
-    sysparam_set_int8("setup", 0);
+    sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
 
     //vTaskDelay(MS_TO_TICK(8000)); sdk_wifi_station_disconnect(); sdk_wifi_station_connect();      // Emulates a WiFi disconnection. Keep comment for releases
     
@@ -2561,7 +2561,7 @@ void http_get_task(void* pvParameters) {
                                             break;
 
                                         case homekit_format_float:
-                                            snprintf(buffer, 10, "%.2f", value->float_value);
+                                            snprintf(buffer, 10, "%.3f", value->float_value);
                                             break;
                                             
                                         default:
@@ -3426,7 +3426,7 @@ void normal_mode_init() {
     if (total_accessories == 0) {
         uart_set_baud(0, 115200);
         printf_header();
-        printf("JSON:\n %s\n\n\n", txt_config);
+        printf("JSON:\n %s\n\n\n", txt_config ? txt_config : "none");
         printf("! Invalid JSON\n");
         sysparam_set_int8(TOTAL_ACC_SYSPARAM, 0);
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);
@@ -6178,34 +6178,35 @@ void user_init(void) {
     sdk_wifi_station_disconnect();
     sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
 
-    printf("\n\n\n\n");
+    printf("\n\n");
     
-#ifndef HAALCM
     // Sysparam starter
     sysparam_status_t status;
     status = sysparam_init(SYSPARAMSECTOR, 0);
-    if (status == SYSPARAM_NOTFOUND) {
-        printf("Creating sysparam\n");
+    if (status == SYSPARAM_OK) {
+        printf("HAA Sysparam ready");
+    } else {
+        printf("! HAA Sysparam. Creating...");
 
         sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
         sysparam_init(SYSPARAMSECTOR, 0);
-    } else if (status == SYSPARAM_OK) {
-        printf("Sysparam ready\n");
     }
-#endif  // HAALCM
 
+    printf("\n\n");
+    
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     
     snprintf(main_config.name_value, 11, "HAA-%02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
     name.value = HOMEKIT_STRING(main_config.name_value);
     
-    int8_t haa_setup = 0;
+    int8_t haa_setup = 1;
     
-    //sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);            // Force to enter always in setup mode. Only for tests. Keep comment for releases
-    //sysparam_set_string("ota_repo", "1");     // Simulates Installation with OTA. Only for tests. Keep comment for releases
+    //sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);    // Force to enter always in setup mode. Only for tests. Keep comment for releases
+    //sysparam_set_string("ota_repo", "1");             // Simulates Installation with OTA. Only for tests. Keep comment for releases
     
     sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &haa_setup);
+    
     if (haa_setup > 0) {
         uart_set_baud(0, 115200);
         printf_header();

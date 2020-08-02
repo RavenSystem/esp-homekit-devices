@@ -1,5 +1,5 @@
 /*
- * Advanced Logger
+ * Advanced ESP Logger
  *
  * Copyright 2020 José Antonio Jiménez Campos (@RavenSystem)
  *
@@ -14,7 +14,7 @@
 extern "C" {
 #endif
 
-// Use       nc -kulnw0 45678 to collect UDP network output
+// Use    nc -kulnw0 45678    to collect UDP network output
 
 #define ADV_LOGGER_NONE         (0)
 #define ADV_LOGGER_UART0        (1)

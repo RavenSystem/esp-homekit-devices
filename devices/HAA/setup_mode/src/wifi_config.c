@@ -60,14 +60,17 @@ typedef enum {
 } endpoint_t;
 
 typedef struct {
-    char *ssid_prefix;
-    char *password;
-    char *custom_hostname;
+    char* ssid_prefix;
+    char* password;
+    char* custom_hostname;
     void (*on_wifi_ready)();
 
     ETSTimer sta_connect_timeout;
     TaskHandle_t http_task_handle;
     TaskHandle_t dns_task_handle;
+    
+    uint8_t check_counter: 7;
+    uint8_t hostname_ready: 1;
 } wifi_config_context_t;
 
 static wifi_config_context_t *context;
@@ -540,6 +543,7 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
             break;
         }
         case ENDPOINT_SETTINGS_UPDATE: {
+            sdk_os_timer_disarm(&context->sta_connect_timeout);
             wifi_config_context_free(context);
             xTaskCreate(wifi_config_server_on_settings_update_task, "on_settings_update_task", (configMINIMAL_STACK_SIZE * 2), client, (tskIDLE_PRIORITY + 0), NULL);
             return 0;
@@ -669,7 +673,7 @@ static void dns_task(void *arg) {
     serv_addr.sin_port = htons(53);
     bind(fd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
 
-    const struct timeval timeout = { 2, 0 }; /* 2 second timeout */
+    const struct timeval timeout = { 1, 200000 }; /* 1.2 second timeout */
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
     const struct ifreq ifreq1 = { "en1" };
@@ -802,17 +806,18 @@ static void wifi_config_softap_stop() {
 }
 
 static void wifi_config_sta_connect_timeout_callback(void *arg) {
-    struct netif *netif = sdk_system_get_netif(STATION_IF);
-    if (netif && !netif->hostname && context->custom_hostname) {
-        LOCK_TCPIP_CORE();
-        dhcp_release_and_stop(netif);
-        netif->hostname = context->custom_hostname;
-        dhcp_start(netif);
-        UNLOCK_TCPIP_CORE();
-        INFO("Hostname: %s", context->custom_hostname);
-    }
-    
-    if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+    if (!context->hostname_ready) {
+        struct netif *netif = sdk_system_get_netif(STATION_IF);
+        if (netif && !netif->hostname && context->custom_hostname) {
+            LOCK_TCPIP_CORE();
+            dhcp_release_and_stop(netif);
+            netif->hostname = context->custom_hostname;
+            INFO("Hostname: %s", context->custom_hostname);
+            dhcp_start(netif);
+            UNLOCK_TCPIP_CORE();
+            context->hostname_ready = true;
+        }
+    } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         // Connected to station, all is dandy
         sdk_os_timer_disarm(&context->sta_connect_timeout);
         
@@ -823,6 +828,17 @@ static void wifi_config_sta_connect_timeout_callback(void *arg) {
             context->on_wifi_ready();
             
             wifi_config_context_free(context);
+        }
+    } else {
+        context->check_counter++;
+        if (context->check_counter == 40) {
+            context->check_counter = 0;
+            struct netif *netif = sdk_system_get_netif(STATION_IF);
+            LOCK_TCPIP_CORE();
+            dhcp_release_and_stop(netif);
+            INFO("Restarting DHCP client");
+            dhcp_start(netif);
+            UNLOCK_TCPIP_CORE();
         }
     }
 }
@@ -836,7 +852,7 @@ static void auto_reboot_run() {
     }
 
     INFO("Auto Reboot");
-    vTaskDelay(150 / portTICK_PERIOD_MS);
+    vTaskDelay(200 / portTICK_PERIOD_MS);
     
     sdk_system_restart();
 }
@@ -884,6 +900,7 @@ uint8_t wifi_config_connect() {
         }
 
         sdk_wifi_station_set_config(&sta_config);
+        sdk_wifi_set_opmode(STATION_MODE);
         sdk_wifi_station_connect();
         sdk_wifi_station_set_auto_connect(true);
         
@@ -908,10 +925,8 @@ uint8_t wifi_config_connect() {
 
 static void wifi_config_station_connect() {
     if (wifi_config_connect() == 1) {
-        wifi_config_sta_connect_timeout_callback(context);
-        
         sdk_os_timer_setfn(&context->sta_connect_timeout, wifi_config_sta_connect_timeout_callback, context);
-        sdk_os_timer_arm(&context->sta_connect_timeout, 1000, 1);
+        sdk_os_timer_arm(&context->sta_connect_timeout, 500, 1);
         
         if (!context->on_wifi_ready) {
             INFO("HAA Setup");
@@ -935,7 +950,7 @@ static void wifi_config_station_connect() {
     }
 }
 
-void wifi_config_init(const char *ssid_prefix, const char *password, void (*on_wifi_ready)(), const char *custom_hostname) {
+void wifi_config_init(const char* ssid_prefix, const char* password, void (*on_wifi_ready)(), const char* custom_hostname) {
     INFO("WiFi config init");
     if (password && strlen(password) < 8) {
         ERROR("Password must be at least 8 characters");
@@ -952,9 +967,14 @@ void wifi_config_init(const char *ssid_prefix, const char *password, void (*on_w
     
     if (custom_hostname) {
         context->custom_hostname = strdup(custom_hostname);
+        context->hostname_ready = false;
+    } else {
+        context->hostname_ready = true;
     }
 
     context->on_wifi_ready = on_wifi_ready;
+    
+    context->check_counter = 0;
 
     wifi_config_station_connect();
 }

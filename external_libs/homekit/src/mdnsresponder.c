@@ -552,19 +552,17 @@ void mdns_announce() {
     struct netif *netif = sdk_system_get_netif(STATION_IF);
 #if LWIP_IPV4
     mdns_announce_netif(netif, &gMulticastV4Addr);
-    vTaskDelay(50 / portTICK_PERIOD_MS);
-    mdns_announce_netif(netif, &gMulticastV4Addr);
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    vTaskDelay(60 / portTICK_PERIOD_MS);
     mdns_announce_netif(netif, &gMulticastV4Addr);
 #endif
 #if LWIP_IPV6
     mdns_announce_netif(netif, &gMulticastV6Addr);
-    vTaskDelay(50 / portTICK_PERIOD_MS);
-    mdns_announce_netif(netif, &gMulticastV4Addr);
-    vTaskDelay(50 / portTICK_PERIOD_MS);
+    vTaskDelay(60 / portTICK_PERIOD_MS);
     mdns_announce_netif(netif, &gMulticastV4Addr);
 #endif
 }
+
+#define TTL_MULTIPLIER_MS   500                         // Set to 1000 to use standard time
 
 void mdns_add_facility_work(const char* instanceName,   // Friendly name, need not be unique
                             const char* serviceName,    // Must be "_name", e.g. "_hap" or "_http"
@@ -624,7 +622,7 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
     
     if (ttl > 0) {
         sdk_os_timer_setfn(&mdns_announce_timer, mdns_announce, NULL);
-        sdk_os_timer_arm(&mdns_announce_timer, ttl * 1000, 1);
+        sdk_os_timer_arm(&mdns_announce_timer, ttl * TTL_MULTIPLIER_MS, 1);
     }
 }
 
