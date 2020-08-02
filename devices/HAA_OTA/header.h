@@ -1,5 +1,5 @@
 /*
- * Home Accessory Architect OTA Update
+ * Home Accessory Architect OTA Installer
  *
  * Copyright 2020 José Antonio Jiménez Campos (@RavenSystem)
  *
@@ -8,7 +8,7 @@
 #ifndef __HAA_OTA_HEADER_H__
 #define __HAA_OTA_HEADER_H__
 
-#define OTAVERSION              "3.2.0"
+#define OTAVERSION              "4.0.0"
 
 #define CUSTOM_REPO_SYSPARAM    "ota_sever"
 #define PORT_NUMBER_SYSPARAM    "ota_port"

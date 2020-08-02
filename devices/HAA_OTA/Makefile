@@ -1,4 +1,4 @@
-#set this in local.mk
+#Set this in local.mk
 #PROGRAM = main
 
 EXTRA_COMPONENTS = \
@@ -56,8 +56,13 @@ EXTRA_WOLFSSL_CFLAGS = \
 
 esp-wolfssl_CFLAGS += $(EXTRA_WOLFSSL_CFLAGS)
 
+# Max HAA OTA Main Installer firmware size is 401392 bytes
+
 EXTRA_CFLAGS += $(EXTRA_WOLFSSL_CFLAGS)
 EXTRA_CFLAGS += -DTCP_MSS=1460 -DTCP_WND=2920
+
+EXTRA_CFLAGS += -DSPIFLASH_BASE_ADDR=0xf2000
+EXTRA_CFLAGS += -DOLD_SPIFLASH_BASE_ADDR=0x8c000
 
 EXTRA_CFLAGS += -Os
 

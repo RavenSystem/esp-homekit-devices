@@ -1,5 +1,5 @@
 /*
- * Home Accessory Architect OTA Update
+ * Home Accessory Architect OTA Installer
  *
  * Copyright 2020 José Antonio Jiménez Campos (@RavenSystem)
  *
@@ -29,22 +29,22 @@
 
 #define SECTORSIZE              4096
 #define BOOT0SECTOR             0x02000
-#define BOOT1SECTOR             0x8D000     // Must match the program1.ld value
+#define BOOT1SECTOR             0x90000     // Must match the program1.ld value
 
 #define HTTPS_PORT              443
 #define FAILED                  "failed\n"
 #define REQUESTHEAD             "GET /"
 #define REQUESTTAIL             " HTTP/1.1\r\nHost: "
 #define CRLFCRLF                "\r\n\r\n"
-#define RECV_BUF_LEN            1025  // current length of amazon URL 724
+#define RECV_BUF_LEN            1025        // Current length of amazon URL 724
 #define HOST_LEN                256
 #define RANGE                   "\r\nRange: bytes="
 
 #define SNTP_SERVERS            "0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org", "3.pool.ntp.org"
 #define MAX_302_JUMPS           6
 
-#define HASHSIZE                48      //SHA-384
-#define SIGNSIZE                104     //ECDSA r+s in ASN1 format secP384r1
+#define HASHSIZE                48          //SHA-384
+#define SIGNSIZE                104         //ECDSA r+s in ASN1 format secP384r1
 
 typedef unsigned char byte;
 

@@ -1,5 +1,5 @@
 /*
- * Home Accessory Architect OTA Update
+ * Home Accessory Architect OTA Installer
  *
  * Copyright 2020 José Antonio Jiménez Campos (@RavenSystem)
  *
@@ -17,6 +17,7 @@
 #include <esp8266.h>
 #include <FreeRTOS.h>
 #include <task.h>
+#include <spiflash.h>
 
 #include <espressif/esp_common.h>
 
@@ -46,7 +47,7 @@ void ota_task(void *arg) {
     printf("\nHAA Installer Version: %s\n\n", OTAVERSION);
 
 #ifdef HAABOOT
-    sysparam_set_string(USER_VERSION_SYSPARAM, "none");
+    sysparam_set_string(USER_VERSION_SYSPARAM, "0.0.0");
 #endif  // HAABOOT
     
     sysparam_status_t status;
@@ -88,6 +89,43 @@ void ota_task(void *arg) {
             
 #ifdef HAABOOT
             printf("\nRunning HAABOOT\n\n");
+
+            printf("HomeKit data migration...\n");
+            const char magic1[] = "HAP";
+            char magic[sizeof(magic1)];
+            memset(magic, 0, sizeof(magic));
+
+            if (!spiflash_read(OLD_SPIFLASH_BASE_ADDR, (byte*) magic, sizeof(magic))) {
+                printf("Failed to read old sector\n");
+                
+            } else if (strncmp(magic, magic1, sizeof(magic1)) == 0) {
+                printf("Formatting new sector 0x%x\n", SPIFLASH_BASE_ADDR);
+                if (!spiflash_erase_sector(SPIFLASH_BASE_ADDR)) {
+                    printf("Failed to erase new sector\n");
+                } else {
+                    printf("Reading data from 0x%x\n", OLD_SPIFLASH_BASE_ADDR);
+                    
+                    byte data[4096];
+                    if (!spiflash_read(OLD_SPIFLASH_BASE_ADDR, data, sizeof(data))) {
+                        printf("Failed to read HomeKit data\n");
+                    } else {
+                        printf("Writting data to 0x%x\n", SPIFLASH_BASE_ADDR);
+                        
+                        if (!spiflash_write(SPIFLASH_BASE_ADDR, data, sizeof(data))) {
+                            printf("Failed to write HomeKit data to new sector\n");
+                        } else {
+                            printf("Erasing old sector 0x%x\n", OLD_SPIFLASH_BASE_ADDR);
+                            if (!spiflash_erase_sector(OLD_SPIFLASH_BASE_ADDR)) {
+                                printf("Failed to erase old sector\n");
+                            } else {
+                                printf("HomeKit data is migrated\n");
+                            }
+                        }
+                    }
+                }
+            } else {
+                printf("Data is already migrated\n\n");
+            }
 
             if (ota_get_sign(user_repo, OTAMAINFILE, signature, port, is_ssl) > 0) {
                 file_size = ota_get_file(user_repo, OTAMAINFILE, BOOT1SECTOR, port, is_ssl);
@@ -160,6 +198,9 @@ void ota_task(void *arg) {
             
             vTaskDelay(5000 / portTICK_PERIOD_MS);
         }
+    } else {
+        printf("\n!!! Error readind HAAMAIN Version. Fixing...\n\n");
+        sysparam_set_string(USER_VERSION_SYSPARAM, "0.0.0");
     }
     
     ota_reboot();
@@ -170,8 +211,10 @@ void on_wifi_ready() {
 }
 
 void user_init(void) {
+    sdk_wifi_station_set_auto_connect(false);
     sdk_wifi_set_opmode(STATION_MODE);
     sdk_wifi_station_disconnect();
+    sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
     
     uart_set_baud(0, 115200);
     

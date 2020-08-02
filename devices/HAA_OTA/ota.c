@@ -1,5 +1,5 @@
 /*
-* Home Accessory Architect OTA Update
+* Home Accessory Architect OTA Installer
 *
 * Copyright 2020 José Antonio Jiménez Campos (@RavenSystem)
 *
