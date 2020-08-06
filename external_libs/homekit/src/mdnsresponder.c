@@ -550,16 +550,17 @@ void mdns_add_AAAA(const char* rKey, u32_t ttl, const ip6_addr_t *addr)
 
 void mdns_announce() {
     struct netif *netif = sdk_system_get_netif(STATION_IF);
+    for (uint8_t i = 0; i < 5; i++) {
+        if (i > 0) {
+            vTaskDelay(20 / portTICK_PERIOD_MS);
+        }
 #if LWIP_IPV4
-    mdns_announce_netif(netif, &gMulticastV4Addr);
-    vTaskDelay(60 / portTICK_PERIOD_MS);
-    mdns_announce_netif(netif, &gMulticastV4Addr);
+        mdns_announce_netif(netif, &gMulticastV4Addr);
 #endif
 #if LWIP_IPV6
-    mdns_announce_netif(netif, &gMulticastV6Addr);
-    vTaskDelay(60 / portTICK_PERIOD_MS);
-    mdns_announce_netif(netif, &gMulticastV4Addr);
+        mdns_announce_netif(netif, &gMulticastV6Addr);
 #endif
+    }
 }
 
 #define TTL_MULTIPLIER_MS   500                         // Set to 1000 to use standard time
@@ -620,10 +621,10 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
     
     mdns_announce();
     
-    if (ttl > 0) {
+//    if (ttl > 0) {
         sdk_os_timer_setfn(&mdns_announce_timer, mdns_announce, NULL);
         sdk_os_timer_arm(&mdns_announce_timer, ttl * TTL_MULTIPLIER_MS, 1);
-    }
+//    }
 }
 
 void mdns_add_facility(const char* instanceName,   // Friendly name, need not be unique
@@ -638,14 +639,14 @@ void mdns_add_facility(const char* instanceName,   // Friendly name, need not be
         vTaskDelayMs(200);
     }
     
-    vTaskDelayMs(600);
-    
+    vTaskDelayMs(500);
+/*
     if (strstr(addText, "sf=1") != NULL) {
         mdns_add_facility_work(instanceName, serviceName, addText, flags, onPort, 0);
         vTaskDelayMs(2000);
         mdns_clear();
     }
-    
+*/
     mdns_add_facility_work(instanceName, serviceName, addText, flags, onPort, ttl);
 }
 

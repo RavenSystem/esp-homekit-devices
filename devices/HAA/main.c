@@ -1779,9 +1779,7 @@ void garage_door_timer_worker(void* args) {
 }
 
 // --- WINDOW COVER
-void normalize_position(homekit_characteristic_t* ch) {
-    ch_group_t* ch_group = ch_group_find(ch);
-    
+void normalize_position(ch_group_t* ch_group) {
     if (WINDOW_COVER_MOTOR_POSITION < 0) {
         WINDOW_COVER_MOTOR_POSITION = 0;
     } else if (WINDOW_COVER_MOTOR_POSITION > 100) {
@@ -1795,18 +1793,39 @@ void normalize_position(homekit_characteristic_t* ch) {
     }
 }
 
-void window_cover_stop(homekit_characteristic_t* ch) {
-    ch_group_t* ch_group = ch_group_find(ch);
+float window_cover_step(ch_group_t* ch_group, const float cover_time) {
+    const float actual_time = SYSTEM_UPTIME_MS;
+    const float time = actual_time - WINDOW_COVER_LAST_TIME;
+    WINDOW_COVER_LAST_TIME = actual_time;
+
+    return (100.00000000f / cover_time) * (time / 1000.00000000f);
+}
+
+void window_cover_stop(ch_group_t* ch_group) {
+    sdk_os_timer_disarm(ch_group->timer);
     
     led_blink(1);
-    INFO("WC Stopped at %f, real %f", WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_HOMEKIT_POSITION);
     
-    sdk_os_timer_disarm(ch_group->timer);
-    normalize_position(ch);
+    switch (WINDOW_COVER_CH_STATE->value.int_value) {
+        case WINDOW_COVER_CLOSING:
+            WINDOW_COVER_MOTOR_POSITION -= window_cover_step(ch_group, WINDOW_COVER_TIME_CLOSE);
+            break;
+            
+        case WINDOW_COVER_OPENING:
+            WINDOW_COVER_MOTOR_POSITION += window_cover_step(ch_group, WINDOW_COVER_TIME_OPEN);
+            break;
+            
+        default:
+            break;
+    }
+
+    INFO("WC Stopped Motor %f, HomeKit %f", WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_HOMEKIT_POSITION);
+    
+    normalize_position(ch_group);
     
     WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_HOMEKIT_POSITION;
     WINDOW_COVER_CH_TARGET_POSITION->value.int_value = WINDOW_COVER_HOMEKIT_POSITION;
-
+    
     if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_CLOSING) {
         do_actions(ch_group, WINDOW_COVER_STOP_FROM_CLOSING);
     } else if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_OPENING) {
@@ -1846,10 +1865,11 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
         
         ch1->value = value;
 
-        normalize_position(ch1);
+        normalize_position(ch_group);
+        
+        WINDOW_COVER_LAST_TIME = SYSTEM_UPTIME_MS;
         
         if (value.int_value < WINDOW_COVER_CH_CURRENT_POSITION->value.int_value) {
-            
             if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_OPENING) {
                 do_actions(ch_group, WINDOW_COVER_CLOSING_FROM_MOVING);
                 setup_mode_toggle_upcount();
@@ -1879,7 +1899,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
             WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_OPENING;
 
         } else {
-            window_cover_stop(ch1);
+            window_cover_stop(ch_group);
         }
         
         do_wildcard_actions(ch_group, 0, value.int_value);
@@ -1905,7 +1925,7 @@ void window_cover_timer_worker(void* args) {
             WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = 100;
         } else {
             if ((WINDOW_COVER_CH_CURRENT_POSITION->value.int_value >> 2) != (uint8_t) WINDOW_COVER_MOTOR_POSITION >> 2) {
-                INFO("WC Moving at %f, real %f", WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_HOMEKIT_POSITION);
+                INFO("WC Moving Motor %f, HomeKit %f", WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_HOMEKIT_POSITION);
                 WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_HOMEKIT_POSITION;
                 homekit_characteristic_notify(WINDOW_COVER_CH_CURRENT_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
             } else {
@@ -1915,12 +1935,12 @@ void window_cover_timer_worker(void* args) {
     }
 
     float window_cover_motor_position(const float position, const float correction) {
-        return position / (1 + ((100 - position) * correction * 0.0002f));
+        return position / (1 + ((100 - position) * correction * 0.00020000f));
     }
     
     switch (WINDOW_COVER_CH_STATE->value.int_value) {
         case WINDOW_COVER_CLOSING:
-            WINDOW_COVER_MOTOR_POSITION -= WINDOW_COVER_STEP_TIME_DOWN;
+            WINDOW_COVER_MOTOR_POSITION -= window_cover_step(ch_group, WINDOW_COVER_TIME_CLOSE);
             if (WINDOW_COVER_MOTOR_POSITION > 0) {
                 WINDOW_COVER_HOMEKIT_POSITION = window_cover_motor_position(WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_CORRECTION);
             } else {
@@ -1930,12 +1950,12 @@ void window_cover_timer_worker(void* args) {
             normalize_current_position();
 
             if ((WINDOW_COVER_CH_TARGET_POSITION->value.int_value - margin) >= WINDOW_COVER_HOMEKIT_POSITION) {
-                window_cover_stop(ch0);
+                window_cover_stop(ch_group);
             }
             break;
             
         case WINDOW_COVER_OPENING:
-            WINDOW_COVER_MOTOR_POSITION += WINDOW_COVER_STEP_TIME_UP;
+            WINDOW_COVER_MOTOR_POSITION += window_cover_step(ch_group, WINDOW_COVER_TIME_OPEN);
             if (WINDOW_COVER_MOTOR_POSITION < 100) {
                 WINDOW_COVER_HOMEKIT_POSITION = window_cover_motor_position(WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_CORRECTION);
             } else {
@@ -1945,12 +1965,12 @@ void window_cover_timer_worker(void* args) {
             normalize_current_position();
             
             if ((WINDOW_COVER_CH_TARGET_POSITION->value.int_value + margin) <= WINDOW_COVER_HOMEKIT_POSITION) {
-                window_cover_stop(ch0);
+                window_cover_stop(ch_group);
             }
             break;
             
         default:    // case WINDOW_COVER_STOP:
-            window_cover_stop(ch0);
+            window_cover_stop(ch_group);
             break;
     }
 }
@@ -5722,8 +5742,8 @@ void normal_mode_init() {
         WINDOW_COVER_CH_TARGET_POSITION = ch1;
         WINDOW_COVER_CH_STATE = ch2;
         WINDOW_COVER_CH_OBSTRUCTION = ch3;
-        WINDOW_COVER_STEP_TIME_UP = WINDOW_COVER_STEP_TIME(WINDOW_COVER_TIME_OPEN_DEFAULT);
-        WINDOW_COVER_STEP_TIME_DOWN = WINDOW_COVER_STEP_TIME(WINDOW_COVER_TIME_OPEN_DEFAULT);
+        WINDOW_COVER_TIME_OPEN = WINDOW_COVER_TIME_DEFAULT;
+        WINDOW_COVER_TIME_CLOSE = WINDOW_COVER_TIME_DEFAULT;
         WINDOW_COVER_CORRECTION = WINDOW_COVER_CORRECTION_DEFAULT;
         WINDOW_COVER_MARGIN_SYNC = WINDOW_COVER_MARGIN_SYNC_DEFAULT;
         register_actions(ch_group, json_context, 0);
@@ -5737,11 +5757,11 @@ void normal_mode_init() {
         sdk_os_timer_setfn(ch_group->timer, window_cover_timer_worker, ch0);
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_OPEN_SET) != NULL) {
-            WINDOW_COVER_STEP_TIME_UP = WINDOW_COVER_STEP_TIME(cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_OPEN_SET)->valuedouble);
+            WINDOW_COVER_TIME_OPEN = cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_OPEN_SET)->valuedouble;
         }
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_CLOSE_SET) != NULL) {
-            WINDOW_COVER_STEP_TIME_DOWN = WINDOW_COVER_STEP_TIME(cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_CLOSE_SET)->valuedouble);
+            WINDOW_COVER_TIME_CLOSE = cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_CLOSE_SET)->valuedouble;
         }
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_CORRECTION_SET) != NULL) {
@@ -5753,7 +5773,7 @@ void normal_mode_init() {
         }
         
         WINDOW_COVER_HOMEKIT_POSITION = set_initial_state(accessory, 0, cJSON_Parse(INIT_STATE_LAST_STR), ch0, CH_TYPE_INT8, 0);
-        WINDOW_COVER_MOTOR_POSITION = (WINDOW_COVER_HOMEKIT_POSITION * (1 + (0.0200f * WINDOW_COVER_CORRECTION))) / (1 + (0.0002f * WINDOW_COVER_CORRECTION * WINDOW_COVER_HOMEKIT_POSITION));
+        WINDOW_COVER_MOTOR_POSITION = (WINDOW_COVER_HOMEKIT_POSITION * (1 + (0.02000000f * WINDOW_COVER_CORRECTION))) / (1 + (0.00020000f * WINDOW_COVER_CORRECTION * WINDOW_COVER_HOMEKIT_POSITION));
         ch0->value.int_value = (uint8_t) WINDOW_COVER_HOMEKIT_POSITION;
         ch1->value.int_value = ch0->value.int_value;
         
@@ -5773,7 +5793,7 @@ void normal_mode_init() {
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), window_cover_obstruction, ch0, 1);
         
         if (get_exec_actions_on_boot(json_context)) {
-            window_cover_stop(ch0);
+            window_cover_stop(ch_group);
         }
         
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), window_cover_obstruction, ch0, 0)) {
