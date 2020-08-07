@@ -11,7 +11,8 @@
 #include <espressif/esp_wifi.h>
 #include <espressif/esp_sta.h>
 #include <espressif/esp_common.h>
-//#include <espressif/esp_system.h> //for timestamp report only
+#include <esplibs/libmain.h>
+//#include <espressif/esp_system.h>     // For timestamp report only
 #include <esp/uart.h>
 #include <esp8266.h>
 #include <FreeRTOS.h>
@@ -24,12 +25,13 @@
 #define UDP_LOG_LEN                     (1472)
 
 // Task Stack Size                      configMINIMAL_STACK_SIZE = 256
-#define ADV_LOGGER_INIT_TASK_SIZE       (configMINIMAL_STACK_SIZE * 1)
-#define ADV_LOGGER_TASK_SIZE            (configMINIMAL_STACK_SIZE * 1)
+#define MINIMAL_STACK_SIZE              (256)
+#define ADV_LOGGER_INIT_TASK_SIZE       (MINIMAL_STACK_SIZE * 1)
+#define ADV_LOGGER_TASK_SIZE            (MINIMAL_STACK_SIZE * 1)
 
 // Task Priority
 #define ADV_LOGGER_INIT_TASK_PRIORITY   (tskIDLE_PRIORITY + 0)
-#define ADV_LOGGER_TASK_PRIORITY        (tskIDLE_PRIORITY + 2)
+#define ADV_LOGGER_TASK_PRIORITY        (configMAX_PRIORITIES - 0)
 
 #define DESTINATION_PORT                (28338)     // 45678 in reversed bytes
 #define SOURCE_PORT                     (40109)     // 44444 in reversed bytes
@@ -42,6 +44,7 @@ typedef struct _adv_logger_data {
     int8_t log_type;
     uint8_t is_wifi_ready: 1;
     uint8_t is_new_line: 1;
+    uint8_t ready_to_send: 1;
 } adv_logger_data_t;
 
 static adv_logger_data_t* adv_logger_data = NULL;
@@ -72,7 +75,7 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
             uart_putc(adv_logger_data->log_type, ((char*) ptr)[i]);
         }
         
-        if (adv_logger_data->is_wifi_ready) {
+        if (adv_logger_data->is_wifi_ready && adv_logger_data->ready_to_send) {
             if (adv_logger_data->is_new_line) {
                 adv_logger_data->is_new_line = false;
                 adv_logger_data->udplogstring[adv_logger_data->udplogstring_len] = 0;
@@ -82,12 +85,14 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
                 adv_logger_data->udplogstring_len = strlen(adv_logger_data->udplogstring);
             }
             
-            adv_logger_data->udplogstring[adv_logger_data->udplogstring_len] = ((char*) ptr)[i];
-            adv_logger_data->udplogstring_len++;
+            if (adv_logger_data->udplogstring_len < UDP_LOG_LEN) {
+                adv_logger_data->udplogstring[adv_logger_data->udplogstring_len] = ((char*) ptr)[i];
+                adv_logger_data->udplogstring_len++;
+            }
             
             if (((char*) ptr)[i] == '\n' || adv_logger_data->udplogstring_len >= (UDP_LOG_LEN - 10)) {
                 adv_logger_data->is_new_line = true;
-                
+
                 vTaskResume(adv_logger_data->xHandle);
             }
         }
@@ -120,8 +125,16 @@ static void adv_logger_task() {
     for (;;) {
         vTaskSuspend(NULL);
         
+        sdk_system_overclock();
+        
+        adv_logger_data->ready_to_send = false;
+        
         lwip_sendto(lSocket, adv_logger_data->udplogstring, adv_logger_data->udplogstring_len, 0, (struct sockaddr*) &sDestAddr, sizeof(sDestAddr));
         adv_logger_data->udplogstring_len = 0;
+        
+        adv_logger_data->ready_to_send = true;
+        
+        sdk_system_restoreclock();
     }
 }
 
@@ -173,6 +186,7 @@ void adv_logger_init(const uint8_t log_type) {
             adv_logger_data->udplogstring = malloc(UDP_LOG_LEN);
             adv_logger_data->udplogstring[0] = 0;
             adv_logger_data->is_new_line = false;
+            adv_logger_data->ready_to_send = true;
             
             xTaskCreate(adv_logger_init_task, "adv_logger_init_task", ADV_LOGGER_INIT_TASK_SIZE, NULL, ADV_LOGGER_INIT_TASK_PRIORITY, NULL);
         }
