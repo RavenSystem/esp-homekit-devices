@@ -234,7 +234,7 @@ typedef struct _ping_input_callback_fn {
     uint8_t param;
     
     ping_callback_fn callback;
-    homekit_characteristic_t *ch;
+    ch_group_t* ch_group;
 
     struct _ping_input_callback_fn *next;
 } ping_input_callback_fn_t;
