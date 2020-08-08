@@ -1731,10 +1731,10 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
    
             if ((value.int_value == GARAGE_DOOR_OPENED && GARAGE_DOOR_HAS_F4 == 0) ||
                        ch_group->ch0->value.int_value == GARAGE_DOOR_CLOSING) {
-                garage_door_sensor(0, ch_group->ch0, GARAGE_DOOR_OPENING);
+                garage_door_sensor(0, ch_group, GARAGE_DOOR_OPENING);
             } else if ((value.int_value == GARAGE_DOOR_CLOSED && GARAGE_DOOR_HAS_F5 == 0) ||
                        ch_group->ch0->value.int_value == GARAGE_DOOR_OPENING) {
-                garage_door_sensor(0, ch_group->ch0, GARAGE_DOOR_CLOSING);
+                garage_door_sensor(0, ch_group, GARAGE_DOOR_CLOSING);
             }
             
             setup_mode_toggle_upcount();
@@ -1752,7 +1752,7 @@ void garage_door_timer_worker(void* args) {
     void halt_timer() {
         sdk_os_timer_disarm(ch_group->timer);
         if (GARAGE_DOOR_TIME_MARGIN > 0) {
-            garage_door_obstruction(0, ch0, 1);
+            garage_door_obstruction(0, ch_group, 1);
         }
     }
     
@@ -1761,7 +1761,7 @@ void garage_door_timer_worker(void* args) {
 
         if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN && GARAGE_DOOR_HAS_F2 == 0) {
             sdk_os_timer_disarm(ch_group->timer);
-            garage_door_sensor(0, ch0, GARAGE_DOOR_OPENED);
+            garage_door_sensor(0, ch_group, GARAGE_DOOR_OPENED);
             
         } else if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME && GARAGE_DOOR_HAS_F2 == 1) {
             halt_timer();
@@ -1772,7 +1772,7 @@ void garage_door_timer_worker(void* args) {
         
         if (GARAGE_DOOR_CURRENT_TIME <= GARAGE_DOOR_TIME_MARGIN && GARAGE_DOOR_HAS_F3 == 0) {
             sdk_os_timer_disarm(ch_group->timer);
-            garage_door_sensor(0, ch0, GARAGE_DOOR_CLOSED);
+            garage_door_sensor(0, ch_group, GARAGE_DOOR_CLOSED);
             
         } else if (GARAGE_DOOR_CURRENT_TIME <= 0 && GARAGE_DOOR_HAS_F3 == 1) {
             halt_timer();
@@ -1803,18 +1803,7 @@ float window_cover_step(ch_group_t* ch_group, const float cover_time) {
     return (100.00000000f / cover_time) * (time / 1000.00000000f);
 }
 
-void window_cover_timer_rearm_stop(void* args) {
-    ch_group_t* ch_group = args;
-    
-    WINDOW_COVER_STOP_ENABLE = 1;
-}
-
 void window_cover_stop(ch_group_t* ch_group) {
-    if (WINDOW_COVER_STOP_ENABLE == 0.f) {
-        INFO("WC Stop ignored");
-        return;
-    }
-    
     sdk_os_timer_disarm(ch_group->timer);
     
     led_blink(1);
@@ -1867,6 +1856,12 @@ void window_cover_obstruction(const uint8_t gpio, void* args, const uint8_t type
     hkc_group_notify(ch_group);
     
     do_actions(ch_group, type + WINDOW_COVER_OBSTRUCTION);
+}
+
+void window_cover_timer_rearm_stop(void* args) {
+    ch_group_t* ch_group = args;
+    
+    WINDOW_COVER_STOP_ENABLE = 1;
 }
 
 void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_t value) {
@@ -2187,7 +2182,7 @@ void hkc_tv_input_configured_name(homekit_characteristic_t* ch, const homekit_va
 
 // --- DIGITAL INPUTS
 void window_cover_diginput(const uint8_t gpio, void* args, const uint8_t type) {
-    INFO("DigI GPIO %i", gpio);
+    INFO("WC DigI GPIO %i", gpio);
     
     ch_group_t* ch_group = args;
 
@@ -2218,7 +2213,11 @@ void window_cover_diginput(const uint8_t gpio, void* args, const uint8_t type) {
                 break;
                 
             default:    // case WINDOW_COVER_STOP:
-                hkc_window_cover_setter(ch_group->ch1, WINDOW_COVER_CH_CURRENT_POSITION->value);
+                if ((int8_t) WINDOW_COVER_STOP_ENABLE == 1) {
+                    hkc_window_cover_setter(ch_group->ch1, WINDOW_COVER_CH_CURRENT_POSITION->value);
+                } else {
+                    INFO("WC DigI Stop ignored");
+                }
                 break;
         }
     }
@@ -5735,19 +5734,19 @@ void normal_mode_init() {
         }
         
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSING)) {
-            garage_door_sensor(0, ch0, GARAGE_DOOR_OPENING);
+            garage_door_sensor(0, ch_group, GARAGE_DOOR_OPENING);
         }
         
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), garage_door_sensor, ch_group, GARAGE_DOOR_OPENING)) {
-            garage_door_sensor(0, ch0, GARAGE_DOOR_OPENING);
+            garage_door_sensor(0, ch_group, GARAGE_DOOR_OPENING);
         }
         
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSED)) {
-            garage_door_sensor(0, ch0, GARAGE_DOOR_CLOSED);
+            garage_door_sensor(0, ch_group, GARAGE_DOOR_CLOSED);
         }
         
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), garage_door_sensor, ch_group, GARAGE_DOOR_OPENED)) {
-            garage_door_sensor(0, ch0, GARAGE_DOOR_OPENED);
+            garage_door_sensor(0, ch_group, GARAGE_DOOR_OPENED);
         }
 
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), garage_door_obstruction, ch_group, 0)) {
