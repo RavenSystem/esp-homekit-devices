@@ -9,8 +9,8 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "2.5.5"
-#define FIRMWARE_VERSION_OCTAL              (020505)    // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "2.5.6"
+#define FIRMWARE_VERSION_OCTAL              (020506)    // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -38,6 +38,7 @@
 #define TYPE_WINDOW_COVER                   (7)
 #define TYPE_FAN                            (8)
 #define TYPE_TV                             (9)
+#define TYPE_DOUBLE_LOCK                    (10)
 
 // Task Stack Sizes                         configMINIMAL_STACK_SIZE = 256
 #define MINIMAL_STACK_SIZE                  (256)
@@ -283,6 +284,8 @@
 #define WINDOW_COVER_CORRECTION             ch_group->num[4]
 #define WINDOW_COVER_MARGIN_SYNC            ch_group->num[5]
 #define WINDOW_COVER_LAST_TIME              ch_group->num[6]
+#define WINDOW_COVER_STOP_ENABLE            ch_group->num[7]
+#define WINDOW_COVER_STOP_ENABLE_DELAY_MS   (80)
 #define WINDOW_COVER_CH_CURRENT_POSITION    ch_group->ch0
 #define WINDOW_COVER_CH_TARGET_POSITION     ch_group->ch1
 #define WINDOW_COVER_CH_STATE               ch_group->ch2

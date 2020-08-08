@@ -46,9 +46,9 @@ typedef struct _adv_button {
     uint8_t press_count;
     volatile uint8_t value;
     
-    bool inverted;
-    bool state;
-    bool old_state;
+    bool inverted: 1;
+    bool state: 1;
+    bool old_state: 1;
     
     ETSTimer press_timer;
     ETSTimer hold_timer;
