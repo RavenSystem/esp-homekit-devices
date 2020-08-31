@@ -14,6 +14,11 @@
 extern "C" {
 #endif
 
+// Max buffer lenth is 1472
+#ifndef ADV_ESP_LOG_BUFFER
+#define ADV_ESP_LOG_BUFFER      (512)
+#endif
+
 // Use    nc -kulnw0 45678    to collect UDP network output
 
 #define ADV_LOGGER_NONE         (0)
@@ -24,6 +29,8 @@ extern "C" {
 #define ADV_LOGGER_UART1_UDP    (5)
 
 void adv_logger_init(const uint8_t log_type);
+
+int adv_logger_remove();
 
 #ifdef __cplusplus
 }

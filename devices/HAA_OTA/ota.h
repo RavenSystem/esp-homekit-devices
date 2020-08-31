@@ -24,10 +24,6 @@
 
 #define MAX_TRIES               2
 
-#define SYSPARAMSECTOR          0xF3000
-#define SYSPARAMSIZE            8
-
-#define SECTORSIZE              4096
 #define BOOT0SECTOR             0x02000
 #define BOOT1SECTOR             0x90000     // Must match the program1.ld value
 

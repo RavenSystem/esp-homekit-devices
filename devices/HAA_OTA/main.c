@@ -225,8 +225,14 @@ void user_init(void) {
     sysparam_status_t status;
 
     status = sysparam_init(SYSPARAMSECTOR, 0);
-    if (status == SYSPARAM_NOTFOUND) {
-        printf("Sysparam not found, creating...\n");
+    if (status != SYSPARAM_OK) {
+        printf("No sysparam, erasing...\n");
+        
+        for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
+            spiflash_erase_sector(SYSPARAMSECTOR + (SECTORSIZE * i));
+        }
+        
+        printf("Creating new...\n");
         status = sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
         if (status == SYSPARAM_OK) {
             printf("Sysparam created\n");
