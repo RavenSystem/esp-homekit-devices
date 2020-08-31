@@ -19,6 +19,7 @@
 #include <espressif/esp_common.h>
 #include <lwip/sockets.h>
 #include <lwip/dhcp.h>
+#include <spiflash.h>
 
 #include <semphr.h>
 
@@ -43,11 +44,16 @@
 #define HAA_JSON_SYSPARAM               "haa_conf"
 #define HAA_SETUP_MODE_SYSPARAM         "setup"
 
-#define WIFI_CONFIG_SERVER_PORT         80
+// Sysparam
+#define SYSPARAMSECTOR                  (0xF3000)
+#define SYSPARAMSIZE                    (8)
+#define SECTORSIZE                      (4096)
 
-#define AUTO_REBOOT_TIMEOUT             90000
+#define WIFI_CONFIG_SERVER_PORT         (80)
 
-#define MAX_BODY_LEN                    14336
+#define AUTO_REBOOT_TIMEOUT             (90000)
+
+#define MAX_BODY_LEN                    (14336)
 
 #define INFO(message, ...)              printf(message "\n", ##__VA_ARGS__);
 #define ERROR(message, ...)             printf("! " message "\n", ##__VA_ARGS__);
@@ -155,8 +161,9 @@ void wifi_config_reset() {
     strncpy((char *)sta_config.ssid, "none", sizeof(sta_config.ssid));
     sta_config.ssid[sizeof(sta_config.ssid) - 1] = 0;
     sdk_wifi_station_set_config(&sta_config);
+    sdk_wifi_set_opmode(STATION_MODE);
     sdk_wifi_station_connect();
-    sdk_wifi_station_set_auto_connect(false);
+    sdk_wifi_station_set_auto_connect(true);
 }
 
 wifi_network_info_t* wifi_networks = NULL;
@@ -383,6 +390,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     
     form_param_t *conf_param = form_params_find(form, "conf");
     form_param_t *reset_param = form_params_find(form, "reset");
+    form_param_t *reset_sys_param = form_params_find(form, "reset_sys");
     form_param_t *nowifi_param = form_params_find(form, "nowifi");
     form_param_t *ota_param = form_params_find(form, "ota");
     form_param_t *autoota_param = form_params_find(form, "autoota");
@@ -485,6 +493,13 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         }
     }
     
+    if (reset_sys_param) {
+        INFO("\nFormating flash storage...\n");
+        for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
+            spiflash_erase_sector(SYSPARAMSECTOR + (SECTORSIZE * i));
+        }
+    }
+    
     INFO("\nRebooting...\n\n");
     
     static const char payload[] = "HTTP/1.1 204 \r\nContent-Type: text/html\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
@@ -545,7 +560,7 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
         case ENDPOINT_SETTINGS_UPDATE: {
             sdk_os_timer_disarm(&context->sta_connect_timeout);
             wifi_config_context_free(context);
-            xTaskCreate(wifi_config_server_on_settings_update_task, "on_settings_update_task", (configMINIMAL_STACK_SIZE * 2), client, (tskIDLE_PRIORITY + 0), NULL);
+            xTaskCreate(wifi_config_server_on_settings_update_task, "on_settings_update_task", 512, client, (tskIDLE_PRIORITY + 0), NULL);
             return 0;
             break;
         }
@@ -786,15 +801,15 @@ static void wifi_config_softap_start() {
     wifi_networks_mutex = xSemaphoreCreateBinary();
     xSemaphoreGive(wifi_networks_mutex);
 
-    xTaskCreate(wifi_scan_task, "wifi_scan_task", (configMINIMAL_STACK_SIZE * 1.5), NULL, (tskIDLE_PRIORITY + 0), NULL);
+    xTaskCreate(wifi_scan_task, "wifi_scan_task", 384, NULL, (tskIDLE_PRIORITY + 0), NULL);
 
     INFO("Start DHCP server");
     dhcpserver_start(&first_client_ip, 4);
     dhcpserver_set_router(&ap_ip.ip);
     dhcpserver_set_dns(&ap_ip.ip);
 
-    xTaskCreate(dns_task, "dns_task", (configMINIMAL_STACK_SIZE * 1.5), NULL, (tskIDLE_PRIORITY + 1), &context->dns_task_handle);
-    xTaskCreate(http_task, "http_task", (configMINIMAL_STACK_SIZE * 2), NULL, (tskIDLE_PRIORITY + 1), &context->http_task_handle);
+    xTaskCreate(dns_task, "dns_task", 384, NULL, (tskIDLE_PRIORITY + 1), &context->dns_task_handle);
+    xTaskCreate(http_task, "http_task", 512, NULL, (tskIDLE_PRIORITY + 1), &context->http_task_handle);
 }
 
 static void wifi_config_softap_stop() {

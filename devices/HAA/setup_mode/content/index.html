@@ -22,13 +22,14 @@ input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
 .nonetworks{text-align:center;margin:1em 0;}
 .field{margin-bottom:0.5em;}
 .field.required label::before{content:"*";color:red;}
-</style></head><body><div class="container"><h1>Home Accessory Architect v2.5.7</h1>
+    </style></head><body><div class="container"><h1>Home Accessory Architect v3.0.0</h1>
 <form action="/settings" method="post">
 <div class="field required conf">
 <label for="conf">JSON Config:</label>
 <textarea id="conf" name="conf">
 <!-- part HTML_SETTINGS_MIDDLE --></textarea><br>
 <input type="checkbox" name="reset" value="y"> Reset HomeKit ID<br>
+<input type="checkbox" name="reset_sys" value="y"> Reset Settings<br>
 <input type="checkbox" name="nowifi" value="y"> Remove WiFi Settings<br>
 <input type="checkbox" name="ota" value="y"> Update all now (HAA OTA v<!-- part HTML_SETTINGS_OTAVERSION -->)<br>
 <input type="checkbox" name="autoota" value="y" <!-- part HTML_SETTINGS_AUTOOTA -->> Auto OTA Updates<br>

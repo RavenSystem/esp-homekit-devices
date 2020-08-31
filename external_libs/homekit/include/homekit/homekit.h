@@ -33,8 +33,7 @@ typedef struct {
     
     uint16_t mdns_ttl;
     
-    bool insecure;
-    bool log_output;
+    bool insecure: 1;
 
     // Callback for "POST /resource" to get snapshot image from camera
     void (*on_resource)(const char *body, size_t body_size);

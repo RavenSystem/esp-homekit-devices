@@ -23,15 +23,13 @@ typedef struct _main_config {
     bool ping_is_running: 1;
     bool led_inverted: 1;
     bool enable_homekit_server: 1;
-    bool uart_action_is_running: 1;
-    bool ir_tx_is_running: 1;
     bool ir_tx_inv: 1;
     bool setpwm_is_running: 1;
     bool wifi_ping_is_running: 1;
+    bool setpwm_bool_semaphore: 1;
     
     uint8_t wifi_ping_max_errors;
-    uint8_t wifi_ping_error_count;
-    bool setpwm_bool_semaphore: 1;
+    uint8_t wifi_error_count;
     
     char name_value[11];
     char serial_value[13];
@@ -149,10 +147,11 @@ typedef struct _wildcard_action {
 } wildcard_action_t;
 
 typedef struct _ch_group {
-    uint8_t accessory: 7;
+    uint8_t accessory: 6;
     bool main_enabled: 1;
     uint8_t acc_type: 7;
     bool child_enabled: 1;
+    bool homekit_enabled: 1;
     
     float num[12];
     
@@ -241,6 +240,7 @@ typedef struct _ping_input_callback_fn {
 
 typedef struct _ping_input {
     bool last_response: 1;
+    bool ignore_last_response: 1;
     
     char* host;
     

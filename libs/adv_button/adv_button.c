@@ -15,7 +15,7 @@
 #include <esplibs/libmain.h>
 #include "adv_button.h"
 
-#define ADV_BUTTON_MAX_EVAL         (6)
+#define ADV_BUTTON_DEFAULT_EVAL     (6)
 
 #define DOUBLEPRESS_TIME            (400)
 #define LONGPRESS_TIME              (DOUBLEPRESS_TIME + 10)
@@ -26,9 +26,9 @@
 #define BUTTON_EVAL_DELAY_DEFAULT   (10)
 #define BUTTON_EVAL_DELAY_MAX       (BUTTON_EVAL_DELAY_MIN + 245)
 
-#define DISABLE_PRESS_COUNT         (200)
+#define DISABLE_PRESS_COUNT         (31)
 
-#define DISABLE_TIME                (ADV_BUTTON_MAX_EVAL * 10)
+#define DISABLE_TIME                (ADV_BUTTON_DEFAULT_EVAL * 10)
 #define MIN(x, y)                   (((x) < (y)) ? (x) : (y))
 #define MAX(x, y)                   (((x) > (y)) ? (x) : (y))
 
@@ -43,8 +43,10 @@ typedef struct _adv_button_callback_fn {
 
 typedef struct _adv_button {
     uint8_t gpio;
-    uint8_t press_count;
+    uint8_t max_eval;
     volatile uint8_t value;
+    
+    uint8_t press_count: 5;
     
     bool inverted: 1;
     bool state: 1;
@@ -67,7 +69,6 @@ typedef struct _adv_button {
 
 static uint32_t disable_time = 0;
 static uint8_t button_evaluate_delay = BUTTON_EVAL_DELAY_DEFAULT;
-static int8_t button_evaluate_count = ADV_BUTTON_MAX_EVAL;
 static bool button_evaluate_is_working = false;
 static ETSTimer button_evaluate_timer;
 
@@ -95,15 +96,25 @@ static void adv_button_run_callback_fn(adv_button_callback_fn_t *callbacks, cons
 void adv_button_set_evaluate_delay(const uint8_t new_delay) {
     if (new_delay < BUTTON_EVAL_DELAY_MIN) {
         button_evaluate_delay = BUTTON_EVAL_DELAY_MIN;
-        
-        button_evaluate_count -= (10 - new_delay);
-        if (button_evaluate_count < 1) {
-            button_evaluate_count = 1;
-        }
     } else if (new_delay > BUTTON_EVAL_DELAY_MAX) {
         button_evaluate_delay = BUTTON_EVAL_DELAY_MAX;
     } else {
         button_evaluate_delay = new_delay;
+    }
+}
+
+void adv_button_set_gpio_probes(const uint8_t gpio, const uint8_t max_eval) {
+    adv_button_t *button = button_find_by_gpio(gpio);
+    if (button) {
+        if (max_eval == 0) {
+            button->max_eval = ADV_BUTTON_DEFAULT_EVAL;
+        } else {
+            button->max_eval = max_eval;
+        }
+        
+        if (button->state) {
+            button->value = button->max_eval;
+        }
     }
 }
 
@@ -194,8 +205,8 @@ IRAM static void button_evaluate_fn() {
         
         while (button) {
             if (gpio_read(button->gpio)) {
-                button->value = MIN(button->value++, ADV_BUTTON_MAX_EVAL);
-                if (button->value == ADV_BUTTON_MAX_EVAL) {
+                button->value = MIN(button->value++, button->max_eval);
+                if (button->value == button->max_eval) {
                     button->state = true;
                 }
             } else {
@@ -229,6 +240,7 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
         button = malloc(sizeof(adv_button_t));
         memset(button, 0, sizeof(*button));
         button->gpio = gpio;
+        button->max_eval = ADV_BUTTON_DEFAULT_EVAL;
         button->inverted = inverted;
         
         if (!buttons) {
@@ -252,7 +264,7 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
         button->old_state = button->state;
         
         if (button->state) {
-            button->value = ADV_BUTTON_MAX_EVAL;
+            button->value = button->max_eval;
         } else {
             button->value = 0;
         }

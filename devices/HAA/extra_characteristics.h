@@ -17,8 +17,8 @@
     .format = homekit_format_float, \
     .permissions = homekit_permissions_paired_read \
                 | homekit_permissions_notify, \
-    .min_value = (float[]) {0}, \
-    .max_value = (float[]) {10000}, \
+    .min_value = (float[]) {-100000}, \
+    .max_value = (float[]) {100000}, \
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
 
@@ -29,8 +29,8 @@
     .format = homekit_format_float, \
     .permissions = homekit_permissions_paired_read \
                 | homekit_permissions_notify, \
-    .min_value = (float[]) {0}, \
-    .max_value = (float[]) {10000}, \
+    .min_value = (float[]) {-100000}, \
+    .max_value = (float[]) {100000}, \
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
 
@@ -41,8 +41,8 @@
     .format = homekit_format_float, \
     .permissions = homekit_permissions_paired_read \
                 | homekit_permissions_notify, \
-    .min_value = (float[]) {0}, \
-    .max_value = (float[]) {10000}, \
+    .min_value = (float[]) {-100000}, \
+    .max_value = (float[]) {100000}, \
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
 

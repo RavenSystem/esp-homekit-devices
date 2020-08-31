@@ -9,12 +9,13 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "2.5.7"
-#define FIRMWARE_VERSION_OCTAL              (020507)    // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "3.0.0"
+#define FIRMWARE_VERSION_OCTAL              (030000)    // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
 #define SYSPARAMSIZE                        (8)
+#define SECTORSIZE                          (4096)
 
 #define TOTAL_ACC_SYSPARAM                  "total_ac"
 #define HAA_JSON_SYSPARAM                   "haa_conf"
@@ -40,30 +41,35 @@
 #define TYPE_TV                             (9)
 #define TYPE_DOUBLE_LOCK                    (10)
 
-// Task Stack Sizes                         configMINIMAL_STACK_SIZE = 256
-#define MINIMAL_STACK_SIZE                  (256)
-#define INITIAL_SETUP_TASK_SIZE             (MINIMAL_STACK_SIZE * 4)
-#define LED_TASK_SIZE                       (MINIMAL_STACK_SIZE * 1)
-#define REBOOT_TASK_SIZE                    (MINIMAL_STACK_SIZE * 2)
-#define PING_TASK_SIZE                      (MINIMAL_STACK_SIZE * 2)
-#define AUTOSWITCH_TASK_SIZE                (MINIMAL_STACK_SIZE * 2)
-#define AUTOOFF_SETTER_TASK_SIZE            (MINIMAL_STACK_SIZE * 2)
-#define AUTODIMMER_TASK_SIZE                (MINIMAL_STACK_SIZE * 1)
-#define IR_TX_TASK_SIZE                     (MINIMAL_STACK_SIZE * 3)
-#define UART_ACTION_TASK_SIZE               (MINIMAL_STACK_SIZE * 2)
-#define HTTP_GET_TASK_SIZE                  (MINIMAL_STACK_SIZE * 2)
-#define DELAYED_SENSOR_START_TASK_SIZE      (MINIMAL_STACK_SIZE * 2)
-#define TEMPERATURE_TASK_SIZE               (MINIMAL_STACK_SIZE * 2)
+// Task Stack Sizes
+#define INITIAL_SETUP_TASK_SIZE             (1024)
+#define LED_TASK_SIZE                       (configMINIMAL_STACK_SIZE)
+#define REBOOT_TASK_SIZE                    (512)
+#define PING_TASK_SIZE                      (512)
+#define AUTOSWITCH_TASK_SIZE                (512)
+#define AUTOOFF_SETTER_TASK_SIZE            (512)
+#define AUTODIMMER_TASK_SIZE                (configMINIMAL_STACK_SIZE)
+#define IR_TX_TASK_SIZE                     (512)
+#define UART_ACTION_TASK_SIZE               (512)
+#define HTTP_GET_TASK_SIZE                  (512)
+#define DELAYED_SENSOR_START_TASK_SIZE      (512)
+#define TEMPERATURE_TASK_SIZE               (512)
+#define POWER_MONITOR_TASK_SIZE             (512)
 
 // Task Priorities
-#define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 0)
+#define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
 #define LED_TASK_PRIORITY                   (tskIDLE_PRIORITY + 1)
-#define AUTODIMMER_TASK_PRIORITY            (tskIDLE_PRIORITY + 1)
+#define REBOOT_TASK_PRIORITY                (tskIDLE_PRIORITY + 1)
 #define PING_TASK_PRIORITY                  (tskIDLE_PRIORITY + 0)
-#define IR_TX_TASK_PRIORITY                 (configMAX_PRIORITIES - 1)
-#define UART_ACTION_TASK_PRIORITY           (tskIDLE_PRIORITY + 6)
+#define AUTOSWITCH_TASK_PRIORITY            (tskIDLE_PRIORITY + 1)
+#define AUTOOFF_SETTER_TASK_PRIORITY        (tskIDLE_PRIORITY + 1)
+#define AUTODIMMER_TASK_PRIORITY            (tskIDLE_PRIORITY + 1)
+#define IR_TX_TASK_PRIORITY                 (tskIDLE_PRIORITY + 1)
+#define UART_ACTION_TASK_PRIORITY           (tskIDLE_PRIORITY + 1)
 #define HTTP_GET_TASK_PRIORITY              (tskIDLE_PRIORITY + 1)
+#define DELAYED_SENSOR_START_TASK_PRIORITY  (tskIDLE_PRIORITY + 0)
 #define TEMPERATURE_TASK_PRIORITY           (tskIDLE_PRIORITY + 1)
+#define POWER_MONITOR_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
 
 // Button Events
 #define SINGLEPRESS_EVENT                   (0)
@@ -127,6 +133,7 @@
 #define FIXED_PINGS_STATUS_ARRAY_3          "q3"
 #define PING_HOST                           "h"
 #define PING_RESPONSE_TYPE                  "r"
+#define PING_IGNORE_LAST_RESPONSE           "i"
 #define PING_RETRIES                        (3)
 #define PING_POLL_PERIOD                    "pt"
 #define PING_POLL_PERIOD_DEFAULT            (4.9)
@@ -196,6 +203,8 @@
 #define TH_SENSOR_GPIO                      ch_group->num[0]
 #define TEMPERATURE_SENSOR_TYPE             "n"
 #define TH_SENSOR_TYPE                      ch_group->num[1]
+#define TEMPERATURE_SENSOR_INDEX            "u"
+#define TH_SENSOR_INDEX                     ch_group->num[4]
 #define TEMPERATURE_SENSOR_POLL_PERIOD      "j"
 #define TH_SENSOR_POLL_PERIOD               ch_group->num[2]
 #define TH_SENSOR_POLL_PERIOD_DEFAULT       (30)
@@ -296,13 +305,34 @@
 
 #define FAN_SPEED_STEPS                     "e"
 
-#define PM_SENSOR_TYPE                      "n"
-#define PM_POLL_PERIOD                      "j"
-#define PM_POLL_PERIOD_DEFAULT              (1)
-#define PM_VOLTAGE_FACTOR                   "vf"
-#define PM_VOLTAGE_OFFSET                   "vo"
-#define PM_CURRENT_FACTOR                   "cf"
-#define PM_CURRENT_OFFSET                   "co"
+#define PM_SENSOR_TYPE_SET                  "n"
+#define PM_SENSOR_TYPE_DEFAULT              (0)
+#define PM_SENSOR_TYPE                      ch_group->num[1]
+#define PM_SENSOR_HLW_GPIO_CF_SET           "c0"
+#define PM_SENSOR_HLW_GPIO_CF1_SET          "c1"
+#define PM_SENSOR_HLW_GPIO_SEL_SET          "sl"
+#define PM_SENSOR_HLW_GPIO_DEFAULT          (-1)
+#define PM_SENSOR_HLW_GPIO                  ch_group->num[2]
+#define PM_SENSOR_HLW_GPIO_CF               ch_group->num[3]
+#define PM_POLL_PERIOD_DEFAULT              (4.9f)
+#define PM_VOLTAGE_FACTOR_SET               "vf"
+#define PM_VOLTAGE_FACTOR_DEFAULT           (1)
+#define PM_VOLTAGE_FACTOR                   ch_group->num[4]
+#define PM_VOLTAGE_OFFSET_SET               "vo"
+#define PM_VOLTAGE_OFFSET_DEFAULT           (0)
+#define PM_VOLTAGE_OFFSET                   ch_group->num[5]
+#define PM_CURRENT_FACTOR_SET               "cf"
+#define PM_CURRENT_FACTOR_DEFAULT           (1)
+#define PM_CURRENT_FACTOR                   ch_group->num[6]
+#define PM_CURRENT_OFFSET_SET               "co"
+#define PM_CURRENT_OFFSET_DEFAULT           (0)
+#define PM_CURRENT_OFFSET                   ch_group->num[7]
+#define PM_POWER_FACTOR_SET                 "pf"
+#define PM_POWER_FACTOR_DEFAULT             (1)
+#define PM_POWER_FACTOR                     ch_group->num[8]
+#define PM_POWER_OFFSET_SET                 "po"
+#define PM_POWER_OFFSET_DEFAULT             (0)
+#define PM_POWER_OFFSET                     ch_group->num[9]
 
 #define MAX_ACTIONS                         (32)    // from 0 to (MAX_ACTIONS - 1)
 #define MAX_WILDCARD_ACTIONS                (3)     // from 0 to (MAX_WILDCARD_ACTIONS - 1)
@@ -387,7 +417,7 @@
 #define ACC_POWER_MONITOR_END               (82)
 
 #define ACC_CREATION_DELAY                  "cd"
-#define EXIT_EMERGENCY_SETUP_MODE_TIME      (2200)
+#define EXIT_EMERGENCY_SETUP_MODE_TIME      (1000)
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
@@ -397,12 +427,13 @@
 #define WIFI_STATUS_PRECONNECTED            (2)
 #define WIFI_STATUS_CONNECTED               (3)
 #define WIFI_WATCHDOG_POLL_PERIOD_MS        (1000)
-#define WIFI_RECONNECTION_POLL_PERIOD_MS    (9900)
+#define WIFI_RECONNECTION_POLL_PERIOD_MS    (10500)
 #define WIFI_PING_ERRORS                    "w"
+#define WIFI_ERROR_COUNT_REBOOT             (20)
 
 #define ACCESSORIES_WITHOUT_BRIDGE          (4)     // Max number of accessories before using a bridge
 
-#define SYSTEM_UPTIME_MS                    (((long double) sdk_system_get_time()) * 1e-3)
+#define SYSTEM_UPTIME_MS                    ((float) sdk_system_get_time() * 1e-3)
 
 #define MS_TO_TICK(x)                       ((x) / portTICK_PERIOD_MS)
 

@@ -13,6 +13,7 @@ EXTRA_COMPONENTS = \
     $(abspath ../../external_libs/cJSON) \
     $(abspath ../../external_libs/homekit) \
     $(abspath ../../libs/adv_button) \
+    $(abspath ../../libs/adv_hlw) \
 	$(abspath ../../libs/new_dht) \
 	$(abspath ../../libs/ping) \
 	$(abspath ../../libs/adv_logger)
@@ -41,9 +42,10 @@ EXTRA_CFLAGS += -DLWIP_NETIF_HOSTNAME=1
 EXTRA_CFLAGS += -DLWIP_RAW=1
 EXTRA_CFLAGS += -DDEFAULT_RAW_RECVMBOX_SIZE=5
 EXTRA_CFLAGS += -DWIFI_PARAM_SAVE=0
+EXTRA_CFLAGS += -DconfigMINIMAL_STACK_SIZE=384
 
 ## HAA DEBUG
-#EXTRA_CFLAGS += -DHAA_DEBUG
+#EXTRA_CFLAGS += -DHAA_DEBUG -DconfigUSE_TRACE_FACILITY
 
 ## mDNS Responder DEBUG
 #EXTRA_CFLAGS += -DqDebugLog
