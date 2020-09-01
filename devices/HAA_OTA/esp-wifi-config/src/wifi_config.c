@@ -388,6 +388,15 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     if (conf_param && conf_param->value) {
         taskYIELD();
         sysparam_set_string(HAA_JSON_SYSPARAM, conf_param->value);
+        
+        int last_config_number = 0;
+        sysparam_get_int32(LAST_CONFIG_NUMBER, &last_config_number);
+        
+        last_config_number++;
+        if (last_config_number > 65535) {
+            last_config_number = 1;
+        }
+        sysparam_set_int32(LAST_CONFIG_NUMBER, last_config_number);
     }
     
     if (autoota_param) {

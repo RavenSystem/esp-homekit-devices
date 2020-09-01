@@ -8,7 +8,7 @@
 #ifndef __HAA_OTA_HEADER_H__
 #define __HAA_OTA_HEADER_H__
 
-#define OTAVERSION              "4.1.0"
+#define OTAVERSION              "4.1.1"
 
 #define CUSTOM_REPO_SYSPARAM    "ota_sever"
 #define PORT_NUMBER_SYSPARAM    "ota_port"
@@ -23,6 +23,7 @@
 #define TOTAL_ACC_SYSPARAM      "total_ac"
 #define HAA_JSON_SYSPARAM       "haa_conf"
 #define HAA_SETUP_MODE_SYSPARAM "setup"
+#define LAST_CONFIG_NUMBER      "hkcf"
 
 #define SYSPARAMSECTOR          0xF3000
 #define SYSPARAMSIZE            8

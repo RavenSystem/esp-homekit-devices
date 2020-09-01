@@ -9,8 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "3.0.0"
-#define FIRMWARE_VERSION_OCTAL              (030000)    // Matches as example: firmware_revision 2.3.8 = 02.03.10 (octal) = config_number 020310
+#define FIRMWARE_VERSION                    "3.0.1"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -20,6 +19,7 @@
 #define TOTAL_ACC_SYSPARAM                  "total_ac"
 #define HAA_JSON_SYSPARAM                   "haa_conf"
 #define HAA_SETUP_MODE_SYSPARAM             "setup"
+#define LAST_CONFIG_NUMBER                  "hkcf"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)

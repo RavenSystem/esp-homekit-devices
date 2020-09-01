@@ -21,14 +21,16 @@
 #include <stdout_redirect.h>
 #include <semphr.h>
 
-#define HEADER_LEN                      (23)
-#define UDP_LOG_LEN                     (1472)
+#define HEADER_LEN                          (23)
+#define UDP_LOG_LEN                         (1472)
 
-// Task Stack Size                      configMINIMAL_STACK_SIZE = 256
-#define ADV_LOGGER_INIT_TASK_SIZE       (configMINIMAL_STACK_SIZE)
+// Task Stack Size                          configMINIMAL_STACK_SIZE = 256
+#define ADV_LOGGER_INIT_TASK_SIZE           (configMINIMAL_STACK_SIZE)
+#define ADV_LOGGER_BUFFERED_TASK_SIZE       (configMINIMAL_STACK_SIZE)
 
 // Task Priority
-#define ADV_LOGGER_INIT_TASK_PRIORITY   (tskIDLE_PRIORITY + 0)
+#define ADV_LOGGER_INIT_TASK_PRIORITY       (tskIDLE_PRIORITY + 0)
+#define ADV_LOGGER_BUFFERED_TASK_PRIORITY   (configMAX_PRIORITIES)
 
 #define DESTINATION_PORT                (28338)     // 45678 in reversed bytes
 #define SOURCE_PORT                     (40109)     // 44444 in reversed bytes
@@ -44,7 +46,9 @@ typedef struct _adv_logger_data {
     uint16_t udplogstring_size: 11;
     bool is_new_line: 1;
     bool ready_to_send: 1;
+    bool is_buffered: 1;
     
+    TaskHandle_t xHandle;
     SemaphoreHandle_t log_sender_semaphore;
     
     struct sockaddr_in sLocalAddr, sDestAddr;
@@ -60,20 +64,24 @@ static ssize_t adv_logger_none(struct _reent* r, int fd, const void* ptr, size_t
 static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_t len) {
     bool is_adv_logger_data = false;
     if (adv_logger_data->ready_to_send) {
-        if (!adv_logger_data->udplogstring) {
-            adv_logger_data->udplogstring_size = len + 1;
-            adv_logger_data->udplogstring = malloc(len);
-            if (adv_logger_data->udplogstring) {
-                adv_logger_data->udplogstring[0] = 0;
-                is_adv_logger_data = true;
-            }
+        if (adv_logger_data->is_buffered) {
+            is_adv_logger_data = true;
         } else {
-            adv_logger_data->udplogstring_size += len;
-            if (adv_logger_data->udplogstring_size <= UDP_LOG_LEN) {
-                char* new_udplogstring = realloc(adv_logger_data->udplogstring, adv_logger_data->udplogstring_size);
-                if (new_udplogstring) {
-                    adv_logger_data->udplogstring = new_udplogstring;
+            if (!adv_logger_data->udplogstring) {
+                adv_logger_data->udplogstring_size = len + 1;
+                adv_logger_data->udplogstring = malloc(len);
+                if (adv_logger_data->udplogstring) {
+                    adv_logger_data->udplogstring[0] = 0;
                     is_adv_logger_data = true;
+                }
+            } else {
+                adv_logger_data->udplogstring_size += len;
+                if (adv_logger_data->udplogstring_size <= UDP_LOG_LEN) {
+                    char* new_udplogstring = realloc(adv_logger_data->udplogstring, adv_logger_data->udplogstring_size);
+                    if (new_udplogstring) {
+                        adv_logger_data->udplogstring = new_udplogstring;
+                        is_adv_logger_data = true;
+                    }
                 }
             }
         }
@@ -103,18 +111,22 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
         if (adv_logger_data->ready_to_send && is_adv_logger_data) {
             if (adv_logger_data->is_new_line) {
                 adv_logger_data->is_new_line = false;
-                adv_logger_data->udplogstring_size += 35;
-                if (adv_logger_data->udplogstring_size > UDP_LOG_LEN) {
-                    is_adv_logger_data = false;
-                    continue;
+                
+                if (!adv_logger_data->is_buffered) {
+                    adv_logger_data->udplogstring_size += 35;
+                    if (adv_logger_data->udplogstring_size > UDP_LOG_LEN) {
+                        is_adv_logger_data = false;
+                        continue;
+                    }
+                    char* new_udplogstring = realloc(adv_logger_data->udplogstring, adv_logger_data->udplogstring_size);
+                    if (new_udplogstring) {
+                        adv_logger_data->udplogstring = new_udplogstring;
+                    } else {
+                        is_adv_logger_data = false;
+                        continue;
+                    }
                 }
-                char* new_udplogstring = realloc(adv_logger_data->udplogstring, adv_logger_data->udplogstring_size);
-                if (new_udplogstring) {
-                    adv_logger_data->udplogstring = new_udplogstring;
-                } else {
-                    is_adv_logger_data = false;
-                    continue;
-                }
+                
                 adv_logger_data->udplogstring[adv_logger_data->udplogstring_len] = 0;
                 char buffer[10];
                 snprintf(buffer, 10, "%08.3f ", (float) sdk_system_get_time() * 1e-6);
@@ -131,7 +143,7 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
         }
     }
     
-    if (adv_logger_data->ready_to_send && adv_logger_data->udplogstring_len > 0 && xSemaphoreTake(adv_logger_data->log_sender_semaphore, (TickType_t) 1) == pdTRUE) {
+    if (!adv_logger_data->is_buffered && adv_logger_data->ready_to_send && adv_logger_data->udplogstring_len > 0 && xSemaphoreTake(adv_logger_data->log_sender_semaphore, (TickType_t) 1) == pdTRUE) {
         lwip_sendto(adv_logger_data->lSocket, adv_logger_data->udplogstring, adv_logger_data->udplogstring_len, 0, (struct sockaddr*) &adv_logger_data->sDestAddr, sizeof(adv_logger_data->sDestAddr));
         free(adv_logger_data->udplogstring);
         adv_logger_data->udplogstring = NULL;
@@ -141,6 +153,29 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
     }
     
     return len;
+}
+
+static void adv_logger_buffered_task() {
+    uint8_t i = 0;
+    
+    for (;;) {
+        i++;
+        
+        if ((i == 10 && adv_logger_data->udplogstring_len > 0) || adv_logger_data->udplogstring_len > (UDP_LOG_LEN >> 1)) {
+            adv_logger_data->ready_to_send = false;
+            lwip_sendto(adv_logger_data->lSocket, adv_logger_data->udplogstring, adv_logger_data->udplogstring_len, 0, (struct sockaddr*) &adv_logger_data->sDestAddr, sizeof(adv_logger_data->sDestAddr));
+            adv_logger_data->udplogstring_len = 0;
+            adv_logger_data->ready_to_send = true;
+            
+            i = 0;
+        }
+
+        if (i == 10) {
+            i = 0;
+        }
+        
+        vTaskDelay(20 / portTICK_PERIOD_MS);
+    }
 }
 
 static void adv_logger_init_task() {
@@ -172,13 +207,21 @@ static void adv_logger_init_task() {
         adv_logger_data->sDestAddr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
         adv_logger_data->sDestAddr.sin_port = DESTINATION_PORT;
         
-        adv_logger_data->udplogstring_size = 63;
-        adv_logger_data->udplogstring = malloc(adv_logger_data->udplogstring_size);
+        if (adv_logger_data->is_buffered) {
+            adv_logger_data->udplogstring = malloc(UDP_LOG_LEN);
+        } else {
+            adv_logger_data->udplogstring_size = 63;
+            adv_logger_data->udplogstring = malloc(adv_logger_data->udplogstring_size);
+        }
         adv_logger_data->udplogstring[0] = 0;
         
         strcat(adv_logger_data->udplogstring, "\r\nAdvanced ESP Logger (c) 2020 José Antonio Jiménez Campos\r\n\r\n");
         adv_logger_data->udplogstring_len = strlen(adv_logger_data->udplogstring);
 
+        if (adv_logger_data->is_buffered) {
+            xTaskCreate(adv_logger_buffered_task, "adv_logger_buff", ADV_LOGGER_BUFFERED_TASK_SIZE, NULL, ADV_LOGGER_BUFFERED_TASK_PRIORITY, &adv_logger_data->xHandle);
+        }
+        
         adv_logger_data->is_new_line = true;
         adv_logger_data->ready_to_send = true;
         
@@ -212,7 +255,7 @@ int adv_logger_remove() {
     return -1;
 }
 
-void adv_logger_init(const uint8_t log_type) {
+void adv_logger_init(const uint8_t log_type, const uint8_t is_buffered) {
     adv_logger_remove();
     
     adv_logger_original_write_function = get_write_stdout();
@@ -225,15 +268,19 @@ void adv_logger_init(const uint8_t log_type) {
         adv_logger_data->udplogstring_len = 0;
         adv_logger_data->log_type = log_type - ADV_LOGGER_UART0;
         adv_logger_data->ready_to_send = false;
+        adv_logger_data->is_buffered = false;
 
         if (adv_logger_data->log_type > ADV_LOGGER_UART0) {
             adv_logger_data->log_type -= 3;         // Can be -1, meaning no UART output
         }
         
         if (log_type > ADV_LOGGER_UART1) {
+            adv_logger_data->is_buffered = is_buffered;
             adv_logger_data->header = malloc(HEADER_LEN);
             adv_logger_data->is_new_line = false;
-            adv_logger_data->log_sender_semaphore = xSemaphoreCreateMutex();
+            if (!is_buffered) {
+                adv_logger_data->log_sender_semaphore = xSemaphoreCreateMutex();
+            }
             
             xTaskCreate(adv_logger_init_task, "adv_logger_init", ADV_LOGGER_INIT_TASK_SIZE, NULL, ADV_LOGGER_INIT_TASK_PRIORITY, NULL);
         }

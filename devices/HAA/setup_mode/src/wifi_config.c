@@ -43,6 +43,7 @@
 #define TOTAL_ACC_SYSPARAM              "total_ac"
 #define HAA_JSON_SYSPARAM               "haa_conf"
 #define HAA_SETUP_MODE_SYSPARAM         "setup"
+#define LAST_CONFIG_NUMBER              "hkcf"
 
 // Sysparam
 #define SYSPARAMSECTOR                  (0xF3000)
@@ -432,9 +433,19 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         sysparam_set_data(WIFI_PASSWORD_SYSPARAM, NULL, 0, false);
     }
     
+    int last_config_number = 0;
+    sysparam_get_int32(LAST_CONFIG_NUMBER, &last_config_number);
+    last_config_number++;
+    if (last_config_number > 65535) {
+        last_config_number = 1;
+    }
+    
     if (reset_param) {
         homekit_server_reset();
+        last_config_number = 1;
     }
+    
+    sysparam_set_int32(LAST_CONFIG_NUMBER, last_config_number);
     
     if (reposerver_param && reposerver_param->value) {
         sysparam_set_string(CUSTOM_REPO_SYSPARAM, reposerver_param->value);

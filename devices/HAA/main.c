@@ -4446,7 +4446,7 @@ void normal_mode_init() {
         }
     }
     
-    adv_logger_init(log_output_type);
+    adv_logger_init(log_output_type, 0);
 
     printf_header();
     INFO("NORMAL MODE\n\nJSON:\n %s\n", txt_config);
@@ -6581,11 +6581,14 @@ void normal_mode_init() {
     }
     
     // --- HOMEKIT SET CONFIG
+    int last_config_number = 1;
+    sysparam_get_int32(LAST_CONFIG_NUMBER, &last_config_number);
+    
     serial.value = name.value;
     config.accessories = accessories;
     config.setupId = "JOSE";
     config.category = homekit_accessory_category_other;
-    config.config_number = FIRMWARE_VERSION_OCTAL;
+    config.config_number = last_config_number;
     
     main_config.setup_mode_toggle_counter = 0;
     
