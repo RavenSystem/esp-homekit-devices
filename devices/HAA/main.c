@@ -846,8 +846,8 @@ void power_monitor_task(void* args) {
     
     if (voltage < 750.f) {
         do_wildcard_actions(ch_group, 0, voltage);
-        do_wildcard_actions(ch_group, 0, current);
-        do_wildcard_actions(ch_group, 0, power);
+        do_wildcard_actions(ch_group, 1, current);
+        do_wildcard_actions(ch_group, 2, power);
         
         if (voltage != ch_group->ch1->value.float_value ||
             current != ch_group->ch2->value.float_value ||
@@ -4218,7 +4218,7 @@ void normal_mode_init() {
     }
     
     void register_wildcard_actions(ch_group_t* ch_group, cJSON* json_accessory) {
-        uint8_t global_index = MAX_ACTIONS;
+        uint8_t global_index = MAX_ACTIONS;     // First wirldcard action must have a higher index than highest possible normal action
         wildcard_action_t* last_action = ch_group->wildcard_action;
         
         for (uint8_t int_index = 0; int_index < MAX_WILDCARD_ACTIONS; int_index++) {
