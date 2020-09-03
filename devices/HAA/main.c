@@ -6497,8 +6497,8 @@ void normal_mode_init() {
         } else if (acc_type == ACC_TYPE_LOCK || acc_type == ACC_TYPE_DOUBLE_LOCK) {
             acc_count = new_lock(acc_count, json_accessory, acc_type);
             
-        } else if ((acc_type >= ACC_TYPE_CONTACT_SENSOR && acc_type < ACC_TYPE_WATER_VALVE) ||
-                   (acc_type >= ACC_POWER_MONITOR_INIT && acc_type < ACC_POWER_MONITOR_END)) {
+        } else if ((acc_type >= ACC_TYPE_CONTACT_SENSOR && acc_type <= ACC_TYPE_MOTION_SENSOR) ||
+                   (acc_type >= ACC_POWER_MONITOR_INIT && acc_type <= ACC_POWER_MONITOR_END)) {
             acc_count = new_sensor(acc_count, json_accessory, acc_type);
             
         } else if (acc_type == ACC_TYPE_WATER_VALVE) {
