@@ -100,12 +100,13 @@ void free_heap_watchdog() {
         
         char* space = NULL;
         while (!space && size > 0) {
-            space = pvPortMalloc(size);
+            space = malloc(size);
             size -= 4;
         }
         
-        vPortFree(space);
+        free(space);
         INFO("* Max chunk = %i", size + 4);
+        INFO("* CPU Speed = %i", sdk_system_get_cpu_freq());
     }
 }
 #endif  // HAA_DEBUG

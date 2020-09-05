@@ -3040,7 +3040,7 @@ static http_parser_settings homekit_http_parser_settings = {
 };
 
 
-static void homekit_client_process(client_context_t *context) {
+IRAM static void homekit_client_process(client_context_t *context) {
     int data_len = read(
         context->socket,
         homekit_server->data+homekit_server->data_available,
@@ -3110,7 +3110,7 @@ static void homekit_client_process(client_context_t *context) {
 }
 
 
-void homekit_server_close_client(client_context_t *context) {
+IRAM void homekit_server_close_client(client_context_t *context) {
     CLIENT_INFO(context, "Closing connection");
 
     FD_CLR(context->socket, &homekit_server->fds);
@@ -3197,7 +3197,7 @@ client_context_t *homekit_server_accept_client() {
     return context;
 }
 
-
+/*
 client_context_t *homekit_server_find_client_by_fd(homekit_server_t *server, int fd) {
     client_context_t *context = server->clients;
     while (context) {
@@ -3208,9 +3208,9 @@ client_context_t *homekit_server_find_client_by_fd(homekit_server_t *server, int
 
     return NULL;
 }
+ */
 
-
-void homekit_server_process_notifications() {
+IRAM void homekit_server_process_notifications() {
     client_context_t *context = homekit_server->clients;
     while (context) {
         characteristic_event_t *event = NULL;
@@ -3270,7 +3270,7 @@ void homekit_server_process_notifications() {
 }
 
 
-void homekit_server_close_clients() {
+IRAM void homekit_server_close_clients() {
     int max_fd = homekit_server->listen_fd;
 
     client_context_t head;
@@ -3317,7 +3317,7 @@ static void homekit_run_server()
         fd_set read_fds;
         memcpy(&read_fds, &homekit_server->fds, sizeof(read_fds));
 
-        struct timeval timeout = { 0, 100000 }; /* 0.1 seconds timeout (orig: 1) */
+        struct timeval timeout = { 0, 200000 }; /* 0.2 seconds timeout (orig: 1) */
         int triggered_nfds = select(homekit_server->max_fd + 1, &read_fds, NULL, NULL, &timeout);
         if (triggered_nfds > 0) {
             if (FD_ISSET(homekit_server->listen_fd, &read_fds)) {

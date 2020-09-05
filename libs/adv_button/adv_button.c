@@ -67,15 +67,22 @@ typedef struct _adv_button {
     struct _adv_button *next;
 } adv_button_t;
 
-static uint32_t disable_time = 0;
-static uint8_t button_evaluate_delay = BUTTON_EVAL_DELAY_DEFAULT;
-static bool button_evaluate_is_working = false;
-static ETSTimer button_evaluate_timer;
+typedef struct _adv_button_main_config {
+    uint32_t disable_time;
+    uint16_t button_evaluate_sleep_countdown;
+    uint8_t button_evaluate_delay;
+    bool button_evaluate_is_working: 1;
+    
+    ETSTimer button_evaluate_timer;
 
-static adv_button_t *buttons = NULL;
+    adv_button_t* buttons;
+} adv_button_main_config_t;
+
+static adv_button_main_config_t* adv_button_main_config = NULL;
+
 
 static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
-    adv_button_t *button = buttons;
+    adv_button_t *button = adv_button_main_config->buttons;
     
     while (button && button->gpio != gpio) {
         button = button->next;
@@ -95,11 +102,11 @@ static void adv_button_run_callback_fn(adv_button_callback_fn_t *callbacks, cons
 
 void adv_button_set_evaluate_delay(const uint8_t new_delay) {
     if (new_delay < BUTTON_EVAL_DELAY_MIN) {
-        button_evaluate_delay = BUTTON_EVAL_DELAY_MIN;
+        adv_button_main_config->button_evaluate_delay = BUTTON_EVAL_DELAY_MIN;
     } else if (new_delay > BUTTON_EVAL_DELAY_MAX) {
-        button_evaluate_delay = BUTTON_EVAL_DELAY_MAX;
+        adv_button_main_config->button_evaluate_delay = BUTTON_EVAL_DELAY_MAX;
     } else {
-        button_evaluate_delay = new_delay;
+        adv_button_main_config->button_evaluate_delay = new_delay;
     }
 }
 
@@ -119,13 +126,13 @@ void adv_button_set_gpio_probes(const uint8_t gpio, const uint8_t max_eval) {
 }
 
 void adv_button_set_disable_time() {
-    disable_time = xTaskGetTickCountFromISR();
+    adv_button_main_config->disable_time = xTaskGetTickCountFromISR();
 }
 
 IRAM static void push_down(const uint8_t used_gpio) {
     const uint32_t now = xTaskGetTickCountFromISR();
     
-    if (now - disable_time > DISABLE_TIME / portTICK_PERIOD_MS) {
+    if (now - adv_button_main_config->disable_time > DISABLE_TIME / portTICK_PERIOD_MS) {
         adv_button_t *button = button_find_by_gpio(used_gpio);
         if (button->singlepress0_callback_fn) {
             adv_button_run_callback_fn(button->singlepress0_callback_fn, button->gpio);
@@ -139,7 +146,7 @@ IRAM static void push_down(const uint8_t used_gpio) {
 IRAM static void push_up(const uint8_t used_gpio) {
     const uint32_t now = xTaskGetTickCountFromISR();
     
-    if (now - disable_time > DISABLE_TIME / portTICK_PERIOD_MS) {
+    if (now - adv_button_main_config->disable_time > DISABLE_TIME / portTICK_PERIOD_MS) {
         adv_button_t *button = button_find_by_gpio(used_gpio);
         
         if (button->press_count == DISABLE_PRESS_COUNT) {
@@ -199,9 +206,14 @@ static void adv_button_hold_callback(void *arg) {
 }
 
 IRAM static void button_evaluate_fn() {
-    if (!button_evaluate_is_working) {
-        button_evaluate_is_working = true;
-        adv_button_t *button = buttons;
+    if (!adv_button_main_config->button_evaluate_is_working) {
+        adv_button_main_config->button_evaluate_sleep_countdown -= 1;
+        if (adv_button_main_config->button_evaluate_sleep_countdown == 0) {
+            sdk_os_timer_disarm(&adv_button_main_config->button_evaluate_timer);
+        }
+        
+        adv_button_main_config->button_evaluate_is_working = true;
+        adv_button_t *button = adv_button_main_config->buttons;
         
         while (button) {
             if (gpio_read(button->gpio)) {
@@ -229,11 +241,34 @@ IRAM static void button_evaluate_fn() {
             button = button->next;
         }
         
-        button_evaluate_is_working = false;
+        adv_button_main_config->button_evaluate_is_working = false;
     }
 }
 
+IRAM static void adv_button_interrupt(const uint8_t gpio) {
+    if (adv_button_main_config->button_evaluate_sleep_countdown == 0) {
+        adv_button_main_config->button_evaluate_sleep_countdown = (HOLDPRESS_TIME + 1000) / adv_button_main_config->button_evaluate_delay;
+        button_evaluate_fn();
+        sdk_os_timer_arm(&adv_button_main_config->button_evaluate_timer, adv_button_main_config->button_evaluate_delay, 1);
+    }
+
+    adv_button_main_config->button_evaluate_sleep_countdown = (HOLDPRESS_TIME + 1000) / adv_button_main_config->button_evaluate_delay;
+}
+
 int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool inverted) {
+    if (!adv_button_main_config) {
+        adv_button_main_config = malloc(sizeof(adv_button_main_config_t));
+        memset(adv_button_main_config, 0, sizeof(*adv_button_main_config));
+        
+        adv_button_main_config->disable_time = 0;
+        adv_button_main_config->button_evaluate_delay = BUTTON_EVAL_DELAY_DEFAULT;
+        adv_button_main_config->button_evaluate_is_working = false;
+        adv_button_main_config->button_evaluate_sleep_countdown = 0;
+        adv_button_main_config->buttons = NULL;
+        
+        sdk_os_timer_setfn(&adv_button_main_config->button_evaluate_timer, button_evaluate_fn, NULL);
+    }
+    
     adv_button_t *button = button_find_by_gpio(gpio);
     
     if (!button) {
@@ -242,24 +277,18 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
         button->gpio = gpio;
         button->max_eval = ADV_BUTTON_DEFAULT_EVAL;
         button->inverted = inverted;
-        
-        if (!buttons) {
-            sdk_os_timer_setfn(&button_evaluate_timer, button_evaluate_fn, NULL);
-            sdk_os_timer_arm(&button_evaluate_timer, button_evaluate_delay, 1);
-        }
-        
-        button->next = buttons;
-        buttons = button;
-        
         button->press_count = 0;
         
+        button->next = adv_button_main_config->buttons;
+        adv_button_main_config->buttons = button;
+ 
         if (button->gpio != 0) {
-            gpio_enable(button->gpio, GPIO_INPUT);
+            gpio_enable(gpio, GPIO_INPUT);
         }
         
-        gpio_set_pullup(button->gpio, pullup_resistor, pullup_resistor);
+        gpio_set_pullup(gpio, pullup_resistor, pullup_resistor);
         
-        button->state = gpio_read(button->gpio);
+        button->state = gpio_read(gpio);
         
         button->old_state = button->state;
         
@@ -271,6 +300,8 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
 
         sdk_os_timer_setfn(&button->hold_timer, adv_button_hold_callback, button);
         sdk_os_timer_setfn(&button->press_timer, adv_button_single_callback, button);
+        
+        gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt);
         
         return 0;
     }
@@ -328,19 +359,24 @@ int adv_button_register_callback_fn(const uint8_t gpio, const button_callback_fn
     return -1;
 }
 
-void adv_button_destroy(const uint8_t gpio) {
-    if (buttons) {
+int adv_button_destroy(const uint8_t gpio) {
+    if (!adv_button_main_config) {
+        return -2;
+    }
+    
+    if (adv_button_main_config->buttons) {
         adv_button_t *button = NULL;
-        if (buttons->gpio == gpio) {
+        if (adv_button_main_config->buttons->gpio == gpio) {
             
             if (button->gpio != 0) {
-                gpio_disable(button->gpio);
+                gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_ANY, NULL);
+                gpio_disable(gpio);
             }
             
-            button = buttons;
-            buttons = buttons->next;
+            button = adv_button_main_config->buttons;
+            adv_button_main_config->buttons = adv_button_main_config->buttons->next;
         } else {
-            adv_button_t *b = buttons;
+            adv_button_t *b = adv_button_main_config->buttons;
             while (b->next) {
                 if (b->next->gpio == gpio) {
                     
@@ -355,8 +391,15 @@ void adv_button_destroy(const uint8_t gpio) {
             }
         }
 
-        if (!buttons) {
-            sdk_os_timer_disarm(&button_evaluate_timer);
+        if (!adv_button_main_config->buttons) {
+            sdk_os_timer_disarm(&adv_button_main_config->button_evaluate_timer);
+            
+            free(adv_button_main_config);
+            adv_button_main_config = NULL;
         }
+        
+        return 0;
     }
+    
+    return -1;
 }
