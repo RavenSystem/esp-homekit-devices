@@ -36,9 +36,9 @@ typedef struct _adv_button_callback_fn {
     uint8_t param;
     button_callback_fn callback;
     
-    void *args;
+    void* args;
 
-    struct _adv_button_callback_fn *next;
+    struct _adv_button_callback_fn* next;
 } adv_button_callback_fn_t;
 
 typedef struct _adv_button {
@@ -57,14 +57,14 @@ typedef struct _adv_button {
     
     volatile uint32_t last_event_time;
     
-    adv_button_callback_fn_t *singlepress0_callback_fn;
-    adv_button_callback_fn_t *singlepress_callback_fn;
-    adv_button_callback_fn_t *doublepress_callback_fn;
-    adv_button_callback_fn_t *longpress_callback_fn;
-    adv_button_callback_fn_t *verylongpress_callback_fn;
-    adv_button_callback_fn_t *holdpress_callback_fn;
+    adv_button_callback_fn_t* singlepress0_callback_fn;
+    adv_button_callback_fn_t* singlepress_callback_fn;
+    adv_button_callback_fn_t* doublepress_callback_fn;
+    adv_button_callback_fn_t* longpress_callback_fn;
+    adv_button_callback_fn_t* verylongpress_callback_fn;
+    adv_button_callback_fn_t* holdpress_callback_fn;
 
-    struct _adv_button *next;
+    struct _adv_button* next;
 } adv_button_t;
 
 typedef struct _adv_button_main_config {
@@ -81,52 +81,27 @@ typedef struct _adv_button_main_config {
 static adv_button_main_config_t* adv_button_main_config = NULL;
 
 
-static adv_button_t *button_find_by_gpio(const uint8_t gpio) {
-    adv_button_t *button = adv_button_main_config->buttons;
-    
-    while (button && button->gpio != gpio) {
-        button = button->next;
-    }
+static adv_button_t* button_find_by_gpio(const uint8_t gpio) {
+    if (adv_button_main_config) {
+        adv_button_t* button = adv_button_main_config->buttons;
+        
+        while (button && button->gpio != gpio) {
+            button = button->next;
+        }
 
-    return button;
+        return button;
+    }
+    
+    return NULL;
 }
 
-static void adv_button_run_callback_fn(adv_button_callback_fn_t *callbacks, const uint8_t gpio) {
-    adv_button_callback_fn_t *adv_button_callback_fn = callbacks;
+static void adv_button_run_callback_fn(adv_button_callback_fn_t* callbacks, const uint8_t gpio) {
+    adv_button_callback_fn_t* adv_button_callback_fn = callbacks;
     
     while (adv_button_callback_fn) {
         adv_button_callback_fn->callback(gpio, adv_button_callback_fn->args, adv_button_callback_fn->param);
         adv_button_callback_fn = adv_button_callback_fn->next;
     }
-}
-
-void adv_button_set_evaluate_delay(const uint8_t new_delay) {
-    if (new_delay < BUTTON_EVAL_DELAY_MIN) {
-        adv_button_main_config->button_evaluate_delay = BUTTON_EVAL_DELAY_MIN;
-    } else if (new_delay > BUTTON_EVAL_DELAY_MAX) {
-        adv_button_main_config->button_evaluate_delay = BUTTON_EVAL_DELAY_MAX;
-    } else {
-        adv_button_main_config->button_evaluate_delay = new_delay;
-    }
-}
-
-void adv_button_set_gpio_probes(const uint8_t gpio, const uint8_t max_eval) {
-    adv_button_t *button = button_find_by_gpio(gpio);
-    if (button) {
-        if (max_eval == 0) {
-            button->max_eval = ADV_BUTTON_DEFAULT_EVAL;
-        } else {
-            button->max_eval = max_eval;
-        }
-        
-        if (button->state) {
-            button->value = button->max_eval;
-        }
-    }
-}
-
-void adv_button_set_disable_time() {
-    adv_button_main_config->disable_time = xTaskGetTickCountFromISR();
 }
 
 IRAM static void push_down(const uint8_t used_gpio) {
@@ -189,14 +164,14 @@ IRAM static void push_up(const uint8_t used_gpio) {
     }
 }
 
-static void adv_button_single_callback(void *arg) {
-    adv_button_t *button = arg;
+static void adv_button_single_callback(void* arg) {
+    adv_button_t* button = arg;
     // Single button pressed
     button->press_count = 0;
     adv_button_run_callback_fn(button->singlepress_callback_fn, button->gpio);
 }
 
-static void adv_button_hold_callback(void *arg) {
+static void adv_button_hold_callback(void* arg) {
     adv_button_t *button = arg;
     
     // Hold button pressed
@@ -255,7 +230,7 @@ IRAM static void adv_button_interrupt(const uint8_t gpio) {
     adv_button_main_config->button_evaluate_sleep_countdown = (HOLDPRESS_TIME + 1000) / adv_button_main_config->button_evaluate_delay;
 }
 
-int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool inverted) {
+void adv_button_init() {
     if (!adv_button_main_config) {
         adv_button_main_config = malloc(sizeof(adv_button_main_config_t));
         memset(adv_button_main_config, 0, sizeof(*adv_button_main_config));
@@ -268,8 +243,45 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
         
         sdk_os_timer_setfn(&adv_button_main_config->button_evaluate_timer, button_evaluate_fn, NULL);
     }
-    
+}
+
+void adv_button_set_gpio_probes(const uint8_t gpio, const uint8_t max_eval) {
     adv_button_t *button = button_find_by_gpio(gpio);
+    if (button) {
+        if (max_eval == 0) {
+            button->max_eval = ADV_BUTTON_DEFAULT_EVAL;
+        } else {
+            button->max_eval = max_eval;
+        }
+        
+        if (button->state) {
+            button->value = button->max_eval;
+        }
+    }
+}
+
+void adv_button_set_evaluate_delay(const uint8_t new_delay) {
+    adv_button_init();
+    
+    if (new_delay < BUTTON_EVAL_DELAY_MIN) {
+        adv_button_main_config->button_evaluate_delay = BUTTON_EVAL_DELAY_MIN;
+    } else if (new_delay > BUTTON_EVAL_DELAY_MAX) {
+        adv_button_main_config->button_evaluate_delay = BUTTON_EVAL_DELAY_MAX;
+    } else {
+        adv_button_main_config->button_evaluate_delay = new_delay;
+    }
+}
+
+void adv_button_set_disable_time() {
+    if (adv_button_main_config) {
+        adv_button_main_config->disable_time = xTaskGetTickCountFromISR();
+    }
+}
+
+int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool inverted) {
+    adv_button_init();
+    
+    adv_button_t* button = button_find_by_gpio(gpio);
     
     if (!button) {
         button = malloc(sizeof(adv_button_t));
