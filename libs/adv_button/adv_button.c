@@ -72,6 +72,7 @@ typedef struct _adv_button_main_config {
     uint16_t button_evaluate_sleep_countdown;
     uint8_t button_evaluate_delay;
     bool button_evaluate_is_working: 1;
+    bool is_gpio16: 1;
     
     ETSTimer button_evaluate_timer;
 
@@ -182,9 +183,12 @@ static void adv_button_hold_callback(void* arg) {
 
 IRAM static void button_evaluate_fn() {
     if (!adv_button_main_config->button_evaluate_is_working) {
-        adv_button_main_config->button_evaluate_sleep_countdown -= 1;
-        if (adv_button_main_config->button_evaluate_sleep_countdown == 0) {
-            sdk_os_timer_disarm(&adv_button_main_config->button_evaluate_timer);
+        if (!adv_button_main_config->is_gpio16) {
+            adv_button_main_config->button_evaluate_sleep_countdown -= 1;
+            
+            if (adv_button_main_config->button_evaluate_sleep_countdown == 0) {
+                sdk_os_timer_disarm(&adv_button_main_config->button_evaluate_timer);
+            }
         }
         
         adv_button_main_config->button_evaluate_is_working = true;
@@ -239,6 +243,7 @@ void adv_button_init() {
         adv_button_main_config->button_evaluate_delay = BUTTON_EVAL_DELAY_DEFAULT;
         adv_button_main_config->button_evaluate_is_working = false;
         adv_button_main_config->button_evaluate_sleep_countdown = 0;
+        adv_button_main_config->is_gpio16 = false;
         adv_button_main_config->buttons = NULL;
         
         sdk_os_timer_setfn(&adv_button_main_config->button_evaluate_timer, button_evaluate_fn, NULL);
@@ -290,6 +295,7 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
         button->max_eval = ADV_BUTTON_DEFAULT_EVAL;
         button->inverted = inverted;
         button->press_count = 0;
+        adv_button_main_config->button_evaluate_sleep_countdown = 0;
         
         button->next = adv_button_main_config->buttons;
         adv_button_main_config->buttons = button;
@@ -313,7 +319,19 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
         sdk_os_timer_setfn(&button->hold_timer, adv_button_hold_callback, button);
         sdk_os_timer_setfn(&button->press_timer, adv_button_single_callback, button);
         
-        gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt);
+        if (gpio != 16) {
+            gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt);
+            
+        } else if (!adv_button_main_config->is_gpio16) {
+            adv_button_main_config->is_gpio16 = true;
+            sdk_os_timer_arm(&adv_button_main_config->button_evaluate_timer, adv_button_main_config->button_evaluate_delay, 1);
+            
+            adv_button_t *button = adv_button_main_config->buttons;
+            while (button) {
+                gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, NULL);
+                button = button->next;
+            }
+        }
         
         return 0;
     }
@@ -408,6 +426,16 @@ int adv_button_destroy(const uint8_t gpio) {
             
             free(adv_button_main_config);
             adv_button_main_config = NULL;
+            
+        } else if (gpio == 16) {
+            adv_button_t *button = adv_button_main_config->buttons;
+            while (button) {
+                gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt);
+                button = button->next;
+            }
+            
+            sdk_os_timer_disarm(&adv_button_main_config->button_evaluate_timer);
+            adv_button_main_config->is_gpio16 = false;
         }
         
         return 0;

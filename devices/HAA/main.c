@@ -807,9 +807,9 @@ void sensor_status_0(const uint8_t gpio, void* args, const uint8_t type) {
 void power_monitor_task(void* args) {
     ch_group_t* ch_group = args;
     
-    double voltage = 0;
-    double current = 0;
-    double power = 0;
+    float voltage = 0;
+    float current = 0;
+    float power = 0;
     
     if (PM_SENSOR_TYPE == 2) {
         // TODO
@@ -1426,7 +1426,7 @@ float white_factor(const float r, const float g, const uint16_t b, const float w
 void hsi2rgbw(uint16_t h, uint16_t s, uint16_t v, lightbulb_group_t* lightbulb_group) {
     h %= 360; // h -> [0,360]
     const uint32_t rgb_max = v * (PWM_SCALE / 100.00f);
-    const uint32_t rgb_min = rgb_max * (100 - s) / 100.0f;
+    const uint32_t rgb_min = rgb_max * (100 - s) / 100.f;
 
     const uint32_t i = h / 60;
     const uint32_t diff = h % 60;
@@ -3311,13 +3311,13 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
             if (ch_group) {
                 INFO("Acc Manager %i -> %.3f", action_acc_manager->accessory, action_acc_manager->value);
                 
-                if (action_acc_manager->value == -10000.00f) {
+                if (action_acc_manager->value == -10000.f) {
                     ch_group->main_enabled = false;
-                } else if (action_acc_manager->value == -10001.00f) {
+                } else if (action_acc_manager->value == -10001.f) {
                     ch_group->main_enabled = true;
-                } else if (action_acc_manager->value == -20000.00f) {
+                } else if (action_acc_manager->value == -20000.f) {
                     ch_group->child_enabled = false;
-                } else if (action_acc_manager->value == -20001.00f) {
+                } else if (action_acc_manager->value == -20001.f) {
                     ch_group->child_enabled = true;
                 } else {
                     switch (ch_group->acc_type) {
@@ -3517,7 +3517,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
 
 void do_wildcard_actions(ch_group_t* ch_group, uint8_t index, const float action_value) {
     INFO("Wildcard %i %.2f", index, action_value);
-    float last_value, last_diff = 10000;
+    float last_value, last_diff = 1000000;
     wildcard_action_t* wildcard_action = ch_group->wildcard_action;
     wildcard_action_t* last_wildcard_action = NULL;
     
