@@ -225,7 +225,7 @@ static void wifi_scan_task(void *arg) {
     
     while (context != NULL) {
         sdk_wifi_station_scan(NULL, wifi_scan_done_cb);
-        vTaskDelay(10000 / portTICK_PERIOD_MS);
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 
     xSemaphoreTake(wifi_networks_mutex, portMAX_DELAY);
@@ -516,7 +516,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     static const char payload[] = "HTTP/1.1 204 \r\nContent-Type: text/html\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
     client_send(client, payload, sizeof(payload) - 1);
     
-    vTaskDelay(250 / portTICK_PERIOD_MS);
+    vTaskDelay(pdMS_TO_TICKS(250));
     
     sdk_system_restart();
 }
@@ -636,7 +636,7 @@ static void http_task(void *arg) {
 
         int fd = accept(listenfd, (struct sockaddr *)NULL, (socklen_t *)NULL);
         if (fd < 0) {
-            vTaskDelay(500 / portTICK_PERIOD_MS);
+            vTaskDelay(pdMS_TO_TICKS(200));
             continue;
         }
 
@@ -878,7 +878,7 @@ static void auto_reboot_run() {
     }
 
     INFO("Auto Reboot");
-    vTaskDelay(200 / portTICK_PERIOD_MS);
+    vTaskDelay(pdMS_TO_TICKS(200));
     
     sdk_system_restart();
 }

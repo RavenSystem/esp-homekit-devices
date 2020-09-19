@@ -5,20 +5,19 @@
  *
  */
 
-//#include <stdio.h>
 #include <unistd.h>
 #include <string.h>
 #include <esp/uart.h>
-//#include <esp8266.h>
-//#include <FreeRTOS.h>
+#include <FreeRTOS.h>
+#include <timers.h>
+#include <task.h>
 #include <espressif/esp_common.h>
 #include <rboot-api.h>
 #include <sysparam.h>
-//#include <task.h>
 #include <math.h>
 #include <spiflash.h>
 
-//#include <etstimer.h>
+#include <etstimer.h>
 #include <esplibs/libmain.h>
 
 #include "lwip/err.h"
@@ -30,6 +29,7 @@
 
 #include <homekit/homekit.h>
 #include <homekit/characteristics.h>
+#include <led_codes.h>
 #include <adv_button.h>
 #include <adv_hlw.h>
 #include <ping.h>
@@ -58,19 +58,34 @@ main_config_t main_config = {
     
     .setup_mode_toggle_counter = INT8_MIN,
     .setup_mode_toggle_counter_max = SETUP_MODE_DEFAULT_ACTIVATE_COUNT,
-    .led_gpio = 255,
+    .led_gpio = GPIO_OVERFLOW,
     .setup_mode_time = 0,
     
     .ping_is_running = false,
     .pwm_freq = 0,
     .setpwm_is_running = false,
     .setpwm_bool_semaphore = true,
-    .led_inverted = true,
     .enable_homekit_server = true,
 
     .ir_tx_freq = 13,
-    .ir_tx_gpio = 255,
-    .ir_tx_inv = false
+    .ir_tx_gpio = GPIO_OVERFLOW,
+    .ir_tx_inv = false,
+    
+    .used_gpio_0 = false,
+    .used_gpio_1 = false,
+    .used_gpio_2 = false,
+    .used_gpio_3 = false,
+    .used_gpio_4 = false,
+    .used_gpio_5 = false,
+    .used_gpio_9 = false,
+    .used_gpio_10 = false,
+    .used_gpio_11 = false,
+    .used_gpio_12 = false,
+    .used_gpio_13 = false,
+    .used_gpio_14 = false,
+    .used_gpio_15 = false,
+    .used_gpio_16 = false,
+    .used_gpio_17 = false
 };
 
 float ping_poll_period = PING_POLL_PERIOD_DEFAULT;
@@ -90,7 +105,6 @@ lightbulb_group_t* lightbulb_groups = NULL;
 ping_input_t* ping_inputs = NULL;
 
 #ifdef HAA_DEBUG
-ETSTimer free_heap_timer;
 int32_t free_heap = 0;
 void free_heap_watchdog() {
     int32_t size = xPortGetFreeHeapSize();
@@ -233,31 +247,14 @@ bool ping_host(char* host) {
     return ping_result;
 }
 
-void led_task(void* pvParameters) {
-    const uint8_t times = (int) pvParameters;
-    
-    for (uint8_t i = 0; i < times; i++) {
-        gpio_write(main_config.led_gpio, true ^ main_config.led_inverted);
-        vTaskDelay(MS_TO_TICK(30));
-        gpio_write(main_config.led_gpio, false ^ main_config.led_inverted);
-        vTaskDelay(MS_TO_TICK(130));
-    }
-    
-    vTaskDelete(NULL);
-}
-
-void led_blink(const int blinks) {
-    if (main_config.led_gpio != 255) {
-        if (xTaskCreate(led_task, "led_task", LED_TASK_SIZE, (void*) blinks, LED_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating led_task");
-        }
-    }
+void inline led_blink(const int blinks) {
+    led_code(main_config.led_gpio, (blinking_params_t) { blinks, 0 });
 }
 
 void reboot_task() {
     led_blink(5);
     INFO("\nRebooting...\n");
-    vTaskDelay(MS_TO_TICK(2900));
+    vTaskDelay(pdMS_TO_TICKS(2900));
     sdk_system_restart();
 }
 
@@ -281,7 +278,7 @@ void wifi_ping_task() {
         snprintf(gw_host, 16, IPSTR, IP2STR(&info.gw));
         
         while (main_config.ping_is_running) {
-            vTaskDelay(MS_TO_TICK(100));
+            vTaskDelay(pdMS_TO_TICKS(100));
         }
         
         ping_result = ping_host(gw_host);
@@ -410,7 +407,7 @@ void ping_task() {
             
             ping_result = ping_host(ping_input->host);
     
-            vTaskDelay(MS_TO_TICK(10));
+            vTaskDelay(pdMS_TO_TICKS(10));
         } while (i < PING_RETRIES && !ping_result);
         
         if (ping_result && (!ping_input->last_response || ping_input->ignore_last_response)) {
@@ -558,7 +555,7 @@ void hkc_setter_with_setup(homekit_characteristic_t* ch, const homekit_value_t v
     setup_mode_toggle_upcount();
 }
 
-void hkc_autooff_setter_task(void* pvParameters);
+void hkc_autooff_setter_task(TimerHandle_t xTimer);
 void do_actions(ch_group_t* ch_group, uint8_t int_action);
 void do_wildcard_actions(ch_group_t* ch_group, uint8_t index, const float action_value);
 
@@ -578,10 +575,7 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                 autooff_setter_params->ch = ch;
                 autooff_setter_params->type = TYPE_ON;
-                autooff_setter_params->time = ch_group->num[0];
-                if (xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_set", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, AUTOOFF_SETTER_TASK_PRIORITY, NULL) != pdPASS) {
-                    ERROR("Creating hkc_autooff_setter_task");
-                }
+                xTimerStart(xTimerCreate("autooff_setter", pdMS_TO_TICKS(ch_group->num[0] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
             }
             
             setup_mode_toggle_upcount();
@@ -649,10 +643,7 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                 autooff_setter_params->ch = ch;
                 autooff_setter_params->type = TYPE_LOCK;
-                autooff_setter_params->time = ch_group->num[lock_index];
-                if (xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_set", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, AUTOOFF_SETTER_TASK_PRIORITY, NULL) != pdPASS) {
-                    ERROR("Creating hkc_autooff_setter_task");
-                }
+                xTimerStart(xTimerCreate("autooff_setter", pdMS_TO_TICKS(ch_group->num[lock_index] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
             }
             
             setup_mode_toggle_upcount();
@@ -699,7 +690,7 @@ void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
 
 // --- SENSORS
 void sensor_1(const uint8_t gpio, void* args, const uint8_t type) {
-    INFO("DigI GPIO %i", gpio);
+    INFO("DigI Sensor GPIO %i", gpio);
     
     ch_group_t* ch_group = args;
 
@@ -723,10 +714,7 @@ void sensor_1(const uint8_t gpio, void* args, const uint8_t type) {
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                 autooff_setter_params->ch = ch_group->ch0;
                 autooff_setter_params->type = type;
-                autooff_setter_params->time = ch_group->num[0];
-                if (xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_set", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, AUTOOFF_SETTER_TASK_PRIORITY, NULL) != pdPASS) {
-                    ERROR("Creating hkc_autooff_setter_task");
-                }
+                xTimerStart(xTimerCreate("autooff_setter", pdMS_TO_TICKS(ch_group->num[0] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
             }
         }
     }
@@ -735,7 +723,7 @@ void sensor_1(const uint8_t gpio, void* args, const uint8_t type) {
 }
 
 void sensor_status_1(const uint8_t gpio, void* args, const uint8_t type) {
-    INFO("DigI GPIO %i", gpio);
+    INFO("DigI Sensor Status GPIO %i", gpio);
     
     ch_group_t* ch_group = args;
 
@@ -757,7 +745,7 @@ void sensor_status_1(const uint8_t gpio, void* args, const uint8_t type) {
 }
 
 void sensor_0(const uint8_t gpio, void* args, const uint8_t type) {
-    INFO("DigI GPIO %i", gpio);
+    INFO("DigI Sensor GPIO %i", gpio);
     
     ch_group_t* ch_group = args;
     
@@ -765,7 +753,8 @@ void sensor_0(const uint8_t gpio, void* args, const uint8_t type) {
         if ((type == TYPE_SENSOR &&
             ch_group->ch0->value.int_value == 1) ||
             (type == TYPE_SENSOR_BOOL &&
-            ch_group->ch0->value.bool_value == true)) {
+            ch_group->ch0->value.bool_value == true) ||
+            ch_group->acc_type == ACC_TYPE_DOORBELL) {
             led_blink(1);
             INFO("Sensor OFF");
             
@@ -783,14 +772,15 @@ void sensor_0(const uint8_t gpio, void* args, const uint8_t type) {
 }
 
 void sensor_status_0(const uint8_t gpio, void* args, const uint8_t type) {
-    INFO("DigI GPIO %i", gpio);
+    INFO("DigI Sensor Status GPIO %i", gpio);
     
     ch_group_t* ch_group = args;
 
     if ((type == TYPE_SENSOR &&
         ch_group->ch0->value.int_value == 1) ||
         (type == TYPE_SENSOR_BOOL &&
-        ch_group->ch0->value.bool_value == true)) {
+        ch_group->ch0->value.bool_value == true) ||
+        ch_group->acc_type == ACC_TYPE_DOORBELL) {
         led_blink(1);
         INFO("Sensor Status OFF");
         
@@ -892,10 +882,7 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                 autooff_setter_params->ch = ch;
                 autooff_setter_params->type = TYPE_VALVE;
-                autooff_setter_params->time = ch_group->num[0];
-                if(xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_set", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, AUTOOFF_SETTER_TASK_PRIORITY, NULL) != pdPASS) {
-                    ERROR("Creating hkc_autooff_setter_task");
-                }
+                xTimerStart(xTimerCreate("autooff_setter", pdMS_TO_TICKS(ch_group->num[0] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
             }
             
             setup_mode_toggle_upcount();
@@ -1716,10 +1703,10 @@ void autodimmer_task(void* args) {
         }
         hkc_rgbw_setter(ch_group->ch1, ch_group->ch1->value);
         
-        vTaskDelay(MS_TO_TICK(lightbulb_group->autodimmer_task_delay));
+        vTaskDelay(pdMS_TO_TICKS(lightbulb_group->autodimmer_task_delay));
         
         if (ch_group->ch1->value.int_value == 100) {    // Double wait when brightness is 100%
-            vTaskDelay(MS_TO_TICK(lightbulb_group->autodimmer_task_delay));
+            vTaskDelay(pdMS_TO_TICKS(lightbulb_group->autodimmer_task_delay));
         }
     }
     
@@ -2117,10 +2104,7 @@ void hkc_fan_setter(homekit_characteristic_t* ch0, const homekit_value_t value) 
                     autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                     autooff_setter_params->ch = ch0;
                     autooff_setter_params->type = TYPE_FAN;
-                    autooff_setter_params->time = ch_group->num[0];
-                    if (xTaskCreate(hkc_autooff_setter_task, "hkc_autooff_set", AUTOOFF_SETTER_TASK_SIZE, autooff_setter_params, AUTOOFF_SETTER_TASK_PRIORITY, NULL) != pdPASS) {
-                        ERROR("Creating hkc_autooff_setter_task");
-                    }
+                    xTimerStart(xTimerCreate("autooff_setter", pdMS_TO_TICKS(ch_group->num[0] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
                 }
             } else {
                 ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
@@ -2616,11 +2600,9 @@ void digstate_0(const uint8_t gpio, void* args, const uint8_t type) {
 }
 
 // --- AUTO-OFF
-void hkc_autooff_setter_task(void* pvParameters) {
-    autooff_setter_params_t* autooff_setter_params = pvParameters;
-    
-    vTaskDelay(MS_TO_TICK(autooff_setter_params->time * 1000));
-    
+void hkc_autooff_setter_task(TimerHandle_t xTimer) {
+    autooff_setter_params_t* autooff_setter_params = (autooff_setter_params_t*) pvTimerGetTimerID(xTimer);
+
     switch (autooff_setter_params->type) {
         case TYPE_LOCK:
         case TYPE_DOUBLE_LOCK:
@@ -2646,7 +2628,7 @@ void hkc_autooff_setter_task(void* pvParameters) {
     }
     
     free(autooff_setter_params);
-    vTaskDelete(NULL);
+    xTimerDelete(xTimer, XTIMER_BLOCK_TIME);
 }
 
 // --- HTTP/TCP task
@@ -2872,7 +2854,7 @@ void http_get_task(void* pvParameters) {
             
             freeaddrinfo(res);
             
-            vTaskDelay(MS_TO_TICK(10));
+            vTaskDelay(pdMS_TO_TICKS(10));
         }
         
         action_http = action_http->next;
@@ -3209,7 +3191,7 @@ void ir_tx_task(void* pvParameters) {
                 
                 INFO("IR %i sent", r);
                 
-                vTaskDelay(MS_TO_TICK(action_ir_tx->pause));
+                vTaskDelay(pdMS_TO_TICKS(action_ir_tx->pause));
             }
             
             if (ir_code) {
@@ -3245,7 +3227,7 @@ void uart_action_task(void* pvParameters) {
         }
         
         if (action_uart->pause > 0) {
-            vTaskDelay(MS_TO_TICK(action_uart->pause));
+            vTaskDelay(pdMS_TO_TICKS(action_uart->pause));
         }
         
         action_uart = action_uart->next;
@@ -3256,16 +3238,13 @@ void uart_action_task(void* pvParameters) {
 }
 
 // --- ACTIONS
-void autoswitch_task(void* pvParameters) {
-    autoswitch_params_t* autoswitch_params = pvParameters;
+void autoswitch_timer(TimerHandle_t xTimer) {
+    action_relay_t* action_relay = (action_relay_t*) pvTimerGetTimerID(xTimer);
 
-    vTaskDelay(MS_TO_TICK(autoswitch_params->time * 1000));
+    gpio_write(action_relay->gpio, !action_relay->value);
+    INFO("AutoSw digO GPIO %i -> %i", action_relay->gpio, !action_relay->value);
     
-    gpio_write(autoswitch_params->gpio, autoswitch_params->value);
-    INFO("AutoSw digO GPIO %i -> %i", autoswitch_params->gpio, autoswitch_params->value);
-    
-    free(autoswitch_params);
-    vTaskDelete(NULL);
+    xTimerDelete(xTimer, XTIMER_BLOCK_TIME);
 }
 
 void do_actions(ch_group_t* ch_group, uint8_t action) {
@@ -3290,13 +3269,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
             INFO("DigO GPIO %i -> %i", action_relay->gpio, action_relay->value);
             
             if (action_relay->inching > 0) {
-                autoswitch_params_t* autoswitch_params = malloc(sizeof(autoswitch_params_t));
-                autoswitch_params->gpio = action_relay->gpio;
-                autoswitch_params->value = !action_relay->value;
-                autoswitch_params->time = action_relay->inching;
-                if (xTaskCreate(autoswitch_task, "autoswitch", AUTOSWITCH_TASK_SIZE, autoswitch_params, AUTOSWITCH_TASK_PRIORITY, NULL) != pdPASS) {
-                    ERROR("Creating autoswitch_task");
-                }
+                xTimerStart(xTimerCreate("autoswitch", pdMS_TO_TICKS(action_relay->inching * 1000), pdFALSE, (void*) action_relay, autoswitch_timer), XTIMER_BLOCK_TIME);
             }
         }
 
@@ -3334,6 +3307,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             break;
                             
                         case ACC_TYPE_CONTACT_SENSOR:
+                        case ACC_TYPE_DOORBELL:
                             if ((bool) action_acc_manager->value) {
                                 sensor_1(0, ch_group, TYPE_SENSOR);
                             } else {
@@ -3565,7 +3539,7 @@ void delayed_sensor_starter_task() {
             ch_group->timer) {
             
             if (!is_first) {
-                vTaskDelay(MS_TO_TICK(3000));
+                vTaskDelay(pdMS_TO_TICKS(3000));
             }
             is_first = false;
             
@@ -3646,17 +3620,123 @@ void normal_mode_init() {
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);
         
         INFO("Rebooting...");
-        vTaskDelay(MS_TO_TICK(200));
+        vTaskDelay(pdMS_TO_TICKS(200));
         sdk_system_restart();
         
         vTaskDelete(NULL);
     }
     
-    //xTaskCreate(exit_emergency_setup_mode_task, "exit_emer_setup", EXIT_EMERG_SETUP_MODE_TASK_SIZE, NULL, EXIT_EMERG_SETUP_MODE_TASK_PRIORITY, NULL);
+    bool get_used_gpio(const uint8_t gpio) {
+        switch (gpio) {
+            case 1:
+                return main_config.used_gpio_1;
+                
+            case 2:
+                return main_config.used_gpio_2;
+                
+            case 3:
+                return main_config.used_gpio_3;
+                
+            case 4:
+                return main_config.used_gpio_4;
+                
+            case 5:
+                return main_config.used_gpio_5;
+                
+            case 9:
+                return main_config.used_gpio_9;
+                
+            case 10:
+                return main_config.used_gpio_10;
+                
+            case 11:
+                return main_config.used_gpio_11;
+                
+            case 12:
+                return main_config.used_gpio_12;
+                
+            case 13:
+                return main_config.used_gpio_13;
+                
+            case 14:
+                return main_config.used_gpio_14;
+                
+            case 15:
+                return main_config.used_gpio_15;
+                
+            case 16:
+                return main_config.used_gpio_16;
+                
+            case 17:
+                return main_config.used_gpio_17;
+                
+            default:    // case 0:
+                return main_config.used_gpio_0;
+        }
+    }
     
-    // Filling Used GPIO Array
-    for (uint8_t g = 0; g < 18; g++) {
-        main_config.used_gpio[g] = false;
+    void set_used_gpio(const uint8_t gpio) {
+        switch (gpio) {
+            case 1:
+                main_config.used_gpio_1 = true;
+                break;
+                
+            case 2:
+                main_config.used_gpio_2 = true;
+                break;
+                
+            case 3:
+                main_config.used_gpio_3 = true;
+                break;
+                
+            case 4:
+                main_config.used_gpio_4 = true;
+                break;
+                
+            case 5:
+                main_config.used_gpio_5 = true;
+                break;
+                
+            case 9:
+                main_config.used_gpio_9 = true;
+                break;
+                
+            case 10:
+                main_config.used_gpio_10 = true;
+                break;
+                
+            case 11:
+                main_config.used_gpio_11 = true;
+                break;
+                
+            case 12:
+                main_config.used_gpio_12 = true;
+                break;
+                
+            case 13:
+                main_config.used_gpio_13 = true;
+                break;
+                
+            case 14:
+                main_config.used_gpio_14 = true;
+                break;
+                
+            case 15:
+                main_config.used_gpio_15 = true;
+                break;
+                
+            case 16:
+                main_config.used_gpio_16 = true;
+                break;
+                
+            case 17:
+                main_config.used_gpio_17 = true;
+                break;
+                
+            default:    // case 0:
+                main_config.used_gpio_0 = true;
+                break;
+        }
     }
     
     // Buttons GPIO Setup function
@@ -3687,7 +3767,7 @@ void normal_mode_init() {
                 button_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE)->valuedouble;
             }
             
-            if (!main_config.used_gpio[gpio]) {
+            if (!get_used_gpio(gpio)) {
                 change_uart_gpio(gpio);
                 adv_button_create(gpio, pullup_resistor, inverted);
                 
@@ -3695,7 +3775,7 @@ void normal_mode_init() {
                     adv_button_set_gpio_probes(gpio, button_filter);
                 }
                 
-                main_config.used_gpio[gpio] = true;
+                set_used_gpio(gpio);
             }
             adv_button_register_callback_fn(gpio, callback, button_type, (void*) ch_group, param);
             
@@ -3901,12 +3981,12 @@ void normal_mode_init() {
                         action_relay->action = new_int_action;
                         
                         action_relay->gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuedouble;
-                        if (!main_config.used_gpio[action_relay->gpio]) {
+                        if (!get_used_gpio(action_relay->gpio)) {
                             change_uart_gpio(action_relay->gpio);
                             gpio_enable(action_relay->gpio, GPIO_OUTPUT);
                             gpio_write(action_relay->gpio, false);
                             
-                            main_config.used_gpio[action_relay->gpio] = true;
+                            set_used_gpio(action_relay->gpio);
                             INFO("DigO GPIO: %i", action_relay->gpio);
                         }
                         
@@ -4458,22 +4538,21 @@ void normal_mode_init() {
     char* custom_hostname = name.value.string_value;
     if (cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME) != NULL) {
         custom_hostname = strdup(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring);
-        INFO("Hostname: %s", custom_hostname);
     }
+    INFO("Hostname: %s", custom_hostname);
     
     // Status LED
     if (cJSON_GetObjectItemCaseSensitive(json_config, STATUS_LED_GPIO) != NULL) {
         main_config.led_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, STATUS_LED_GPIO)->valuedouble;
 
+        bool led_inverted = true;
         if (cJSON_GetObjectItemCaseSensitive(json_config, INVERTED) != NULL) {
-                main_config.led_inverted = (bool) cJSON_GetObjectItemCaseSensitive(json_config, INVERTED)->valuedouble;
+            led_inverted = (bool) cJSON_GetObjectItemCaseSensitive(json_config, INVERTED)->valuedouble;
         }
         
         change_uart_gpio(main_config.led_gpio);
-        gpio_enable(main_config.led_gpio, GPIO_OUTPUT);
-        main_config.used_gpio[main_config.led_gpio] = true;
-        gpio_write(main_config.led_gpio, false ^ main_config.led_inverted);
-        INFO("Status LED GPIO: %i, inv: %i", main_config.led_gpio, main_config.led_inverted);
+        led_create(main_config.led_gpio, led_inverted);
+        INFO("Status LED GPIO: %i, inv: %i", main_config.led_gpio, led_inverted);
     }
     
     // IR TX LED Frequency
@@ -4493,7 +4572,7 @@ void normal_mode_init() {
         main_config.ir_tx_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO)->valuedouble;
         change_uart_gpio(main_config.ir_tx_gpio);
         gpio_enable(main_config.ir_tx_gpio, GPIO_OUTPUT);
-        main_config.used_gpio[main_config.ir_tx_gpio] = true;
+        set_used_gpio(main_config.ir_tx_gpio);
         gpio_write(main_config.ir_tx_gpio, false ^ main_config.ir_tx_inv);
         INFO("IR TX GPIO: %i", main_config.ir_tx_gpio);
     }
@@ -4514,51 +4593,58 @@ void normal_mode_init() {
     // PWM frequency
     if (cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ) != NULL) {
         main_config.pwm_freq = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ)->valuedouble;
-        INFO("PWM Freq: %i", main_config.pwm_freq);
     }
+    INFO("PWM Freq: %i", main_config.pwm_freq);
     
     // Ping poll period
     if (cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD) != NULL) {
         ping_poll_period = (float) cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD)->valuedouble;
-        INFO("Ping period: %g secs", ping_poll_period);
     }
+    INFO("Ping period: %g secs", ping_poll_period);
     
     // Allowed Setup Mode Time
     if (cJSON_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME) != NULL) {
         main_config.setup_mode_time = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME)->valuedouble;
-        INFO("Setup mode time: %i secs", main_config.setup_mode_time);
     }
+    INFO("Setup mode time: %i secs", main_config.setup_mode_time);
     
     // Run HomeKit Server
     if (cJSON_GetObjectItemCaseSensitive(json_config, ENABLE_HOMEKIT_SERVER) != NULL) {
         main_config.enable_homekit_server = (bool) cJSON_GetObjectItemCaseSensitive(json_config, ENABLE_HOMEKIT_SERVER)->valuedouble;
-        INFO("Run HomeKit Server: %i", main_config.enable_homekit_server);
     }
+    INFO("Run HomeKit Server: %i", main_config.enable_homekit_server);
     
     // Allow unsecure connections
     if (cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS) != NULL) {
         config.insecure = (bool) cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS)->valuedouble;
-        INFO("Unsecure connections: %i", config.insecure);
     }
+    INFO("Unsecure connections: %i", config.insecure);
     
     // mDNS TTL
     config.mdns_ttl = MDNS_TTL_DEFAULT;
     if (cJSON_GetObjectItemCaseSensitive(json_config, MDNS_TTL) != NULL) {
         config.mdns_ttl = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, MDNS_TTL)->valuedouble;
-        INFO("mDNS TTL: %i secs", config.mdns_ttl);
     }
+    INFO("mDNS TTL: %i secs", config.mdns_ttl);
+    
+    // HomeKit Device Category
+    config.category =  HOMEKIT_DEVICE_CATEGORY_DEFAULT;
+    if (cJSON_GetObjectItemCaseSensitive(json_config, HOMEKIT_DEVICE_CATEGORY_SET) != NULL) {
+        config.category = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, HOMEKIT_DEVICE_CATEGORY_SET)->valuedouble;
+    }
+    INFO("Device Category: %i", config.category);
     
     // Gateway Ping
     if (cJSON_GetObjectItemCaseSensitive(json_config, WIFI_PING_ERRORS) != NULL) {
         main_config.wifi_ping_max_errors = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, WIFI_PING_ERRORS)->valuedouble;
-        INFO("Gateway Ping: %i", main_config.wifi_ping_max_errors);
     }
+    INFO("Gateway Ping: %i", main_config.wifi_ping_max_errors);
     
     // Times to toggle quickly an accessory status to enter setup mode
     if (cJSON_GetObjectItemCaseSensitive(json_config, SETUP_MODE_ACTIVATE_COUNT) != NULL) {
         main_config.setup_mode_toggle_counter_max = (int8_t) cJSON_GetObjectItemCaseSensitive(json_config, SETUP_MODE_ACTIVATE_COUNT)->valuedouble;
-        INFO("Toggles to enter setup mode: %i", main_config.setup_mode_toggle_counter_max);
     }
+    INFO("Toggles to enter setup mode: %i", main_config.setup_mode_toggle_counter_max);
     
     if (main_config.setup_mode_toggle_counter_max > 0) {
         setup_mode_toggle_timer = new_timer();
@@ -4656,12 +4742,7 @@ void normal_mode_init() {
         
         return initial_state;
     }
-    
-    void acc_creation_delay(cJSON* json_accessory) {
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, ACC_CREATION_DELAY) != NULL) {
-            vTaskDelay(MS_TO_TICK((uint16_t) cJSON_GetObjectItemCaseSensitive(json_accessory, ACC_CREATION_DELAY)->valuedouble));
-        }
-    }
+
 
     uint8_t new_switch(uint8_t accessory, cJSON* json_context, const uint8_t acc_type) {
         ch_group_t* ch_group = new_ch_group();
@@ -5002,6 +5083,7 @@ void normal_mode_init() {
     
     uint8_t new_sensor(const uint8_t accessory, cJSON* json_context, uint8_t acc_type) {
         ch_group_t* ch_group = new_ch_group();
+        ch_group->acc_type = ACC_TYPE_CONTACT_SENSOR;
         ch_group->accessory = accessory_numerator;
         accessory_numerator++;
         ch_group->homekit_enabled = acc_homekit_enabled(json_context);
@@ -5070,7 +5152,16 @@ void normal_mode_init() {
                 if (ch_group->homekit_enabled) {
                     accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_MOTION_SENSOR;
                 }
+                ch_group->acc_type = ACC_TYPE_MOTION_SENSOR;
                 ch0 = NEW_HOMEKIT_CHARACTERISTIC(MOTION_DETECTED, 0);
+                break;
+                
+            case ACC_TYPE_DOORBELL:
+                if (ch_group->homekit_enabled) {
+                    accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_DOORBELL;
+                }
+                ch_group->acc_type = ACC_TYPE_DOORBELL;
+                ch0 = NEW_HOMEKIT_CHARACTERISTIC(PROGRAMMABLE_SWITCH_EVENT, 0);
                 break;
                 
             default:    // case ACC_TYPE_CONTACT_SENSOR:
@@ -5081,7 +5172,6 @@ void normal_mode_init() {
                 break;
         }
         
-        ch_group->acc_type = ACC_TYPE_CONTACT_SENSOR;
         ch_group->ch0 = ch0;
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
@@ -5195,8 +5285,6 @@ void normal_mode_init() {
         const bool exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (acc_type == ACC_TYPE_MOTION_SENSOR) {
-            ch_group->acc_type = ACC_TYPE_MOTION_SENSOR;
-            
             ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), sensor_0, ch_group, TYPE_SENSOR_BOOL);
             ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), sensor_1, ch_group, TYPE_SENSOR_BOOL);
             ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), sensor_status_1, ch_group, TYPE_SENSOR_BOOL);
@@ -6482,7 +6570,6 @@ void normal_mode_init() {
     
     for (uint8_t i = 0; i < total_accessories; i++) {
         INFO("\nACCESSORY %i", accessory_numerator);
-        
         uint8_t acc_type = ACC_TYPE_SWITCH;
         if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE) != NULL) {
             acc_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE)->valuedouble;
@@ -6498,7 +6585,7 @@ void normal_mode_init() {
         } else if (acc_type == ACC_TYPE_LOCK || acc_type == ACC_TYPE_DOUBLE_LOCK) {
             acc_count = new_lock(acc_count, json_accessory, acc_type);
             
-        } else if ((acc_type >= ACC_TYPE_CONTACT_SENSOR && acc_type <= ACC_TYPE_MOTION_SENSOR) ||
+        } else if ((acc_type >= ACC_TYPE_CONTACT_SENSOR && acc_type <= ACC_TYPE_DOORBELL) ||
                    (acc_type >= ACC_POWER_MONITOR_INIT && acc_type <= ACC_POWER_MONITOR_END)) {
             acc_count = new_sensor(acc_count, json_accessory, acc_type);
             
@@ -6544,7 +6631,10 @@ void normal_mode_init() {
         
         FREEHEAP();
         
-        acc_creation_delay(json_accessory);
+        // Accessory creation delay
+        if (cJSON_GetObjectItemCaseSensitive(json_accessory, ACC_CREATION_DELAY) != NULL) {
+            vTaskDelay(pdMS_TO_TICKS((uint16_t) cJSON_GetObjectItemCaseSensitive(json_accessory, ACC_CREATION_DELAY)->valuedouble));
+        }
         
         taskYIELD();
     }
@@ -6588,7 +6678,6 @@ void normal_mode_init() {
     serial.value = name.value;
     config.accessories = accessories;
     config.setupId = "JOSE";
-    config.category = homekit_accessory_category_other;
     config.config_number = last_config_number;
     
     main_config.setup_mode_toggle_counter = 0;
@@ -6598,14 +6687,16 @@ void normal_mode_init() {
     if (xTaskCreate(delayed_sensor_starter_task, "delayed_sensor", DELAYED_SENSOR_START_TASK_SIZE, NULL, DELAYED_SENSOR_START_TASK_PRIORITY, NULL) != pdPASS) {
         ERROR("Creating delayed_sensor_starter_task");
     }
-    
+
     wifi_config_init("HAA", NULL, run_homekit_server, custom_hostname);
     
-    vTaskDelay(MS_TO_TICK(EXIT_EMERGENCY_SETUP_MODE_TIME));
+    led_blink(3);
+    
+    vTaskDelay(pdMS_TO_TICKS(EXIT_EMERGENCY_SETUP_MODE_TIME));
     INFO("Disarming Emergency Setup Mode");
     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
 
-    //vTaskDelay(MS_TO_TICK(8000)); sdk_wifi_station_disconnect(); sdk_wifi_station_connect();      // Emulates a Wifi disconnection. Keep comment for releases
+    //vTaskDelay(pdMS_TO_TICKS(8000)); sdk_wifi_station_disconnect(); sdk_wifi_station_connect();      // Emulates a Wifi disconnection. Keep comment for releases
     
     vTaskDelete(NULL);
 }
@@ -6658,15 +6749,14 @@ void user_init(void) {
     } else {
 #ifdef HAA_DEBUG
         free_heap_watchdog();
-        sdk_os_timer_setfn(&free_heap_timer, free_heap_watchdog, NULL);
-        sdk_os_timer_arm(&free_heap_timer, 1000, 1);
+        xTimerStart(xTimerCreate("free_heap", pdMS_TO_TICKS(1000), pdTRUE, NULL, free_heap_watchdog), XTIMER_BLOCK_TIME);
 #endif // HAA_DEBUG
         
         // Arming emergency Setup Mode
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
         
         if (xTaskCreate(normal_mode_init, "normal_init", INITIAL_SETUP_TASK_SIZE, NULL, INITIAL_SETUP_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating led_task");
+            ERROR("Creating normal_mode_init");
         }
     }
 }

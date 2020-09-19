@@ -21,6 +21,7 @@
 #include <esplibs/libmain.h>
 
 #include <FreeRTOS.h>
+#include <timers.h>
 #include <task.h>
 #include <semphr.h>
 
@@ -425,10 +426,10 @@ static u8_t* mdns_get_question(u8_t* hdrP, u8_t* qp, char* qStr, uint16_t* qClas
 //---------------------------------------------------------------------------
 static void mdns_announce_netif(struct netif *netif, const ip_addr_t *addr);
 
-static ETSTimer mdns_announce_timer;
+static TimerHandle_t mdns_announce_timer = NULL;
 
 void mdns_clear() {
-    sdk_os_timer_disarm(&mdns_announce_timer);
+    xTimerStop(mdns_announce_timer, 100);
     
     if (!xSemaphoreTake(gDictMutex, portMAX_DELAY))
         return;
@@ -549,6 +550,7 @@ void mdns_add_AAAA(const char* rKey, u32_t ttl, const ip6_addr_t *addr)
 #endif
 
 void mdns_announce() {
+    printf("mDNS reannounced\n");
     struct netif *netif = sdk_system_get_netif(STATION_IF);
     for (uint8_t i = 0; i < 5; i++) {
         if (i > 0) {
@@ -617,13 +619,13 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
     free(fullName);
     free(devName);
 
-    sdk_os_timer_disarm(&mdns_announce_timer);
+    xTimerStop(mdns_announce_timer, 100);
     
     mdns_announce();
     
 //    if (ttl > 0) {
-        sdk_os_timer_setfn(&mdns_announce_timer, mdns_announce, NULL);
-        sdk_os_timer_arm(&mdns_announce_timer, ttl * TTL_MULTIPLIER_MS, 1);
+        xTimerChangePeriod(mdns_announce_timer, pdMS_TO_TICKS(ttl * TTL_MULTIPLIER_MS), 100);
+        xTimerStart(mdns_announce_timer, 100);
 //    }
 }
 
@@ -1013,6 +1015,8 @@ void mdns_init()
         return;
     }
 
+    mdns_announce_timer = xTimerCreate("mdns_announce", pdMS_TO_TICKS(60000), pdTRUE, NULL, mdns_announce);
+    
     udp_bind_netif(gMDNS_pcb, netif);
 
     udp_recv(gMDNS_pcb, mdns_recv, NULL);

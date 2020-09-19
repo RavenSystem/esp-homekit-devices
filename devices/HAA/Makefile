@@ -12,6 +12,7 @@ EXTRA_COMPONENTS = \
     $(abspath ../../external_libs/wolfssl) \
     $(abspath ../../external_libs/cJSON) \
     $(abspath ../../external_libs/homekit) \
+	$(abspath ../../libs/led_codes) \
     $(abspath ../../libs/adv_button) \
     $(abspath ../../libs/adv_hlw) \
 	$(abspath ../../libs/new_dht) \
@@ -42,16 +43,19 @@ EXTRA_CFLAGS += -DLWIP_NETIF_HOSTNAME=1
 EXTRA_CFLAGS += -DLWIP_RAW=1
 EXTRA_CFLAGS += -DDEFAULT_RAW_RECVMBOX_SIZE=5
 EXTRA_CFLAGS += -DWIFI_PARAM_SAVE=0
+
 EXTRA_CFLAGS += -DconfigMINIMAL_STACK_SIZE=384
+EXTRA_CFLAGS += -DconfigTIMER_QUEUE_LENGTH=20
+EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=640
 
 ## HAA DEBUG
 #EXTRA_CFLAGS += -DHAA_DEBUG -DconfigUSE_TRACE_FACILITY
 
-## mDNS Responder DEBUG
-#EXTRA_CFLAGS += -DqDebugLog
-
 ## HOMEKIT DEBUG
 #EXTRA_CFLAGS += -DHOMEKIT_DEBUG=1
+
+## mDNS Responder DEBUG
+#EXTRA_CFLAGS += -DqDebugLog
 
 include $(abspath ../../sdk/esp-open-rtos/common.mk)
 

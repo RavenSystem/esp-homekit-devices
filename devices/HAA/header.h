@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "3.1.2"
+#define FIRMWARE_VERSION                    "3.2.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -401,6 +401,7 @@
 #define ACC_TYPE_CARBON_DIOXIDE_SENSOR      (10)
 #define ACC_TYPE_FILTER_CHANGE_SENSOR       (11)
 #define ACC_TYPE_MOTION_SENSOR              (12)
+#define ACC_TYPE_DOORBELL                   (13)
 #define ACC_TYPE_WATER_VALVE                (20)
 #define ACC_TYPE_THERMOSTAT                 (21)
 #define ACC_TYPE_TEMP_SENSOR                (22)
@@ -414,7 +415,10 @@
 #define ACC_TYPE_TV                         (60)
 #define ACC_TYPE_FAN                        (65)
 #define ACC_POWER_MONITOR_INIT              (75)
-#define ACC_POWER_MONITOR_END               (82)
+#define ACC_POWER_MONITOR_END               (83)
+
+#define HOMEKIT_DEVICE_CATEGORY_SET         "ct"
+#define HOMEKIT_DEVICE_CATEGORY_DEFAULT     (1)
 
 #define ACC_CREATION_DELAY                  "cd"
 #define EXIT_EMERGENCY_SETUP_MODE_TIME      (1000)
@@ -427,15 +431,15 @@
 #define WIFI_STATUS_PRECONNECTED            (2)
 #define WIFI_STATUS_CONNECTED               (3)
 #define WIFI_WATCHDOG_POLL_PERIOD_MS        (1000)
-#define WIFI_RECONNECTION_POLL_PERIOD_MS    (10500)
+#define WIFI_RECONNECTION_POLL_PERIOD_MS    (12000)
 #define WIFI_PING_ERRORS                    "w"
 #define WIFI_ERROR_COUNT_REBOOT             (20)
+
+#define GPIO_OVERFLOW                       (18)    // GPIO 17 is ADC PIN
 
 #define ACCESSORIES_WITHOUT_BRIDGE          (4)     // Max number of accessories before using a bridge
 
 #define SYSTEM_UPTIME_MS                    ((float) sdk_system_get_time() * 1e-3)
-
-#define MS_TO_TICK(x)                       ((x) / portTICK_PERIOD_MS)
 
 #define MIN(x, y)                           (((x) < (y)) ? (x) : (y))
 #define MAX(x, y)                           (((x) > (y)) ? (x) : (y))
@@ -445,6 +449,8 @@
 #define DEBUG(message, ...)                 printf("%s: " message "\n", __func__, ##__VA_ARGS__)
 #define INFO(message, ...)                  printf(message "\n", ##__VA_ARGS__)
 #define ERROR(message, ...)                 printf("! " message "\n", ##__VA_ARGS__)
+
+#define XTIMER_BLOCK_TIME                   (90)
 
 #define FREEHEAP()                          printf("Free Heap: %d\n", xPortGetFreeHeapSize())
 

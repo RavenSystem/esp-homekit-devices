@@ -9,49 +9,54 @@
 #define __HAA_TYPES_H__
 
 typedef struct _main_config {
-    uint8_t wifi_status;
-    uint8_t wifi_channel;
+    uint8_t wifi_status: 2;
+    uint8_t wifi_channel: 4;
+    bool ping_is_running: 1;
+    bool enable_homekit_server: 1;
     int8_t setup_mode_toggle_counter;
     int8_t setup_mode_toggle_counter_max;
-    
-    uint16_t setup_mode_time;
-    uint16_t pwm_freq;
-    
     uint8_t ir_tx_freq;
-    uint8_t ir_tx_gpio;
-    uint8_t led_gpio;
-    bool ping_is_running: 1;
-    bool led_inverted: 1;
-    bool enable_homekit_server: 1;
-    bool ir_tx_inv: 1;
-    bool setpwm_is_running: 1;
-    bool wifi_ping_is_running: 1;
-    bool setpwm_bool_semaphore: 1;
     
     uint8_t wifi_ping_max_errors;
     uint8_t wifi_error_count;
+    uint8_t ir_tx_gpio: 5;
+    bool ir_tx_inv: 1;
+    bool setpwm_is_running: 1;
+    bool setpwm_bool_semaphore: 1;
+    uint8_t led_gpio: 5;
+    bool wifi_ping_is_running: 1;
+    bool used_gpio_0: 1;
+    bool used_gpio_1: 1;
+    
+    uint16_t setup_mode_time;
+    bool used_gpio_2: 1;
+    bool used_gpio_3: 1;
+    bool used_gpio_4: 1;
+    bool used_gpio_5: 1;
+    bool used_gpio_9: 1;
+    bool used_gpio_10: 1;
+    bool used_gpio_11: 1;
+    bool used_gpio_12: 1;
+    bool used_gpio_13: 1;
+    bool used_gpio_14: 1;
+    bool used_gpio_15: 1;
+    bool used_gpio_16: 1;
+    bool used_gpio_17: 1;
+    
+    uint16_t pwm_freq;
+    uint16_t multipwm_duty[MULTIPWM_MAX_CHANNELS];
     
     char name_value[11];
     char serial_value[13];
-    uint16_t multipwm_duty[MULTIPWM_MAX_CHANNELS];
     
     ETSTimer save_states_timer;
     ETSTimer wifi_reconnection_timer;
     ETSTimer wifi_watchdog_timer;
-    
-    bool used_gpio[17];
 } main_config_t;
-
-typedef struct _autoswitch_params {
-    uint8_t gpio: 7;
-    bool value: 1;
-    float time;
-} autoswitch_params_t;
 
 typedef struct _autooff_setter_params {
     homekit_characteristic_t* ch;
     uint8_t type;
-    float time;
 } autooff_setter_params_t;
 
 typedef struct _last_state {
