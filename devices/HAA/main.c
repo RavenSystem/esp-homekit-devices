@@ -406,7 +406,8 @@ void ping_task_timer_worker() {
         ping_input_callback_fn_t* ping_input_callback_fn = callbacks;
         
         while (ping_input_callback_fn) {
-            if (!ping_input_callback_fn->disable_without_wifi) {
+            if (!ping_input_callback_fn->disable_without_wifi ||
+                (ping_input_callback_fn->disable_without_wifi && main_config.wifi_status >= WIFI_STATUS_PRECONNECTED)) {
                 ping_input_callback_fn->callback(0, ping_input_callback_fn->ch_group, ping_input_callback_fn->param);
             }
             ping_input_callback_fn = ping_input_callback_fn->next;
