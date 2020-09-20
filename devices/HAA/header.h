@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "3.2.0"
+#define FIRMWARE_VERSION                    "3.3.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -134,6 +134,7 @@
 #define PING_HOST                           "h"
 #define PING_RESPONSE_TYPE                  "r"
 #define PING_IGNORE_LAST_RESPONSE           "i"
+#define PING_DISABLE_WITHOUT_WIFI           "d"
 #define PING_RETRIES                        (3)
 #define PING_POLL_PERIOD                    "pt"
 #define PING_POLL_PERIOD_DEFAULT            (4.9)
@@ -388,6 +389,7 @@
 #define UART_ACTION_PAUSE                   "d"
 
 #define ACCESSORY_TYPE                      "t"
+#define ACC_TYPE_ROOT_DEVICE                (0)
 #define ACC_TYPE_SWITCH                     (1)
 #define ACC_TYPE_OUTLET                     (2)
 #define ACC_TYPE_BUTTON                     (3)
@@ -421,7 +423,7 @@
 #define HOMEKIT_DEVICE_CATEGORY_DEFAULT     (1)
 
 #define ACC_CREATION_DELAY                  "cd"
-#define EXIT_EMERGENCY_SETUP_MODE_TIME      (1000)
+#define EXIT_EMERGENCY_SETUP_MODE_TIME      (2000)
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
@@ -431,9 +433,11 @@
 #define WIFI_STATUS_PRECONNECTED            (2)
 #define WIFI_STATUS_CONNECTED               (3)
 #define WIFI_WATCHDOG_POLL_PERIOD_MS        (1000)
-#define WIFI_RECONNECTION_POLL_PERIOD_MS    (12000)
+#define WIFI_RECONNECTION_POLL_PERIOD_MS    (12345)
 #define WIFI_PING_ERRORS                    "w"
 #define WIFI_ERROR_COUNT_REBOOT             (20)
+
+#define SAVE_STATES_DELAY_MS                (4800)
 
 #define GPIO_OVERFLOW                       (18)    // GPIO 17 is ADC PIN
 
@@ -450,7 +454,7 @@
 #define INFO(message, ...)                  printf(message "\n", ##__VA_ARGS__)
 #define ERROR(message, ...)                 printf("! " message "\n", ##__VA_ARGS__)
 
-#define XTIMER_BLOCK_TIME                   (90)
+#define XTIMER_BLOCK_TIME                   (100)
 
 #define FREEHEAP()                          printf("Free Heap: %d\n", xPortGetFreeHeapSize())
 

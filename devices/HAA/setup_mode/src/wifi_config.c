@@ -14,7 +14,8 @@
 #include <string.h>
 //#include <stdint.h>
 #include <sysparam.h>
-#include <etstimer.h>
+#include <FreeRTOS.h>
+#include <timers.h>
 #include <esplibs/libmain.h>
 #include <espressif/esp_common.h>
 #include <lwip/sockets.h>
@@ -56,6 +57,8 @@
 
 #define MAX_BODY_LEN                    (14336)
 
+#define XTIMER_BLOCK_TIME               (100)
+
 #define INFO(message, ...)              printf(message "\n", ##__VA_ARGS__);
 #define ERROR(message, ...)             printf("! " message "\n", ##__VA_ARGS__);
 
@@ -72,7 +75,9 @@ typedef struct {
     char* custom_hostname;
     void (*on_wifi_ready)();
 
-    ETSTimer sta_connect_timeout;
+    TimerHandle_t sta_connect_timeout;
+    TimerHandle_t auto_reboot_timer;
+    
     TaskHandle_t http_task_handle;
     TaskHandle_t dns_task_handle;
     
@@ -90,8 +95,6 @@ typedef struct _client {
     uint8_t *body;
     size_t body_length;
 } client_t;
-
-ETSTimer auto_reboot_timer;
 
 static void wifi_config_station_connect();
 static void wifi_config_softap_start();
@@ -246,7 +249,8 @@ static void wifi_scan_task(void *arg) {
 #include "index.html.h"
 
 static void wifi_config_server_on_settings(client_t *client) {
-    sdk_os_timer_disarm(&auto_reboot_timer);
+    xTimerStop(context->auto_reboot_timer, XTIMER_BLOCK_TIME);
+    xTimerDelete(context->auto_reboot_timer, XTIMER_BLOCK_TIME);
     
     static const char http_prologue[] =
         "HTTP/1.1 200 \r\n"
@@ -569,7 +573,8 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
             break;
         }
         case ENDPOINT_SETTINGS_UPDATE: {
-            sdk_os_timer_disarm(&context->sta_connect_timeout);
+            xTimerStop(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
+            xTimerDelete(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
             wifi_config_context_free(context);
             xTaskCreate(wifi_config_server_on_settings_update_task, "on_settings_update_task", 512, client, (tskIDLE_PRIORITY + 0), NULL);
             return 0;
@@ -831,7 +836,7 @@ static void wifi_config_softap_stop() {
     UNLOCK_TCPIP_CORE();
 }
 
-static void wifi_config_sta_connect_timeout_callback(void *arg) {
+static void wifi_config_sta_connect_timeout_callback() {
     if (!context->hostname_ready) {
         struct netif *netif = sdk_system_get_netif(STATION_IF);
         if (netif && !netif->hostname && context->custom_hostname) {
@@ -845,7 +850,8 @@ static void wifi_config_sta_connect_timeout_callback(void *arg) {
         }
     } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         // Connected to station, all is dandy
-        sdk_os_timer_disarm(&context->sta_connect_timeout);
+        xTimerStop(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
+        xTimerDelete(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
         
         wifi_config_softap_stop();
         
@@ -951,8 +957,8 @@ uint8_t wifi_config_connect() {
 
 static void wifi_config_station_connect() {
     if (wifi_config_connect() == 1) {
-        sdk_os_timer_setfn(&context->sta_connect_timeout, wifi_config_sta_connect_timeout_callback, context);
-        sdk_os_timer_arm(&context->sta_connect_timeout, 500, 1);
+        context->sta_connect_timeout = xTimerCreate("connect_timeout", pdMS_TO_TICKS(500), pdTRUE, NULL, wifi_config_sta_connect_timeout_callback);
+        xTimerStart(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
         
         if (!context->on_wifi_ready) {
             INFO("HAA Setup");
@@ -964,8 +970,8 @@ static void wifi_config_station_connect() {
 
             if (setup_mode == 1) {
                 INFO("Enabling auto reboot");
-                sdk_os_timer_setfn(&auto_reboot_timer, auto_reboot_run, NULL);
-                sdk_os_timer_arm(&auto_reboot_timer, AUTO_REBOOT_TIMEOUT, false);
+                context->auto_reboot_timer = xTimerCreate("auto_reboot", pdMS_TO_TICKS(AUTO_REBOOT_TIMEOUT), pdFALSE, NULL, auto_reboot_run);
+                xTimerStart(context->auto_reboot_timer, XTIMER_BLOCK_TIME);
             }
             
             wifi_config_softap_start();

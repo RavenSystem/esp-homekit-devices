@@ -49,7 +49,7 @@ typedef struct _main_config {
     char name_value[11];
     char serial_value[13];
     
-    ETSTimer save_states_timer;
+    TimerHandle_t save_states_timer;
     ETSTimer wifi_reconnection_timer;
     ETSTimer wifi_watchdog_timer;
 } main_config_t;
@@ -236,6 +236,7 @@ typedef void (*ping_callback_fn)(uint8_t gpio, void* args, uint8_t param);
 
 typedef struct _ping_input_callback_fn {
     uint8_t param;
+    bool disable_without_wifi: 1;
     
     ping_callback_fn callback;
     ch_group_t* ch_group;

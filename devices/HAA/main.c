@@ -92,8 +92,6 @@ float ping_poll_period = PING_POLL_PERIOD_DEFAULT;
 
 ETSTimer* setup_mode_toggle_timer;
 
-char* ir_protocol = NULL;
-
 ETSTimer* pwm_timer;
 pwm_info_t* pwm_info;
 
@@ -103,6 +101,10 @@ last_state_t* last_states = NULL;
 ch_group_t* ch_groups = NULL;
 lightbulb_group_t* lightbulb_groups = NULL;
 ping_input_t* ping_inputs = NULL;
+
+void hkc_autooff_setter_task(TimerHandle_t xTimer);
+void do_actions(ch_group_t* ch_group, uint8_t int_action);
+void do_wildcard_actions(ch_group_t* ch_group, uint8_t index, const float action_value);
 
 #ifdef HAA_DEBUG
 int32_t free_heap = 0;
@@ -124,6 +126,12 @@ void free_heap_watchdog() {
     }
 }
 #endif  // HAA_DEBUG
+
+void disable_emergency_setup(TimerHandle_t xTimer) {
+    INFO("Disarming Emergency Setup Mode");
+    sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
+    xTimerDelete(xTimer, XTIMER_BLOCK_TIME);
+}
 
 void change_uart_gpio(const uint8_t gpio) {
     if (gpio == 1) {
@@ -172,6 +180,9 @@ ch_group_t* new_ch_group() {
     memset(ch_group, 0, sizeof(*ch_group));
     ch_group->main_enabled = true;
     ch_group->child_enabled = true;
+    
+    ch_group->next = ch_groups;
+    ch_groups = ch_group;
     
     return ch_group;
 }
@@ -332,7 +343,7 @@ void wifi_reconnection() {
         main_config.wifi_status = WIFI_STATUS_CONNECTING;
         INFO("Wifi reconnecting...");
         wifi_config_connect();
-        
+
     } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
             main_config.wifi_status = WIFI_STATUS_CONNECTED;
@@ -350,6 +361,8 @@ void wifi_reconnection() {
             homekit_mdns_announce();
             
             main_config.wifi_error_count = 0;
+            
+            do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 3);
         }
         
     } else {
@@ -358,18 +371,15 @@ void wifi_reconnection() {
         ERROR("Wifi disconnected");
 
         main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
-        
         wifi_config_reset();
-        /*
+        
         main_config.wifi_error_count++;
         if (main_config.wifi_error_count < WIFI_ERROR_COUNT_REBOOT) {
-            wifi_config_reset();
+            do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
         } else {
-            ERROR("Rebooting...");
-            sdk_os_timer_disarm(&main_config.wifi_reconnection_timer);
-            sdk_system_restart();
+            main_config.wifi_error_count = 0;
+            do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 5);
         }
-         */
     }
 }
 
@@ -383,7 +393,11 @@ ping_input_t* ping_input_find_by_host(char* host) {
     return ping_input;
 }
 
-void ping_task() {
+void ping_task_timer_worker() {
+    if (main_config.ping_is_running || homekit_is_pairing()) {
+        return;
+    }
+    
     INFO("Ping...");
     
     main_config.ping_is_running = true;
@@ -392,7 +406,9 @@ void ping_task() {
         ping_input_callback_fn_t* ping_input_callback_fn = callbacks;
         
         while (ping_input_callback_fn) {
-            ping_input_callback_fn->callback(0, ping_input_callback_fn->ch_group, ping_input_callback_fn->param);
+            if (!ping_input_callback_fn->disable_without_wifi) {
+                ping_input_callback_fn->callback(0, ping_input_callback_fn->ch_group, ping_input_callback_fn->param);
+            }
             ping_input_callback_fn = ping_input_callback_fn->next;
         }
     }
@@ -425,16 +441,6 @@ void ping_task() {
     }
     
     main_config.ping_is_running = false;
-    
-    vTaskDelete(NULL);
-}
-
-void ping_task_timer_worker() {
-    if (!main_config.ping_is_running && !homekit_is_pairing()) {
-        if (xTaskCreate(ping_task, "ping_task", PING_TASK_SIZE, NULL, PING_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating ping_task");
-        }
-    }
 }
 
 // -----
@@ -504,8 +510,8 @@ void save_states() {
     }
 }
 
-void save_states_callback() {
-    sdk_os_timer_arm(&main_config.save_states_timer, 4800, 0);
+void inline save_states_callback() {
+    xTimerStart(main_config.save_states_timer, XTIMER_BLOCK_TIME);
 }
 
 void hkc_group_notify(ch_group_t* ch_group) {
@@ -554,10 +560,6 @@ void hkc_setter_with_setup(homekit_characteristic_t* ch, const homekit_value_t v
     
     setup_mode_toggle_upcount();
 }
-
-void hkc_autooff_setter_task(TimerHandle_t xTimer);
-void do_actions(ch_group_t* ch_group, uint8_t int_action);
-void do_wildcard_actions(ch_group_t* ch_group, uint8_t index, const float action_value);
 
 // --- ON
 void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
@@ -1213,7 +1215,11 @@ void th_input_temp(const uint8_t gpio, void* args, const uint8_t type) {
 }
 
 // --- TEMPERATURE
-void temperature_task(void* args) {
+void temperature_timer_worker(void* args) {
+    if (homekit_is_pairing()) {
+        return;
+    }
+    
     INFO("Read TH sensor");
     
     float taylor_log(float x) {
@@ -1356,16 +1362,6 @@ void temperature_task(void* args) {
     }
     
     hkc_group_notify(ch_group);
-    
-    vTaskDelete(NULL);
-}
-
-void temperature_timer_worker(void* args) {
-    if (!homekit_is_pairing()) {
-        if (xTaskCreate(temperature_task, "temperature", TEMPERATURE_TASK_SIZE, args, TEMPERATURE_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating temperature_task");
-        }
-    }
 }
 
 // --- LIGHTBULBS
@@ -2888,7 +2884,7 @@ void ir_tx_task(void* pvParameters) {
                 } else if (action_task->ch_group->ir_protocol) {
                     prot = action_task->ch_group->ir_protocol;
                 } else {
-                    prot = ir_protocol;
+                    prot = ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE)->ir_protocol;
                 }
                 
                 // Decoding protocol based IR code length
@@ -3248,7 +3244,7 @@ void autoswitch_timer(TimerHandle_t xTimer) {
 }
 
 void do_actions(ch_group_t* ch_group, uint8_t action) {
-    INFO("Exec action %i", action);
+    INFO("Exec acc %i, action %i", ch_group->accessory, action);
     
     // Copy actions
     action_copy_t* action_copy = ch_group->action_copy;
@@ -3580,6 +3576,8 @@ void run_homekit_server() {
     sdk_os_timer_setfn(&main_config.wifi_reconnection_timer, wifi_reconnection, NULL);
     sdk_os_timer_setfn(&main_config.wifi_watchdog_timer, wifi_watchdog, NULL);
     sdk_os_timer_arm(&main_config.wifi_watchdog_timer, WIFI_WATCHDOG_POLL_PERIOD_MS, 1);
+    
+    do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 2);
 
     if (ping_inputs) {
         ping_task_timer = new_timer();
@@ -3806,22 +3804,23 @@ void normal_mode_init() {
             }
             
             bool response_type = true;
-            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_RESPONSE_TYPE) != NULL &&
-                cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_RESPONSE_TYPE)->valuedouble == 0) {
-                response_type = false;
+            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_RESPONSE_TYPE) != NULL) {
+                response_type = (bool) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_RESPONSE_TYPE)->valuedouble;
             }
             
-            bool ignore_last_response = false;
-            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_IGNORE_LAST_RESPONSE) != NULL &&
-                cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_IGNORE_LAST_RESPONSE)->valuedouble == 1) {
-                ignore_last_response = true;
+            ping_input->ignore_last_response = false;
+            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_IGNORE_LAST_RESPONSE) != NULL) {
+                ping_input->ignore_last_response = (bool) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_IGNORE_LAST_RESPONSE)->valuedouble;
             }
-            
-            ping_input->ignore_last_response = ignore_last_response;
             
             ping_input_callback_fn_t* ping_input_callback_fn;
             ping_input_callback_fn = malloc(sizeof(ping_input_callback_fn_t));
             memset(ping_input_callback_fn, 0, sizeof(*ping_input_callback_fn));
+            
+            ping_input_callback_fn->disable_without_wifi = false;
+            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_DISABLE_WITHOUT_WIFI) != NULL) {
+                ping_input_callback_fn->disable_without_wifi = (bool) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_DISABLE_WITHOUT_WIFI)->valuedouble;
+            }
             
             ping_input_callback_fn->callback = callback;
             ping_input_callback_fn->ch_group = ch_group;
@@ -4577,12 +4576,6 @@ void normal_mode_init() {
         INFO("IR TX GPIO: %i", main_config.ir_tx_gpio);
     }
     
-    // IR Protocol
-    if (cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_PROTOCOL) != NULL) {
-        ir_protocol = strdup(cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_PROTOCOL)->valuestring);
-        INFO("IR Protocol: %s", ir_protocol);
-    }
-    
     // Button filter
     if (cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER) != NULL) {
         uint8_t button_filter_value = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER)->valuedouble;
@@ -4627,13 +4620,6 @@ void normal_mode_init() {
     }
     INFO("mDNS TTL: %i secs", config.mdns_ttl);
     
-    // HomeKit Device Category
-    config.category =  HOMEKIT_DEVICE_CATEGORY_DEFAULT;
-    if (cJSON_GetObjectItemCaseSensitive(json_config, HOMEKIT_DEVICE_CATEGORY_SET) != NULL) {
-        config.category = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, HOMEKIT_DEVICE_CATEGORY_SET)->valuedouble;
-    }
-    INFO("Device Category: %i", config.category);
-    
     // Gateway Ping
     if (cJSON_GetObjectItemCaseSensitive(json_config, WIFI_PING_ERRORS) != NULL) {
         main_config.wifi_ping_max_errors = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, WIFI_PING_ERRORS)->valuedouble;
@@ -4672,9 +4658,9 @@ void normal_mode_init() {
     }
     
     // Saved States Timer Function
-    sdk_os_timer_setfn(&main_config.save_states_timer, save_states, NULL);
+    main_config.save_states_timer = xTimerCreate("save_states", pdMS_TO_TICKS(SAVE_STATES_DELAY_MS), pdFALSE, NULL, save_states);
     
-    homekit_accessory_t* *accessories = calloc(hk_total_ac, sizeof(homekit_accessory_t*));
+    homekit_accessory_t** accessories = calloc(hk_total_ac, sizeof(homekit_accessory_t*));
     
     // Define services and characteristics
     uint8_t accessory_numerator = 1;
@@ -4759,13 +4745,11 @@ void normal_mode_init() {
             max_duration = (uint32_t) cJSON_GetObjectItemCaseSensitive(json_context, VALVE_MAX_DURATION)->valuedouble;
         }
         
-        ch_group->acc_type = ACC_TYPE_SWITCH;
+        ch_group->acc_type = acc_type;
         ch_group->ch0 = ch0;
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         ch_group->num[0] = autoswitch_time(json_context);
-        ch_group->next = ch_groups;
-        ch_groups = ch_group;
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
@@ -4898,8 +4882,6 @@ void normal_mode_init() {
         ch_group->ch0 = ch0;
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
-        ch_group->next = ch_groups;
-        ch_groups = ch_group;
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
@@ -4954,8 +4936,6 @@ void normal_mode_init() {
         set_accessory_ir_protocol(ch_group, json_context);
         ch_group->num[0] = autoswitch_time(json_context);
         ch_group->num[1] = autoswitch_time_1(json_context);
-        ch_group->next = ch_groups;
-        ch_groups = ch_group;
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
@@ -5176,8 +5156,6 @@ void normal_mode_init() {
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         ch_group->num[0] = autoswitch_time(json_context);
-        ch_group->next = ch_groups;
-        ch_groups = ch_group;
         
         uint8_t calloc_count = 2;
         
@@ -5378,8 +5356,6 @@ void normal_mode_init() {
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         ch_group->num[0] = autoswitch_time(json_context);
-        ch_group->next = ch_groups;
-        ch_groups = ch_group;
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
@@ -5634,8 +5610,6 @@ void normal_mode_init() {
         ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
         ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
         ch_group->last_wildcard_action[2] = NO_LAST_WILDCARD_ACTION;
-        ch_group->next = ch_groups;
-        ch_groups = ch_group;
          
         ch_group->timer2 = new_timer();
         sdk_os_timer_setfn(ch_group->timer2, process_th, ch_group);
@@ -5702,8 +5676,6 @@ void normal_mode_init() {
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
         ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
-        ch_group->next = ch_groups;
-        ch_groups = ch_group;
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
@@ -5740,8 +5712,6 @@ void normal_mode_init() {
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
         ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
-        ch_group->next = ch_groups;
-        ch_groups = ch_group;
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
@@ -5781,8 +5751,6 @@ void normal_mode_init() {
         register_wildcard_actions(ch_group, json_context);
         ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
         ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
-        ch_group->next = ch_groups;
-        ch_groups = ch_group;
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
@@ -5850,8 +5818,6 @@ void normal_mode_init() {
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
         ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
-        ch_group->next = ch_groups;
-        ch_groups = ch_group;
         
         lightbulb_group_t* lightbulb_group = malloc(sizeof(lightbulb_group_t));
         memset(lightbulb_group, 0, sizeof(*lightbulb_group));
@@ -6077,8 +6043,6 @@ void normal_mode_init() {
         GARAGE_DOOR_WORKING_TIME = GARAGE_DOOR_TIME_OPEN_DEFAULT;
         GARAGE_DOOR_TIME_MARGIN = GARAGE_DOOR_TIME_MARGIN_DEFAULT;
         GARAGE_DOOR_CLOSE_TIME_FACTOR = 1;
-        ch_group->next = ch_groups;
-        ch_groups = ch_group;
         
         ch_group->timer = new_timer();
         sdk_os_timer_setfn(ch_group->timer, garage_door_timer_worker, ch0);
@@ -6229,8 +6193,6 @@ void normal_mode_init() {
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
         ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
-        ch_group->next = ch_groups;
-        ch_groups = ch_group;
         
         ch_group->timer = new_timer();
         sdk_os_timer_setfn(ch_group->timer, window_cover_timer_worker, ch_group);
@@ -6315,8 +6277,6 @@ void normal_mode_init() {
         register_wildcard_actions(ch_group, json_context);
         ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
         ch_group->num[0] = autoswitch_time(json_context);
-        ch_group->next = ch_groups;
-        ch_groups = ch_group;
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
@@ -6426,8 +6386,6 @@ void normal_mode_init() {
         ch_group->ch7 = ch7;
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
-        ch_group->next = ch_groups;
-        ch_groups = ch_group;
         
         homekit_service_t* new_tv_input_service(const uint8_t service_number, char* name) {
             INFO("TV Input: %s", name);
@@ -6561,7 +6519,16 @@ void normal_mode_init() {
         return accessory;
     }
     
-    // Accessory Builder
+    // *** Accessory Builder
+    // Root device
+    ch_group_t* root_device_ch_group = new_ch_group();
+    register_actions(root_device_ch_group, json_config, 0);
+    set_accessory_ir_protocol(root_device_ch_group, json_config);
+    
+    // Exec action 0 from root device
+    do_actions(root_device_ch_group, 0);
+    
+    // Bridge
     if (bridge_needed) {
         INFO("BRIDGE CREATED");
         new_accessory(0, 2, true);
@@ -6672,6 +6639,82 @@ void normal_mode_init() {
     }
     
     // --- HOMEKIT SET CONFIG
+    // HomeKit Device Category
+    if (cJSON_GetObjectItemCaseSensitive(json_config, HOMEKIT_DEVICE_CATEGORY_SET) != NULL) {
+        config.category = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, HOMEKIT_DEVICE_CATEGORY_SET)->valuedouble;
+        
+    } else if (bridge_needed) {
+        config.category = homekit_accessory_category_bridge;
+        
+    } else {
+        switch (ch_group_find_by_acc(1)->acc_type) {
+            case ACC_TYPE_SWITCH:
+                config.category = homekit_accessory_category_switch;
+                break;
+                
+            case ACC_TYPE_OUTLET:
+                config.category = homekit_accessory_category_outlet;
+                break;
+                
+            case ACC_TYPE_BUTTON:
+                config.category = homekit_accessory_category_programmable_switch;
+                break;
+                
+            case ACC_TYPE_LOCK:
+                config.category = homekit_accessory_category_door_lock;
+                break;
+                
+            case ACC_TYPE_CONTACT_SENSOR:
+            case ACC_TYPE_MOTION_SENSOR:
+            case ACC_TYPE_TEMP_SENSOR:
+            case ACC_TYPE_HUM_SENSOR:
+            case ACC_TYPE_TH_SENSOR:
+            case ACC_TYPE_LIGHT_SENSOR:
+                config.category = homekit_accessory_category_sensor;
+                break;
+                
+            case ACC_TYPE_DOORBELL:
+                config.category = homekit_accessory_category_video_door_bell;
+                break;
+                
+            case ACC_TYPE_WATER_VALVE:
+                config.category = homekit_accessory_category_faucet;
+                break;
+                
+            case ACC_TYPE_THERMOSTAT:
+            case ACC_TYPE_THERMOSTAT_WITH_HUM:
+                config.category = homekit_accessory_category_air_conditioner;
+                break;
+                
+            case ACC_TYPE_LIGHTBULB:
+                config.category = homekit_accessory_category_lightbulb;
+                break;
+                
+            case ACC_TYPE_GARAGE_DOOR:
+                config.category = homekit_accessory_category_garage;
+                break;
+                
+            case ACC_TYPE_WINDOW_COVER:
+                config.category = homekit_accessory_category_window_covering;
+                break;
+                
+            case ACC_TYPE_TV:
+                config.category = homekit_accessory_category_television;
+                break;
+                
+            case ACC_TYPE_FAN:
+                config.category = homekit_accessory_category_fan;
+                break;
+                
+            default:
+                config.category = homekit_accessory_category_other;
+                break;
+        }
+    }
+    
+    INFO("Device Category: %i\n", config.category);
+    
+    // HomeKit last config number
     int last_config_number = 1;
     sysparam_get_int32(LAST_CONFIG_NUMBER, &last_config_number);
     
@@ -6692,9 +6735,7 @@ void normal_mode_init() {
     
     led_blink(3);
     
-    vTaskDelay(pdMS_TO_TICKS(EXIT_EMERGENCY_SETUP_MODE_TIME));
-    INFO("Disarming Emergency Setup Mode");
-    sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
+    do_actions(root_device_ch_group, 1);
 
     //vTaskDelay(pdMS_TO_TICKS(8000)); sdk_wifi_station_disconnect(); sdk_wifi_station_connect();      // Emulates a Wifi disconnection. Keep comment for releases
     
@@ -6729,13 +6770,12 @@ void user_init(void) {
     
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
-    
     snprintf(main_config.name_value, 11, "HAA-%02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
-    name.value = HOMEKIT_STRING(main_config.name_value);
     
     int8_t haa_setup = 1;
     
     //sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);    // Force to enter always in setup mode. Only for tests. Keep comment for releases
+    
     //sysparam_set_string("ota_repo", "1");             // Simulates Installation with OTA. Only for tests. Keep comment for releases
     
     sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &haa_setup);
@@ -6754,6 +6794,9 @@ void user_init(void) {
         
         // Arming emergency Setup Mode
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
+        xTimerStart(xTimerCreate("emerg_setup", pdMS_TO_TICKS(EXIT_EMERGENCY_SETUP_MODE_TIME), pdFALSE, NULL, disable_emergency_setup), XTIMER_BLOCK_TIME);
+        
+        name.value = HOMEKIT_STRING(main_config.name_value);
         
         if (xTaskCreate(normal_mode_init, "normal_init", INITIAL_SETUP_TASK_SIZE, NULL, INITIAL_SETUP_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("Creating normal_mode_init");
