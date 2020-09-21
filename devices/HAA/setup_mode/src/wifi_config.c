@@ -158,6 +158,13 @@ typedef struct _wifi_network_info {
     struct _wifi_network_info *next;
 } wifi_network_info_t;
 
+static void stop_reboot_timer() {
+    if (context->auto_reboot_timer) {
+        xTimerStop(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
+        xTimerDelete(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
+    }
+}
+
 void wifi_config_reset() {
     struct sdk_station_config sta_config;
     memset(&sta_config, 0, sizeof(sta_config));
@@ -249,10 +256,7 @@ static void wifi_scan_task(void *arg) {
 #include "index.html.h"
 
 static void wifi_config_server_on_settings(client_t *client) {
-    if (context->auto_reboot_timer) {
-        xTimerStop(context->auto_reboot_timer, XTIMER_BLOCK_TIME);
-        xTimerDelete(context->auto_reboot_timer, XTIMER_BLOCK_TIME);
-    }
+    stop_reboot_timer();
     
     static const char http_prologue[] =
         "HTTP/1.1 200 \r\n"
@@ -575,8 +579,7 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
             break;
         }
         case ENDPOINT_SETTINGS_UPDATE: {
-            xTimerStop(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
-            xTimerDelete(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
+            stop_reboot_timer();
             wifi_config_context_free(context);
             xTaskCreate(wifi_config_server_on_settings_update_task, "on_settings_update_task", 512, client, (tskIDLE_PRIORITY + 0), NULL);
             return 0;

@@ -444,7 +444,9 @@ void ping_task() {
 
 void ping_task_timer_worker() {
     if (!main_config.ping_is_running && !homekit_is_pairing()) {
-        xTaskCreate(ping_task, "ping_task", PING_TASK_SIZE, NULL, PING_TASK_PRIORITY, NULL);
+        if (xTaskCreate(ping_task, "ping_task", PING_TASK_SIZE, NULL, PING_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("Creating ping_task");
+        }
     }
 }
 
