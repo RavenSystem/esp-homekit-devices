@@ -249,8 +249,10 @@ static void wifi_scan_task(void *arg) {
 #include "index.html.h"
 
 static void wifi_config_server_on_settings(client_t *client) {
-    xTimerStop(context->auto_reboot_timer, XTIMER_BLOCK_TIME);
-    xTimerDelete(context->auto_reboot_timer, XTIMER_BLOCK_TIME);
+    if (context->auto_reboot_timer) {
+        xTimerStop(context->auto_reboot_timer, XTIMER_BLOCK_TIME);
+        xTimerDelete(context->auto_reboot_timer, XTIMER_BLOCK_TIME);
+    }
     
     static const char http_prologue[] =
         "HTTP/1.1 200 \r\n"

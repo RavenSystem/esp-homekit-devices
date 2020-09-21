@@ -393,11 +393,7 @@ ping_input_t* ping_input_find_by_host(char* host) {
     return ping_input;
 }
 
-void ping_task_timer_worker() {
-    if (main_config.ping_is_running || homekit_is_pairing()) {
-        return;
-    }
-    
+void ping_task() {
     INFO("Ping...");
     
     main_config.ping_is_running = true;
@@ -442,6 +438,14 @@ void ping_task_timer_worker() {
     }
     
     main_config.ping_is_running = false;
+    
+    vTaskDelete(NULL);
+}
+
+void ping_task_timer_worker() {
+    if (!main_config.ping_is_running && !homekit_is_pairing()) {
+        xTaskCreate(ping_task, "ping_task", PING_TASK_SIZE, NULL, PING_TASK_PRIORITY, NULL);
+    }
 }
 
 // -----
@@ -2641,7 +2645,7 @@ void http_get_task(void* pvParameters) {
                 .ai_family = AF_UNSPEC,
                 .ai_socktype = SOCK_STREAM,
             };
-            struct addrinfo *res;
+            struct addrinfo* res;
             
             char port[6];
             memset(port, 0, 6);
