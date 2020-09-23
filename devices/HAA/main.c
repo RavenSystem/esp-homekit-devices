@@ -71,6 +71,8 @@ main_config_t main_config = {
     .ir_tx_gpio = GPIO_OVERFLOW,
     .ir_tx_inv = false,
     
+    .ping_poll_period = PING_POLL_PERIOD_DEFAULT,
+    
     .used_gpio_0 = false,
     .used_gpio_1 = false,
     .used_gpio_2 = false,
@@ -85,22 +87,16 @@ main_config_t main_config = {
     .used_gpio_14 = false,
     .used_gpio_15 = false,
     .used_gpio_16 = false,
-    .used_gpio_17 = false
+    .used_gpio_17 = false,
+    
+    .save_states_timer = NULL,
+    .setup_mode_toggle_timer = NULL,
+    
+    .ch_groups = NULL,
+    .lightbulb_groups = NULL,
+    .ping_inputs = NULL,
+    .last_states = NULL
 };
-
-float ping_poll_period = PING_POLL_PERIOD_DEFAULT;
-
-ETSTimer* setup_mode_toggle_timer;
-
-ETSTimer* pwm_timer;
-pwm_info_t* pwm_info;
-
-ETSTimer* ping_task_timer;
-
-last_state_t* last_states = NULL;
-ch_group_t* ch_groups = NULL;
-lightbulb_group_t* lightbulb_groups = NULL;
-ping_input_t* ping_inputs = NULL;
 
 void hkc_autooff_setter_task(TimerHandle_t xTimer);
 void do_actions(ch_group_t* ch_group, uint8_t int_action);
@@ -181,14 +177,14 @@ ch_group_t* new_ch_group() {
     ch_group->main_enabled = true;
     ch_group->child_enabled = true;
     
-    ch_group->next = ch_groups;
-    ch_groups = ch_group;
+    ch_group->next = main_config.ch_groups;
+    main_config.ch_groups = ch_group;
     
     return ch_group;
 }
 
 ch_group_t* ch_group_find(homekit_characteristic_t* ch) {
-    ch_group_t* ch_group = ch_groups;
+    ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group &&
            ch_group->ch0 != ch &&
            ch_group->ch1 != ch &&
@@ -205,7 +201,7 @@ ch_group_t* ch_group_find(homekit_characteristic_t* ch) {
 }
 
 ch_group_t* ch_group_find_by_acc(uint8_t accessory) {
-    ch_group_t* ch_group = ch_groups;
+    ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group &&
            ch_group->accessory != accessory) {
         ch_group = ch_group->next;
@@ -215,7 +211,7 @@ ch_group_t* ch_group_find_by_acc(uint8_t accessory) {
 }
 
 lightbulb_group_t* lightbulb_group_find(homekit_characteristic_t* ch) {
-    lightbulb_group_t* lightbulb_group = lightbulb_groups;
+    lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
     while (lightbulb_group &&
            lightbulb_group->ch0 != ch) {
         lightbulb_group = lightbulb_group->next;
@@ -262,11 +258,14 @@ void inline led_blink(const int blinks) {
     led_code(main_config.led_gpio, (blinking_params_t) { blinks, 0 });
 }
 
-void reboot_task() {
+void reboot_callback() {
+    sdk_system_restart();
+}
+
+void reboot_haa() {
     led_blink(5);
     INFO("\nRebooting...\n");
-    vTaskDelay(pdMS_TO_TICKS(2900));
-    sdk_system_restart();
+    xTimerStart(xTimerCreate("reboot_task", pdMS_TO_TICKS(2900), pdFALSE, NULL, reboot_callback), XTIMER_BLOCK_TIME);
 }
 
 void resend_arp() {
@@ -313,7 +312,7 @@ void wifi_watchdog() {
     if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
         uint8_t current_channel = sdk_wifi_get_channel();
         if (main_config.wifi_channel != current_channel) {
-            sdk_os_timer_disarm(&main_config.wifi_watchdog_timer);
+            xTimerStop(main_config.wifi_watchdog_timer, XTIMER_BLOCK_TIME);
             
             main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
             INFO("Wifi new Ch%i", current_channel);
@@ -321,7 +320,7 @@ void wifi_watchdog() {
             resend_arp();
             homekit_mdns_announce();
             
-            sdk_os_timer_arm(&main_config.wifi_reconnection_timer, WIFI_RECONNECTION_POLL_PERIOD_MS, 1);
+            xTimerStart(main_config.wifi_reconnection_timer, XTIMER_BLOCK_TIME);
         }
         
         if (main_config.wifi_ping_max_errors != 255 && !main_config.wifi_ping_is_running && !homekit_is_pairing()) {
@@ -333,8 +332,8 @@ void wifi_watchdog() {
     } else {
         ERROR("Wifi error");
         main_config.wifi_error_count = 0;
-        sdk_os_timer_disarm(&main_config.wifi_watchdog_timer);
-        sdk_os_timer_arm(&main_config.wifi_reconnection_timer, WIFI_RECONNECTION_POLL_PERIOD_MS, 1);
+        xTimerStop(main_config.wifi_watchdog_timer, XTIMER_BLOCK_TIME);
+        xTimerStart(main_config.wifi_reconnection_timer, XTIMER_BLOCK_TIME);
     }
 }
 
@@ -351,8 +350,8 @@ void wifi_reconnection() {
             INFO("mDNS reannounced");
             homekit_mdns_announce();
             
-            sdk_os_timer_disarm(&main_config.wifi_reconnection_timer);
-            sdk_os_timer_arm(&main_config.wifi_watchdog_timer, WIFI_WATCHDOG_POLL_PERIOD_MS, 1);
+            xTimerStop(main_config.wifi_reconnection_timer, XTIMER_BLOCK_TIME);
+            xTimerStart(main_config.wifi_watchdog_timer, XTIMER_BLOCK_TIME);
             
         } else {
             main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
@@ -384,7 +383,7 @@ void wifi_reconnection() {
 }
 
 ping_input_t* ping_input_find_by_host(char* host) {
-    ping_input_t* ping_input = ping_inputs;
+    ping_input_t* ping_input = main_config.ping_inputs;
     while (ping_input &&
            strcmp(ping_input->host, host) != 0) {
         ping_input = ping_input->next;
@@ -410,7 +409,7 @@ void ping_task() {
         }
     }
     
-    ping_input_t* ping_input = ping_inputs;
+    ping_input_t* ping_input = main_config.ping_inputs;
     while (ping_input) {
         bool ping_result = false;
         
@@ -457,9 +456,7 @@ void setup_mode_call(const uint8_t gpio, void* args, const uint8_t param) {
     
     if (main_config.setup_mode_time == 0 || xTaskGetTickCountFromISR() < main_config.setup_mode_time * 1000 / portTICK_PERIOD_MS) {
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
-        if (xTaskCreate(reboot_task, "reboot_task", REBOOT_TASK_SIZE, NULL, REBOOT_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating reboot_task");
-        }
+        reboot_haa();
     } else {
         ERROR("Not allowed after %i secs since boot", main_config.setup_mode_time);
     }
@@ -468,7 +465,7 @@ void setup_mode_call(const uint8_t gpio, void* args, const uint8_t param) {
 void setup_mode_toggle_upcount() {
     if (main_config.setup_mode_toggle_counter_max > 0) {
         main_config.setup_mode_toggle_counter++;
-        sdk_os_timer_arm(setup_mode_toggle_timer, SETUP_MODE_TOGGLE_TIME_MS, 0);
+        xTimerStart(main_config.setup_mode_toggle_timer, XTIMER_BLOCK_TIME);
     }
 }
 
@@ -483,7 +480,7 @@ void setup_mode_toggle() {
 // -----
 void save_states() {
     INFO("Saving states");
-    last_state_t* last_state = last_states;
+    last_state_t* last_state = main_config.last_states;
     sysparam_status_t status;
     
     while (last_state) {
@@ -1480,19 +1477,19 @@ void hsi2rgbw(uint16_t h, uint16_t s, uint16_t v, lightbulb_group_t* lightbulb_g
 }
 
 void multipwm_set_all() {
-    multipwm_stop(pwm_info);
-    for (uint8_t i = 0; i < pwm_info->channels; i++) {
-        multipwm_set_duty(pwm_info, i, main_config.multipwm_duty[i]);
+    multipwm_stop(main_config.pwm_info);
+    for (uint8_t i = 0; i < main_config.pwm_info->channels; i++) {
+        multipwm_set_duty(main_config.pwm_info, i, main_config.multipwm_duty[i]);
     }
-    multipwm_start(pwm_info);
+    multipwm_start(main_config.pwm_info);
 }
 
 void rgbw_set_timer_worker() {
     if (!main_config.setpwm_bool_semaphore) {
         main_config.setpwm_bool_semaphore = true;
         
-        uint8_t channels_to_set = pwm_info->channels;
-        lightbulb_group_t* lightbulb_group = lightbulb_groups;
+        uint8_t channels_to_set = main_config.pwm_info->channels;
+        lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
         
         while (main_config.setpwm_is_running && lightbulb_group) {
             if (lightbulb_group->pwm_r != 255) {
@@ -1565,10 +1562,10 @@ void rgbw_set_timer_worker() {
 
             if (channels_to_set == 0) {
                 main_config.setpwm_is_running = false;
-                sdk_os_timer_disarm(pwm_timer);
+                xTimerStop(main_config.pwm_timer, XTIMER_BLOCK_TIME);
                 
                 INFO("Color fixed");
-                for (uint8_t i = 0; i < pwm_info->channels; i++) {
+                for (uint8_t i = 0; i < main_config.pwm_info->channels; i++) {
                     INFO("PWM Ch %i = %i", i, main_config.multipwm_duty[i]);
                 }
             }
@@ -1643,7 +1640,7 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
         
         if (lightbulb_group->is_pwm && !main_config.setpwm_is_running) {
             main_config.setpwm_is_running = true;
-            sdk_os_timer_arm(pwm_timer, RGBW_PERIOD, true);
+            xTimerStart(main_config.pwm_timer, XTIMER_BLOCK_TIME);
         }
         
         do_actions(ch_group, (uint8_t) ch_group->ch0->value.bool_value);
@@ -3441,16 +3438,12 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                 case SYSTEM_ACTION_OTA_UPDATE:
                     if (sysparam_get_string("ota_repo", &ota) == SYSPARAM_OK) {
                         rboot_set_temp_rom(1);
-                        if (xTaskCreate(reboot_task, "reboot", REBOOT_TASK_SIZE, NULL, REBOOT_TASK_PRIORITY, NULL) != pdPASS) {
-                            ERROR("Creating reboot_task");
-                        }
+                        reboot_haa();
                     }
                     break;
                     
                 default:    // case SYSTEM_ACTION_REBOOT:
-                    if (xTaskCreate(reboot_task, "reboot", REBOOT_TASK_SIZE, NULL, REBOOT_TASK_PRIORITY, NULL) != pdPASS) {
-                        ERROR("Creating reboot_task");
-                    }
+                    reboot_haa();
                     break;
             }
         }
@@ -3530,7 +3523,7 @@ void identify(homekit_value_t _value) {
 // ---------
 
 void delayed_sensor_starter_task() {
-    ch_group_t* ch_group = ch_groups;
+    ch_group_t* ch_group = main_config.ch_groups;
     
     bool is_first = true;
     
@@ -3580,16 +3573,14 @@ void run_homekit_server() {
         FREEHEAP();
     }
     
-    sdk_os_timer_setfn(&main_config.wifi_reconnection_timer, wifi_reconnection, NULL);
-    sdk_os_timer_setfn(&main_config.wifi_watchdog_timer, wifi_watchdog, NULL);
-    sdk_os_timer_arm(&main_config.wifi_watchdog_timer, WIFI_WATCHDOG_POLL_PERIOD_MS, 1);
+    main_config.wifi_reconnection_timer = xTimerCreate("wifi_rec", pdMS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS), pdTRUE, NULL, wifi_reconnection);
+    main_config.wifi_watchdog_timer = xTimerCreate("wifi_wd", pdMS_TO_TICKS(WIFI_WATCHDOG_POLL_PERIOD_MS), pdTRUE, NULL, wifi_watchdog);
+    xTimerStart(main_config.wifi_watchdog_timer, XTIMER_BLOCK_TIME);
     
     do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 2);
 
-    if (ping_inputs) {
-        ping_task_timer = new_timer();
-        sdk_os_timer_setfn(ping_task_timer, ping_task_timer_worker, NULL);
-        sdk_os_timer_arm(ping_task_timer, ping_poll_period * 1000.000f, 1);
+    if (main_config.ping_inputs) {
+        xTimerStart(xTimerCreate("ping_task", pdMS_TO_TICKS(main_config.ping_poll_period * 1000.000f), pdTRUE, NULL, ping_task_timer_worker), XTIMER_BLOCK_TIME);
     }
     
     led_blink(6);
@@ -3806,8 +3797,8 @@ void normal_mode_init() {
                 ping_input->host = strdup(cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_HOST)->valuestring);
                 ping_input->last_response = false;
                 
-                ping_input->next = ping_inputs;
-                ping_inputs = ping_input;
+                ping_input->next = main_config.ping_inputs;
+                main_config.ping_inputs = ping_input;
             }
             
             bool response_type = true;
@@ -3863,8 +3854,8 @@ void normal_mode_init() {
                 last_state->id = saved_state_id;
                 last_state->ch = ch;
                 last_state->ch_type = ch_type;
-                last_state->next = last_states;
-                last_states = last_state;
+                last_state->next = main_config.last_states;
+                main_config.last_states = last_state;
                 
                 sysparam_status_t status;
                 bool saved_state_bool = false;
@@ -4598,9 +4589,9 @@ void normal_mode_init() {
     
     // Ping poll period
     if (cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD) != NULL) {
-        ping_poll_period = (float) cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD)->valuedouble;
+        main_config.ping_poll_period = (float) cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD)->valuedouble;
     }
-    INFO("Ping period: %g secs", ping_poll_period);
+    INFO("Ping period: %g secs", main_config.ping_poll_period);
     
     // Allowed Setup Mode Time
     if (cJSON_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME) != NULL) {
@@ -4640,8 +4631,7 @@ void normal_mode_init() {
     INFO("Toggles to enter setup mode: %i", main_config.setup_mode_toggle_counter_max);
     
     if (main_config.setup_mode_toggle_counter_max > 0) {
-        setup_mode_toggle_timer = new_timer();
-        sdk_os_timer_setfn(setup_mode_toggle_timer, setup_mode_toggle, NULL);
+        main_config.setup_mode_toggle_timer = xTimerCreate("setup_toggle", pdMS_TO_TICKS(SETUP_MODE_TOGGLE_TIME_MS), pdFALSE, NULL, setup_mode_toggle);
     }
     
     // Buttons to enter setup mode
@@ -5799,20 +5789,18 @@ void normal_mode_init() {
             is_pwm = false;
         }
 
-        if (is_pwm && !lightbulb_groups) {
+        if (is_pwm && !main_config.lightbulb_groups) {
             INFO("PWM Init");
-            pwm_timer = malloc(sizeof(ETSTimer));
-            memset(pwm_timer, 0, sizeof(*pwm_timer));
-            sdk_os_timer_setfn(pwm_timer, rgbw_set_timer_worker, NULL);
+            main_config.pwm_timer = xTimerCreate("pwm_timer", pdMS_TO_TICKS(RGBW_PERIOD), pdTRUE, NULL, rgbw_set_timer_worker);
             
-            pwm_info = malloc(sizeof(pwm_info_t));
-            memset(pwm_info, 0, sizeof(*pwm_info));
+            main_config.pwm_info = malloc(sizeof(pwm_info_t));
+            memset(main_config.pwm_info, 0, sizeof(*main_config.pwm_info));
             
-            multipwm_init(pwm_info);
+            multipwm_init(main_config.pwm_info);
             if (main_config.pwm_freq > 0) {
-                multipwm_set_freq(pwm_info, main_config.pwm_freq);
+                multipwm_set_freq(main_config.pwm_info, main_config.pwm_freq);
             }
-            pwm_info->channels = 0;
+            main_config.pwm_info->channels = 0;
         }
         
         homekit_characteristic_t* ch0 = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .setter_ex=hkc_rgbw_setter);
@@ -5853,64 +5841,64 @@ void normal_mode_init() {
         lightbulb_group->armed_autodimmer = false;
         lightbulb_group->autodimmer_task_delay = AUTODIMMER_TASK_DELAY_DEFAULT;
         lightbulb_group->autodimmer_task_step = AUTODIMMER_TASK_STEP_DEFAULT;
-        lightbulb_group->next = lightbulb_groups;
-        lightbulb_groups = lightbulb_group;
+        lightbulb_group->next = main_config.lightbulb_groups;
+        main_config.lightbulb_groups = lightbulb_group;
 
         if (is_pwm) {
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                lightbulb_group->pwm_r = pwm_info->channels;
-                pwm_info->channels++;
-                multipwm_set_pin(pwm_info, lightbulb_group->pwm_r, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R)->valuedouble);
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                lightbulb_group->pwm_r = main_config.pwm_info->channels;
+                main_config.pwm_info->channels++;
+                multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_r, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R)->valuedouble);
             }
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_R) != NULL) {
                 lightbulb_group->factor_r = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_R)->valuedouble;
             }
 
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                lightbulb_group->pwm_g = pwm_info->channels;
-                pwm_info->channels++;
-                multipwm_set_pin(pwm_info, lightbulb_group->pwm_g, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G)->valuedouble);
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                lightbulb_group->pwm_g = main_config.pwm_info->channels;
+                main_config.pwm_info->channels++;
+                multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_g, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G)->valuedouble);
             }
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_G) != NULL) {
                 lightbulb_group->factor_g = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_G)->valuedouble;
             }
 
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                lightbulb_group->pwm_b = pwm_info->channels;
-                pwm_info->channels++;
-                multipwm_set_pin(pwm_info, lightbulb_group->pwm_b, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B)->valuedouble);
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                lightbulb_group->pwm_b = main_config.pwm_info->channels;
+                main_config.pwm_info->channels++;
+                multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_b, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B)->valuedouble);
             }
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_B) != NULL) {
                 lightbulb_group->factor_b = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_B)->valuedouble;
             }
 
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                lightbulb_group->pwm_w = pwm_info->channels;
-                pwm_info->channels++;
-                multipwm_set_pin(pwm_info, lightbulb_group->pwm_w, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W)->valuedouble);
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                lightbulb_group->pwm_w = main_config.pwm_info->channels;
+                main_config.pwm_info->channels++;
+                multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_w, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W)->valuedouble);
             }
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_W) != NULL) {
                 lightbulb_group->factor_w = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_W)->valuedouble;
             }
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_CW) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                lightbulb_group->pwm_cw = pwm_info->channels;
-                pwm_info->channels++;
-                multipwm_set_pin(pwm_info, lightbulb_group->pwm_cw, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_CW)->valuedouble);
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_CW) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                lightbulb_group->pwm_cw = main_config.pwm_info->channels;
+                main_config.pwm_info->channels++;
+                multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_cw, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_CW)->valuedouble);
             }
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_CW) != NULL) {
                 lightbulb_group->factor_cw = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_CW)->valuedouble;
             }
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_WW) != NULL && pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                lightbulb_group->pwm_ww = pwm_info->channels;
-                pwm_info->channels++;
-                multipwm_set_pin(pwm_info, lightbulb_group->pwm_ww, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_WW)->valuedouble);
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_WW) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                lightbulb_group->pwm_ww = main_config.pwm_info->channels;
+                main_config.pwm_info->channels++;
+                multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_ww, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_WW)->valuedouble);
             }
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_WW) != NULL) {
@@ -6618,12 +6606,12 @@ void normal_mode_init() {
     INFO("");
     
     // --- LIGHTBULBS INIT
-    if (lightbulb_groups) {
+    if (main_config.lightbulb_groups) {
         INFO("Init Lights");
         
         main_config.setpwm_bool_semaphore = false;
         
-        lightbulb_group_t* lightbulb_group = lightbulb_groups;
+        lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
         while (lightbulb_group) {
             ch_group_t* ch_group = ch_group_find(lightbulb_group->ch0);
             bool kill_switch = false;
@@ -6774,7 +6762,7 @@ void user_init(void) {
     }
 
     INFO("\n");
-    
+    INFO("size %i", sizeof(main_config.save_states_timer));
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     snprintf(main_config.name_value, 11, "HAA-%02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);
@@ -6810,3 +6798,4 @@ void user_init(void) {
         }
     }
 }
+

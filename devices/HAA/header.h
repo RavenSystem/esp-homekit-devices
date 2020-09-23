@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "3.3.3"
+#define FIRMWARE_VERSION                    "3.4.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -44,7 +44,6 @@
 // Task Stack Sizes
 #define INITIAL_SETUP_TASK_SIZE             (1024)
 #define LED_TASK_SIZE                       (configMINIMAL_STACK_SIZE)
-#define REBOOT_TASK_SIZE                    (512)
 #define PING_TASK_SIZE                      (512)
 #define AUTOSWITCH_TASK_SIZE                (512)
 #define AUTOOFF_SETTER_TASK_SIZE            (512)
@@ -59,7 +58,6 @@
 // Task Priorities
 #define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
 #define LED_TASK_PRIORITY                   (tskIDLE_PRIORITY + 1)
-#define REBOOT_TASK_PRIORITY                (tskIDLE_PRIORITY + 1)
 #define PING_TASK_PRIORITY                  (tskIDLE_PRIORITY + 0)
 #define AUTOSWITCH_TASK_PRIORITY            (tskIDLE_PRIORITY + 1)
 #define AUTOOFF_SETTER_TASK_PRIORITY        (tskIDLE_PRIORITY + 1)
@@ -454,7 +452,7 @@
 #define INFO(message, ...)                  printf(message "\n", ##__VA_ARGS__)
 #define ERROR(message, ...)                 printf("! " message "\n", ##__VA_ARGS__)
 
-#define XTIMER_BLOCK_TIME                   (100)
+#define XTIMER_BLOCK_TIME                   (pdMS_TO_TICKS(1100))
 
 #define FREEHEAP()                          printf("Free Heap: %d\n", xPortGetFreeHeapSize())
 

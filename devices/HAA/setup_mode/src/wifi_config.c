@@ -57,7 +57,7 @@
 
 #define MAX_BODY_LEN                    (14336)
 
-#define XTIMER_BLOCK_TIME               (100)
+#define XTIMER_BLOCK_TIME               (pdMS_TO_TICKS(1100))
 
 #define INFO(message, ...)              printf(message "\n", ##__VA_ARGS__);
 #define ERROR(message, ...)             printf("! " message "\n", ##__VA_ARGS__);
@@ -68,6 +68,16 @@ typedef enum {
     ENDPOINT_SETTINGS,
     ENDPOINT_SETTINGS_UPDATE,
 } endpoint_t;
+
+typedef struct _wifi_network_info {
+    char ssid[33];
+    uint8_t bssid[6];
+    char rssi[4];
+    char channel[3];
+    bool secure;
+
+    struct _wifi_network_info *next;
+} wifi_network_info_t;
 
 typedef struct {
     char* ssid_prefix;
@@ -81,11 +91,14 @@ typedef struct {
     TaskHandle_t http_task_handle;
     TaskHandle_t dns_task_handle;
     
+    wifi_network_info_t* wifi_networks;
+    SemaphoreHandle_t wifi_networks_mutex;
+    
     uint8_t check_counter: 7;
-    uint8_t hostname_ready: 1;
+    bool hostname_ready: 1;
 } wifi_config_context_t;
 
-static wifi_config_context_t *context;
+static wifi_config_context_t* context;
 
 typedef struct _client {
     int fd;
@@ -148,23 +161,21 @@ static void client_send_redirect(client_t *client, int code, const char *redirec
     client_send(client, buffer, len);
 }
 
-typedef struct _wifi_network_info {
-    char ssid[33];
-    uint8_t bssid[6];
-    char rssi[4];
-    char channel[3];
-    bool secure;
-
-    struct _wifi_network_info *next;
-} wifi_network_info_t;
-
 static void stop_reboot_timer() {
     if (context->auto_reboot_timer) {
+        xTimerStop(context->auto_reboot_timer, XTIMER_BLOCK_TIME);
+        xTimerDelete(context->auto_reboot_timer, XTIMER_BLOCK_TIME);
+    }
+}
+
+static void stop_sta_connect_timer() {
+    if (context->sta_connect_timeout) {
         xTimerStop(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
         xTimerDelete(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
     }
 }
 
+uint8_t wifi_config_connect();
 void wifi_config_reset() {
     struct sdk_station_config sta_config;
     memset(&sta_config, 0, sizeof(sta_config));
@@ -174,11 +185,8 @@ void wifi_config_reset() {
     sdk_wifi_station_set_config(&sta_config);
     sdk_wifi_set_opmode(STATION_MODE);
     sdk_wifi_station_connect();
-    sdk_wifi_station_set_auto_connect(true);
+    sdk_wifi_station_set_auto_connect(false);
 }
-
-wifi_network_info_t* wifi_networks = NULL;
-SemaphoreHandle_t wifi_networks_mutex;
 
 static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
     if (status != SCAN_OK) {
@@ -186,15 +194,15 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
         return;
     }
 
-    xSemaphoreTake(wifi_networks_mutex, portMAX_DELAY);
+    xSemaphoreTake(context->wifi_networks_mutex, portMAX_DELAY);
 
-    wifi_network_info_t *wifi_network = wifi_networks;
+    wifi_network_info_t* wifi_network = context->wifi_networks;
     while (wifi_network) {
         wifi_network_info_t *next = wifi_network->next;
         free(wifi_network);
         wifi_network = next;
     }
-    wifi_networks = NULL;
+    context->wifi_networks = NULL;
 
     struct sdk_bss_info *bss = (struct sdk_bss_info *)arg;
     // first one is invalid
@@ -203,7 +211,7 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
     while (bss) {
         //INFO("%s (%i) Ch %i - %02x%02x%02x%02x%02x%02x", bss->ssid, bss->rssi, bss->channel, bss->bssid[0], bss->bssid[1], bss->bssid[2], bss->bssid[3], bss->bssid[4], bss->bssid[5]);
 
-        wifi_network_info_t *net = wifi_networks;
+        wifi_network_info_t* net = context->wifi_networks;
         while (net) {
             if (!memcmp(net->bssid, bss->bssid, 6)) {
                 break;
@@ -219,15 +227,15 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
             itoa(bss->rssi, net->rssi, 10);
             itoa(bss->channel, net->channel, 10);
             net->secure = bss->authmode != AUTH_OPEN;
-            net->next = wifi_networks;
+            net->next = context->wifi_networks;
 
-            wifi_networks = net;
+            context->wifi_networks = net;
         }
 
         bss = bss->next.stqe_next;
     }
 
-    xSemaphoreGive(wifi_networks_mutex);
+    xSemaphoreGive(context->wifi_networks_mutex);
 }
 
 static void wifi_scan_task(void *arg) {
@@ -238,17 +246,17 @@ static void wifi_scan_task(void *arg) {
         vTaskDelay(pdMS_TO_TICKS(10000));
     }
 
-    xSemaphoreTake(wifi_networks_mutex, portMAX_DELAY);
+    xSemaphoreTake(context->wifi_networks_mutex, portMAX_DELAY);
 
-    wifi_network_info_t *wifi_network = wifi_networks;
+    wifi_network_info_t* wifi_network = context->wifi_networks;
     while (wifi_network) {
         wifi_network_info_t *next = wifi_network->next;
         free(wifi_network);
         wifi_network = next;
     }
-    wifi_networks = NULL;
+    context->wifi_networks = NULL;
 
-    xSemaphoreGive(wifi_networks_mutex);
+    xSemaphoreGive(context->wifi_networks_mutex);
 
     vTaskDelete(NULL);
 }
@@ -312,8 +320,8 @@ static void wifi_config_server_on_settings(client_t *client) {
     // WiFi Networks
     char buffer[120];
     char bssid[13];
-    if (xSemaphoreTake(wifi_networks_mutex, 5000 / portTICK_PERIOD_MS)) {
-        wifi_network_info_t *net = wifi_networks;
+    if (xSemaphoreTake(context->wifi_networks_mutex, pdMS_TO_TICKS(5000))) {
+        wifi_network_info_t* net = context->wifi_networks;
         while (net) {
             snprintf(bssid, 13, "%02x%02x%02x%02x%02x%02x", net->bssid[0], net->bssid[1], net->bssid[2], net->bssid[3], net->bssid[4], net->bssid[5]);
             snprintf(
@@ -326,7 +334,7 @@ static void wifi_config_server_on_settings(client_t *client) {
             net = net->next;
         }
 
-        xSemaphoreGive(wifi_networks_mutex);
+        xSemaphoreGive(context->wifi_networks_mutex);
     }
 
     client_send_chunk(client, html_settings_wifi);
@@ -580,6 +588,7 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
         }
         case ENDPOINT_SETTINGS_UPDATE: {
             stop_reboot_timer();
+            stop_sta_connect_timer();
             wifi_config_context_free(context);
             xTaskCreate(wifi_config_server_on_settings_update_task, "on_settings_update_task", 512, client, (tskIDLE_PRIORITY + 0), NULL);
             return 0;
@@ -819,8 +828,8 @@ static void wifi_config_softap_start() {
     ip4_addr_t first_client_ip;
     first_client_ip.addr = ap_ip.ip.addr + htonl(1);
 
-    wifi_networks_mutex = xSemaphoreCreateBinary();
-    xSemaphoreGive(wifi_networks_mutex);
+    context->wifi_networks_mutex = xSemaphoreCreateBinary();
+    xSemaphoreGive(context->wifi_networks_mutex);
 
     xTaskCreate(wifi_scan_task, "wifi_scan_task", 384, NULL, (tskIDLE_PRIORITY + 0), NULL);
 
@@ -868,14 +877,11 @@ static void wifi_config_sta_connect_timeout_callback() {
         }
     } else {
         context->check_counter++;
-        if (context->check_counter == 40) {
+        if (context->check_counter == 10) {
+            wifi_config_connect();
+        } else if (context->check_counter == 120) {
             context->check_counter = 0;
-            struct netif *netif = sdk_system_get_netif(STATION_IF);
-            LOCK_TCPIP_CORE();
-            dhcp_release_and_stop(netif);
-            INFO("Restarting DHCP client");
-            dhcp_start(netif);
-            UNLOCK_TCPIP_CORE();
+            wifi_config_reset();
         }
     }
 }
@@ -889,7 +895,7 @@ static void auto_reboot_run() {
     }
 
     INFO("Auto Reboot");
-    vTaskDelay(pdMS_TO_TICKS(200));
+    vTaskDelay(pdMS_TO_TICKS(150));
     
     sdk_system_restart();
 }
@@ -1011,7 +1017,7 @@ void wifi_config_init(const char* ssid_prefix, const char* password, void (*on_w
 
     context->on_wifi_ready = on_wifi_ready;
     
-    context->check_counter = 0;
+    context->check_counter = 10;
 
     wifi_config_station_connect();
 }

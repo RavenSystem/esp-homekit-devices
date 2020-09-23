@@ -8,52 +8,6 @@
 #ifndef __HAA_TYPES_H__
 #define __HAA_TYPES_H__
 
-typedef struct _main_config {
-    uint8_t wifi_status: 2;
-    uint8_t wifi_channel: 4;
-    bool ping_is_running: 1;
-    bool enable_homekit_server: 1;
-    int8_t setup_mode_toggle_counter;
-    int8_t setup_mode_toggle_counter_max;
-    uint8_t ir_tx_freq;
-    
-    uint8_t wifi_ping_max_errors;
-    uint8_t wifi_error_count;
-    uint8_t ir_tx_gpio: 5;
-    bool ir_tx_inv: 1;
-    bool setpwm_is_running: 1;
-    bool setpwm_bool_semaphore: 1;
-    uint8_t led_gpio: 5;
-    bool wifi_ping_is_running: 1;
-    bool used_gpio_0: 1;
-    bool used_gpio_1: 1;
-    
-    uint16_t setup_mode_time;
-    bool used_gpio_2: 1;
-    bool used_gpio_3: 1;
-    bool used_gpio_4: 1;
-    bool used_gpio_5: 1;
-    bool used_gpio_9: 1;
-    bool used_gpio_10: 1;
-    bool used_gpio_11: 1;
-    bool used_gpio_12: 1;
-    bool used_gpio_13: 1;
-    bool used_gpio_14: 1;
-    bool used_gpio_15: 1;
-    bool used_gpio_16: 1;
-    bool used_gpio_17: 1;
-    
-    uint16_t pwm_freq;
-    uint16_t multipwm_duty[MULTIPWM_MAX_CHANNELS];
-    
-    char name_value[11];
-    char serial_value[13];
-    
-    TimerHandle_t save_states_timer;
-    ETSTimer wifi_reconnection_timer;
-    ETSTimer wifi_watchdog_timer;
-} main_config_t;
-
 typedef struct _autooff_setter_params {
     homekit_characteristic_t* ch;
     uint8_t type;
@@ -261,5 +215,62 @@ typedef struct _str_ch_value {
 
     struct _str_ch_value* next;
 } str_ch_value_t;
+
+typedef struct _main_config {
+    uint8_t wifi_status: 2;
+    uint8_t wifi_channel: 4;
+    bool ping_is_running: 1;
+    bool enable_homekit_server: 1;
+    int8_t setup_mode_toggle_counter;
+    int8_t setup_mode_toggle_counter_max;
+    uint8_t ir_tx_freq;
+    
+    uint8_t wifi_ping_max_errors;
+    uint8_t wifi_error_count;
+    uint8_t ir_tx_gpio: 5;
+    bool ir_tx_inv: 1;
+    bool setpwm_is_running: 1;
+    bool setpwm_bool_semaphore: 1;
+    uint8_t led_gpio: 5;
+    bool wifi_ping_is_running: 1;
+    bool used_gpio_0: 1;
+    bool used_gpio_1: 1;
+    
+    uint16_t setup_mode_time;
+    bool used_gpio_2: 1;
+    bool used_gpio_3: 1;
+    bool used_gpio_4: 1;
+    bool used_gpio_5: 1;
+    bool used_gpio_9: 1;
+    bool used_gpio_10: 1;
+    bool used_gpio_11: 1;
+    bool used_gpio_12: 1;
+    bool used_gpio_13: 1;
+    bool used_gpio_14: 1;
+    bool used_gpio_15: 1;
+    bool used_gpio_16: 1;
+    bool used_gpio_17: 1;
+    
+    uint16_t pwm_freq;
+    uint16_t multipwm_duty[MULTIPWM_MAX_CHANNELS];
+    
+    char name_value[11];
+    char serial_value[13];
+    
+    float ping_poll_period;
+    
+    TimerHandle_t save_states_timer;
+    TimerHandle_t setup_mode_toggle_timer;
+    TimerHandle_t wifi_reconnection_timer;
+    TimerHandle_t wifi_watchdog_timer;
+    TimerHandle_t pwm_timer;
+    
+    ch_group_t* ch_groups;
+    ping_input_t* ping_inputs;
+    lightbulb_group_t* lightbulb_groups;
+    last_state_t* last_states;
+    
+    pwm_info_t* pwm_info;
+} main_config_t;
 
 #endif // __HAA_TYPES_H__
