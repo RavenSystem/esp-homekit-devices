@@ -14,8 +14,13 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <lwip/sockets.h>
 #include <lwip/api.h>
+#include "lwip/err.h"
+#include "lwip/sockets.h"
+#include "lwip/sys.h"
+#include "lwip/netdb.h"
+#include "lwip/dns.h"
+#include "lwip/etharp.h"
 #include <esp8266.h>
 #include <wolfssl/ssl.h>
 #include <wolfssl/wolfcrypt/types.h>
@@ -51,7 +56,6 @@ static const byte raw_public_key[] = {
 static ecc_key public_key;
 static byte file_first_byte[] = { 0xff };
 static WOLFSSL_CTX* ctx;
-static int local_port = 0;
 static char last_host[HOST_LEN];
 static char last_location[RECV_BUF_LEN];
 
@@ -108,7 +112,7 @@ static void ota_get_location(const char* repo) {
 void ota_init(char* repo, const bool is_ssl) {
     printf("INIT\n");
 
-    ip_addr_t target_ip;
+    //ip_addr_t target_ip;
     
     //rboot setup
     rboot_config conf;
@@ -150,75 +154,58 @@ void ota_init(char* repo, const bool is_ssl) {
     printf("DNS check result  = ");
     
     ota_get_host(repo);
-    if (netconn_gethostbyname(last_host, &target_ip)) {
+
+    const struct addrinfo hints = {
+        .ai_family = AF_UNSPEC,
+        .ai_socktype = SOCK_STREAM,
+    };
+    struct addrinfo *res;
+    
+    if (getaddrinfo(last_host, NULL, &hints, &res)) {
         printf("ERROR\n");
         ota_reboot();
     }
-
+    
+    freeaddrinfo(res);
+    
     word32 idx = 0;
     wc_ecc_init(&public_key);
     wc_EccPublicKeyDecode(raw_public_key, &idx, &public_key, sizeof(raw_public_key));
-
 
     printf("OK\n");
 }
 
 static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, const bool is_ssl) {
-    printf("NEW CONNECTION LocalPort=");
+    printf("\n*** NEW CONNECTION\nDNS..");
     int ret;
-    ip_addr_t target_ip;
-    struct sockaddr_in sock_addr;
-    unsigned char initial_port[2];
-    WC_RNG rng;
-    
-    if (!local_port) {
-        wc_RNG_GenerateBlock(&rng, initial_port, 2);
-        local_port = (256 * initial_port[0] + initial_port[1]) | 0xc000;
-    }
-    
-    printf("%04x DNS..", local_port);
-    
-    ret = netconn_gethostbyname(host, &target_ip);
+    const struct addrinfo hints = {
+        .ai_family = AF_UNSPEC,
+        .ai_socktype = SOCK_STREAM,
+    };
+    struct addrinfo* res;
+
+    char port_s[6];
+    memset(port_s, 0, 6);
+    itoa(port, port_s, 10);
+    ret = getaddrinfo(host, port_s, &hints, &res);
     if (ret) {
+        freeaddrinfo(res);
         printf(FAILED);
         return -2;
     }
-    printf("OK ");
     
-    printf("IP addr: %d.%d.%d.%d ", (unsigned char) ((target_ip.addr & 0x000000ff) >> 0),
-                                    (unsigned char) ((target_ip.addr & 0x0000ff00) >> 8),
-                                    (unsigned char) ((target_ip.addr & 0x00ff0000) >> 16),
-                                    (unsigned char) ((target_ip.addr & 0xff000000) >> 24));
-
-    *socket = socket(AF_INET, SOCK_STREAM, 0);
+    printf("OK Socket..");
+    *socket = socket(res->ai_family, res->ai_socktype, 0);
     if (*socket < 0) {
+        freeaddrinfo(res);
         printf(FAILED);
         return -3;
     }
 
-    printf("Local..");
-    memset(&sock_addr, 0, sizeof(sock_addr));
-    sock_addr.sin_family = AF_INET;
-    sock_addr.sin_addr.s_addr = 0;
-    sock_addr.sin_port = htons(local_port++);
-    if (local_port == 0x10000) {
-        local_port = 0xc000;
-    }
-    
-    ret = bind(*socket, (struct sockaddr*) &sock_addr, sizeof(sock_addr));
+    printf("OK Connect..");
+    ret = connect(*socket, res->ai_addr, res->ai_addrlen);
     if (ret) {
-        printf(FAILED);
-        return -2;
-    }
-    printf("OK ");
-
-    printf("Remote..");
-    memset(&sock_addr, 0, sizeof(sock_addr));
-    sock_addr.sin_family = AF_INET;
-    sock_addr.sin_addr.s_addr = target_ip.addr;
-    sock_addr.sin_port = htons(port);
-    ret = connect(*socket, (struct sockaddr*)&sock_addr, sizeof(sock_addr));
-    if (ret) {
+        freeaddrinfo(res);
         printf(FAILED);
         return -2;
     }
@@ -229,6 +216,7 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
         *ssl = wolfSSL_new(ctx);
         
         if (!*ssl) {
+            freeaddrinfo(res);
             printf(FAILED);
             return -2;
         }
@@ -239,12 +227,12 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
         wolfSSL_set_fd(*ssl, *socket);
         printf("set_fd ");
 
-        ret = wolfSSL_check_domain_name(*ssl, host);
         //wolfSSL_Debugging_OFF();
 
         printf("to %s port %d..", host, port);
         ret = wolfSSL_connect(*ssl);
         if (ret != SSL_SUCCESS) {
+            freeaddrinfo(res);
             printf("failed, return [-0x%x]\n", -ret);
             ret = wolfSSL_get_error(*ssl, ret);
             printf("wolfSSL_send error = %d\n", ret);
@@ -252,6 +240,8 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
         }
         printf("OK");
     }
+    
+    freeaddrinfo(res);
     
     printf("\n");
     

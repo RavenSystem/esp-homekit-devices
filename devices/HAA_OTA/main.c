@@ -79,7 +79,7 @@ void ota_task(void *arg) {
 
         ota_init(user_repo, is_ssl);
         
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
+        vTaskDelay(pdMS_TO_TICKS(2000));
         
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
         
@@ -196,7 +196,7 @@ void ota_task(void *arg) {
                 break;
             }
             
-            vTaskDelay(5000 / portTICK_PERIOD_MS);
+            vTaskDelay(pdMS_TO_TICKS(5000));
         }
     } else {
         printf("\n!!! Error readind HAAMAIN Version. Fixing...\n\n");
