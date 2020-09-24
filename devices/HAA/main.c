@@ -254,7 +254,7 @@ bool ping_host(char* host) {
     return ping_result;
 }
 
-void inline led_blink(const int blinks) {
+inline void led_blink(const int blinks) {
     led_code(main_config.led_gpio, (blinking_params_t) { blinks, 0 });
 }
 
@@ -514,7 +514,7 @@ void save_states() {
     }
 }
 
-void inline save_states_callback() {
+inline void save_states_callback() {
     xTimerStart(main_config.save_states_timer, XTIMER_BLOCK_TIME);
 }
 
@@ -3248,7 +3248,7 @@ void autoswitch_timer(TimerHandle_t xTimer) {
 }
 
 void do_actions(ch_group_t* ch_group, uint8_t action) {
-    INFO("Exec acc %i, action %i", ch_group->accessory, action);
+    INFO("Exec Action: acc %i, action %i", ch_group->accessory, action);
     
     // Copy actions
     action_copy_t* action_copy = ch_group->action_copy;
@@ -3266,7 +3266,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     while(action_relay) {
         if (action_relay->action == action) {
             gpio_write(action_relay->gpio, action_relay->value);
-            INFO("DigO GPIO %i -> %i", action_relay->gpio, action_relay->value);
+            INFO("Digital Output: gpio %i, val %i, inch %g", action_relay->gpio, action_relay->value, action_relay->inching);
             
             if (action_relay->inching > 0) {
                 xTimerStart(xTimerCreate("autoswitch", pdMS_TO_TICKS(action_relay->inching * 1000), pdFALSE, (void*) action_relay, autoswitch_timer), XTIMER_BLOCK_TIME);
@@ -3282,7 +3282,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         if (action_acc_manager->action == action) {
             ch_group_t* ch_group = ch_group_find_by_acc(action_acc_manager->accessory);
             if (ch_group) {
-                INFO("Acc Manager %i -> %.3f", action_acc_manager->accessory, action_acc_manager->value);
+                INFO("Acc Manager: target %i, val %g", action_acc_manager->accessory, action_acc_manager->value);
                 
                 if (action_acc_manager->value == -10000.f) {
                     ch_group->main_enabled = false;
@@ -3415,7 +3415,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                     }
                 }
             } else {
-                ERROR("No acc found: %i", action_acc_manager->accessory);
+                ERROR("Target not found");
             }
         }
 
@@ -3426,7 +3426,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     action_system_t* action_system = ch_group->action_system;
     while(action_system) {
         if (action_system->action == action) {
-            INFO("Sys Action %i", action_system->value);
+            INFO("System Action: val %i", action_system->value);
             
             char* ota = NULL;
             
@@ -3539,7 +3539,7 @@ void delayed_sensor_starter_task() {
             }
             is_first = false;
             
-            INFO("Starting delayed sensor acc: %i", ch_group->accessory);
+            INFO("Starting delayed sensor for acc %i", ch_group->accessory);
             
             temperature_timer_worker(ch_group);
             sdk_os_timer_arm(ch_group->timer, TH_SENSOR_POLL_PERIOD * 1000, 1);
@@ -3589,7 +3589,7 @@ void run_homekit_server() {
 void printf_header() {
     INFO("\n\n");
     INFO("Home Accessory Architect v%s", FIRMWARE_VERSION);
-    INFO("Developed by José Antonio Jiménez Campos (@RavenSystem)\n");
+    INFO("(c) 2019-2020 José Antonio Jiménez Campos\n");
     
 #ifdef HAA_DEBUG
     INFO("HAA DEBUG ENABLED\n");
@@ -3611,11 +3611,11 @@ void normal_mode_init() {
         uart_set_baud(0, 115200);
         printf_header();
         INFO("JSON:\n %s\n\n", txt_config ? txt_config : "none");
-        INFO("! Invalid JSON\n");
+        ERROR("Invalid JSON\n");
         sysparam_set_int8(TOTAL_ACC_SYSPARAM, 0);
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);
         
-        INFO("Rebooting...");
+        INFO("Rebooting...\n\n");
         vTaskDelay(pdMS_TO_TICKS(200));
         sdk_system_restart();
         
@@ -3775,7 +3775,7 @@ void normal_mode_init() {
             }
             adv_button_register_callback_fn(gpio, callback, button_type, (void*) ch_group, param);
             
-            INFO("DigI GPIO: %i, type: %i, inv: %i, filter: %i", gpio, button_type, inverted, button_filter);
+            INFO("New Digital Input: gpio %i, type %i, inv %i, filter %i", gpio, button_type, inverted, button_filter);
              
             if (gpio_read(gpio) == button_type) {
                 run_at_launch = true;
@@ -3832,7 +3832,7 @@ void normal_mode_init() {
                 ping_input->callback_0 = ping_input_callback_fn;
             }
             
-            INFO("Ping input: %s, res: %i", ping_input->host, response_type);
+            INFO("New Ping Input: host %s, res %i", ping_input->host, response_type);
         }
     }
     
@@ -3910,13 +3910,13 @@ void normal_mode_init() {
                 }
                 
                 if (status != SYSPARAM_OK) {
-                    ERROR("No saved state found");
+                    ERROR("Init state: not saved, using default");
                 }
                 
                 if (ch_type == CH_TYPE_STRING && state > 0) {
-                    INFO("Init state = %s", (char*) (uint32_t) state);
+                    INFO("Init state: %s", (char*) (uint32_t) state);
                 } else {
-                    INFO("Init state = %.2f", state);
+                    INFO("Init state: %g", state);
                 }
                 
             }
@@ -3927,7 +3927,7 @@ void normal_mode_init() {
     
     // REGISTER ACTIONS
     // Copy actions
-    void new_action_copy(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+    inline void new_action_copy(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
         action_copy_t* last_action = ch_group->action_copy;
         
         void register_action(cJSON* json_accessory, uint8_t new_int_action) {
@@ -3944,6 +3944,8 @@ void normal_mode_init() {
                     
                     action_copy->next = last_action;
                     last_action = action_copy;
+                    
+                    INFO("New Copy Action %i: val %i", new_int_action, action_copy->new_action);
                 }
             }
         }
@@ -3960,7 +3962,7 @@ void normal_mode_init() {
     }
     
     // Digital outputs
-    void new_action_relay(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+    inline void new_action_relay(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
         action_relay_t* last_action = ch_group->action_relay;
         
         void register_action(cJSON* json_accessory, uint8_t new_int_action) {
@@ -3984,7 +3986,6 @@ void normal_mode_init() {
                             gpio_write(action_relay->gpio, false);
                             
                             set_used_gpio(action_relay->gpio);
-                            INFO("DigO GPIO: %i", action_relay->gpio);
                         }
                         
                         action_relay->value = false;
@@ -3999,6 +4000,8 @@ void normal_mode_init() {
                         
                         action_relay->next = last_action;
                         last_action = action_relay;
+                        
+                        INFO("New Digital Output Action %i: gpio %i, val %i, inch %g", new_int_action, action_relay->gpio, action_relay->value, action_relay->inching);
                     }
                 }
             }
@@ -4016,7 +4019,7 @@ void normal_mode_init() {
     }
     
     // Accessory Manager
-    void new_action_acc_manager(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+    inline void new_action_acc_manager(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
         action_acc_manager_t* last_action = ch_group->action_acc_manager;
         
         void register_action(cJSON* json_accessory, uint8_t new_int_action) {
@@ -4034,12 +4037,8 @@ void normal_mode_init() {
                         
                         action_acc_manager->action = new_int_action;
                         
-                        action_acc_manager->is_kill_switch = false;
                         action_acc_manager->accessory = 1;
-                        if (cJSON_GetObjectItemCaseSensitive(json_acc_manager, ACCESSORY_INDEX_KILL_SWITCH) != NULL) {
-                            action_acc_manager->is_kill_switch = true;
-                            action_acc_manager->accessory = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_acc_manager, ACCESSORY_INDEX_KILL_SWITCH)->valuedouble;
-                        } else if (cJSON_GetObjectItemCaseSensitive(json_acc_manager, ACCESSORY_INDEX) != NULL) {
+                        if (cJSON_GetObjectItemCaseSensitive(json_acc_manager, ACCESSORY_INDEX) != NULL) {
                             action_acc_manager->accessory = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_acc_manager, ACCESSORY_INDEX)->valuedouble;
                         }
 
@@ -4050,6 +4049,8 @@ void normal_mode_init() {
                         
                         action_acc_manager->next = last_action;
                         last_action = action_acc_manager;
+                        
+                        INFO("New Acc Manager Action %i: acc %i, val %g", new_int_action, action_acc_manager->accessory, action_acc_manager->value);
                     }
                 }
             }
@@ -4067,7 +4068,7 @@ void normal_mode_init() {
     }
     
     // System Actions
-    void new_action_system(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+    inline void new_action_system(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
         action_system_t* last_action = ch_group->action_system;
         
         void register_action(cJSON* json_accessory, uint8_t new_int_action) {
@@ -4088,6 +4089,8 @@ void normal_mode_init() {
                         
                         action_system->next = last_action;
                         last_action = action_system;
+                        
+                        INFO("New System Action %i: val %i", new_int_action, action_system->value);
                     }
                 }
             }
@@ -4105,7 +4108,7 @@ void normal_mode_init() {
     }
     
     // HTTP/TCP Actions
-    void new_action_http(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+    inline void new_action_http(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
         action_http_t* last_action = ch_group->action_http;
         
         void register_action(cJSON* json_accessory, uint8_t new_int_action) {
@@ -4146,6 +4149,8 @@ void normal_mode_init() {
                             action_http->content = strdup("");
                         }
                         
+                        INFO("New HTTP/TCP Action %i: host %s:%i, method %i, content %s", new_int_action, action_http->url, action_http->port_n, action_http->method_n, action_http->content);
+                        
                         if (action_http->method_n == 3 ) {
                             action_http->len = strlen(action_http->content);
                         } else if (action_http->method_n == 4) {
@@ -4173,7 +4178,7 @@ void normal_mode_init() {
     }
     
     // IR TX Actions
-    void new_action_ir_tx(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+    inline void new_action_ir_tx(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
         action_ir_tx_t* last_action = ch_group->action_ir_tx;
         
         void register_action(cJSON* json_accessory, uint8_t new_int_action) {
@@ -4219,6 +4224,8 @@ void normal_mode_init() {
                         
                         action_ir_tx->next = last_action;
                         last_action = action_ir_tx;
+                        
+                        INFO("New IR TX Action %i: repeats %i, pause %i", new_int_action, action_ir_tx->repeats, action_ir_tx->pause);
                     }
                 }
             }
@@ -4236,7 +4243,7 @@ void normal_mode_init() {
     }
     
     // UART Actions
-    void new_action_uart(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+    inline void new_action_uart(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
         action_uart_t* last_action = ch_group->action_uart;
         
         void register_action(cJSON* json_accessory, uint8_t new_int_action) {
@@ -4269,6 +4276,8 @@ void normal_mode_init() {
                         
                         action_uart->next = last_action;
                         last_action = action_uart;
+                        
+                        INFO("New UART Action %i: uart %i, pause %i, len %i", new_int_action, action_uart->uart, action_uart->pause, action_uart->len);
                     }
                 }
             }
@@ -5670,6 +5679,7 @@ void normal_mode_init() {
         ch_group->acc_type = ACC_TYPE_TEMP_SENSOR;
         ch_group->ch0 = ch0;
         th_sensor(ch_group, json_context);
+        register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
         ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
@@ -5706,6 +5716,7 @@ void normal_mode_init() {
         ch_group->acc_type = ACC_TYPE_HUM_SENSOR;
         ch_group->ch1 = ch1;
         th_sensor(ch_group, json_context);
+        register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
         ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
@@ -5744,6 +5755,7 @@ void normal_mode_init() {
         ch_group->ch0 = ch0;
         ch_group->ch1 = ch1;
         th_sensor(ch_group, json_context);
+        register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
         ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;

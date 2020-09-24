@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "3.4.0"
+#define FIRMWARE_VERSION                    "3.4.1"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -141,12 +141,10 @@
 #define VALUE                               "v"
 #define MANAGE_OTHERS_ACC_ARRAY             "m"
 #define ACCESSORY_INDEX                     "g"
-#define ACCESSORY_INDEX_KILL_SWITCH         "k"
 #define AUTOSWITCH_TIME                     "i"
 #define AUTOSWITCH_TIME_1                   "i1"
 #define PIN_GPIO                            "g"
 #define INITIAL_STATE                       "s"
-#define KILL_SWITCH                         "k"
 #define EXEC_ACTIONS_ON_BOOT                "xa"
 
 #define VALVE_SYSTEM_TYPE                   "w"
