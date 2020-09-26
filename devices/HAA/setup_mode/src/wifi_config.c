@@ -386,21 +386,26 @@ static void wifi_config_context_free(wifi_config_context_t *context) {
 }
 
 static void wifi_config_server_on_settings_update_task(void* args) {
+    INFO("Update settings");
+    
     client_t* client = args;
-
+    
+    /*
     uint8_t* new_body = malloc(client->body_length + 1);
     if (new_body) {
         memcpy(new_body, client->body, client->body_length + 1);
         free(client->body);
         client->body = new_body;
     }
-    
-    INFO("Update settings, body = %s", client->body);
+     */
 
+    vTaskDelay(1);
+    //taskYIELD();
     form_param_t *form = form_params_parse((char *) client->body);
     free(client->body);
     
     if (!form) {
+        ERROR("No enough memory");
         body_malloc(client);
         client->body_length = 0;
         client_send_redirect(client, 302, "/settings");
@@ -432,7 +437,6 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     }
     
     if (conf_param && conf_param->value) {
-        taskYIELD();
         sysparam_set_string(HAA_JSON_SYSPARAM, conf_param->value);
     }
     
@@ -523,7 +527,6 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     }
     
     if (reset_sys_param) {
-        INFO("\nFormating flash storage...\n");
         for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
             spiflash_erase_sector(SYSPARAMSECTOR + (SECTORSIZE * i));
         }

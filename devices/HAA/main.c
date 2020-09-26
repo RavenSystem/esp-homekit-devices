@@ -3610,7 +3610,7 @@ void normal_mode_init() {
     if (total_accessories == 0) {
         uart_set_baud(0, 115200);
         printf_header();
-        INFO("JSON:\n %s\n\n", txt_config ? txt_config : "none");
+        INFO("JSON:\n %s\n", txt_config ? txt_config : "none");
         ERROR("Invalid JSON\n");
         sysparam_set_int8(TOTAL_ACC_SYSPARAM, 0);
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);
