@@ -1362,6 +1362,8 @@ void temperature_task(void* args) {
     }
     
     hkc_group_notify(ch_group);
+    
+    vTaskDelete(NULL);
 }
 
 void temperature_timer_worker(void* args) {
