@@ -1219,11 +1219,7 @@ void th_input_temp(const uint8_t gpio, void* args, const uint8_t type) {
 }
 
 // --- TEMPERATURE
-void temperature_timer_worker(void* args) {
-    if (homekit_is_pairing()) {
-        return;
-    }
-    
+void temperature_task(void* args) {
     INFO("Read TH sensor");
     
     float taylor_log(float x) {
@@ -1366,6 +1362,14 @@ void temperature_timer_worker(void* args) {
     }
     
     hkc_group_notify(ch_group);
+}
+
+void temperature_timer_worker(void* args) {
+    if (!homekit_is_pairing()) {
+        if (xTaskCreate(temperature_task, "temperature", TEMPERATURE_TASK_SIZE, args, TEMPERATURE_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("Creating temperature_task");
+        }
+    }
 }
 
 // --- LIGHTBULBS
@@ -6535,6 +6539,11 @@ void normal_mode_init() {
     // Exec action 0 from root device
     do_actions(root_device_ch_group, 0);
     
+    // Initial delay
+    if (cJSON_GetObjectItemCaseSensitive(json_config, ACC_CREATION_DELAY) != NULL) {
+        vTaskDelay(pdMS_TO_TICKS(cJSON_GetObjectItemCaseSensitive(json_config, ACC_CREATION_DELAY)->valuedouble * 1000));
+    }
+    
     // Bridge
     if (bridge_needed) {
         INFO("BRIDGE CREATED");
@@ -6607,7 +6616,7 @@ void normal_mode_init() {
         
         // Accessory creation delay
         if (cJSON_GetObjectItemCaseSensitive(json_accessory, ACC_CREATION_DELAY) != NULL) {
-            vTaskDelay(pdMS_TO_TICKS((uint16_t) cJSON_GetObjectItemCaseSensitive(json_accessory, ACC_CREATION_DELAY)->valuedouble));
+            vTaskDelay(pdMS_TO_TICKS(cJSON_GetObjectItemCaseSensitive(json_accessory, ACC_CREATION_DELAY)->valuedouble * 1000));
         }
         
         taskYIELD();
