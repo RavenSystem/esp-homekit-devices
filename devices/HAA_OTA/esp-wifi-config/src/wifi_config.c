@@ -37,7 +37,7 @@
 
 #define AUTO_REBOOT_TIMEOUT             (90000)
 
-#define MAX_BODY_LEN                    (14336)
+#define MAX_BODY_LEN                    (16000)
 
 #define XTIMER_BLOCK_TIME               (pdMS_TO_TICKS(1100))
 
@@ -72,6 +72,7 @@ typedef struct {
     
     TaskHandle_t http_task_handle;
     TaskHandle_t dns_task_handle;
+    TaskHandle_t wifi_scan_task_handle;
     
     wifi_network_info_t* wifi_networks;
     SemaphoreHandle_t wifi_networks_mutex;
@@ -169,14 +170,7 @@ static void wifi_config_reset() {
     sdk_wifi_station_set_auto_connect(false);
 }
 
-static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
-    if (status != SCAN_OK) {
-        ERROR("WiFi scan failed");
-        return;
-    }
-
-    xSemaphoreTake(context->wifi_networks_mutex, portMAX_DELAY);
-
+static void wifi_networks_free() {
     wifi_network_info_t* wifi_network = context->wifi_networks;
     while (wifi_network) {
         wifi_network_info_t *next = wifi_network->next;
@@ -184,6 +178,17 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
         wifi_network = next;
     }
     context->wifi_networks = NULL;
+}
+
+static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
+    if (status != SCAN_OK || !context) {
+        ERROR("WiFi scan failed");
+        return;
+    }
+
+    xSemaphoreTake(context->wifi_networks_mutex, portMAX_DELAY);
+
+    wifi_networks_free();
 
     struct sdk_bss_info *bss = (struct sdk_bss_info *)arg;
     // first one is invalid
@@ -222,24 +227,10 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
 static void wifi_scan_task(void *arg) {
     INFO("Start WiFi scan");
     
-    while (context != NULL) {
+    for (;;) {
         sdk_wifi_station_scan(NULL, wifi_scan_done_cb);
         vTaskDelay(pdMS_TO_TICKS(10000));
     }
-
-    xSemaphoreTake(context->wifi_networks_mutex, portMAX_DELAY);
-
-    wifi_network_info_t* wifi_network = context->wifi_networks;
-    while (wifi_network) {
-        wifi_network_info_t *next = wifi_network->next;
-        free(wifi_network);
-        wifi_network = next;
-    }
-    context->wifi_networks = NULL;
-
-    xSemaphoreGive(context->wifi_networks_mutex);
-
-    vTaskDelete(NULL);
 }
 
 #include "index.html.h"
@@ -348,32 +339,32 @@ static void http_stop() {
 }
 
 static void wifi_config_context_free(wifi_config_context_t *context) {
-    if (context->ssid_prefix)
+    if (context->ssid_prefix) {
         free(context->ssid_prefix);
+    }
 
-    if (context->password)
+    if (context->password) {
         free(context->password);
+    }
+    
+    wifi_networks_free();
 
     free(context);
     context = NULL;
 }
 
 static void wifi_config_server_on_settings_update_task(void* args) {
+    INFO("Update settings");
+    
     client_t* client = args;
 
-    uint8_t* new_body = malloc(client->body_length + 1);
-    if (new_body) {
-        memcpy(new_body, client->body, client->body_length + 1);
-        free(client->body);
-        client->body = new_body;
-    }
-    
-    INFO("Update settings, body = %s", client->body);
+    vTaskDelay(pdMS_TO_TICKS(100));
 
     form_param_t *form = form_params_parse((char *) client->body);
     free(client->body);
     
     if (!form) {
+        ERROR("No enough memory");
         body_malloc(client);
         client->body_length = 0;
         client_send_redirect(client, 302, "/settings");
@@ -487,7 +478,6 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     }
     
     if (reset_sys_param) {
-        INFO("\nFormating flash storage...\n");
         for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
             spiflash_erase_sector(SYSPARAMSECTOR + (SECTORSIZE * i));
         }
@@ -556,6 +546,9 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
         case ENDPOINT_SETTINGS_UPDATE: {
             stop_reboot_timer();
             stop_sta_connect_timer();
+            if (context->wifi_scan_task_handle) {
+                vTaskDelete(context->wifi_scan_task_handle);
+            }
             wifi_config_context_free(context);
             xTaskCreate(wifi_config_server_on_settings_update_task, "on_settings_update_task", 512, client, (tskIDLE_PRIORITY + 0), NULL);
             return 0;
@@ -799,7 +792,7 @@ static void wifi_config_softap_start() {
     context->wifi_networks_mutex = xSemaphoreCreateBinary();
     xSemaphoreGive(context->wifi_networks_mutex);
 
-    xTaskCreate(wifi_scan_task, "wifi_scan_task", 384, NULL, (tskIDLE_PRIORITY + 0), NULL);
+    xTaskCreate(wifi_scan_task, "wifi_scan_task", 384, NULL, (tskIDLE_PRIORITY + 0), &context->wifi_scan_task_handle);
 
     INFO("Start DHCP server");
     dhcpserver_start(&first_client_ip, 4);
@@ -832,7 +825,9 @@ static void wifi_config_sta_connect_timeout_callback() {
         
         wifi_config_softap_stop();
         http_stop();
-        
+        if (context->wifi_scan_task_handle) {
+            vTaskDelete(context->wifi_scan_task_handle);
+        }
         context->on_wifi_ready();
         
         wifi_config_context_free(context);
@@ -956,7 +951,6 @@ void wifi_config_init(const char *ssid_prefix, const char *password, void (*on_w
     }
 
     context->on_wifi_ready = on_wifi_ready;
-
     context->check_counter = 10;
     
     wifi_config_station_connect();
