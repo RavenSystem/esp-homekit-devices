@@ -123,10 +123,10 @@ typedef struct _ch_group {
     homekit_characteristic_t* ch6;
     homekit_characteristic_t* ch7;
 
-    ETSTimer* timer;
-    ETSTimer* timer2;
+    TimerHandle_t timer;
+    TimerHandle_t timer2;
     
-    char *ir_protocol;
+    char* ir_protocol;
     
     action_copy_t* action_copy;
     action_relay_t* action_relay;
@@ -217,9 +217,8 @@ typedef struct _str_ch_value {
 } str_ch_value_t;
 
 typedef struct _main_config {
-    uint8_t wifi_status: 2;
+    uint8_t wifi_status: 3;
     uint8_t wifi_channel: 4;
-    bool ping_is_running: 1;
     bool enable_homekit_server: 1;
     int8_t setup_mode_toggle_counter;
     int8_t setup_mode_toggle_counter_max;
@@ -233,10 +232,11 @@ typedef struct _main_config {
     bool setpwm_bool_semaphore: 1;
     uint8_t led_gpio: 5;
     bool wifi_ping_is_running: 1;
+    bool ping_is_running: 1;
     bool used_gpio_0: 1;
-    bool used_gpio_1: 1;
     
     uint16_t setup_mode_time;
+    bool used_gpio_1: 1;
     bool used_gpio_2: 1;
     bool used_gpio_3: 1;
     bool used_gpio_4: 1;
@@ -261,8 +261,6 @@ typedef struct _main_config {
     
     TimerHandle_t save_states_timer;
     TimerHandle_t setup_mode_toggle_timer;
-    TimerHandle_t wifi_reconnection_timer;
-    TimerHandle_t wifi_watchdog_timer;
     TimerHandle_t pwm_timer;
     
     ch_group_t* ch_groups;

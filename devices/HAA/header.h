@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "3.4.6"
+#define FIRMWARE_VERSION                    "3.5.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -309,7 +309,7 @@
 #define PM_SENSOR_HLW_GPIO_DEFAULT          (-1)
 #define PM_SENSOR_HLW_GPIO                  ch_group->num[2]
 #define PM_SENSOR_HLW_GPIO_CF               ch_group->num[3]
-#define PM_POLL_PERIOD_DEFAULT              (4.9f)
+#define PM_POLL_PERIOD_DEFAULT              (5.f)
 #define PM_VOLTAGE_FACTOR_SET               "vf"
 #define PM_VOLTAGE_FACTOR_DEFAULT           (1)
 #define PM_VOLTAGE_FACTOR                   ch_group->num[4]
@@ -413,6 +413,9 @@
 #define ACC_POWER_MONITOR_INIT              (75)
 #define ACC_POWER_MONITOR_END               (83)
 
+#define SERIAL_STRING                       "sn"
+#define SERIAL_STRING_LEN                   (11)
+
 #define HOMEKIT_DEVICE_CATEGORY_SET         "ct"
 #define HOMEKIT_DEVICE_CATEGORY_DEFAULT     (1)
 
@@ -422,16 +425,19 @@
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
 
+#define WIFI_RECONNECTION_TIMER             ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE)->timer
+#define WIFI_WATCHDOG_TIMER                 ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE)->timer2
 #define WIFI_STATUS_DISCONNECTED            (0)
-#define WIFI_STATUS_CONNECTING              (1)
-#define WIFI_STATUS_PRECONNECTED            (2)
-#define WIFI_STATUS_CONNECTED               (3)
+#define WIFI_STATUS_CONNECTING_1            (1)
+#define WIFI_STATUS_CONNECTING_2            (2)
+#define WIFI_STATUS_PRECONNECTED            (3)
+#define WIFI_STATUS_CONNECTED               (4)
 #define WIFI_WATCHDOG_POLL_PERIOD_MS        (1000)
-#define WIFI_RECONNECTION_POLL_PERIOD_MS    (12345)
+#define WIFI_RECONNECTION_POLL_PERIOD_MS    (7500)
 #define WIFI_PING_ERRORS                    "w"
 #define WIFI_ERROR_COUNT_REBOOT             (20)
 
-#define SAVE_STATES_DELAY_MS                (4800)
+#define SAVE_STATES_DELAY_MS                (5000)
 
 #define GPIO_OVERFLOW                       (18)    // GPIO 17 is ADC PIN
 

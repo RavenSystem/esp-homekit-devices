@@ -178,7 +178,7 @@ static void adv_button_single_callback(TimerHandle_t xTimer) {
 }
 
 static void adv_button_hold_callback(TimerHandle_t xTimer) {
-    adv_button_t *button = (adv_button_t*) pvTimerGetTimerID(xTimer);
+    adv_button_t* button = (adv_button_t*) pvTimerGetTimerID(xTimer);
     // Hold button pressed
     button->press_count = DISABLE_PRESS_COUNT;
     adv_button_run_callback_fn(button->holdpress_callback_fn, button->gpio);
@@ -195,7 +195,7 @@ IRAM static void button_evaluate_fn() {
         }
         
         adv_button_main_config->button_evaluate_is_working = true;
-        adv_button_t *button = adv_button_main_config->buttons;
+        adv_button_t* button = adv_button_main_config->buttons;
         
         while (button) {
             if (gpio_read(button->gpio)) {
@@ -251,7 +251,7 @@ void adv_button_init() {
         adv_button_main_config->is_gpio16 = false;
         adv_button_main_config->buttons = NULL;
         
-        adv_button_main_config->button_evaluate_timer = xTimerCreate("button_evaluate", pdMS_TO_TICKS(adv_button_main_config->button_evaluate_delay), pdTRUE, NULL, button_evaluate_fn);
+        adv_button_main_config->button_evaluate_timer = xTimerCreate(0, pdMS_TO_TICKS(adv_button_main_config->button_evaluate_delay), pdTRUE, NULL, button_evaluate_fn);
     }
 }
 
@@ -323,8 +323,8 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
             button->value = 0;
         }
 
-        button->hold_timer = xTimerCreate("button_hold", pdMS_TO_TICKS(HOLDPRESS_TIME), pdFALSE, (void*) button, adv_button_hold_callback);
-        button->press_timer = xTimerCreate("button_single", pdMS_TO_TICKS(DOUBLEPRESS_TIME), pdFALSE, (void*) button, adv_button_single_callback);
+        button->hold_timer = xTimerCreate(0, pdMS_TO_TICKS(HOLDPRESS_TIME), pdFALSE, (void*) button, adv_button_hold_callback);
+        button->press_timer = xTimerCreate(0, pdMS_TO_TICKS(DOUBLEPRESS_TIME), pdFALSE, (void*) button, adv_button_single_callback);
         
         if (gpio != 16) {
             gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt);

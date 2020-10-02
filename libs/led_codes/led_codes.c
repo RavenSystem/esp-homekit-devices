@@ -86,7 +86,7 @@ int led_create(const uint8_t gpio, const bool inverted) {
         led->next = leds;
         leds = led;
         
-        led->timer = xTimerCreate("led_code", pdMS_TO_TICKS(10), pdFALSE, (void*) led, led_code_run);
+        led->timer = xTimerCreate(0, pdMS_TO_TICKS(10), pdFALSE, (void*) led, led_code_run);
         
         led->gpio = gpio;
         led->inverted = inverted;

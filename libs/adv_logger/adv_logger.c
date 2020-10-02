@@ -143,7 +143,7 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
         }
     }
     
-    if (!adv_logger_data->is_buffered && adv_logger_data->ready_to_send && adv_logger_data->udplogstring_len > 0 && xSemaphoreTake(adv_logger_data->log_sender_semaphore, (TickType_t) 1) == pdTRUE) {
+    if (!adv_logger_data->is_buffered && adv_logger_data->ready_to_send && adv_logger_data->udplogstring_len > 0 && xSemaphoreTake(adv_logger_data->log_sender_semaphore, pdMS_TO_TICKS(10)) == pdTRUE) {
         lwip_sendto(adv_logger_data->lSocket, adv_logger_data->udplogstring, adv_logger_data->udplogstring_len, 0, (struct sockaddr*) &adv_logger_data->sDestAddr, sizeof(adv_logger_data->sDestAddr));
         free(adv_logger_data->udplogstring);
         adv_logger_data->udplogstring = NULL;
@@ -161,7 +161,7 @@ static void adv_logger_buffered_task() {
     for (;;) {
         i++;
         
-        if ((i == 10 && adv_logger_data->udplogstring_len > 0) || adv_logger_data->udplogstring_len > (UDP_LOG_LEN >> 1)) {
+        if ((i == 5 && adv_logger_data->udplogstring_len > 0) || adv_logger_data->udplogstring_len > (UDP_LOG_LEN >> 1)) {
             adv_logger_data->ready_to_send = false;
             lwip_sendto(adv_logger_data->lSocket, adv_logger_data->udplogstring, adv_logger_data->udplogstring_len, 0, (struct sockaddr*) &adv_logger_data->sDestAddr, sizeof(adv_logger_data->sDestAddr));
             adv_logger_data->udplogstring_len = 0;
@@ -170,11 +170,11 @@ static void adv_logger_buffered_task() {
             i = 0;
         }
 
-        if (i == 10) {
+        if (i == 5) {
             i = 0;
         }
         
-        vTaskDelay(20 / portTICK_PERIOD_MS);
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
 
@@ -255,7 +255,7 @@ int adv_logger_remove() {
     return -1;
 }
 
-void adv_logger_init(const uint8_t log_type, const uint8_t is_buffered) {
+void adv_logger_init(const uint8_t log_type) {
     adv_logger_remove();
     
     adv_logger_original_write_function = get_write_stdout();
@@ -265,20 +265,22 @@ void adv_logger_init(const uint8_t log_type, const uint8_t is_buffered) {
 
     } else if (log_type > ADV_LOGGER_UART0) {
         adv_logger_data = malloc(sizeof(adv_logger_data_t));
-        adv_logger_data->udplogstring_len = 0;
+        memset(adv_logger_data, 0, sizeof(*adv_logger_data));
+        
         adv_logger_data->log_type = log_type - ADV_LOGGER_UART0;
-        adv_logger_data->ready_to_send = false;
-        adv_logger_data->is_buffered = false;
 
+        if (adv_logger_data->log_type > ADV_LOGGER_UART0_UDP) {
+            adv_logger_data->log_type -= 3;
+            adv_logger_data->is_buffered = true;
+        }
+        
         if (adv_logger_data->log_type > ADV_LOGGER_UART0) {
             adv_logger_data->log_type -= 3;         // Can be -1, meaning no UART output
         }
-        
+
         if (log_type > ADV_LOGGER_UART1) {
-            adv_logger_data->is_buffered = is_buffered;
             adv_logger_data->header = malloc(HEADER_LEN);
-            adv_logger_data->is_new_line = false;
-            if (!is_buffered) {
+            if (!adv_logger_data->is_buffered) {
                 adv_logger_data->log_sender_semaphore = xSemaphoreCreateMutex();
             }
             

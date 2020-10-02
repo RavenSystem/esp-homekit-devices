@@ -1015,7 +1015,7 @@ void mdns_init()
         return;
     }
 
-    mdns_announce_timer = xTimerCreate("mdns_announce", pdMS_TO_TICKS(60000), pdTRUE, NULL, mdns_announce);
+    mdns_announce_timer = xTimerCreate(0, pdMS_TO_TICKS(60000), pdTRUE, NULL, mdns_announce);
     
     udp_bind_netif(gMDNS_pcb, netif);
 

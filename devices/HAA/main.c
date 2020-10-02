@@ -17,7 +17,6 @@
 #include <math.h>
 #include <spiflash.h>
 
-#include <etstimer.h>
 #include <esplibs/libmain.h>
 
 #include "lwip/err.h"
@@ -157,13 +156,6 @@ uint16_t process_hexstr(const char* string, char** output_hex_string) {
     return len;
 }
 
-ETSTimer* new_timer() {
-    ETSTimer* timer = malloc(sizeof(ETSTimer));
-    memset(timer, 0, sizeof(*timer));
-    
-    return timer;
-}
-
 action_task_t* new_action_task() {
     action_task_t* action_task = malloc(sizeof(action_task_t));
     memset(action_task, 0, sizeof(*action_task));
@@ -265,7 +257,7 @@ void reboot_callback() {
 void reboot_haa() {
     led_blink(5);
     INFO("\nRebooting...\n");
-    xTimerStart(xTimerCreate("reboot_task", pdMS_TO_TICKS(2900), pdFALSE, NULL, reboot_callback), XTIMER_BLOCK_TIME);
+    xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(2900), pdFALSE, NULL, reboot_callback), XTIMER_BLOCK_TIME);
 }
 
 void resend_arp() {
@@ -312,7 +304,7 @@ void wifi_watchdog() {
     if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
         uint8_t current_channel = sdk_wifi_get_channel();
         if (main_config.wifi_channel != current_channel) {
-            xTimerStop(main_config.wifi_watchdog_timer, XTIMER_BLOCK_TIME);
+            xTimerStop(WIFI_WATCHDOG_TIMER, XTIMER_BLOCK_TIME);
             
             main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
             INFO("Wifi new Ch%i", current_channel);
@@ -320,7 +312,7 @@ void wifi_watchdog() {
             resend_arp();
             homekit_mdns_announce();
             
-            xTimerStart(main_config.wifi_reconnection_timer, XTIMER_BLOCK_TIME);
+            xTimerStart(WIFI_RECONNECTION_TIMER, XTIMER_BLOCK_TIME);
         }
         
         if (main_config.wifi_ping_max_errors != 255 && !main_config.wifi_ping_is_running && !homekit_is_pairing()) {
@@ -331,17 +323,22 @@ void wifi_watchdog() {
         
     } else {
         ERROR("Wifi error");
+        xTimerStop(WIFI_WATCHDOG_TIMER, XTIMER_BLOCK_TIME);
+        xTimerStart(WIFI_RECONNECTION_TIMER, XTIMER_BLOCK_TIME);
         main_config.wifi_error_count = 0;
-        xTimerStop(main_config.wifi_watchdog_timer, XTIMER_BLOCK_TIME);
-        xTimerStart(main_config.wifi_reconnection_timer, XTIMER_BLOCK_TIME);
+        main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
+        sdk_wifi_station_disconnect();
     }
 }
 
 void wifi_reconnection() {
     if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
-        main_config.wifi_status = WIFI_STATUS_CONNECTING;
+        main_config.wifi_status = WIFI_STATUS_CONNECTING_1;
         INFO("Wifi reconnecting...");
         wifi_config_connect();
+        
+    } else if (main_config.wifi_status == WIFI_STATUS_CONNECTING_1) {
+        main_config.wifi_status = WIFI_STATUS_CONNECTING_2;
 
     } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
@@ -350,8 +347,8 @@ void wifi_reconnection() {
             INFO("mDNS reannounced");
             homekit_mdns_announce();
             
-            xTimerStop(main_config.wifi_reconnection_timer, XTIMER_BLOCK_TIME);
-            xTimerStart(main_config.wifi_watchdog_timer, XTIMER_BLOCK_TIME);
+            xTimerStop(WIFI_RECONNECTION_TIMER, XTIMER_BLOCK_TIME);
+            xTimerStart(WIFI_WATCHDOG_TIMER, XTIMER_BLOCK_TIME);
             
         } else {
             main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
@@ -581,7 +578,7 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                 autooff_setter_params->ch = ch;
                 autooff_setter_params->type = TYPE_ON;
-                xTimerStart(xTimerCreate("autooff_setter", pdMS_TO_TICKS(ch_group->num[0] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
+                xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(ch_group->num[0] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
             }
             
             setup_mode_toggle_upcount();
@@ -590,10 +587,10 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
             if (ch_group->ch2) {
                 if (value.bool_value) {
                     ch_group->ch2->value = ch_group->ch1->value;
-                    sdk_os_timer_arm(ch_group->timer, 1000, 1);
+                    xTimerStart(ch_group->timer, XTIMER_BLOCK_TIME);
                 } else {
                     ch_group->ch2->value.int_value = 0;
-                    sdk_os_timer_disarm(ch_group->timer);
+                    xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
                 }
             }
         }
@@ -612,14 +609,14 @@ void hkc_on_status_setter(homekit_characteristic_t* ch0, const homekit_value_t v
     }
 }
 
-void on_timer_worker(void* args) {
-    homekit_characteristic_t* ch = args;
+void on_timer_worker(TimerHandle_t xTimer) {
+    homekit_characteristic_t* ch = (homekit_characteristic_t*) pvTimerGetTimerID(xTimer);
     ch_group_t* ch_group = ch_group_find(ch);
     
     ch_group->ch2->value.int_value--;
     
     if (ch_group->ch2->value.int_value == 0) {
-        sdk_os_timer_disarm(ch_group->timer);
+        xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
         
         hkc_on_setter(ch, HOMEKIT_BOOL(false));
     }
@@ -649,7 +646,7 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                 autooff_setter_params->ch = ch;
                 autooff_setter_params->type = TYPE_LOCK;
-                xTimerStart(xTimerCreate("autooff_setter", pdMS_TO_TICKS(ch_group->num[lock_index] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
+                xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(ch_group->num[lock_index] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
             }
             
             setup_mode_toggle_upcount();
@@ -720,7 +717,7 @@ void sensor_1(const uint8_t gpio, void* args, const uint8_t type) {
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                 autooff_setter_params->ch = ch_group->ch0;
                 autooff_setter_params->type = type;
-                xTimerStart(xTimerCreate("autooff_setter", pdMS_TO_TICKS(ch_group->num[0] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
+                xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(ch_group->num[0] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
             }
         }
     }
@@ -863,8 +860,9 @@ void power_monitor_task(void* args) {
     vTaskDelete(NULL);
 }
 
-void power_monitor_timer_worker(void* args) {
+void power_monitor_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
+        void* args = (void*) pvTimerGetTimerID(xTimer);
         if (xTaskCreate(power_monitor_task, "power_monitor", POWER_MONITOR_TASK_SIZE, args, POWER_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("Creating power_monitor_task");
         }
@@ -888,7 +886,7 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                 autooff_setter_params->ch = ch;
                 autooff_setter_params->type = TYPE_VALVE;
-                xTimerStart(xTimerCreate("autooff_setter", pdMS_TO_TICKS(ch_group->num[0] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
+                xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(ch_group->num[0] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
             }
             
             setup_mode_toggle_upcount();
@@ -897,10 +895,10 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
             if (ch_group->ch3) {
                 if (value.int_value == 0) {
                     ch_group->ch3->value.int_value = 0;
-                    sdk_os_timer_disarm(ch_group->timer);
+                    xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
                 } else {
                     ch_group->ch3->value = ch_group->ch2->value;
-                    sdk_os_timer_arm(ch_group->timer, 1000, 1);
+                    xTimerStart(ch_group->timer, XTIMER_BLOCK_TIME);
                 }
             }
         }
@@ -922,14 +920,14 @@ void hkc_valve_status_setter(homekit_characteristic_t* ch, const homekit_value_t
     }
 }
 
-void valve_timer_worker(void* args) {
-    homekit_characteristic_t* ch = args;
+void valve_timer_worker(TimerHandle_t xTimer) {
+    homekit_characteristic_t* ch = (homekit_characteristic_t*) pvTimerGetTimerID(xTimer);
     ch_group_t* ch_group = ch_group_find(ch);
     
     ch_group->ch3->value.int_value--;
     
     if (ch_group->ch3->value.int_value == 0) {
-        sdk_os_timer_disarm(ch_group->timer);
+        xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
         
         hkc_valve_setter(ch, HOMEKIT_UINT8(0));
     }
@@ -1104,6 +1102,11 @@ void process_th(void* args) {
     save_states_callback();
 }
 
+void process_th_timer(TimerHandle_t xTimer) {
+    ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
+    process_th(ch_group);
+}
+
 void update_th(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
@@ -1112,7 +1115,7 @@ void update_th(homekit_characteristic_t* ch, const homekit_value_t value) {
         
         ch->value = value;
         
-        sdk_os_timer_arm(ch_group->timer2, TH_UPDATE_DELAY_MS, false);
+        xTimerStart(ch_group->timer2, XTIMER_BLOCK_TIME);
         
     } else {
         hkc_group_notify(ch_group);
@@ -1366,8 +1369,9 @@ void temperature_task(void* args) {
     vTaskDelete(NULL);
 }
 
-void temperature_timer_worker(void* args) {
+void temperature_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
+        void* args = (void*) pvTimerGetTimerID(xTimer);
         if (xTaskCreate(temperature_task, "temperature", TEMPERATURE_TASK_SIZE, args, TEMPERATURE_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("Creating temperature_task");
         }
@@ -1721,8 +1725,8 @@ void autodimmer_task(void* args) {
     vTaskDelete(NULL);
 }
 
-void no_autodimmer_called(void* args) {
-    homekit_characteristic_t* ch0 = args;
+void no_autodimmer_called(TimerHandle_t xTimer) {
+    homekit_characteristic_t* ch0 = (homekit_characteristic_t*) pvTimerGetTimerID(xTimer);
     lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch0);
     lightbulb_group->armed_autodimmer = false;
     hkc_rgbw_setter(ch0, HOMEKIT_BOOL(false));
@@ -1739,12 +1743,12 @@ void autodimmer_call(homekit_characteristic_t* ch0, const homekit_value_t value)
         ch_group_t* ch_group = ch_group_find(ch0);
         if (lightbulb_group->armed_autodimmer) {
             lightbulb_group->armed_autodimmer = false;
-            sdk_os_timer_disarm(ch_group->timer);
+            xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
             if (xTaskCreate(autodimmer_task, "autodimmer", AUTODIMMER_TASK_SIZE, (void*) ch0, AUTODIMMER_TASK_PRIORITY, NULL) != pdPASS) {
                 ERROR("Creating autodimmer_task");
             }
         } else {
-            sdk_os_timer_arm(ch_group->timer, AUTODIMMER_DELAY, 0);
+            xTimerStart(ch_group->timer, XTIMER_BLOCK_TIME);
             lightbulb_group->armed_autodimmer = true;
         }
     }
@@ -1760,7 +1764,7 @@ void garage_door_stop(const uint8_t gpio, void* args, const uint8_t type) {
         
         ch_group->ch0->value.int_value = GARAGE_DOOR_STOPPED;
         
-        sdk_os_timer_disarm(ch_group->timer);
+        xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
 
         do_actions(ch_group, 10);
         
@@ -1791,10 +1795,10 @@ void garage_door_sensor(const uint8_t gpio, void* args, const uint8_t type) {
     
     if (type > 1) {
         ch_group->ch1->value.int_value = type - 2;
-        sdk_os_timer_arm(ch_group->timer, 1000, 1);
+        xTimerStart(ch_group->timer, XTIMER_BLOCK_TIME);
     } else {
         ch_group->ch1->value.int_value = type;
-        sdk_os_timer_disarm(ch_group->timer);
+        xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
         
         if (type == 0) {
             GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN;
@@ -1846,12 +1850,12 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
     hkc_group_notify(ch_group);
 }
 
-void garage_door_timer_worker(void* args) {
-    homekit_characteristic_t* ch0 = args;
+void garage_door_timer_worker(TimerHandle_t xTimer) {
+    homekit_characteristic_t* ch0 = (homekit_characteristic_t*) pvTimerGetTimerID(xTimer);
     ch_group_t* ch_group = ch_group_find(ch0);
 
     void halt_timer() {
-        sdk_os_timer_disarm(ch_group->timer);
+        xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
         if (GARAGE_DOOR_TIME_MARGIN > 0) {
             garage_door_obstruction(0, ch_group, 1);
         }
@@ -1861,7 +1865,7 @@ void garage_door_timer_worker(void* args) {
         GARAGE_DOOR_CURRENT_TIME++;
 
         if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN && GARAGE_DOOR_HAS_F2 == 0) {
-            sdk_os_timer_disarm(ch_group->timer);
+            xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
             garage_door_sensor(0, ch_group, GARAGE_DOOR_OPENED);
             
         } else if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME && GARAGE_DOOR_HAS_F2 == 1) {
@@ -1872,7 +1876,7 @@ void garage_door_timer_worker(void* args) {
         GARAGE_DOOR_CURRENT_TIME -= GARAGE_DOOR_CLOSE_TIME_FACTOR;
         
         if (GARAGE_DOOR_CURRENT_TIME <= GARAGE_DOOR_TIME_MARGIN && GARAGE_DOOR_HAS_F3 == 0) {
-            sdk_os_timer_disarm(ch_group->timer);
+            xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
             garage_door_sensor(0, ch_group, GARAGE_DOOR_CLOSED);
             
         } else if (GARAGE_DOOR_CURRENT_TIME <= 0 && GARAGE_DOOR_HAS_F3 == 1) {
@@ -1905,7 +1909,7 @@ float window_cover_step(ch_group_t* ch_group, const float cover_time) {
 }
 
 void window_cover_stop(ch_group_t* ch_group) {
-    sdk_os_timer_disarm(ch_group->timer);
+    xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
     
     led_blink(1);
 
@@ -1959,8 +1963,8 @@ void window_cover_obstruction(const uint8_t gpio, void* args, const uint8_t type
     do_actions(ch_group, type + WINDOW_COVER_OBSTRUCTION);
 }
 
-void window_cover_timer_rearm_stop(void* args) {
-    ch_group_t* ch_group = args;
+void window_cover_timer_rearm_stop(TimerHandle_t xTimer) {
+    ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
     
     WINDOW_COVER_STOP_ENABLE = 1;
 }
@@ -1970,7 +1974,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
     
     void disable_stop() {
         WINDOW_COVER_STOP_ENABLE = 0;
-        sdk_os_timer_arm(ch_group->timer2, WINDOW_COVER_STOP_ENABLE_DELAY_MS, 0);
+        xTimerStart(ch_group->timer2, XTIMER_BLOCK_TIME);
     }
     
     if (ch_group->main_enabled) {
@@ -1994,7 +1998,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
             }
             
             if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
-                sdk_os_timer_arm(ch_group->timer, WINDOW_COVER_POLL_PERIOD_MS, 1);
+                xTimerStart(ch_group->timer, XTIMER_BLOCK_TIME);
             }
             
             WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_CLOSING;
@@ -2010,7 +2014,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
             }
             
             if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
-                sdk_os_timer_arm(ch_group->timer, WINDOW_COVER_POLL_PERIOD_MS, 1);
+                xTimerStart(ch_group->timer, XTIMER_BLOCK_TIME);
             }
             
             WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_OPENING;
@@ -2026,8 +2030,8 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
     hkc_group_notify(ch_group);
 }
 
-void window_cover_timer_worker(void* args) {
-    ch_group_t* ch_group = args;
+void window_cover_timer_worker(TimerHandle_t xTimer) {
+    ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
     
     uint8_t margin = 0;     // Used as covering offset to add extra time when target position completely closed or opened
     if (WINDOW_COVER_CH_TARGET_POSITION->value.int_value == 0 || WINDOW_COVER_CH_TARGET_POSITION->value.int_value == 100) {
@@ -2110,7 +2114,7 @@ void hkc_fan_setter(homekit_characteristic_t* ch0, const homekit_value_t value) 
                     autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                     autooff_setter_params->ch = ch0;
                     autooff_setter_params->type = TYPE_FAN;
-                    xTimerStart(xTimerCreate("autooff_setter", pdMS_TO_TICKS(ch_group->num[0] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
+                    xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(ch_group->num[0] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
                 }
             } else {
                 ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
@@ -3275,7 +3279,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
             INFO("Digital Output: gpio %i, val %i, inch %g", action_relay->gpio, action_relay->value, action_relay->inching);
             
             if (action_relay->inching > 0) {
-                xTimerStart(xTimerCreate("autoswitch", pdMS_TO_TICKS(action_relay->inching * 1000), pdFALSE, (void*) action_relay, autoswitch_timer), XTIMER_BLOCK_TIME);
+                xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(action_relay->inching * 1000), pdFALSE, (void*) action_relay, autoswitch_timer), XTIMER_BLOCK_TIME);
             }
         }
 
@@ -3547,8 +3551,8 @@ void delayed_sensor_starter_task() {
             
             INFO("Starting delayed sensor for acc %i", ch_group->accessory);
             
-            temperature_timer_worker(ch_group);
-            sdk_os_timer_arm(ch_group->timer, TH_SENSOR_POLL_PERIOD * 1000, 1);
+            temperature_timer_worker(ch_group->timer);
+            xTimerStart(ch_group->timer, XTIMER_BLOCK_TIME);
         }
 
         ch_group = ch_group->next;
@@ -3558,7 +3562,6 @@ void delayed_sensor_starter_task() {
 }
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, NULL);
-homekit_characteristic_t serial = HOMEKIT_CHARACTERISTIC_(SERIAL_NUMBER, NULL);
 homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, "José A. Jiménez Campos");
 homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "RavenSystem HAA");
 homekit_characteristic_t identify_function = HOMEKIT_CHARACTERISTIC_(IDENTIFY, identify);
@@ -3579,14 +3582,14 @@ void run_homekit_server() {
         FREEHEAP();
     }
     
-    main_config.wifi_reconnection_timer = xTimerCreate("wifi_rec", pdMS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS), pdTRUE, NULL, wifi_reconnection);
-    main_config.wifi_watchdog_timer = xTimerCreate("wifi_wd", pdMS_TO_TICKS(WIFI_WATCHDOG_POLL_PERIOD_MS), pdTRUE, NULL, wifi_watchdog);
-    xTimerStart(main_config.wifi_watchdog_timer, XTIMER_BLOCK_TIME);
+    WIFI_RECONNECTION_TIMER = xTimerCreate(0, pdMS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS), pdTRUE, NULL, wifi_reconnection);
+    WIFI_WATCHDOG_TIMER = xTimerCreate(0, pdMS_TO_TICKS(WIFI_WATCHDOG_POLL_PERIOD_MS), pdTRUE, NULL, wifi_watchdog);
+    xTimerStart(WIFI_WATCHDOG_TIMER, XTIMER_BLOCK_TIME);
     
     do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 2);
 
     if (main_config.ping_inputs) {
-        xTimerStart(xTimerCreate("ping_task", pdMS_TO_TICKS(main_config.ping_poll_period * 1000.000f), pdTRUE, NULL, ping_task_timer_worker), XTIMER_BLOCK_TIME);
+        xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(main_config.ping_poll_period * 1000.000f), pdTRUE, NULL, ping_task_timer_worker), XTIMER_BLOCK_TIME);
     }
     
     led_blink(6);
@@ -4438,8 +4441,7 @@ void normal_mode_init() {
     }
     
     void th_sensor_starter(ch_group_t* ch_group) {
-        ch_group->timer = new_timer();
-        sdk_os_timer_setfn(ch_group->timer, temperature_timer_worker, ch_group);
+        ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(TH_SENSOR_POLL_PERIOD), pdTRUE, (void*) ch_group, temperature_timer_worker);
     }
     
     // ----- CONFIG SECTION
@@ -4539,7 +4541,7 @@ void normal_mode_init() {
         }
     }
     
-    adv_logger_init(log_output_type, 0);
+    adv_logger_init(log_output_type);
 
     printf_header();
     INFO("NORMAL MODE\n\nJSON:\n %s\n", txt_config);
@@ -4639,6 +4641,13 @@ void normal_mode_init() {
     }
     INFO("Gateway Ping: %i", main_config.wifi_ping_max_errors);
     
+    // Common serial prefix
+    char* common_serial_prefix = NULL;
+    if (cJSON_GetObjectItemCaseSensitive(json_config, SERIAL_STRING) != NULL) {
+        common_serial_prefix = cJSON_GetObjectItemCaseSensitive(json_config, SERIAL_STRING)->valuestring;
+        INFO("Common serial prefix: %s", common_serial_prefix);
+    }
+    
     // Times to toggle quickly an accessory status to enter setup mode
     if (cJSON_GetObjectItemCaseSensitive(json_config, SETUP_MODE_ACTIVATE_COUNT) != NULL) {
         main_config.setup_mode_toggle_counter_max = (int8_t) cJSON_GetObjectItemCaseSensitive(json_config, SETUP_MODE_ACTIVATE_COUNT)->valuedouble;
@@ -4646,7 +4655,7 @@ void normal_mode_init() {
     INFO("Toggles to enter setup mode: %i", main_config.setup_mode_toggle_counter_max);
     
     if (main_config.setup_mode_toggle_counter_max > 0) {
-        main_config.setup_mode_toggle_timer = xTimerCreate("setup_toggle", pdMS_TO_TICKS(SETUP_MODE_TOGGLE_TIME_MS), pdFALSE, NULL, setup_mode_toggle);
+        main_config.setup_mode_toggle_timer = xTimerCreate(0, pdMS_TO_TICKS(SETUP_MODE_TOGGLE_TIME_MS), pdFALSE, NULL, setup_mode_toggle);
     }
     
     // Buttons to enter setup mode
@@ -4670,7 +4679,7 @@ void normal_mode_init() {
     }
     
     // Saved States Timer Function
-    main_config.save_states_timer = xTimerCreate("save_states", pdMS_TO_TICKS(SAVE_STATES_DELAY_MS), pdFALSE, NULL, save_states);
+    main_config.save_states_timer = xTimerCreate(0, pdMS_TO_TICKS(SAVE_STATES_DELAY_MS), pdFALSE, NULL, save_states);
     
     homekit_accessory_t** accessories = calloc(hk_total_ac, sizeof(homekit_accessory_t*));
     
@@ -4678,15 +4687,60 @@ void normal_mode_init() {
     uint8_t accessory_numerator = 1;
     uint8_t acc_count = 0;
     
-    void new_accessory(const uint8_t accessory, uint8_t services, const bool homekit_enabled) {
+    // HomeKit last config number
+    int last_config_number = 1;
+    sysparam_get_int32(LAST_CONFIG_NUMBER, &last_config_number);
+    
+    void new_accessory(const uint8_t accessory, uint8_t services, const bool homekit_enabled, cJSON* json_context) {
         if (!homekit_enabled) {
+            accessory_numerator++;
             return;
         }
         
+        uint8_t serial_acc = accessory_numerator;
+        accessory_numerator++;
+        
         if (acc_count == 0) {
             services++;
+            
+            if (bridge_needed) {
+                serial_acc = 0;
+            }
         }
 
+        char* serial_prefix = NULL;
+        if (json_context && cJSON_GetObjectItemCaseSensitive(json_context, SERIAL_STRING) != NULL) {
+            serial_prefix = cJSON_GetObjectItemCaseSensitive(json_context, SERIAL_STRING)->valuestring;
+        } else {
+            serial_prefix = common_serial_prefix;
+        }
+        
+        uint8_t serial_prefix_len = SERIAL_STRING_LEN;
+        bool use_config_number = false;
+        if (serial_prefix) {
+            serial_prefix_len += strlen(serial_prefix) + 1;
+            
+            if (strcmp(serial_prefix, "cn") == 0) {
+                serial_prefix_len += 4;
+                use_config_number = true;
+            }
+        }
+
+        char* serial_str = malloc(serial_prefix_len);
+        uint8_t macaddr[6];
+        sdk_wifi_get_macaddr(STATION_IF, macaddr);
+        
+        if (use_config_number) {
+            snprintf(serial_str, serial_prefix_len, "%i-%02X%02X%02X-%i", last_config_number, macaddr[3], macaddr[4], macaddr[5], serial_acc);
+        } else {
+            snprintf(serial_str, serial_prefix_len, "%s%s%02X%02X%02X-%i", serial_prefix ? serial_prefix : "", serial_prefix ? "-" : "", macaddr[3], macaddr[4], macaddr[5], serial_acc);
+        }
+        
+        INFO("Serial: %s", serial_str);
+        
+        homekit_characteristic_t* serial = NEW_HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, serial_str);
+        //serial.value = HOMEKIT_STRING(serial_str);
+        
         accessories[accessory] = calloc(1, sizeof(homekit_accessory_t));
         accessories[accessory]->id = accessory + 1;
         accessories[accessory]->services = calloc(services, sizeof(homekit_service_t*));
@@ -4697,7 +4751,7 @@ void normal_mode_init() {
         accessories[accessory]->services[0]->characteristics = calloc(7, sizeof(homekit_characteristic_t*));
         accessories[accessory]->services[0]->characteristics[0] = &name;
         accessories[accessory]->services[0]->characteristics[1] = &manufacturer;
-        accessories[accessory]->services[0]->characteristics[2] = &serial;
+        accessories[accessory]->services[0]->characteristics[2] = serial;
         accessories[accessory]->services[0]->characteristics[3] = &model;
         accessories[accessory]->services[0]->characteristics[4] = &firmware;
         accessories[accessory]->services[0]->characteristics[5] = &identify_function;
@@ -4745,10 +4799,9 @@ void normal_mode_init() {
     uint8_t new_switch(uint8_t accessory, cJSON* json_context, const uint8_t acc_type) {
         ch_group_t* ch_group = new_ch_group();
         ch_group->accessory = accessory_numerator;
-        accessory_numerator++;
         ch_group->homekit_enabled = acc_homekit_enabled(json_context);
         
-        new_accessory(accessory, 3, ch_group->homekit_enabled);
+        new_accessory(accessory, 3, ch_group->homekit_enabled, json_context);
         
         homekit_characteristic_t* ch0 = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .setter_ex=hkc_on_setter);
         
@@ -4821,8 +4874,7 @@ void normal_mode_init() {
                 ch1->value.int_value = initial_time;
             }
             
-            ch_group->timer = new_timer();
-            sdk_os_timer_setfn(ch_group->timer, on_timer_worker, ch0);
+            ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(1000), pdTRUE, (void*) ch0, on_timer_worker);
         }
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, TYPE_ON);
@@ -4883,10 +4935,9 @@ void normal_mode_init() {
     uint8_t new_button_event(uint8_t accessory, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group();
         ch_group->accessory = accessory_numerator;
-        accessory_numerator++;
         ch_group->homekit_enabled = acc_homekit_enabled(json_context);
         
-        new_accessory(accessory, 3, ch_group->homekit_enabled);
+        new_accessory(accessory, 3, ch_group->homekit_enabled, json_context);
 
         homekit_characteristic_t* ch0 = NEW_HOMEKIT_CHARACTERISTIC(PROGRAMMABLE_SWITCH_EVENT, 0);
 
@@ -4920,13 +4971,12 @@ void normal_mode_init() {
     uint8_t new_lock(const uint8_t accessory, cJSON* json_context, const uint8_t acc_type) {
         ch_group_t* ch_group = new_ch_group();
         ch_group->accessory = accessory_numerator;
-        accessory_numerator++;
         ch_group->homekit_enabled = acc_homekit_enabled(json_context);
  
         if (acc_type == ACC_TYPE_DOUBLE_LOCK) {
-            new_accessory(accessory, 4, ch_group->homekit_enabled);
+            new_accessory(accessory, 4, ch_group->homekit_enabled, json_context);
         } else {
-            new_accessory(accessory, 3, ch_group->homekit_enabled);
+            new_accessory(accessory, 3, ch_group->homekit_enabled, json_context);
         }
         
         homekit_characteristic_t* ch0 = NEW_HOMEKIT_CHARACTERISTIC(LOCK_CURRENT_STATE, 1);
@@ -5077,10 +5127,9 @@ void normal_mode_init() {
         ch_group_t* ch_group = new_ch_group();
         ch_group->acc_type = ACC_TYPE_CONTACT_SENSOR;
         ch_group->accessory = accessory_numerator;
-        accessory_numerator++;
         ch_group->homekit_enabled = acc_homekit_enabled(json_context);
         
-        new_accessory(accessory, 3, ch_group->homekit_enabled);
+        new_accessory(accessory, 3, ch_group->homekit_enabled, json_context);
         
         homekit_characteristic_t* ch0;
         
@@ -5266,10 +5315,8 @@ void normal_mode_init() {
             }
 
             const float poll_period = sensor_poll_period(json_context, PM_POLL_PERIOD_DEFAULT);
-            ch_group->timer = new_timer();
-            sdk_os_timer_setfn(ch_group->timer, power_monitor_timer_worker, ch_group);
-            power_monitor_timer_worker(ch_group);
-            sdk_os_timer_arm(ch_group->timer, poll_period * 1000, 1);
+            ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(poll_period * 1000), pdTRUE, (void*) ch_group, power_monitor_timer_worker);
+            xTimerStart(ch_group->timer, XTIMER_BLOCK_TIME);
         }
 
         const bool exec_actions_on_boot = get_exec_actions_on_boot(json_context);
@@ -5343,10 +5390,9 @@ void normal_mode_init() {
     uint8_t new_water_valve(uint8_t accessory, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group();
         ch_group->accessory = accessory_numerator;
-        accessory_numerator++;
         ch_group->homekit_enabled = acc_homekit_enabled(json_context);
         
-        new_accessory(accessory, 3, ch_group->homekit_enabled);
+        new_accessory(accessory, 3, ch_group->homekit_enabled, json_context);
         
         uint8_t valve_type = VALVE_SYSTEM_TYPE_DEFAULT;
         if (cJSON_GetObjectItemCaseSensitive(json_context, VALVE_SYSTEM_TYPE) != NULL) {
@@ -5398,8 +5444,7 @@ void normal_mode_init() {
                 ch2->value.int_value = initial_time;
             }
             
-            ch_group->timer = new_timer();
-            sdk_os_timer_setfn(ch_group->timer, valve_timer_worker, ch0);
+            ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(1000), pdTRUE, (void*) ch0, valve_timer_worker);
         }
         
         if (ch_group->homekit_enabled) {
@@ -5467,7 +5512,6 @@ void normal_mode_init() {
     uint8_t new_thermostat(uint8_t accessory, cJSON* json_context, const uint8_t acc_type) {
         ch_group_t* ch_group = new_ch_group();
         ch_group->accessory = accessory_numerator;
-        accessory_numerator++;
         ch_group->homekit_enabled = acc_homekit_enabled(json_context);
         
         uint8_t th_accessories = 3;
@@ -5475,7 +5519,7 @@ void normal_mode_init() {
             th_accessories++;
         }
         
-        new_accessory(accessory, th_accessories, ch_group->homekit_enabled);
+        new_accessory(accessory, th_accessories, ch_group->homekit_enabled, json_context);
 
         ch_group->acc_type = ACC_TYPE_THERMOSTAT;
         
@@ -5622,9 +5666,8 @@ void normal_mode_init() {
         ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
         ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
         ch_group->last_wildcard_action[2] = NO_LAST_WILDCARD_ACTION;
-         
-        ch_group->timer2 = new_timer();
-        sdk_os_timer_setfn(ch_group->timer2, process_th, ch_group);
+        
+        ch_group->timer2 = xTimerCreate(0, pdMS_TO_TICKS(TH_UPDATE_DELAY_MS), pdFALSE, (void*) ch_group, process_th_timer);
         
         if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 4) {
             th_sensor_starter(ch_group);
@@ -5675,10 +5718,9 @@ void normal_mode_init() {
     uint8_t new_temp_sensor(uint8_t accessory, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group();
         ch_group->accessory = accessory_numerator;
-        accessory_numerator++;
         ch_group->homekit_enabled = acc_homekit_enabled(json_context);
         
-        new_accessory(accessory, 3, ch_group->homekit_enabled);
+        new_accessory(accessory, 3, ch_group->homekit_enabled, json_context);
         
         homekit_characteristic_t* ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200});
   
@@ -5712,10 +5754,9 @@ void normal_mode_init() {
     uint8_t new_hum_sensor(uint8_t accessory, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group();
         ch_group->accessory = accessory_numerator;
-        accessory_numerator++;
         ch_group->homekit_enabled = acc_homekit_enabled(json_context);
         
-        new_accessory(accessory, 3, ch_group->homekit_enabled);
+        new_accessory(accessory, 3, ch_group->homekit_enabled, json_context);
         
         homekit_characteristic_t* ch1 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0);
         
@@ -5749,10 +5790,9 @@ void normal_mode_init() {
     uint8_t new_th_sensor(uint8_t accessory, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group();
         ch_group->accessory = accessory_numerator;
-        accessory_numerator++;
         ch_group->homekit_enabled = acc_homekit_enabled(json_context);
         
-        new_accessory(accessory, 4, ch_group->homekit_enabled);
+        new_accessory(accessory, 4, ch_group->homekit_enabled, json_context);
         
         homekit_characteristic_t* ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200});
         homekit_characteristic_t* ch1 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0);
@@ -5796,10 +5836,9 @@ void normal_mode_init() {
     uint8_t new_lightbulb(uint8_t accessory, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group();
         ch_group->accessory = accessory_numerator;
-        accessory_numerator++;
         ch_group->homekit_enabled = acc_homekit_enabled(json_context);
         
-        new_accessory(accessory, 3, ch_group->homekit_enabled);
+        new_accessory(accessory, 3, ch_group->homekit_enabled, json_context);
         
         bool is_pwm = true;
         if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R) == NULL &&
@@ -5809,7 +5848,7 @@ void normal_mode_init() {
 
         if (is_pwm && !main_config.lightbulb_groups) {
             INFO("PWM Init");
-            main_config.pwm_timer = xTimerCreate("pwm_timer", pdMS_TO_TICKS(RGBW_PERIOD), pdTRUE, NULL, rgbw_set_timer_worker);
+            main_config.pwm_timer = xTimerCreate(0, pdMS_TO_TICKS(RGBW_PERIOD), pdTRUE, NULL, rgbw_set_timer_worker);
             
             main_config.pwm_info = malloc(sizeof(pwm_info_t));
             memset(main_config.pwm_info, 0, sizeof(*main_config.pwm_info));
@@ -5996,8 +6035,7 @@ void normal_mode_init() {
             cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0) != NULL ||
             cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1) != NULL) {
             if (lightbulb_group->autodimmer_task_step > 0) {
-                ch_group->timer = new_timer();
-                sdk_os_timer_setfn(ch_group->timer, no_autodimmer_called, ch0);
+                ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(AUTODIMMER_DELAY), pdFALSE, (void*) ch0, no_autodimmer_called);
             }
         } else {
             lightbulb_group->autodimmer_task_step = 0;
@@ -6026,10 +6064,9 @@ void normal_mode_init() {
     uint8_t new_garage_door(uint8_t accessory, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group();
         ch_group->accessory = accessory_numerator;
-        accessory_numerator++;
         ch_group->homekit_enabled = acc_homekit_enabled(json_context);
         
-        new_accessory(accessory, 3, ch_group->homekit_enabled);
+        new_accessory(accessory, 3, ch_group->homekit_enabled, json_context);
         
         homekit_characteristic_t* ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_DOOR_STATE, 1);
         homekit_characteristic_t* ch1 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_DOOR_STATE, 1, .setter_ex=hkc_garage_door_setter);
@@ -6057,8 +6094,7 @@ void normal_mode_init() {
         GARAGE_DOOR_TIME_MARGIN = GARAGE_DOOR_TIME_MARGIN_DEFAULT;
         GARAGE_DOOR_CLOSE_TIME_FACTOR = 1;
         
-        ch_group->timer = new_timer();
-        sdk_os_timer_setfn(ch_group->timer, garage_door_timer_worker, ch0);
+        ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(1000), pdTRUE, (void*) ch0, garage_door_timer_worker);
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN_SET) != NULL) {
             GARAGE_DOOR_TIME_MARGIN = cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN_SET)->valuedouble;
@@ -6152,10 +6188,9 @@ void normal_mode_init() {
     uint8_t new_window_cover(uint8_t accessory, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group();
         ch_group->accessory = accessory_numerator;
-        accessory_numerator++;
         ch_group->homekit_enabled = acc_homekit_enabled(json_context);
         
-        new_accessory(accessory, 3, ch_group->homekit_enabled);
+        new_accessory(accessory, 3, ch_group->homekit_enabled, json_context);
         
         uint8_t cover_type = WINDOW_COVER_TYPE_DEFAULT;
         if (cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TYPE) != NULL) {
@@ -6207,11 +6242,9 @@ void normal_mode_init() {
         register_wildcard_actions(ch_group, json_context);
         ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
         
-        ch_group->timer = new_timer();
-        sdk_os_timer_setfn(ch_group->timer, window_cover_timer_worker, ch_group);
+        ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(WINDOW_COVER_POLL_PERIOD_MS), pdTRUE, (void*) ch_group, window_cover_timer_worker);
         
-        ch_group->timer2 = new_timer();
-        sdk_os_timer_setfn(ch_group->timer2, window_cover_timer_rearm_stop, ch_group);
+        ch_group->timer2 = xTimerCreate(0, pdMS_TO_TICKS(WINDOW_COVER_STOP_ENABLE_DELAY_MS), pdFALSE, (void*) ch_group, window_cover_timer_rearm_stop);
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_OPEN_SET) != NULL) {
             WINDOW_COVER_TIME_OPEN = cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_OPEN_SET)->valuedouble;
@@ -6269,10 +6302,9 @@ void normal_mode_init() {
     uint8_t new_fan(uint8_t accessory, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group();
         ch_group->accessory = accessory_numerator;
-        accessory_numerator++;
         ch_group->homekit_enabled = acc_homekit_enabled(json_context);
         
-        new_accessory(accessory, 3, ch_group->homekit_enabled);
+        new_accessory(accessory, 3, ch_group->homekit_enabled, json_context);
         
         uint8_t max_speed = 100;
         if (cJSON_GetObjectItemCaseSensitive(json_context, FAN_SPEED_STEPS) != NULL) {
@@ -6373,10 +6405,9 @@ void normal_mode_init() {
         
         ch_group_t* ch_group = new_ch_group();
         ch_group->accessory = accessory_numerator;
-        accessory_numerator++;
         ch_group->homekit_enabled = acc_homekit_enabled(json_context);
         
-        new_accessory(accessory, 4 + inputs, ch_group->homekit_enabled);
+        new_accessory(accessory, 4 + inputs, ch_group->homekit_enabled, json_context);
 
         homekit_characteristic_t* ch0 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_tv_active);
         homekit_characteristic_t* ch1 = NEW_HOMEKIT_CHARACTERISTIC(CONFIGURED_NAME, "HAA TV", .setter_ex=hkc_tv_configured_name);
@@ -6549,7 +6580,7 @@ void normal_mode_init() {
     // Bridge
     if (bridge_needed) {
         INFO("BRIDGE CREATED");
-        new_accessory(0, 2, true);
+        new_accessory(0, 2, true, NULL);
         acc_count++;
     }
     
@@ -6732,11 +6763,6 @@ void normal_mode_init() {
     
     INFO("Device Category: %i\n", config.category);
     
-    // HomeKit last config number
-    int last_config_number = 1;
-    sysparam_get_int32(LAST_CONFIG_NUMBER, &last_config_number);
-    
-    serial.value = name.value;
     config.accessories = accessories;
     config.setupId = "JOSE";
     config.config_number = last_config_number;
@@ -6807,12 +6833,12 @@ void user_init(void) {
     } else {
 #ifdef HAA_DEBUG
         free_heap_watchdog();
-        xTimerStart(xTimerCreate("free_heap", pdMS_TO_TICKS(1000), pdTRUE, NULL, free_heap_watchdog), XTIMER_BLOCK_TIME);
+        xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(1000), pdTRUE, NULL, free_heap_watchdog), XTIMER_BLOCK_TIME);
 #endif // HAA_DEBUG
         
         // Arming emergency Setup Mode
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
-        xTimerStart(xTimerCreate("emerg_setup", pdMS_TO_TICKS(EXIT_EMERGENCY_SETUP_MODE_TIME), pdFALSE, NULL, disable_emergency_setup), XTIMER_BLOCK_TIME);
+        xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(EXIT_EMERGENCY_SETUP_MODE_TIME), pdFALSE, NULL, disable_emergency_setup), XTIMER_BLOCK_TIME);
         
         name.value = HOMEKIT_STRING(main_config.name_value);
         

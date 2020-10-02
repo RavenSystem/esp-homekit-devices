@@ -962,7 +962,7 @@ uint8_t wifi_config_connect() {
 
 static void wifi_config_station_connect() {
     if (wifi_config_connect() == 1) {
-        context->sta_connect_timeout = xTimerCreate("connect_timeout", pdMS_TO_TICKS(500), pdTRUE, NULL, wifi_config_sta_connect_timeout_callback);
+        context->sta_connect_timeout = xTimerCreate(0, pdMS_TO_TICKS(500), pdTRUE, NULL, wifi_config_sta_connect_timeout_callback);
         xTimerStart(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
         
         if (!context->on_wifi_ready) {
@@ -975,7 +975,7 @@ static void wifi_config_station_connect() {
 
             if (setup_mode == 1) {
                 INFO("Enabling auto reboot");
-                context->auto_reboot_timer = xTimerCreate("auto_reboot", pdMS_TO_TICKS(AUTO_REBOOT_TIMEOUT), pdFALSE, NULL, auto_reboot_run);
+                context->auto_reboot_timer = xTimerCreate(0, pdMS_TO_TICKS(AUTO_REBOOT_TIMEOUT), pdFALSE, NULL, auto_reboot_run);
                 xTimerStart(context->auto_reboot_timer, XTIMER_BLOCK_TIME);
             }
             
