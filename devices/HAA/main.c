@@ -4441,7 +4441,7 @@ void normal_mode_init() {
     }
     
     void th_sensor_starter(ch_group_t* ch_group) {
-        ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(TH_SENSOR_POLL_PERIOD), pdTRUE, (void*) ch_group, temperature_timer_worker);
+        ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(TH_SENSOR_POLL_PERIOD * 1000), pdTRUE, (void*) ch_group, temperature_timer_worker);
     }
     
     // ----- CONFIG SECTION
