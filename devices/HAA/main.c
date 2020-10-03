@@ -336,9 +336,6 @@ void wifi_reconnection() {
         main_config.wifi_status = WIFI_STATUS_CONNECTING_1;
         INFO("Wifi reconnecting...");
         wifi_config_connect();
-        
-    } else if (main_config.wifi_status == WIFI_STATUS_CONNECTING_1) {
-        main_config.wifi_status = WIFI_STATUS_CONNECTING_2;
 
     } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
@@ -360,6 +357,9 @@ void wifi_reconnection() {
             
             do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 3);
         }
+    
+    } else if (main_config.wifi_status == WIFI_STATUS_CONNECTING_1) {
+        main_config.wifi_status = WIFI_STATUS_CONNECTING_2;
         
     } else {
         sdk_wifi_station_disconnect();
