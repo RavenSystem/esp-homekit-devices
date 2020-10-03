@@ -3988,20 +3988,22 @@ void normal_mode_init() {
                         
                         action_relay->action = new_int_action;
                         
-                        action_relay->gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuedouble;
-                        if (!get_used_gpio(action_relay->gpio)) {
-                            change_uart_gpio(action_relay->gpio);
-                            gpio_enable(action_relay->gpio, GPIO_OUTPUT);
-                            gpio_write(action_relay->gpio, false);
-                            
-                            set_used_gpio(action_relay->gpio);
-                        }
-                        
                         action_relay->value = false;
                         if (cJSON_GetObjectItemCaseSensitive(json_relay, VALUE) != NULL) {
                             action_relay->value = (bool) cJSON_GetObjectItemCaseSensitive(json_relay, VALUE)->valuedouble;
                         }
                         
+                        action_relay->gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuedouble;
+                        if (!get_used_gpio(action_relay->gpio)) {
+                            change_uart_gpio(action_relay->gpio);
+                            gpio_enable(action_relay->gpio, GPIO_OUTPUT);
+                            gpio_write(action_relay->gpio, action_relay->value);
+                            
+                            set_used_gpio(action_relay->gpio);
+                            
+                            INFO("New GPIO Output %i set to %i", action_relay->gpio, action_relay->value);
+                        }
+
                         action_relay->inching = 0;
                         if (cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME) != NULL) {
                             action_relay->inching = (float) cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME)->valuedouble;
