@@ -151,13 +151,6 @@ static void stop_reboot_timer() {
     }
 }
 
-static void stop_sta_connect_timer() {
-    if (context->sta_connect_timeout) {
-        xTimerStop(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
-        xTimerDelete(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
-    }
-}
-
 static uint8_t wifi_config_connect();
 static void wifi_config_reset() {
     struct sdk_station_config sta_config;
@@ -545,12 +538,16 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
             
         case ENDPOINT_SETTINGS_UPDATE: {
             stop_reboot_timer();
-            stop_sta_connect_timer();
+            if (context->sta_connect_timeout) {
+                xTimerStop(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
+                xTimerDelete(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
+            }
+            
             if (context->wifi_scan_task_handle) {
                 vTaskDelete(context->wifi_scan_task_handle);
             }
             wifi_config_context_free(context);
-            xTaskCreate(wifi_config_server_on_settings_update_task, "on_settings_update_task", 512, client, (tskIDLE_PRIORITY + 0), NULL);
+            xTaskCreate(wifi_config_server_on_settings_update_task, "settings_update", 512, client, (tskIDLE_PRIORITY + 0), NULL);
             return 0;
             break;
         }
@@ -818,10 +815,10 @@ static void auto_reboot_run() {
     sdk_system_restart();
 }
 
-static void wifi_config_sta_connect_timeout_callback() {
+static void wifi_config_sta_connect_timeout_callback(TimerHandle_t xTimer) {
     if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         // Connected to station, all is dandy
-        stop_sta_connect_timer();
+        xTimerStop(xTimer, XTIMER_BLOCK_TIME);
         
         wifi_config_softap_stop();
         http_stop();
@@ -832,6 +829,7 @@ static void wifi_config_sta_connect_timeout_callback() {
         
         wifi_config_context_free(context);
         context = NULL;
+        xTimerDelete(xTimer, XTIMER_BLOCK_TIME);
     } else {
         context->check_counter++;
         if (context->check_counter == 10) {
@@ -919,7 +917,7 @@ static void wifi_config_station_connect() {
         INFO("\nHAA OTA - NORMAL MODE\n");
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
 
-        context->sta_connect_timeout = xTimerCreate("connect_timeout", pdMS_TO_TICKS(500), pdTRUE, NULL, wifi_config_sta_connect_timeout_callback);
+        context->sta_connect_timeout = xTimerCreate(0, pdMS_TO_TICKS(500), pdTRUE, NULL, wifi_config_sta_connect_timeout_callback);
         xTimerStart(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
         
     } else {
@@ -927,7 +925,7 @@ static void wifi_config_station_connect() {
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
         
         if (setup_mode == 1) {
-            context->auto_reboot_timer = xTimerCreate("auto_reboot", pdMS_TO_TICKS(AUTO_REBOOT_TIMEOUT), pdFALSE, NULL, auto_reboot_run);
+            context->auto_reboot_timer = xTimerCreate(0, pdMS_TO_TICKS(AUTO_REBOOT_TIMEOUT), pdFALSE, NULL, auto_reboot_run);
             xTimerStart(context->auto_reboot_timer, XTIMER_BLOCK_TIME);
         }
         
@@ -945,7 +943,7 @@ void wifi_config_init(const char *ssid_prefix, const char *password, void (*on_w
     context = malloc(sizeof(wifi_config_context_t));
     memset(context, 0, sizeof(*context));
 
-    context->ssid_prefix = strndup(ssid_prefix, 33-7);
+    context->ssid_prefix = strndup(ssid_prefix, 33 - 7);
     if (password) {
         context->password = strdup(password);
     }
