@@ -3785,8 +3785,8 @@ void normal_mode_init() {
             adv_button_register_callback_fn(gpio, callback, button_type, (void*) ch_group, param);
             
             INFO("New Digital Input: gpio %i, type %i, inv %i, filter %i", gpio, button_type, inverted, button_filter);
-             
-            if (gpio_read(gpio) == button_type) {
+
+            if (gpio_read(gpio) ^ inverted == button_type) {
                 run_at_launch = true;
             }
         }
