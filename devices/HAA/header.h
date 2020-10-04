@@ -211,6 +211,12 @@
 #define SENSOR_TEMPERATURE_FLOAT            ch_group->ch0->value.float_value
 #define TH_SENSOR_ERROR_COUNT               ch_group->num[9]
 
+#define LIGHTBULB_DRIVER                    "d"
+#define LIGHTBULB_DRIVER_PWM                (0)
+#define LIGHTBULB_DRIVER_MY9291             (1)
+#define LIGHTBULB_DRIVER_MY9231             (2)
+#define LIGHTBULB_DRIVER_GPIO_DI            "d1"
+#define LIGHTBULB_DRIVER_GPIO_DCKI          "d2"
 #define LIGHTBULB_PWM_GPIO_R                "r"
 #define LIGHTBULB_PWM_GPIO_G                "g"
 #define LIGHTBULB_PWM_GPIO_B                "v"

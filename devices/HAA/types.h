@@ -269,6 +269,7 @@ typedef struct _main_config {
     last_state_t* last_states;
     
     pwm_info_t* pwm_info;
+    driver_interface_t* driver_interface;
 } main_config_t;
 
 #endif // __HAA_TYPES_H__
