@@ -1,3 +1,9 @@
+/**
+ * This code is a C port of the my92xx LED Driver Library by Xose Perez
+ * the original C++ implementation is https://github.com/xoseperez/my92xx
+ * Some functions were adjusted but mainly it's a copy paste of the library mentioned above.
+ * Original comments are kept.
+ */ 
 #ifndef MY92XX_H
 #define MY92XX_H
 
