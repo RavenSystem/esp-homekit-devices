@@ -34,7 +34,7 @@
 #define MIN(x, y)                   (((x) < (y)) ? (x) : (y))
 #define MAX(x, y)                   (((x) > (y)) ? (x) : (y))
 
-#define XTIMER_BLOCK_TIME           (90)
+#define XTIMER_BLOCK_TIME           (1)
 
 typedef struct _adv_button_callback_fn {
     uint8_t param;

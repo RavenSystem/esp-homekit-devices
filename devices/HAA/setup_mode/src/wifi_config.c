@@ -57,7 +57,7 @@
 
 #define MAX_BODY_LEN                    (16000)
 
-#define XTIMER_BLOCK_TIME               (pdMS_TO_TICKS(1100))
+#define XTIMER_BLOCK_TIME               (20)
 
 #define INFO(message, ...)              printf(message "\n", ##__VA_ARGS__);
 #define ERROR(message, ...)             printf("! " message "\n", ##__VA_ARGS__);
@@ -164,7 +164,6 @@ static void client_send_redirect(client_t *client, int code, const char *redirec
 
 static void stop_reboot_timer() {
     if (context->auto_reboot_timer) {
-        xTimerStop(context->auto_reboot_timer, XTIMER_BLOCK_TIME);
         xTimerDelete(context->auto_reboot_timer, XTIMER_BLOCK_TIME);
     }
 }
@@ -571,7 +570,6 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
         case ENDPOINT_SETTINGS_UPDATE: {
             stop_reboot_timer();
             if (context->sta_connect_timeout) {
-                xTimerStop(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
                 xTimerDelete(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
             }
             
@@ -853,7 +851,7 @@ static void wifi_config_sta_connect_timeout_callback(TimerHandle_t xTimer) {
         }
     } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         // Connected to station, all is dandy
-        xTimerStop(xTimer, XTIMER_BLOCK_TIME);
+        xTimerDelete(xTimer, XTIMER_BLOCK_TIME);
         
         wifi_config_softap_stop();
         
@@ -867,8 +865,6 @@ static void wifi_config_sta_connect_timeout_callback(TimerHandle_t xTimer) {
             wifi_config_context_free(context);
             context = NULL;
         }
-        
-        xTimerDelete(xTimer, XTIMER_BLOCK_TIME);
     } else {
         context->check_counter++;
         if (context->check_counter == 10) {

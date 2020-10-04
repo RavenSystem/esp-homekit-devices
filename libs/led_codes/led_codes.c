@@ -16,7 +16,8 @@
 
 #define DURATION_OFF                (120)
 #define DURATION_ON_MIN             (30)
-#define XTIMER_BLOCK_TIME           (90)
+
+#define XTIMER_BLOCK_TIME           (3)
 
 typedef struct _led {
     uint8_t gpio: 5;
