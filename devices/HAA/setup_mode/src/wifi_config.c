@@ -57,7 +57,7 @@
 
 #define MAX_BODY_LEN                    (16000)
 
-#define XTIMER_BLOCK_TIME               (20)
+#define XTIMER_BLOCK_TIME               (50)
 
 #define INFO(message, ...)              printf(message "\n", ##__VA_ARGS__);
 #define ERROR(message, ...)             printf("! " message "\n", ##__VA_ARGS__);
@@ -85,16 +85,16 @@ typedef struct {
     char* custom_hostname;
     void (*on_wifi_ready)();
 
-    TimerHandle_t sta_connect_timeout;
     TimerHandle_t auto_reboot_timer;
     
     TaskHandle_t http_task_handle;
     TaskHandle_t dns_task_handle;
     TaskHandle_t wifi_scan_task_handle;
+    TaskHandle_t sta_connect_timeout;
     
     wifi_network_info_t* wifi_networks;
     SemaphoreHandle_t wifi_networks_mutex;
-    
+
     uint8_t check_counter: 7;
     bool hostname_ready: 1;
 } wifi_config_context_t;
@@ -569,9 +569,7 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
         }
         case ENDPOINT_SETTINGS_UPDATE: {
             stop_reboot_timer();
-            if (context->sta_connect_timeout) {
-                xTimerDelete(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
-            }
+            vTaskDelete(context->sta_connect_timeout);
             
             if (context->wifi_scan_task_handle) {
                 vTaskDelete(context->wifi_scan_task_handle);
@@ -837,43 +835,50 @@ static void wifi_config_softap_stop() {
     UNLOCK_TCPIP_CORE();
 }
 
-static void wifi_config_sta_connect_timeout_callback(TimerHandle_t xTimer) {
-    if (!context->hostname_ready) {
-        struct netif *netif = sdk_system_get_netif(STATION_IF);
-        if (netif && !netif->hostname && context->custom_hostname) {
-            LOCK_TCPIP_CORE();
-            dhcp_release_and_stop(netif);
-            netif->hostname = context->custom_hostname;
-            INFO("Hostname: %s", context->custom_hostname);
-            dhcp_start(netif);
-            UNLOCK_TCPIP_CORE();
-            context->hostname_ready = true;
-        }
-    } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
-        // Connected to station, all is dandy
-        xTimerDelete(xTimer, XTIMER_BLOCK_TIME);
+static void wifi_config_sta_connect_timeout_task() {
+    for (;;) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
         
-        wifi_config_softap_stop();
-        
-        if (context->on_wifi_ready) {
-            http_stop();
-            if (context->wifi_scan_task_handle) {
-                vTaskDelete(context->wifi_scan_task_handle);
+        if (!context->hostname_ready && context->custom_hostname) {
+            struct netif *netif = sdk_system_get_netif(STATION_IF);
+            if (netif && !netif->hostname) {
+                LOCK_TCPIP_CORE();
+                dhcp_release_and_stop(netif);
+                netif->hostname = context->custom_hostname;
+                INFO("Hostname: %s", context->custom_hostname);
+                dhcp_start(netif);
+                UNLOCK_TCPIP_CORE();
+                context->hostname_ready = true;
             }
-            context->on_wifi_ready();
+        } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+            wifi_config_softap_stop();
             
-            wifi_config_context_free(context);
-            context = NULL;
-        }
-    } else {
-        context->check_counter++;
-        if (context->check_counter == 10) {
-            wifi_config_connect();
-        } else if (context->check_counter == 120) {
-            context->check_counter = 0;
-            wifi_config_reset();
+            if (context->on_wifi_ready) {
+                http_stop();
+                if (context->wifi_scan_task_handle) {
+                    vTaskDelete(context->wifi_scan_task_handle);
+                }
+                context->on_wifi_ready();
+                
+                wifi_config_context_free(context);
+                context = NULL;
+                break;
+            }
+        } else if (context->on_wifi_ready) {
+            context->check_counter++;
+            if (context->check_counter == 1) {
+                wifi_config_connect();
+                vTaskDelay(pdMS_TO_TICKS(6000));
+                
+            } else if (context->check_counter == 60) {
+                context->check_counter = 0;
+                wifi_config_reset();
+                vTaskDelay(pdMS_TO_TICKS(6000));
+            }
         }
     }
+    
+    vTaskDelete(NULL);
 }
 
 static void auto_reboot_run() {
@@ -958,8 +963,7 @@ uint8_t wifi_config_connect() {
 
 static void wifi_config_station_connect() {
     if (wifi_config_connect() == 1) {
-        context->sta_connect_timeout = xTimerCreate(0, pdMS_TO_TICKS(500), pdTRUE, NULL, wifi_config_sta_connect_timeout_callback);
-        xTimerStart(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
+        xTaskCreate(wifi_config_sta_connect_timeout_task, "sta_connect", 512, NULL, (tskIDLE_PRIORITY + 0), &context->sta_connect_timeout);
         
         if (!context->on_wifi_ready) {
             INFO("HAA Setup");
@@ -1006,7 +1010,7 @@ void wifi_config_init(const char* ssid_prefix, const char* password, void (*on_w
     }
 
     context->on_wifi_ready = on_wifi_ready;
-    context->check_counter = 10;
+    context->check_counter = 1;
 
     wifi_config_station_connect();
 }

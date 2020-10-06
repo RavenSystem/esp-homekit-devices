@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "3.5.5"
+#define FIRMWARE_VERSION                    "3.5.6"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -53,6 +53,7 @@
 #define DELAYED_SENSOR_START_TASK_SIZE      (512)
 #define TEMPERATURE_TASK_SIZE               (512)
 #define POWER_MONITOR_TASK_SIZE             (512)
+#define WIFI_RECONNECTION_TASK_SIZE         (512)
 
 // Task Priorities
 #define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
@@ -66,6 +67,7 @@
 #define DELAYED_SENSOR_START_TASK_PRIORITY  (tskIDLE_PRIORITY + 0)
 #define TEMPERATURE_TASK_PRIORITY           (tskIDLE_PRIORITY + 1)
 #define POWER_MONITOR_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
+#define WIFI_RECONNECTION_TASK_PRIORITY     (tskIDLE_PRIORITY + 0)
 
 // Button Events
 #define SINGLEPRESS_EVENT                   (0)
@@ -425,7 +427,7 @@
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
 
-#define WIFI_RECONNECTION_TIMER             ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE)->timer
+#define SAVE_STATES_TIMER                   ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE)->timer
 #define WIFI_WATCHDOG_TIMER                 ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE)->timer2
 #define WIFI_STATUS_DISCONNECTED            (0)
 #define WIFI_STATUS_CONNECTING_1            (1)
@@ -454,7 +456,7 @@
 #define INFO(message, ...)                  printf(message "\n", ##__VA_ARGS__)
 #define ERROR(message, ...)                 printf("! " message "\n", ##__VA_ARGS__)
 
-#define XTIMER_BLOCK_TIME                   (1)
+#define XTIMER_BLOCK_TIME                   (50)
 
 #define FREEHEAP()                          printf("Free Heap: %d\n", xPortGetFreeHeapSize())
 

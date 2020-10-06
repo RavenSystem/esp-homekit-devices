@@ -17,7 +17,8 @@
 #define DURATION_OFF                (120)
 #define DURATION_ON_MIN             (30)
 
-#define XTIMER_BLOCK_TIME           (3)
+#define XTIMER_BLOCK_TIME           (50)
+#define XTIMER_PERIOD_BLOCK_TIME    (10)
 
 typedef struct _led {
     uint8_t gpio: 5;
@@ -58,8 +59,7 @@ static void led_code_run(TimerHandle_t xTimer) {
     }
     
     if (led->count < led->blinking_params.times) {
-        xTimerChangePeriod(led->timer, pdMS_TO_TICKS(delay), XTIMER_BLOCK_TIME);
-        xTimerStart(led->timer, XTIMER_BLOCK_TIME);
+        xTimerChangePeriod(led->timer, pdMS_TO_TICKS(delay), XTIMER_PERIOD_BLOCK_TIME);
     }
 }
 

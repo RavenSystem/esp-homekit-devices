@@ -34,7 +34,8 @@
 #define MIN(x, y)                   (((x) < (y)) ? (x) : (y))
 #define MAX(x, y)                   (((x) > (y)) ? (x) : (y))
 
-#define XTIMER_BLOCK_TIME           (1)
+#define XTIMER_BLOCK_TIME           (50)
+#define XTIMER_PERIOD_BLOCK_TIME    (10)
 
 typedef struct _adv_button_callback_fn {
     uint8_t param;
@@ -228,6 +229,8 @@ IRAM static void button_evaluate_fn() {
 }
 
 IRAM static void adv_button_interrupt(const uint8_t gpio) {
+    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, adv_button_interrupt);
+    
     if (adv_button_main_config->button_evaluate_sleep_countdown == 0) {
         adv_button_main_config->button_evaluate_sleep_countdown = (HOLDPRESS_TIME + 1000) / adv_button_main_config->button_evaluate_delay;
         button_evaluate_fn();
@@ -237,6 +240,8 @@ IRAM static void adv_button_interrupt(const uint8_t gpio) {
     }
 
     adv_button_main_config->button_evaluate_sleep_countdown = (HOLDPRESS_TIME + 1000) / adv_button_main_config->button_evaluate_delay;
+    
+    gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt);
 }
 
 void adv_button_init() {
@@ -281,7 +286,7 @@ void adv_button_set_evaluate_delay(const uint8_t new_delay) {
         adv_button_main_config->button_evaluate_delay = new_delay;
     }
     
-    xTimerChangePeriod(adv_button_main_config->button_evaluate_timer, pdMS_TO_TICKS(adv_button_main_config->button_evaluate_delay), XTIMER_BLOCK_TIME);
+    xTimerChangePeriod(adv_button_main_config->button_evaluate_timer, pdMS_TO_TICKS(adv_button_main_config->button_evaluate_delay), XTIMER_PERIOD_BLOCK_TIME);
 }
 
 void adv_button_set_disable_time() {
@@ -335,7 +340,7 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
             
             adv_button_t *button = adv_button_main_config->buttons;
             while (button) {
-                gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, NULL);
+                gpio_set_interrupt(button->gpio, GPIO_INTTYPE_NONE, NULL);
                 button = button->next;
             }
         }
@@ -405,16 +410,13 @@ int adv_button_destroy(const uint8_t gpio) {
         adv_button_t *button = NULL;
         if (adv_button_main_config->buttons->gpio == gpio) {
             
-            gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_ANY, NULL);
+            gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
             
             if (button->gpio != 0) {
                 gpio_disable(gpio);
             }
             
-            xTimerStop(button->hold_timer, XTIMER_BLOCK_TIME);
             xTimerDelete(button->hold_timer, XTIMER_BLOCK_TIME);
-            
-            xTimerStop(button->press_timer, XTIMER_BLOCK_TIME);
             xTimerDelete(button->press_timer, XTIMER_BLOCK_TIME);
             
             button = adv_button_main_config->buttons;
@@ -436,7 +438,6 @@ int adv_button_destroy(const uint8_t gpio) {
         }
 
         if (!adv_button_main_config->buttons) {
-            xTimerStop(adv_button_main_config->button_evaluate_timer, XTIMER_BLOCK_TIME);
             xTimerDelete(adv_button_main_config->button_evaluate_timer, XTIMER_BLOCK_TIME);
             
             free(adv_button_main_config);

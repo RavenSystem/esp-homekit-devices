@@ -88,7 +88,6 @@ main_config_t main_config = {
     .used_gpio_16 = false,
     .used_gpio_17 = false,
     
-    .save_states_timer = NULL,
     .setup_mode_toggle_timer = NULL,
     
     .ch_groups = NULL,
@@ -300,6 +299,60 @@ void wifi_ping_task() {
     vTaskDelete(NULL);
 }
 
+void wifi_reconnection_task() {
+    while (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
+        vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
+        
+        if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
+            main_config.wifi_status = WIFI_STATUS_CONNECTING_1;
+            INFO("Wifi reconnecting...");
+            wifi_config_connect();
+
+        } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+            if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
+                main_config.wifi_status = WIFI_STATUS_CONNECTED;
+                main_config.wifi_channel = sdk_wifi_get_channel();
+                INFO("mDNS reannounced");
+                homekit_mdns_announce();
+                
+                xTimerStart(WIFI_WATCHDOG_TIMER, XTIMER_BLOCK_TIME);
+                
+            } else {
+                main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
+                INFO("Wifi reconnected");
+                resend_arp();
+                homekit_mdns_announce();
+                
+                main_config.wifi_error_count = 0;
+                
+                do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 3);
+            }
+        
+        } else if (main_config.wifi_status == WIFI_STATUS_CONNECTING_1) {
+            main_config.wifi_status = WIFI_STATUS_CONNECTING_2;
+            
+        } else {
+            sdk_wifi_station_disconnect();
+            led_blink(8);
+            ERROR("Wifi disconnected");
+
+            main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
+            wifi_config_reset();
+            
+            main_config.wifi_error_count++;
+            if (main_config.wifi_error_count < WIFI_ERROR_COUNT_REBOOT) {
+                do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
+            } else {
+                main_config.wifi_error_count = 0;
+                do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 5);
+            }
+        }
+    }
+    
+    xTimerStart(WIFI_WATCHDOG_TIMER, XTIMER_BLOCK_TIME);
+    vTaskDelete(NULL);
+}
+
 void wifi_watchdog() {
     if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
         uint8_t current_channel = sdk_wifi_get_channel();
@@ -312,7 +365,9 @@ void wifi_watchdog() {
             resend_arp();
             homekit_mdns_announce();
             
-            xTimerStart(WIFI_RECONNECTION_TIMER, XTIMER_BLOCK_TIME);
+            if (xTaskCreate(wifi_reconnection_task, "reconnect", WIFI_RECONNECTION_TASK_SIZE, NULL, WIFI_RECONNECTION_TASK_PRIORITY, NULL) != pdPASS) {
+                ERROR("Creating wifi_reconnection_task");
+            }
         }
         
         if (main_config.wifi_ping_max_errors != 255 && !main_config.wifi_ping_is_running && !homekit_is_pairing()) {
@@ -324,57 +379,11 @@ void wifi_watchdog() {
     } else {
         ERROR("Wifi error");
         xTimerStop(WIFI_WATCHDOG_TIMER, XTIMER_BLOCK_TIME);
-        xTimerStart(WIFI_RECONNECTION_TIMER, XTIMER_BLOCK_TIME);
         main_config.wifi_error_count = 0;
         main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
         sdk_wifi_station_disconnect();
-    }
-}
-
-void wifi_reconnection() {
-    if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
-        main_config.wifi_status = WIFI_STATUS_CONNECTING_1;
-        INFO("Wifi reconnecting...");
-        wifi_config_connect();
-
-    } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
-        if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
-            main_config.wifi_status = WIFI_STATUS_CONNECTED;
-            main_config.wifi_channel = sdk_wifi_get_channel();
-            INFO("mDNS reannounced");
-            homekit_mdns_announce();
-            
-            xTimerStop(WIFI_RECONNECTION_TIMER, XTIMER_BLOCK_TIME);
-            xTimerStart(WIFI_WATCHDOG_TIMER, XTIMER_BLOCK_TIME);
-            
-        } else {
-            main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
-            INFO("Wifi reconnected");
-            resend_arp();
-            homekit_mdns_announce();
-            
-            main_config.wifi_error_count = 0;
-            
-            do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 3);
-        }
-    
-    } else if (main_config.wifi_status == WIFI_STATUS_CONNECTING_1) {
-        main_config.wifi_status = WIFI_STATUS_CONNECTING_2;
-        
-    } else {
-        sdk_wifi_station_disconnect();
-        led_blink(8);
-        ERROR("Wifi disconnected");
-
-        main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
-        wifi_config_reset();
-        
-        main_config.wifi_error_count++;
-        if (main_config.wifi_error_count < WIFI_ERROR_COUNT_REBOOT) {
-            do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
-        } else {
-            main_config.wifi_error_count = 0;
-            do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 5);
+        if (xTaskCreate(wifi_reconnection_task, "reconnect", WIFI_RECONNECTION_TASK_SIZE, NULL, WIFI_RECONNECTION_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("Creating wifi_reconnection_task");
         }
     }
 }
@@ -512,7 +521,7 @@ void save_states() {
 }
 
 inline void save_states_callback() {
-    xTimerStart(main_config.save_states_timer, XTIMER_BLOCK_TIME);
+    xTimerStart(SAVE_STATES_TIMER, XTIMER_BLOCK_TIME);
 }
 
 void hkc_group_notify(ch_group_t* ch_group) {
@@ -3582,7 +3591,6 @@ void run_homekit_server() {
         FREEHEAP();
     }
     
-    WIFI_RECONNECTION_TIMER = xTimerCreate(0, pdMS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS), pdTRUE, NULL, wifi_reconnection);
     WIFI_WATCHDOG_TIMER = xTimerCreate(0, pdMS_TO_TICKS(WIFI_WATCHDOG_POLL_PERIOD_MS), pdTRUE, NULL, wifi_watchdog);
     xTimerStart(WIFI_WATCHDOG_TIMER, XTIMER_BLOCK_TIME);
     
@@ -4680,9 +4688,6 @@ void normal_mode_init() {
         hk_total_ac += 1;
     }
     
-    // Saved States Timer Function
-    main_config.save_states_timer = xTimerCreate(0, pdMS_TO_TICKS(SAVE_STATES_DELAY_MS), pdFALSE, NULL, save_states);
-    
     homekit_accessory_t** accessories = calloc(hk_total_ac, sizeof(homekit_accessory_t*));
     
     // Define services and characteristics
@@ -4698,15 +4703,12 @@ void normal_mode_init() {
             accessory_numerator++;
             return;
         }
-        
-        uint8_t serial_acc = accessory_numerator;
-        accessory_numerator++;
-        
+
         if (acc_count == 0) {
             services++;
             
             if (bridge_needed) {
-                serial_acc = 0;
+                accessory_numerator--;
             }
         }
 
@@ -4733,15 +4735,16 @@ void normal_mode_init() {
         sdk_wifi_get_macaddr(STATION_IF, macaddr);
         
         if (use_config_number) {
-            snprintf(serial_str, serial_prefix_len, "%i-%02X%02X%02X-%i", last_config_number, macaddr[3], macaddr[4], macaddr[5], serial_acc);
+            snprintf(serial_str, serial_prefix_len, "%i-%02X%02X%02X-%i", last_config_number, macaddr[3], macaddr[4], macaddr[5], accessory_numerator);
         } else {
-            snprintf(serial_str, serial_prefix_len, "%s%s%02X%02X%02X-%i", serial_prefix ? serial_prefix : "", serial_prefix ? "-" : "", macaddr[3], macaddr[4], macaddr[5], serial_acc);
+            snprintf(serial_str, serial_prefix_len, "%s%s%02X%02X%02X-%i", serial_prefix ? serial_prefix : "", serial_prefix ? "-" : "", macaddr[3], macaddr[4], macaddr[5], accessory_numerator);
         }
+        
+        accessory_numerator++;
         
         INFO("Serial: %s", serial_str);
         
         homekit_characteristic_t* serial = NEW_HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, serial_str);
-        //serial.value = HOMEKIT_STRING(serial_str);
         
         accessories[accessory] = calloc(1, sizeof(homekit_accessory_t));
         accessories[accessory]->id = accessory + 1;
@@ -6571,6 +6574,9 @@ void normal_mode_init() {
     register_actions(root_device_ch_group, json_config, 0);
     set_accessory_ir_protocol(root_device_ch_group, json_config);
     
+    // Saved States Timer Function
+    root_device_ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(SAVE_STATES_DELAY_MS), pdFALSE, NULL, save_states);
+    
     // Exec action 0 from root device
     do_actions(root_device_ch_group, 0);
     
@@ -6813,7 +6819,7 @@ void user_init(void) {
     }
 
     INFO("\n");
-    INFO("size %i", sizeof(main_config.save_states_timer));
+
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     snprintf(main_config.name_value, 11, "HAA-%02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);

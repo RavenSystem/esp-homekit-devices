@@ -259,7 +259,6 @@ typedef struct _main_config {
     
     float ping_poll_period;
     
-    TimerHandle_t save_states_timer;
     TimerHandle_t setup_mode_toggle_timer;
     TimerHandle_t pwm_timer;
     
