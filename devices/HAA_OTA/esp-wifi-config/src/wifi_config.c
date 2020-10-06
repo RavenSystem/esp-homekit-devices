@@ -39,7 +39,7 @@
 
 #define MAX_BODY_LEN                    (16000)
 
-#define XTIMER_BLOCK_TIME               (20)
+#define XTIMER_BLOCK_TIME               (50)
 
 #define INFO(message, ...)              printf(message "\n", ##__VA_ARGS__);
 #define ERROR(message, ...)             printf("! " message "\n", ##__VA_ARGS__);
@@ -77,7 +77,7 @@ typedef struct {
     wifi_network_info_t* wifi_networks;
     SemaphoreHandle_t wifi_networks_mutex;
     
-    uint8_t check_counter: 7;
+    uint8_t check_counter;
 } wifi_config_context_t;
 
 static wifi_config_context_t* context;
@@ -830,11 +830,8 @@ static void wifi_config_sta_connect_timeout_callback(TimerHandle_t xTimer) {
         
     } else {
         context->check_counter++;
-        if (context->check_counter == 10) {
-            wifi_config_connect();
-        } else if (context->check_counter == 120) {
-            context->check_counter = 0;
-            wifi_config_reset();
+        if (context->check_counter == 255) {
+            sdk_system_restart();
         }
     }
 }
@@ -947,7 +944,6 @@ void wifi_config_init(const char *ssid_prefix, const char *password, void (*on_w
     }
 
     context->on_wifi_ready = on_wifi_ready;
-    context->check_counter = 10;
     
     wifi_config_station_connect();
 }
