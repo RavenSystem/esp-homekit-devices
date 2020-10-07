@@ -314,9 +314,7 @@ void wifi_reconnection_task() {
                 main_config.wifi_channel = sdk_wifi_get_channel();
                 INFO("mDNS reannounced");
                 homekit_mdns_announce();
-                
-                xTimerStart(WIFI_WATCHDOG_TIMER, XTIMER_BLOCK_TIME);
-                
+
             } else {
                 main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
                 INFO("Wifi reconnected");
@@ -3579,14 +3577,13 @@ homekit_characteristic_t hap_version = HOMEKIT_CHARACTERISTIC_(VERSION, "1.1.0")
 
 homekit_server_config_t config;
 
-void run_homekit_server() {
+void run_homekit_server(TimerHandle_t xTimer) {
     main_config.wifi_channel = sdk_wifi_get_channel();
 
     FREEHEAP();
     
     if (main_config.enable_homekit_server) {
         INFO("Start HK Server");
-
         homekit_server_init(&config);
         FREEHEAP();
     }
@@ -3597,10 +3594,16 @@ void run_homekit_server() {
     do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 2);
 
     if (main_config.ping_inputs) {
-        xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(main_config.ping_poll_period * 1000.000f), pdTRUE, NULL, ping_task_timer_worker), XTIMER_BLOCK_TIME);
+        xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(main_config.ping_poll_period * 1000.00f), pdTRUE, NULL, ping_task_timer_worker), XTIMER_BLOCK_TIME);
     }
     
     led_blink(6);
+    
+    xTimerDelete(xTimer, XTIMER_BLOCK_TIME);
+}
+
+void run_homekit_server_delayed() {
+    xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(100), pdFALSE, NULL, run_homekit_server), XTIMER_BLOCK_TIME);
 }
 
 void printf_header() {
@@ -6783,7 +6786,7 @@ void normal_mode_init() {
         ERROR("Creating delayed_sensor_starter_task");
     }
 
-    wifi_config_init("HAA", NULL, run_homekit_server, custom_hostname);
+    wifi_config_init("HAA", NULL, run_homekit_server_delayed, custom_hostname);
     
     led_blink(3);
     
