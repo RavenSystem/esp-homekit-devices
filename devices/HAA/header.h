@@ -215,8 +215,10 @@
 #define LIGHTBULB_DRIVER_PWM                (0)
 #define LIGHTBULB_DRIVER_MY9291             (1)
 #define LIGHTBULB_DRIVER_MY9231             (2)
+#define LIGHTBULB_DRIVER_WS2812             (3)
 #define LIGHTBULB_DRIVER_GPIO_DI            "d1"
 #define LIGHTBULB_DRIVER_GPIO_DCKI          "d2"
+#define LIGHTBULB_DRIVER_NUM_CHIPS          "dn"
 #define LIGHTBULB_PWM_GPIO_R                "r"
 #define LIGHTBULB_PWM_GPIO_G                "g"
 #define LIGHTBULB_PWM_GPIO_B                "v"

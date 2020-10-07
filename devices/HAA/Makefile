@@ -9,6 +9,7 @@ EXTRA_COMPONENTS = \
 	extras/http-parser \
 	extras/dhcpserver \
 	extras/rboot-ota \
+	extras/ws2812 \
     $(abspath ../../external_libs/wolfssl) \
     $(abspath ../../external_libs/cJSON) \
     $(abspath ../../external_libs/homekit) \

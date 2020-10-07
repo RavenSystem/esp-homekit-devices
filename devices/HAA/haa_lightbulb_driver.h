@@ -5,6 +5,7 @@
 typedef enum _driver_family {
         DRIVER_PWM = 0X00,
         DRIVER_MY92XX = 0X01,
+        DRIVER_WS2812 = 0X02,
 } driver_family_t;
 
 typedef void (*haa_driver_updater_callback_t)(const void* driver_info, const uint16_t* multipwm_duty);

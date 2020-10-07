@@ -50,6 +50,7 @@
 #include "types.h"
 #include "lightbulb_my92xx_driver.h"
 #include "lightbulb_pwm_driver.h"
+#include "lightbulb_ws2812_driver.h"
 
 main_config_t main_config = {
     .wifi_status = WIFI_STATUS_CONNECTED,
@@ -5869,6 +5870,11 @@ void normal_mode_init() {
                 {
                     my92xx_cmd_t my92xx_command = MY92XX_COMMAND_DEFAULT;
                     haa_my92xx_init(&(main_config.driver_interface), MY92XX_MODEL_MY9231, json_context, &my92xx_command, &channels);
+                    break;
+                }
+                case LIGHTBULB_DRIVER_WS2812:
+                {
+                    haa_ws2812_init(&(main_config.driver_interface), json_context, &channels);
                     break;
                 }
                 default:
