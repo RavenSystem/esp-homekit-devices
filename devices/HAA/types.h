@@ -148,14 +148,10 @@ typedef struct _action_task {
     ch_group_t* ch_group;
 } action_task_t;
 
+
 typedef struct _lightbulb_group {
-    uint8_t pwm_r;
-    uint8_t pwm_g;
-    uint8_t pwm_b;
-    uint8_t pwm_w;
-    
-    uint8_t pwm_cw;
-    uint8_t pwm_ww;
+    lightbulb_channels_t channels;
+
     uint8_t autodimmer;
     uint8_t autodimmer_task_step;
     
@@ -251,7 +247,6 @@ typedef struct _main_config {
     bool used_gpio_16: 1;
     bool used_gpio_17: 1;
     
-    uint16_t pwm_freq;
     uint16_t multipwm_duty[MULTIPWM_MAX_CHANNELS];
     
     char name_value[11];
@@ -268,7 +263,6 @@ typedef struct _main_config {
     lightbulb_group_t* lightbulb_groups;
     last_state_t* last_states;
     
-    pwm_info_t* pwm_info;
     driver_interface_t* driver_interface;
 } main_config_t;
 

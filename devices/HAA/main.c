@@ -48,7 +48,8 @@
 #include "header.h"
 #include "haa_lightbulb_driver.h"
 #include "types.h"
-#include "my92xx.h"
+#include "lightbulb_my92xx_driver.h"
+#include "lightbulb_pwm_driver.h"
 
 main_config_t main_config = {
     .wifi_status = WIFI_STATUS_CONNECTED,
@@ -63,7 +64,6 @@ main_config_t main_config = {
     .setup_mode_time = 0,
     
     .ping_is_running = false,
-    .pwm_freq = 0,
     .setpwm_is_running = false,
     .setpwm_bool_semaphore = true,
     .enable_homekit_server = true,
@@ -1488,124 +1488,100 @@ void hsi2rgbw(uint16_t h, uint16_t s, uint16_t v, lightbulb_group_t* lightbulb_g
     lightbulb_group->target_ww = lightbulb_group->factor_ww * ((ww > PWM_SCALE) ? PWM_SCALE : ww);
 }
 
-void multipwm_set_all() {
-    multipwm_stop(main_config.pwm_info);
-    for (uint8_t i = 0; i < main_config.pwm_info->channels; i++) {
-        multipwm_set_duty(main_config.pwm_info, i, main_config.multipwm_duty[i]);
-    }
-    multipwm_start(main_config.pwm_info);
-}
-
 void rgbw_set_timer_worker() {
-    if (!main_config.setpwm_bool_semaphore) {
+    if (!main_config.setpwm_bool_semaphore && (main_config.driver_interface != NULL)) {
         main_config.setpwm_bool_semaphore = true;
         
-        uint8_t channels_to_set = 0; 
+        uint8_t channels_to_set = main_config.driver_interface->numChannelsPerChip; 
         
-        if(main_config.pwm_info != NULL)
-        {
-            channels_to_set = main_config.pwm_info->channels;
-        }
-        else 
-        {
-            channels_to_set = main_config.driver_interface->descriptor->numChannelsPerChip;
-        }
-        uint8_t num_channels = channels_to_set; 
-
         lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
         
         while (main_config.setpwm_is_running && lightbulb_group) {
-            if (lightbulb_group->pwm_r != 255) {
-                if (lightbulb_group->target_r - main_config.multipwm_duty[lightbulb_group->pwm_r] >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_r] += lightbulb_group->step;
-                } else if (main_config.multipwm_duty[lightbulb_group->pwm_r] - lightbulb_group->target_r >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_r] -= lightbulb_group->step;
+            if (lightbulb_group->channels.r != 255) {
+                if (lightbulb_group->target_r - main_config.multipwm_duty[lightbulb_group->channels.r] >= lightbulb_group->step) {
+                    main_config.multipwm_duty[lightbulb_group->channels.r] += lightbulb_group->step;
+                } else if (main_config.multipwm_duty[lightbulb_group->channels.r] - lightbulb_group->target_r >= lightbulb_group->step) {
+                    main_config.multipwm_duty[lightbulb_group->channels.r] -= lightbulb_group->step;
                 } else {
-                    main_config.multipwm_duty[lightbulb_group->pwm_r] = lightbulb_group->target_r;
+                    main_config.multipwm_duty[lightbulb_group->channels.r] = lightbulb_group->target_r;
                     channels_to_set--;
                 }
             }
             
-            if (lightbulb_group->pwm_g != 255) {
-                if (lightbulb_group->target_g - main_config.multipwm_duty[lightbulb_group->pwm_g] >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_g] += lightbulb_group->step;
-                } else if (main_config.multipwm_duty[lightbulb_group->pwm_g] - lightbulb_group->target_g >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_g] -= lightbulb_group->step;
+            if (lightbulb_group->channels.g != 255) {
+                if (lightbulb_group->target_g - main_config.multipwm_duty[lightbulb_group->channels.g] >= lightbulb_group->step) {
+                    main_config.multipwm_duty[lightbulb_group->channels.g] += lightbulb_group->step;
+                } else if (main_config.multipwm_duty[lightbulb_group->channels.g] - lightbulb_group->target_g >= lightbulb_group->step) {
+                    main_config.multipwm_duty[lightbulb_group->channels.g] -= lightbulb_group->step;
                 } else {
-                    main_config.multipwm_duty[lightbulb_group->pwm_g] = lightbulb_group->target_g;
+                    main_config.multipwm_duty[lightbulb_group->channels.g] = lightbulb_group->target_g;
                     channels_to_set--;
                 }
             }
             
-            if (lightbulb_group->pwm_b != 255) {
-                if (lightbulb_group->target_b - main_config.multipwm_duty[lightbulb_group->pwm_b] >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_b] += lightbulb_group->step;
-                } else if (main_config.multipwm_duty[lightbulb_group->pwm_b] - lightbulb_group->target_b >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_b] -= lightbulb_group->step;
+            if (lightbulb_group->channels.b != 255) {
+                if (lightbulb_group->target_b - main_config.multipwm_duty[lightbulb_group->channels.b] >= lightbulb_group->step) {
+                    main_config.multipwm_duty[lightbulb_group->channels.b] += lightbulb_group->step;
+                } else if (main_config.multipwm_duty[lightbulb_group->channels.b] - lightbulb_group->target_b >= lightbulb_group->step) {
+                    main_config.multipwm_duty[lightbulb_group->channels.b] -= lightbulb_group->step;
                 } else {
-                    main_config.multipwm_duty[lightbulb_group->pwm_b] = lightbulb_group->target_b;
+                    main_config.multipwm_duty[lightbulb_group->channels.b] = lightbulb_group->target_b;
                     channels_to_set--;
                 }
             }
             
-            if (lightbulb_group->pwm_w != 255) {
-                if (lightbulb_group->target_w - main_config.multipwm_duty[lightbulb_group->pwm_w] >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_w] += lightbulb_group->step;
-                } else if (main_config.multipwm_duty[lightbulb_group->pwm_w] - lightbulb_group->target_w >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_w] -= lightbulb_group->step;
+            if (lightbulb_group->channels.w != 255) {
+                if (lightbulb_group->target_w - main_config.multipwm_duty[lightbulb_group->channels.w] >= lightbulb_group->step) {
+                    main_config.multipwm_duty[lightbulb_group->channels.w] += lightbulb_group->step;
+                } else if (main_config.multipwm_duty[lightbulb_group->channels.w] - lightbulb_group->target_w >= lightbulb_group->step) {
+                    main_config.multipwm_duty[lightbulb_group->channels.w] -= lightbulb_group->step;
                 } else {
-                    main_config.multipwm_duty[lightbulb_group->pwm_w] = lightbulb_group->target_w;
+                    main_config.multipwm_duty[lightbulb_group->channels.w] = lightbulb_group->target_w;
                     channels_to_set--;
                 }
             }
             
-            if (lightbulb_group->pwm_cw != 255) {
-                if (lightbulb_group->target_cw - main_config.multipwm_duty[lightbulb_group->pwm_cw] >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_cw] += lightbulb_group->step;
-                } else if (main_config.multipwm_duty[lightbulb_group->pwm_cw] - lightbulb_group->target_cw >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_cw] -= lightbulb_group->step;
+            if (lightbulb_group->channels.cw != 255) {
+                if (lightbulb_group->target_cw - main_config.multipwm_duty[lightbulb_group->channels.cw] >= lightbulb_group->step) {
+                    main_config.multipwm_duty[lightbulb_group->channels.cw] += lightbulb_group->step;
+                } else if (main_config.multipwm_duty[lightbulb_group->channels.cw] - lightbulb_group->target_cw >= lightbulb_group->step) {
+                    main_config.multipwm_duty[lightbulb_group->channels.cw] -= lightbulb_group->step;
                 } else {
-                    main_config.multipwm_duty[lightbulb_group->pwm_cw] = lightbulb_group->target_cw;
+                    main_config.multipwm_duty[lightbulb_group->channels.cw] = lightbulb_group->target_cw;
                     channels_to_set--;
                 }
             }
             
-            if (lightbulb_group->pwm_ww != 255) {
-                if (lightbulb_group->target_ww - main_config.multipwm_duty[lightbulb_group->pwm_ww] >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_ww] += lightbulb_group->step;
-                } else if (main_config.multipwm_duty[lightbulb_group->pwm_ww] - lightbulb_group->target_ww >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_ww] -= lightbulb_group->step;
+            if (lightbulb_group->channels.ww != 255) {
+                if (lightbulb_group->target_ww - main_config.multipwm_duty[lightbulb_group->channels.ww] >= lightbulb_group->step) {
+                    main_config.multipwm_duty[lightbulb_group->channels.ww] += lightbulb_group->step;
+                } else if (main_config.multipwm_duty[lightbulb_group->channels.ww] - lightbulb_group->target_ww >= lightbulb_group->step) {
+                    main_config.multipwm_duty[lightbulb_group->channels.ww] -= lightbulb_group->step;
                 } else {
-                    main_config.multipwm_duty[lightbulb_group->pwm_ww] = lightbulb_group->target_ww;
+                    main_config.multipwm_duty[lightbulb_group->channels.ww] = lightbulb_group->target_ww;
                     channels_to_set--;
                 }
             }
             
-            //INFO("RGBW-CW-WW -> %i, %i, %i, %i, %i, %i", main_config.multipwm_duty[lightbulb_group->pwm_r], main_config.multipwm_duty[lightbulb_group->pwm_g], main_config.multipwm_duty[lightbulb_group->pwm_b], main_config.multipwm_duty[lightbulb_group->pwm_w], main_config.multipwm_duty[lightbulb_group->pwm_cw], main_config.multipwm_duty[lightbulb_group->pwm_ww]);
+            //INFO("RGBW-CW-WW -> %i, %i, %i, %i, %i, %i", main_config.multipwm_duty[lightbulb_group->channels.r], main_config.multipwm_duty[lightbulb_group->channels.g], main_config.multipwm_duty[lightbulb_group->channels.b], main_config.multipwm_duty[lightbulb_group->channels.w], main_config.multipwm_duty[lightbulb_group->channels.cw], main_config.multipwm_duty[lightbulb_group->channels.ww]);
 
             if (channels_to_set == 0) {
                 main_config.setpwm_is_running = false;
                 xTimerStop(main_config.pwm_timer, XTIMER_BLOCK_TIME);
                 
                 INFO("Color fixed");
-                for (uint8_t i = 0; i < num_channels; i++) {
+                for (uint8_t i = 0; i < main_config.driver_interface->numChannelsPerChip; i++) {
                     INFO("PWM Ch %i = %i", i, main_config.multipwm_duty[i]);
                 }
             }
             
             lightbulb_group = lightbulb_group->next;
         }
-        if(main_config.pwm_info != NULL)
+
+        if(main_config.driver_interface->updater != NULL)
         {
-            INFO("WWWW 1\n");
-            multipwm_set_all();
-        } 
-        else
-        {            
-            INFO("WWWW 2\n");
-            haa_lighbulb_driver_set_all(main_config.driver_interface, main_config.multipwm_duty);
-        }
-        
+            main_config.driver_interface->updater(main_config.driver_interface->driver_info, main_config.multipwm_duty);
+        }        
 
         main_config.setpwm_bool_semaphore = false;
     } else {
@@ -1633,10 +1609,10 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
                 setup_mode_toggle_upcount();
             }
             
-            if (lightbulb_group->pwm_r != 255) {            // RGB, RGB-W, RGB-CW-WW, RGB-W-CW-WW
+            if (lightbulb_group->channels.r != 255) {            // RGB, RGB-W, RGB-CW-WW, RGB-W-CW-WW
                 hsi2rgbw(ch_group->ch2->value.float_value, ch_group->ch3->value.float_value, ch_group->ch1->value.int_value, lightbulb_group);
                 
-            } else if (lightbulb_group->pwm_b != 255) {     // Custom Color Temperature
+            } else if (lightbulb_group->channels.b != 255) {     // Custom Color Temperature
                 uint16_t target_color = 0;
                 
                 if (ch_group->ch2->value.int_value >= COLOR_TEMP_MAX - 5) {
@@ -1674,60 +1650,7 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
             main_config.setpwm_is_running = true;
             xTimerStart(main_config.pwm_timer, XTIMER_BLOCK_TIME);
         }
-        /*
-        else if(lightbulb_group->driver_interface != NULL)
-        {
-            if(lightbulb_group->pwm_r != 255)
-            {
-                for(uint8_t chips = 0; chips < lightbulb_group->driver_interface->descriptor->numChips; chips++)
-                {
-                    my92xx_setChannel(lightbulb_group->driver_interface->descriptor,chips*lightbulb_group->driver_interface->descriptor->numChannels + lightbulb_group->pwm_r, lightbulb_group->target_r);
-                }
-                main_config.multipwm_duty[lightbulb_group->pwm_r] = lightbulb_group->target_r;
-            }
-            if(lightbulb_group->pwm_g != 255)
-            {
-                for(uint8_t chips = 0; chips < lightbulb_group->driver_interface->descriptor->numChips; chips++)
-                {
-                    my92xx_setChannel(lightbulb_group->driver_interface->descriptor,chips*lightbulb_group->driver_interface->descriptor->numChannels + lightbulb_group->pwm_g, lightbulb_group->target_g);
-                }
-                main_config.multipwm_duty[lightbulb_group->pwm_g] = lightbulb_group->target_g;
-            }
-            if(lightbulb_group->pwm_b != 255)
-            {
-                for(uint8_t chips = 0; chips < lightbulb_group->driver_interface->descriptor->numChips; chips++)
-                {
-                    my92xx_setChannel(lightbulb_group->driver_interface->descriptor,chips*lightbulb_group->driver_interface->descriptor->numChannels + lightbulb_group->pwm_b, lightbulb_group->target_b);
-                }
-                main_config.multipwm_duty[lightbulb_group->pwm_b] = lightbulb_group->target_b;
-            }
-            if(lightbulb_group->pwm_w != 255)
-            {
-                for(uint8_t chips = 0; chips < lightbulb_group->driver_interface->descriptor->numChips; chips++)
-                {
-                    my92xx_setChannel(lightbulb_group->driver_interface->descriptor,chips*lightbulb_group->driver_interface->descriptor->numChannels + lightbulb_group->pwm_w, lightbulb_group->target_w);
-                }
-                main_config.multipwm_duty[lightbulb_group->pwm_w] = lightbulb_group->target_w;
-            }
-            if(lightbulb_group->pwm_cw != 255)
-            {
-                for(uint8_t chips = 0; chips < lightbulb_group->driver_interface->descriptor->numChips; chips++)
-                {
-                    my92xx_setChannel(lightbulb_group->driver_interface->descriptor,chips*lightbulb_group->driver_interface->descriptor->numChannels + lightbulb_group->pwm_cw, lightbulb_group->target_cw);
-                }
-                main_config.multipwm_duty[lightbulb_group->pwm_cw] = lightbulb_group->target_cw;
-            }
-            if(lightbulb_group->pwm_ww != 255)
-            {
-                for(uint8_t chips = 0; chips < lightbulb_group->driver_interface->descriptor->numChips; chips++)
-                {
-                    my92xx_setChannel(lightbulb_group->driver_interface->descriptor,chips*lightbulb_group->driver_interface->descriptor->numChannels + lightbulb_group->pwm_ww, lightbulb_group->target_ww);
-                }
-                main_config.multipwm_duty[lightbulb_group->pwm_ww] = lightbulb_group->target_ww;
-            }
-            my92xx_send(lightbulb_group->driver_interface->descriptor);
-        }
-        */
+
         do_actions(ch_group, (uint8_t) ch_group->ch0->value.bool_value);
         
         if (ch_group->ch0->value.bool_value) {
@@ -4675,12 +4598,6 @@ void normal_mode_init() {
         INFO("Button filter: %i", button_filter_value);
     }
     
-    // PWM frequency
-    if (cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ) != NULL) {
-        main_config.pwm_freq = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ)->valuedouble;
-    }
-    INFO("PWM Freq: %i", main_config.pwm_freq);
-    
     // Ping poll period
     if (cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD) != NULL) {
         main_config.ping_poll_period = (float) cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD)->valuedouble;
@@ -5919,18 +5836,10 @@ void normal_mode_init() {
         
         bool is_pwm = true;
         uint8_t driver = 0; 
-        uint8_t di_pin = 0; 
-        uint8_t dcki_pin = 0; 
 
         if(cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_DRIVER) != NULL)
         {
-            if ((cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_DRIVER_GPIO_DCKI) != NULL) && 
-                (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_DRIVER_GPIO_DCKI) != NULL))
-            {
-                di_pin = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_DRIVER_GPIO_DI)->valuedouble;
-                dcki_pin = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_DRIVER_GPIO_DCKI)->valuedouble;
-                driver = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_DRIVER)->valuedouble;
-            }
+            driver = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_DRIVER)->valuedouble;
         }
  
         if ((cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R) == NULL) &&
@@ -5938,43 +5847,35 @@ void normal_mode_init() {
             is_pwm = false;
         }
 
+        lightbulb_channels_t channels = {.r = UINT8_MAX, .g=UINT8_MAX, .b=UINT8_MAX, .w=UINT8_MAX, .ww=UINT8_MAX, .cw=UINT8_MAX};
         if (is_pwm && !main_config.lightbulb_groups) {
             INFO("PWM Init");
             main_config.pwm_timer = xTimerCreate(0, pdMS_TO_TICKS(RGBW_PERIOD), pdTRUE, NULL, rgbw_set_timer_worker);
             
-            if(driver == 0)
+            switch(driver)
             {
-                main_config.pwm_info = malloc(sizeof(pwm_info_t));
-                memset(main_config.pwm_info, 0, sizeof(*main_config.pwm_info));
-                
-                multipwm_init(main_config.pwm_info);
-                if (main_config.pwm_freq > 0) {
-                    multipwm_set_freq(main_config.pwm_info, main_config.pwm_freq);
-                }
-                main_config.pwm_info->channels = 0;
-            }
-            else
-            {
-                switch(driver)
+                case LIGHTBULB_DRIVER_PWM:
                 {
-                    case LIGHTBULB_DRIVER_MY9291:
-                    {
-                        my92xx_cmd_t my92xx_command = MY92XX_COMMAND_DEFAULT;
-                        my92xx_init(&(main_config.driver_interface), MY92XX_MODEL_MY9291, 1, di_pin, dcki_pin, &my92xx_command);
-                        break;
-                    }
-                    case LIGHTBULB_DRIVER_MY9231:
-                    {
-                        my92xx_cmd_t my92xx_command = MY92XX_COMMAND_DEFAULT;
-                        my92xx_init(&(main_config.driver_interface), MY92XX_MODEL_MY9231, 1, di_pin, dcki_pin, &my92xx_command);
-                        break;
-                    }
-                    default:
-                    {
-                        my92xx_cmd_t my92xx_command = MY92XX_COMMAND_DEFAULT;
-                        my92xx_init(&(main_config.driver_interface), MY92XX_MODEL_MY9291, 1, di_pin, dcki_pin, &my92xx_command);
-                        break;
-                    }
+                    haa_pwm_init(&(main_config.driver_interface), json_context, &channels);
+                    break;
+                }
+                case LIGHTBULB_DRIVER_MY9291:
+                {
+                    my92xx_cmd_t my92xx_command = MY92XX_COMMAND_DEFAULT;
+                    haa_my92xx_init(&(main_config.driver_interface), MY92XX_MODEL_MY9291, json_context, &my92xx_command, &channels);
+                    break;
+                }
+                case LIGHTBULB_DRIVER_MY9231:
+                {
+                    my92xx_cmd_t my92xx_command = MY92XX_COMMAND_DEFAULT;
+                    haa_my92xx_init(&(main_config.driver_interface), MY92XX_MODEL_MY9231, json_context, &my92xx_command, &channels);
+                    break;
+                }
+                default:
+                {
+                    my92xx_cmd_t my92xx_command = MY92XX_COMMAND_DEFAULT;
+                    haa_my92xx_init(&(main_config.driver_interface), MY92XX_MODEL_MY9291, json_context, &my92xx_command, &channels);
+                    break;
                 }
             }
         }
@@ -5994,12 +5895,7 @@ void normal_mode_init() {
         memset(lightbulb_group, 0, sizeof(*lightbulb_group));
         lightbulb_group->ch0 = ch0;
         lightbulb_group->is_pwm = is_pwm;
-        lightbulb_group->pwm_r = 255;
-        lightbulb_group->pwm_g = 255;
-        lightbulb_group->pwm_b = 255;
-        lightbulb_group->pwm_w = 255;
-        lightbulb_group->pwm_cw = 255;
-        lightbulb_group->pwm_ww = 255;
+        lightbulb_group->channels = channels;
         lightbulb_group->target_r = 255;
         lightbulb_group->target_g = 255;
         lightbulb_group->target_b = 255;
@@ -6021,85 +5917,6 @@ void normal_mode_init() {
         main_config.lightbulb_groups = lightbulb_group;
 
         if (is_pwm) {
-            if(driver == 0)
-            {
-                if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                    lightbulb_group->pwm_r = main_config.pwm_info->channels;
-                    main_config.pwm_info->channels++;
-                    multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_r, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R)->valuedouble);
-                }
-
-                if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                    lightbulb_group->pwm_g = main_config.pwm_info->channels;
-                    main_config.pwm_info->channels++;
-                    multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_g, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G)->valuedouble);
-                }
-
-                if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                    lightbulb_group->pwm_b = main_config.pwm_info->channels;
-                    main_config.pwm_info->channels++;
-                    multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_b, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B)->valuedouble);
-                }
-
-                if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                    lightbulb_group->pwm_w = main_config.pwm_info->channels;
-                    main_config.pwm_info->channels++;
-                    multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_w, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W)->valuedouble);
-                }
-
-                if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_CW) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                    lightbulb_group->pwm_cw = main_config.pwm_info->channels;
-                    main_config.pwm_info->channels++;
-                    multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_cw, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_CW)->valuedouble);
-                }
-
-                if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_WW) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                    lightbulb_group->pwm_ww = main_config.pwm_info->channels;
-                    main_config.pwm_info->channels++;
-                    multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_ww, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_WW)->valuedouble);
-                }
-
-            }
-            else
-            {
-                uint8_t numChannels = main_config.driver_interface->descriptor->numChannels;
-                if ((numChannels > 0) && (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R) != NULL)) 
-                {
-                    lightbulb_group->pwm_r = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R)->valuedouble;
-                    numChannels--;
-                }
-                
-                if ((numChannels > 0) && (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G) != NULL)) 
-                {
-                    lightbulb_group->pwm_g = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G)->valuedouble;
-                    numChannels--;
-                }
-                
-                if ((numChannels > 0) && (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B) != NULL))
-                {
-                    lightbulb_group->pwm_b = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B)->valuedouble;
-                    numChannels--;
-                }
-                
-                if ((numChannels > 0) && (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W) != NULL))
-                {
-                    lightbulb_group->pwm_w = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W)->valuedouble;
-                    numChannels--;
-                }
-                
-                if ((numChannels > 0) &&  (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_CW) != NULL))
-                {
-                    lightbulb_group->pwm_cw = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_CW)->valuedouble;
-                    numChannels--;
-                }
-                
-                if ((numChannels > 0) && (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_WW) != NULL))
-                {
-                    lightbulb_group->pwm_ww = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_WW)->valuedouble;
-                    numChannels--;
-                }
-            }
-            
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_R) != NULL) {
                 lightbulb_group->factor_r = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_R)->valuedouble;
@@ -6126,26 +5943,14 @@ void normal_mode_init() {
             }
         }
         
-        INFO("\nInit BULB\n pwm_r: %i\n  pwm_g: %i\n  pwm_b: %i\n pwm_w: %i\n  pwm_cw: %i\n  pwm_ww: %i\n  is_pwm: %i\n",
-                        lightbulb_group->pwm_r,
-                        lightbulb_group->pwm_g,
-                        lightbulb_group->pwm_b,
-                        lightbulb_group->pwm_w,
-                        lightbulb_group->pwm_cw,
-                        lightbulb_group->pwm_ww,
+        INFO("\nInit BULB\n channels.r: %i\n  channels.g: %i\n  channels.b: %i\n channels.w: %i\n  channels.cw: %i\n  channels.ww: %i\n  is_pwm: %i\n",
+                        lightbulb_group->channels.r,
+                        lightbulb_group->channels.g,
+                        lightbulb_group->channels.b,
+                        lightbulb_group->channels.w,
+                        lightbulb_group->channels.cw,
+                        lightbulb_group->channels.ww,
                         lightbulb_group->is_pwm);
-        if(main_config.driver_interface != NULL)
-        {
-            INFO("\nInit Driver\n family: %i\n  model: %i\n  numChips: %i\n numChannels: %i\n  di_pin: %i\n  dcki_pin: %i\n  bit_width: %i\n",
-            main_config.driver_interface->descriptor->family,
-            main_config.driver_interface->descriptor->model,
-            main_config.driver_interface->descriptor->numChips,
-            main_config.driver_interface->descriptor->numChannels,
-            main_config.driver_interface->descriptor->di_pin,
-            main_config.driver_interface->descriptor->dcki_pin,
-            main_config.driver_interface->descriptor->bit_width);
-        }
-
 
         if (cJSON_GetObjectItemCaseSensitive(json_context, RGBW_STEP) != NULL) {
             lightbulb_group->step = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_context, RGBW_STEP)->valuedouble;
@@ -6166,7 +5971,7 @@ void normal_mode_init() {
             accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_LIGHTBULB;
         }
         
-        if (lightbulb_group->pwm_r != 255) {
+        if (lightbulb_group->channels.r != 255) {
             homekit_characteristic_t* ch2 = NEW_HOMEKIT_CHARACTERISTIC(HUE, 0, .setter_ex=hkc_rgbw_setter);
             homekit_characteristic_t* ch3 = NEW_HOMEKIT_CHARACTERISTIC(SATURATION, 0, .setter_ex=hkc_rgbw_setter);
             
@@ -6183,7 +5988,7 @@ void normal_mode_init() {
             
             ch2->value.float_value = set_initial_state(ch_group->accessory, 2, cJSON_Parse(INIT_STATE_LAST_STR), ch2, CH_TYPE_FLOAT, 0);
             ch3->value.float_value = set_initial_state(ch_group->accessory, 3, cJSON_Parse(INIT_STATE_LAST_STR), ch3, CH_TYPE_FLOAT, 0);
-        } else if (lightbulb_group->pwm_b != 255) {
+        } else if (lightbulb_group->channels.b != 255) {
             homekit_characteristic_t* ch2 = NEW_HOMEKIT_CHARACTERISTIC(COLOR_TEMPERATURE, 152, .setter_ex=hkc_rgbw_setter);
             
             ch_group->ch2 = ch2;
