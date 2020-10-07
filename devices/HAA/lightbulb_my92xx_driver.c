@@ -49,11 +49,16 @@ void haa_my92xx_init(driver_interface_t** interface, my92xx_model_t model, const
                 (*interface)->driver_info = (void*) descriptor; 
                 (*interface)->family = DRIVER_MY92XX;
                 descriptor->model = model;
-                descriptor->numChips = 1;
-                (*interface)->numChips = descriptor->numChips;
                 descriptor->di_pin = (uint8_t) cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_DRIVER_GPIO_DI)->valuedouble;
                 descriptor->dcki_pin = (uint8_t) cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_DRIVER_GPIO_DCKI)->valuedouble;
                 (*interface)->updater = haa_my92xx_send;
+                
+                descriptor->numChips = 1;
+                if (cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_DRIVER_NUM_CHIPS) != NULL)
+                {
+                    descriptor->numChips = (uint8_t) cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_DRIVER_NUM_CHIPS)->valuedouble;
+                }
+                (*interface)->numChips = descriptor->numChips;
 
                 switch (command->bit_width) 
                 {
