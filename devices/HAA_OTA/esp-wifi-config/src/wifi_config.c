@@ -1,9 +1,9 @@
 /*
-* Home Accessory Architect OTA Update
-*
-* Copyright 2020 José Antonio Jiménez Campos (@RavenSystem)
-*
-*/
+ * Home Accessory Architect OTA Update
+ *
+ * Copyright 2020 José Antonio Jiménez Campos (@RavenSystem)
+ *
+ */
 
 /*
  * Based on esp-wifi-config library by Maxim Kulkin (@MaximKulkin), licensed under the MIT License.
@@ -15,7 +15,6 @@
 #include <stdint.h>
 #include <sysparam.h>
 #include <FreeRTOS.h>
-#include <timers.h>
 #include <esplibs/libmain.h>
 #include <espressif/esp_common.h>
 #include <lwip/sockets.h>
@@ -31,6 +30,8 @@
 
 #include <rboot-api.h>
 
+#include <timers_helper.h>
+
 #include "header.h"
 
 #define WIFI_CONFIG_SERVER_PORT         (80)
@@ -38,8 +39,6 @@
 #define AUTO_REBOOT_TIMEOUT             (90000)
 
 #define MAX_BODY_LEN                    (16000)
-
-#define XTIMER_BLOCK_TIME               (50)
 
 #define INFO(message, ...)              printf(message "\n", ##__VA_ARGS__);
 #define ERROR(message, ...)             printf("! " message "\n", ##__VA_ARGS__);
@@ -72,7 +71,6 @@ typedef struct {
     
     TaskHandle_t http_task_handle;
     TaskHandle_t dns_task_handle;
-    TaskHandle_t wifi_scan_task_handle;
     
     wifi_network_info_t* wifi_networks;
     SemaphoreHandle_t wifi_networks_mutex;
@@ -144,12 +142,6 @@ static void client_send_redirect(client_t *client, int code, const char *redirec
     client_send(client, buffer, len);
 }
 
-static void stop_reboot_timer() {
-    if (context->auto_reboot_timer) {
-        xTimerDelete(context->auto_reboot_timer, XTIMER_BLOCK_TIME);
-    }
-}
-
 static uint8_t wifi_config_connect();
 static void wifi_config_reset() {
     struct sdk_station_config sta_config;
@@ -174,12 +166,17 @@ static void wifi_networks_free() {
 
 static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
     if (status != SCAN_OK || !context) {
-        ERROR("WiFi scan failed");
+        ERROR("Wifi scan failed");
         return;
     }
 
     xSemaphoreTake(context->wifi_networks_mutex, portMAX_DELAY);
 
+    if (!context) {
+        ERROR("No context");
+        return;
+    }
+    
     wifi_networks_free();
 
     struct sdk_bss_info *bss = (struct sdk_bss_info *)arg;
@@ -217,18 +214,19 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
 }
 
 static void wifi_scan_task(void *arg) {
-    INFO("Start WiFi scan");
-    
-    for (;;) {
-        sdk_wifi_station_scan(NULL, wifi_scan_done_cb);
-        vTaskDelay(pdMS_TO_TICKS(10000));
-    }
+    INFO("Start Wifi scan");
+    sdk_wifi_station_scan(NULL, wifi_scan_done_cb);
+    vTaskDelete(NULL);
 }
 
 #include "index.html.h"
 
 static void wifi_config_server_on_settings(client_t *client) {
-    stop_reboot_timer();
+    if (context->auto_reboot_timer) {
+        esp_timer_delete(context->auto_reboot_timer);
+    }
+    
+    xTaskCreate(wifi_scan_task, "wifi_scan", 384, NULL, (tskIDLE_PRIORITY + 0), NULL);
     
     static const char http_prologue[] =
         "HTTP/1.1 200 \r\n"
@@ -241,10 +239,8 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send(client, http_prologue, sizeof(http_prologue) - 1);
     client_send_chunk(client, html_settings_header);
     
-    sysparam_status_t status;
-    
     char *text = NULL;
-    
+    sysparam_status_t status;
     status = sysparam_get_string(HAA_JSON_SYSPARAM, &text);
     if (status == SYSPARAM_OK) {
         client_send_chunk(client, text);
@@ -253,7 +249,6 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send_chunk(client, html_settings_middle);
     
     bool auto_ota = false;
-    
     status = sysparam_get_bool(AUTO_OTA_SYSPARAM, &auto_ota);
     if (status == SYSPARAM_OK && auto_ota) {
         client_send_chunk(client, "checked");
@@ -261,7 +256,6 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send_chunk(client, html_settings_autoota);
     
     int8_t int8_value = 0;
-    
     sysparam_get_int8(WIFI_MODE_SYSPARAM, &int8_value);
     if (int8_value == 0) {
         client_send_chunk(client, "selected");
@@ -273,7 +267,7 @@ static void wifi_config_server_on_settings(client_t *client) {
     }
     client_send_chunk(client, html_wifi_mode_1);
 
-    // WiFi Networks
+    // Wifi Networks
     char buffer[120];
     char bssid[13];
     if (xSemaphoreTake(context->wifi_networks_mutex, pdMS_TO_TICKS(5000))) {
@@ -536,13 +530,11 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
         }
             
         case ENDPOINT_SETTINGS_UPDATE: {
-            stop_reboot_timer();
-            if (context->sta_connect_timeout) {
-                xTimerDelete(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
+            if (context->auto_reboot_timer) {
+                esp_timer_delete(context->auto_reboot_timer);
             }
-            
-            if (context->wifi_scan_task_handle) {
-                vTaskDelete(context->wifi_scan_task_handle);
+            if (context->sta_connect_timeout) {
+                esp_timer_delete(context->sta_connect_timeout);
             }
             wifi_config_context_free(context);
             xTaskCreate(wifi_config_server_on_settings_update_task, "settings_update", 512, client, (tskIDLE_PRIORITY + 0), NULL);
@@ -787,8 +779,6 @@ static void wifi_config_softap_start() {
     context->wifi_networks_mutex = xSemaphoreCreateBinary();
     xSemaphoreGive(context->wifi_networks_mutex);
 
-    xTaskCreate(wifi_scan_task, "wifi_scan_task", 384, NULL, (tskIDLE_PRIORITY + 0), &context->wifi_scan_task_handle);
-
     INFO("Start DHCP server");
     dhcpserver_start(&first_client_ip, 4);
     dhcpserver_set_router(&ap_ip.ip);
@@ -816,13 +806,10 @@ static void auto_reboot_run() {
 static void wifi_config_sta_connect_timeout_callback(TimerHandle_t xTimer) {
     if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         // Connected to station, all is dandy
-        xTimerDelete(xTimer, XTIMER_BLOCK_TIME);
+        esp_timer_delete(xTimer);
         
         wifi_config_softap_stop();
         http_stop();
-        if (context->wifi_scan_task_handle) {
-            vTaskDelete(context->wifi_scan_task_handle);
-        }
         context->on_wifi_ready();
         
         wifi_config_context_free(context);
@@ -871,12 +858,12 @@ static uint8_t wifi_config_connect() {
         if (wifi_mode == 1 && wifi_bssid) {
             sta_config.bssid_set = 1;
             memcpy(sta_config.bssid, wifi_bssid, 6);
-            INFO("WiFi Mode: Forced BSSID");
+            INFO("Wifi Mode: Forced BSSID");
             
-            //INFO("WiFi Mode: Forced BSSID %02x%02x%02x%02x%02x%02x", sta_config.bssid[0], sta_config.bssid[1], sta_config.bssid[2], sta_config.bssid[3], sta_config.bssid[4], sta_config.bssid[5]);
+            //INFO("Wifi Mode: Forced BSSID %02x%02x%02x%02x%02x%02x", sta_config.bssid[0], sta_config.bssid[1], sta_config.bssid[2], sta_config.bssid[3], sta_config.bssid[4], sta_config.bssid[5]);
 
         } else {
-            INFO("WiFi Mode: Normal");
+            INFO("Wifi Mode: Normal");
             sta_config.bssid_set = 0;
         }
 
@@ -898,7 +885,7 @@ static uint8_t wifi_config_connect() {
         return 1;
         
     } else {
-        INFO("No WiFi config found");
+        INFO("No Wifi config found");
     }
     
     return 0;
@@ -912,16 +899,16 @@ static void wifi_config_station_connect() {
         INFO("\nHAA OTA - NORMAL MODE\n");
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
 
-        context->sta_connect_timeout = xTimerCreate(0, pdMS_TO_TICKS(500), pdTRUE, NULL, wifi_config_sta_connect_timeout_callback);
-        xTimerStart(context->sta_connect_timeout, XTIMER_BLOCK_TIME);
+        context->sta_connect_timeout = esp_timer_create(500, true, NULL, wifi_config_sta_connect_timeout_callback);
+        esp_timer_start(context->sta_connect_timeout);
         
     } else {
         INFO("\nHAA OTA - SETUP MODE\n");
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
         
         if (setup_mode == 1) {
-            context->auto_reboot_timer = xTimerCreate(0, pdMS_TO_TICKS(AUTO_REBOOT_TIMEOUT), pdFALSE, NULL, auto_reboot_run);
-            xTimerStart(context->auto_reboot_timer, XTIMER_BLOCK_TIME);
+            context->auto_reboot_timer = esp_timer_create(AUTO_REBOOT_TIMEOUT, false, NULL, auto_reboot_run);
+            esp_timer_start(context->auto_reboot_timer);
         }
         
         wifi_config_softap_start();
@@ -929,7 +916,7 @@ static void wifi_config_station_connect() {
 }
 
 void wifi_config_init(const char *ssid_prefix, const char *password, void (*on_wifi_ready)()) {
-    INFO("WiFi Init");
+    INFO("Wifi Init");
     if (password && strlen(password) < 8) {
         ERROR("Password must be at least 8 characters");
         return;

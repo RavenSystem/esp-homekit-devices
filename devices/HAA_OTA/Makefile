@@ -8,7 +8,8 @@ EXTRA_COMPONENTS = \
     extras/rboot-ota \
 	$(abspath esp-wifi-config) \
 	$(abspath esp-wolfssl) \
-	$(abspath ../../libs/adv_logger)
+	$(abspath ../../libs/adv_logger) \
+	$(abspath ../../libs/timers_helper)
 
 FLASH_SIZE ?= 8
 
@@ -72,7 +73,7 @@ EXTRA_CFLAGS += -DDNS_MAX_SERVERS=4
 EXTRA_CFLAGS += -DWIFI_PARAM_SAVE=0
 
 EXTRA_CFLAGS += -DconfigMINIMAL_STACK_SIZE=256
-EXTRA_CFLAGS += -DconfigTIMER_TASK_PRIORITY=3
+EXTRA_CFLAGS += -DconfigTIMER_TASK_PRIORITY=\(configMAX_PRIORITIES-1\)
 EXTRA_CFLAGS += -DconfigTIMER_QUEUE_LENGTH=10
 EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=640
 
