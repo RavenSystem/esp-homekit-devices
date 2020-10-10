@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "3.5.7"
+#define FIRMWARE_VERSION                    "3.5.8"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -430,14 +430,13 @@
 #define SAVE_STATES_TIMER                   ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE)->timer
 #define WIFI_WATCHDOG_TIMER                 ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE)->timer2
 #define WIFI_STATUS_DISCONNECTED            (0)
-#define WIFI_STATUS_CONNECTING_1            (1)
-#define WIFI_STATUS_CONNECTING_2            (2)
-#define WIFI_STATUS_PRECONNECTED            (3)
-#define WIFI_STATUS_CONNECTED               (4)
+#define WIFI_STATUS_CONNECTING              (1)
+#define WIFI_STATUS_PRECONNECTED            (2)
+#define WIFI_STATUS_CONNECTED               (3)
 #define WIFI_WATCHDOG_POLL_PERIOD_MS        (1000)
-#define WIFI_RECONNECTION_POLL_PERIOD_MS    (7500)
+#define WIFI_RECONNECTION_POLL_PERIOD_MS    (5000)
 #define WIFI_PING_ERRORS                    "w"
-#define WIFI_ERROR_COUNT_REBOOT             (20)
+#define WIFI_ERROR_COUNT_REBOOT             (60)
 
 #define SAVE_STATES_DELAY_MS                (5000)
 

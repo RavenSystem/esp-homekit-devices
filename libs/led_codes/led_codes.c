@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <esp8266.h>
 #include <FreeRTOS.h>
-#include <timers.h>
+#include <timers_helper.h>
 #include <esplibs/libmain.h>
 
 #include "led_codes.h"
@@ -17,8 +17,6 @@
 #define DURATION_OFF                (120)
 #define DURATION_ON_MIN             (30)
 
-#define XTIMER_BLOCK_TIME           (50)
-#define XTIMER_PERIOD_BLOCK_TIME    (10)
 
 typedef struct _led {
     uint8_t gpio: 5;
@@ -59,7 +57,7 @@ static void led_code_run(TimerHandle_t xTimer) {
     }
     
     if (led->count < led->blinking_params.times) {
-        xTimerChangePeriod(led->timer, pdMS_TO_TICKS(delay), XTIMER_PERIOD_BLOCK_TIME);
+        esp_timer_change_period(xTimer, delay);
     }
 }
 
@@ -67,7 +65,7 @@ void led_code(const uint8_t gpio, blinking_params_t blinking_params) {
     led_t* led = led_find_by_gpio(gpio);
     
     if (led) {
-        xTimerStop(led->timer, XTIMER_BLOCK_TIME);
+        esp_timer_stop(led->timer);
         
         led->blinking_params = blinking_params;
         led->status = led->inverted;
@@ -87,7 +85,7 @@ int led_create(const uint8_t gpio, const bool inverted) {
         led->next = leds;
         leds = led;
         
-        led->timer = xTimerCreate(0, pdMS_TO_TICKS(10), pdFALSE, (void*) led, led_code_run);
+        led->timer = esp_timer_create(10, false, (void*) led, led_code_run);
         
         led->gpio = gpio;
         led->inverted = inverted;

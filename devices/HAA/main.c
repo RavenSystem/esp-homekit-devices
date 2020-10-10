@@ -9,7 +9,6 @@
 #include <string.h>
 #include <esp/uart.h>
 #include <FreeRTOS.h>
-#include <timers.h>
 #include <task.h>
 #include <espressif/esp_common.h>
 #include <rboot-api.h>
@@ -33,6 +32,7 @@
 #include <adv_hlw.h>
 #include <ping.h>
 #include <adv_logger.h>
+#include <timers_helper.h>
 
 #include <multipwm/multipwm.h>
 
@@ -124,7 +124,7 @@ void free_heap_watchdog() {
 void disable_emergency_setup(TimerHandle_t xTimer) {
     INFO("Disarming Emergency Setup Mode");
     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
-    xTimerDelete(xTimer, XTIMER_BLOCK_TIME);
+    esp_timer_delete(xTimer);
 }
 
 void change_uart_gpio(const uint8_t gpio) {
@@ -256,7 +256,7 @@ void reboot_callback() {
 void reboot_haa() {
     led_blink(5);
     INFO("\nRebooting...\n");
-    xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(2900), pdFALSE, NULL, reboot_callback), XTIMER_BLOCK_TIME);
+    esp_timer_start(esp_timer_create(2900, false, NULL, reboot_callback));
 }
 
 void resend_arp() {
@@ -301,12 +301,15 @@ void wifi_ping_task() {
 
 void wifi_reconnection_task() {
     while (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
-        vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
+        vTaskDelay(pdMS_TO_TICKS(1000));
         
         if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
-            main_config.wifi_status = WIFI_STATUS_CONNECTING_1;
             INFO("Wifi reconnecting...");
+            main_config.wifi_status = WIFI_STATUS_CONNECTING;
+            do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
+
             wifi_config_connect();
+            vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
 
         } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
             if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
@@ -314,6 +317,8 @@ void wifi_reconnection_task() {
                 main_config.wifi_channel = sdk_wifi_get_channel();
                 INFO("mDNS reannounced");
                 homekit_mdns_announce();
+                
+                vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
 
             } else {
                 main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
@@ -325,29 +330,23 @@ void wifi_reconnection_task() {
                 
                 do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 3);
             }
-        
-        } else if (main_config.wifi_status == WIFI_STATUS_CONNECTING_1) {
-            main_config.wifi_status = WIFI_STATUS_CONNECTING_2;
             
         } else {
-            sdk_wifi_station_disconnect();
-            led_blink(8);
-            ERROR("Wifi disconnected");
-
-            main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
-            wifi_config_reset();
-            
             main_config.wifi_error_count++;
-            if (main_config.wifi_error_count < WIFI_ERROR_COUNT_REBOOT) {
-                do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
-            } else {
-                main_config.wifi_error_count = 0;
+            if (main_config.wifi_error_count >= WIFI_ERROR_COUNT_REBOOT) {
+                sdk_wifi_station_disconnect();
+                led_blink(8);
+                ERROR("Wifi disconnected");
+                main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
                 do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 5);
+                
+                wifi_config_reset();
+                vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
             }
         }
     }
     
-    xTimerStart(WIFI_WATCHDOG_TIMER, XTIMER_BLOCK_TIME);
+    esp_timer_start(WIFI_WATCHDOG_TIMER);
     vTaskDelete(NULL);
 }
 
@@ -355,20 +354,20 @@ void wifi_watchdog() {
     if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
         uint8_t current_channel = sdk_wifi_get_channel();
         if (main_config.wifi_channel != current_channel) {
-            xTimerStop(WIFI_WATCHDOG_TIMER, XTIMER_BLOCK_TIME);
-            
-            main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
-            INFO("Wifi new Ch%i", current_channel);
-            main_config.wifi_channel = current_channel;
-            resend_arp();
-            homekit_mdns_announce();
-            
-            if (xTaskCreate(wifi_reconnection_task, "reconnect", WIFI_RECONNECTION_TASK_SIZE, NULL, WIFI_RECONNECTION_TASK_PRIORITY, NULL) != pdPASS) {
+            if (xTaskCreate(wifi_reconnection_task, "reconnect", WIFI_RECONNECTION_TASK_SIZE, NULL, WIFI_RECONNECTION_TASK_PRIORITY, NULL) == pdPASS) {
+                esp_timer_stop(WIFI_WATCHDOG_TIMER);
+                
+                main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
+                INFO("Wifi new Ch%i", current_channel);
+                resend_arp();
+                homekit_mdns_announce();
+            } else {
                 ERROR("Creating wifi_reconnection_task");
             }
         }
         
         if (main_config.wifi_ping_max_errors != 255 && !main_config.wifi_ping_is_running && !homekit_is_pairing()) {
+            main_config.wifi_error_count = 0;
             if (xTaskCreate(wifi_ping_task, "wifi_ping_task", PING_TASK_SIZE, NULL, PING_TASK_PRIORITY, NULL) != pdPASS) {
                 ERROR("Creating wifi_ping_task");
             }
@@ -376,11 +375,12 @@ void wifi_watchdog() {
         
     } else {
         ERROR("Wifi error");
-        xTimerStop(WIFI_WATCHDOG_TIMER, XTIMER_BLOCK_TIME);
         main_config.wifi_error_count = 0;
-        main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
-        sdk_wifi_station_disconnect();
-        if (xTaskCreate(wifi_reconnection_task, "reconnect", WIFI_RECONNECTION_TASK_SIZE, NULL, WIFI_RECONNECTION_TASK_PRIORITY, NULL) != pdPASS) {
+        if (xTaskCreate(wifi_reconnection_task, "reconnect", WIFI_RECONNECTION_TASK_SIZE, NULL, WIFI_RECONNECTION_TASK_PRIORITY, NULL) == pdPASS) {
+            esp_timer_stop(WIFI_WATCHDOG_TIMER);
+            main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
+            sdk_wifi_station_disconnect();
+        } else {
             ERROR("Creating wifi_reconnection_task");
         }
     }
@@ -469,7 +469,7 @@ void setup_mode_call(const uint8_t gpio, void* args, const uint8_t param) {
 void setup_mode_toggle_upcount() {
     if (main_config.setup_mode_toggle_counter_max > 0) {
         main_config.setup_mode_toggle_counter++;
-        xTimerStart(main_config.setup_mode_toggle_timer, XTIMER_BLOCK_TIME);
+        esp_timer_start(main_config.setup_mode_toggle_timer);
     }
 }
 
@@ -519,7 +519,7 @@ void save_states() {
 }
 
 inline void save_states_callback() {
-    xTimerStart(SAVE_STATES_TIMER, XTIMER_BLOCK_TIME);
+    esp_timer_start(SAVE_STATES_TIMER);
 }
 
 void hkc_group_notify(ch_group_t* ch_group) {
@@ -585,7 +585,7 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                 autooff_setter_params->ch = ch;
                 autooff_setter_params->type = TYPE_ON;
-                xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(ch_group->num[0] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
+                esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
             }
             
             setup_mode_toggle_upcount();
@@ -594,10 +594,10 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
             if (ch_group->ch2) {
                 if (value.bool_value) {
                     ch_group->ch2->value = ch_group->ch1->value;
-                    xTimerStart(ch_group->timer, XTIMER_BLOCK_TIME);
+                    esp_timer_start(ch_group->timer);
                 } else {
                     ch_group->ch2->value.int_value = 0;
-                    xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
+                    esp_timer_stop(ch_group->timer);
                 }
             }
         }
@@ -623,7 +623,7 @@ void on_timer_worker(TimerHandle_t xTimer) {
     ch_group->ch2->value.int_value--;
     
     if (ch_group->ch2->value.int_value == 0) {
-        xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
+        esp_timer_stop(ch_group->timer);
         
         hkc_on_setter(ch, HOMEKIT_BOOL(false));
     }
@@ -653,7 +653,7 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                 autooff_setter_params->ch = ch;
                 autooff_setter_params->type = TYPE_LOCK;
-                xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(ch_group->num[lock_index] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
+                esp_timer_start(esp_timer_create(ch_group->num[lock_index] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
             }
             
             setup_mode_toggle_upcount();
@@ -724,7 +724,7 @@ void sensor_1(const uint8_t gpio, void* args, const uint8_t type) {
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                 autooff_setter_params->ch = ch_group->ch0;
                 autooff_setter_params->type = type;
-                xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(ch_group->num[0] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
+                esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
             }
         }
     }
@@ -893,7 +893,7 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                 autooff_setter_params->ch = ch;
                 autooff_setter_params->type = TYPE_VALVE;
-                xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(ch_group->num[0] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
+                esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
             }
             
             setup_mode_toggle_upcount();
@@ -902,10 +902,10 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
             if (ch_group->ch3) {
                 if (value.int_value == 0) {
                     ch_group->ch3->value.int_value = 0;
-                    xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
+                    esp_timer_stop(ch_group->timer);
                 } else {
                     ch_group->ch3->value = ch_group->ch2->value;
-                    xTimerStart(ch_group->timer, XTIMER_BLOCK_TIME);
+                    esp_timer_start(ch_group->timer);
                 }
             }
         }
@@ -934,7 +934,7 @@ void valve_timer_worker(TimerHandle_t xTimer) {
     ch_group->ch3->value.int_value--;
     
     if (ch_group->ch3->value.int_value == 0) {
-        xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
+        esp_timer_stop(ch_group->timer);
         
         hkc_valve_setter(ch, HOMEKIT_UINT8(0));
     }
@@ -1122,7 +1122,7 @@ void update_th(homekit_characteristic_t* ch, const homekit_value_t value) {
         
         ch->value = value;
         
-        xTimerStart(ch_group->timer2, XTIMER_BLOCK_TIME);
+        esp_timer_start(ch_group->timer2);
         
     } else {
         hkc_group_notify(ch_group);
@@ -1579,7 +1579,7 @@ void rgbw_set_timer_worker() {
 
             if (channels_to_set == 0) {
                 main_config.setpwm_is_running = false;
-                xTimerStop(main_config.pwm_timer, XTIMER_BLOCK_TIME);
+                esp_timer_stop(main_config.pwm_timer);
                 
                 INFO("Color fixed");
                 for (uint8_t i = 0; i < main_config.pwm_info->channels; i++) {
@@ -1657,7 +1657,7 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
         
         if (lightbulb_group->is_pwm && !main_config.setpwm_is_running) {
             main_config.setpwm_is_running = true;
-            xTimerStart(main_config.pwm_timer, XTIMER_BLOCK_TIME);
+            esp_timer_start(main_config.pwm_timer);
         }
         
         do_actions(ch_group, (uint8_t) ch_group->ch0->value.bool_value);
@@ -1750,12 +1750,12 @@ void autodimmer_call(homekit_characteristic_t* ch0, const homekit_value_t value)
         ch_group_t* ch_group = ch_group_find(ch0);
         if (lightbulb_group->armed_autodimmer) {
             lightbulb_group->armed_autodimmer = false;
-            xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
+            esp_timer_stop(ch_group->timer);
             if (xTaskCreate(autodimmer_task, "autodimmer", AUTODIMMER_TASK_SIZE, (void*) ch0, AUTODIMMER_TASK_PRIORITY, NULL) != pdPASS) {
                 ERROR("Creating autodimmer_task");
             }
         } else {
-            xTimerStart(ch_group->timer, XTIMER_BLOCK_TIME);
+            esp_timer_start(ch_group->timer);
             lightbulb_group->armed_autodimmer = true;
         }
     }
@@ -1771,7 +1771,7 @@ void garage_door_stop(const uint8_t gpio, void* args, const uint8_t type) {
         
         ch_group->ch0->value.int_value = GARAGE_DOOR_STOPPED;
         
-        xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
+        esp_timer_stop(ch_group->timer);
 
         do_actions(ch_group, 10);
         
@@ -1802,10 +1802,10 @@ void garage_door_sensor(const uint8_t gpio, void* args, const uint8_t type) {
     
     if (type > 1) {
         ch_group->ch1->value.int_value = type - 2;
-        xTimerStart(ch_group->timer, XTIMER_BLOCK_TIME);
+        esp_timer_start(ch_group->timer);
     } else {
         ch_group->ch1->value.int_value = type;
-        xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
+        esp_timer_stop(ch_group->timer);
         
         if (type == 0) {
             GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN;
@@ -1862,7 +1862,7 @@ void garage_door_timer_worker(TimerHandle_t xTimer) {
     ch_group_t* ch_group = ch_group_find(ch0);
 
     void halt_timer() {
-        xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
+        esp_timer_stop(ch_group->timer);
         if (GARAGE_DOOR_TIME_MARGIN > 0) {
             garage_door_obstruction(0, ch_group, 1);
         }
@@ -1872,7 +1872,7 @@ void garage_door_timer_worker(TimerHandle_t xTimer) {
         GARAGE_DOOR_CURRENT_TIME++;
 
         if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN && GARAGE_DOOR_HAS_F2 == 0) {
-            xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
+            esp_timer_stop(ch_group->timer);
             garage_door_sensor(0, ch_group, GARAGE_DOOR_OPENED);
             
         } else if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME && GARAGE_DOOR_HAS_F2 == 1) {
@@ -1883,7 +1883,7 @@ void garage_door_timer_worker(TimerHandle_t xTimer) {
         GARAGE_DOOR_CURRENT_TIME -= GARAGE_DOOR_CLOSE_TIME_FACTOR;
         
         if (GARAGE_DOOR_CURRENT_TIME <= GARAGE_DOOR_TIME_MARGIN && GARAGE_DOOR_HAS_F3 == 0) {
-            xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
+            esp_timer_stop(ch_group->timer);
             garage_door_sensor(0, ch_group, GARAGE_DOOR_CLOSED);
             
         } else if (GARAGE_DOOR_CURRENT_TIME <= 0 && GARAGE_DOOR_HAS_F3 == 1) {
@@ -1916,7 +1916,7 @@ float window_cover_step(ch_group_t* ch_group, const float cover_time) {
 }
 
 void window_cover_stop(ch_group_t* ch_group) {
-    xTimerStop(ch_group->timer, XTIMER_BLOCK_TIME);
+    esp_timer_stop(ch_group->timer);
     
     led_blink(1);
 
@@ -1981,7 +1981,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
     
     void disable_stop() {
         WINDOW_COVER_STOP_ENABLE = 0;
-        xTimerStart(ch_group->timer2, XTIMER_BLOCK_TIME);
+        esp_timer_start(ch_group->timer2);
     }
     
     if (ch_group->main_enabled) {
@@ -2005,7 +2005,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
             }
             
             if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
-                xTimerStart(ch_group->timer, XTIMER_BLOCK_TIME);
+                esp_timer_start(ch_group->timer);
             }
             
             WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_CLOSING;
@@ -2021,7 +2021,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
             }
             
             if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
-                xTimerStart(ch_group->timer, XTIMER_BLOCK_TIME);
+                esp_timer_start(ch_group->timer);
             }
             
             WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_OPENING;
@@ -2121,7 +2121,7 @@ void hkc_fan_setter(homekit_characteristic_t* ch0, const homekit_value_t value) 
                     autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                     autooff_setter_params->ch = ch0;
                     autooff_setter_params->type = TYPE_FAN;
-                    xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(ch_group->num[0] * 1000), pdFALSE, (void*) autooff_setter_params, hkc_autooff_setter_task), XTIMER_BLOCK_TIME);
+                    esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
                 }
             } else {
                 ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
@@ -2645,7 +2645,7 @@ void hkc_autooff_setter_task(TimerHandle_t xTimer) {
     }
     
     free(autooff_setter_params);
-    xTimerDelete(xTimer, XTIMER_BLOCK_TIME);
+    esp_timer_delete(xTimer);
 }
 
 // --- HTTP/TCP task
@@ -3261,7 +3261,7 @@ void autoswitch_timer(TimerHandle_t xTimer) {
     gpio_write(action_relay->gpio, !action_relay->value);
     INFO("AutoSw digO GPIO %i -> %i", action_relay->gpio, !action_relay->value);
     
-    xTimerDelete(xTimer, XTIMER_BLOCK_TIME);
+    esp_timer_delete(xTimer);
 }
 
 void do_actions(ch_group_t* ch_group, uint8_t action) {
@@ -3286,7 +3286,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
             INFO("Digital Output: gpio %i, val %i, inch %g", action_relay->gpio, action_relay->value, action_relay->inching);
             
             if (action_relay->inching > 0) {
-                xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(action_relay->inching * 1000), pdFALSE, (void*) action_relay, autoswitch_timer), XTIMER_BLOCK_TIME);
+                esp_timer_start(esp_timer_create(action_relay->inching * 1000, false, (void*) action_relay, autoswitch_timer));
             }
         }
 
@@ -3559,7 +3559,7 @@ void delayed_sensor_starter_task() {
             INFO("Starting delayed sensor for acc %i", ch_group->accessory);
             
             temperature_timer_worker(ch_group->timer);
-            xTimerStart(ch_group->timer, XTIMER_BLOCK_TIME);
+            esp_timer_start(ch_group->timer);
         }
 
         ch_group = ch_group->next;
@@ -3588,22 +3588,22 @@ void run_homekit_server(TimerHandle_t xTimer) {
         FREEHEAP();
     }
     
-    WIFI_WATCHDOG_TIMER = xTimerCreate(0, pdMS_TO_TICKS(WIFI_WATCHDOG_POLL_PERIOD_MS), pdTRUE, NULL, wifi_watchdog);
-    xTimerStart(WIFI_WATCHDOG_TIMER, XTIMER_BLOCK_TIME);
+    WIFI_WATCHDOG_TIMER = esp_timer_create(WIFI_WATCHDOG_POLL_PERIOD_MS, true, NULL, wifi_watchdog);
+    esp_timer_start(WIFI_WATCHDOG_TIMER);
     
     do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 2);
 
     if (main_config.ping_inputs) {
-        xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(main_config.ping_poll_period * 1000.00f), pdTRUE, NULL, ping_task_timer_worker), XTIMER_BLOCK_TIME);
+        esp_timer_start(esp_timer_create(main_config.ping_poll_period * 1000.00f, true, NULL, ping_task_timer_worker));
     }
     
     led_blink(6);
     
-    xTimerDelete(xTimer, XTIMER_BLOCK_TIME);
+    esp_timer_delete(xTimer);
 }
 
 void run_homekit_server_delayed() {
-    xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(100), pdFALSE, NULL, run_homekit_server), XTIMER_BLOCK_TIME);
+    esp_timer_start(esp_timer_create(100, false, NULL, run_homekit_server));
 }
 
 void printf_header() {
@@ -4454,7 +4454,7 @@ void normal_mode_init() {
     }
     
     void th_sensor_starter(ch_group_t* ch_group) {
-        ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(TH_SENSOR_POLL_PERIOD * 1000), pdTRUE, (void*) ch_group, temperature_timer_worker);
+        ch_group->timer = esp_timer_create(TH_SENSOR_POLL_PERIOD * 1000, true, (void*) ch_group, temperature_timer_worker);
     }
     
     // ----- CONFIG SECTION
@@ -4668,7 +4668,7 @@ void normal_mode_init() {
     INFO("Toggles to enter setup mode: %i", main_config.setup_mode_toggle_counter_max);
     
     if (main_config.setup_mode_toggle_counter_max > 0) {
-        main_config.setup_mode_toggle_timer = xTimerCreate(0, pdMS_TO_TICKS(SETUP_MODE_TOGGLE_TIME_MS), pdFALSE, NULL, setup_mode_toggle);
+        main_config.setup_mode_toggle_timer = esp_timer_create(SETUP_MODE_TOGGLE_TIME_MS, false, NULL, setup_mode_toggle);
     }
     
     // Buttons to enter setup mode
@@ -4882,7 +4882,7 @@ void normal_mode_init() {
                 ch1->value.int_value = initial_time;
             }
             
-            ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(1000), pdTRUE, (void*) ch0, on_timer_worker);
+            ch_group->timer = esp_timer_create(1000, true, (void*) ch0, on_timer_worker);
         }
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, TYPE_ON);
@@ -5323,8 +5323,8 @@ void normal_mode_init() {
             }
 
             const float poll_period = sensor_poll_period(json_context, PM_POLL_PERIOD_DEFAULT);
-            ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(poll_period * 1000), pdTRUE, (void*) ch_group, power_monitor_timer_worker);
-            xTimerStart(ch_group->timer, XTIMER_BLOCK_TIME);
+            ch_group->timer = esp_timer_create(poll_period * 1000, true, (void*) ch_group, power_monitor_timer_worker);
+            esp_timer_start(ch_group->timer);
         }
 
         const bool exec_actions_on_boot = get_exec_actions_on_boot(json_context);
@@ -5452,7 +5452,7 @@ void normal_mode_init() {
                 ch2->value.int_value = initial_time;
             }
             
-            ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(1000), pdTRUE, (void*) ch0, valve_timer_worker);
+            ch_group->timer = esp_timer_create(1000, true, (void*) ch0, valve_timer_worker);
         }
         
         if (ch_group->homekit_enabled) {
@@ -5675,7 +5675,7 @@ void normal_mode_init() {
         ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
         ch_group->last_wildcard_action[2] = NO_LAST_WILDCARD_ACTION;
         
-        ch_group->timer2 = xTimerCreate(0, pdMS_TO_TICKS(TH_UPDATE_DELAY_MS), pdFALSE, (void*) ch_group, process_th_timer);
+        ch_group->timer2 = esp_timer_create(TH_UPDATE_DELAY_MS, false, (void*) ch_group, process_th_timer);
         
         if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 4) {
             th_sensor_starter(ch_group);
@@ -5856,7 +5856,7 @@ void normal_mode_init() {
 
         if (is_pwm && !main_config.lightbulb_groups) {
             INFO("PWM Init");
-            main_config.pwm_timer = xTimerCreate(0, pdMS_TO_TICKS(RGBW_PERIOD), pdTRUE, NULL, rgbw_set_timer_worker);
+            main_config.pwm_timer = esp_timer_create(RGBW_PERIOD, true, NULL, rgbw_set_timer_worker);
             
             main_config.pwm_info = malloc(sizeof(pwm_info_t));
             memset(main_config.pwm_info, 0, sizeof(*main_config.pwm_info));
@@ -6043,7 +6043,7 @@ void normal_mode_init() {
             cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0) != NULL ||
             cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1) != NULL) {
             if (lightbulb_group->autodimmer_task_step > 0) {
-                ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(AUTODIMMER_DELAY), pdFALSE, (void*) ch0, no_autodimmer_called);
+                ch_group->timer = esp_timer_create(AUTODIMMER_DELAY, false, (void*) ch0, no_autodimmer_called);
             }
         } else {
             lightbulb_group->autodimmer_task_step = 0;
@@ -6102,7 +6102,7 @@ void normal_mode_init() {
         GARAGE_DOOR_TIME_MARGIN = GARAGE_DOOR_TIME_MARGIN_DEFAULT;
         GARAGE_DOOR_CLOSE_TIME_FACTOR = 1;
         
-        ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(1000), pdTRUE, (void*) ch0, garage_door_timer_worker);
+        ch_group->timer = esp_timer_create(1000, true, (void*) ch0, garage_door_timer_worker);
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN_SET) != NULL) {
             GARAGE_DOOR_TIME_MARGIN = cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN_SET)->valuedouble;
@@ -6250,9 +6250,9 @@ void normal_mode_init() {
         register_wildcard_actions(ch_group, json_context);
         ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
         
-        ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(WINDOW_COVER_POLL_PERIOD_MS), pdTRUE, (void*) ch_group, window_cover_timer_worker);
+        ch_group->timer = esp_timer_create(WINDOW_COVER_POLL_PERIOD_MS, true, (void*) ch_group, window_cover_timer_worker);
         
-        ch_group->timer2 = xTimerCreate(0, pdMS_TO_TICKS(WINDOW_COVER_STOP_ENABLE_DELAY_MS), pdFALSE, (void*) ch_group, window_cover_timer_rearm_stop);
+        ch_group->timer2 = esp_timer_create(WINDOW_COVER_STOP_ENABLE_DELAY_MS, false, (void*) ch_group, window_cover_timer_rearm_stop);
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_OPEN_SET) != NULL) {
             WINDOW_COVER_TIME_OPEN = cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_OPEN_SET)->valuedouble;
@@ -6578,7 +6578,7 @@ void normal_mode_init() {
     set_accessory_ir_protocol(root_device_ch_group, json_config);
     
     // Saved States Timer Function
-    root_device_ch_group->timer = xTimerCreate(0, pdMS_TO_TICKS(SAVE_STATES_DELAY_MS), pdFALSE, NULL, save_states);
+    root_device_ch_group->timer = esp_timer_create(SAVE_STATES_DELAY_MS, false, NULL, save_states);
     
     // Exec action 0 from root device
     do_actions(root_device_ch_group, 0);
@@ -6666,7 +6666,7 @@ void normal_mode_init() {
         taskYIELD();
     }
     
-    sysparam_set_int8(TOTAL_ACC_SYSPARAM, hk_total_ac);
+    sysparam_set_int8(TOTAL_ACC_SYSPARAM, accessory_numerator);
     
     INFO("");
     
@@ -6844,12 +6844,12 @@ void user_init(void) {
     } else {
 #ifdef HAA_DEBUG
         free_heap_watchdog();
-        xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(1000), pdTRUE, NULL, free_heap_watchdog), XTIMER_BLOCK_TIME);
+        esp_timer_start(esp_timer_create(1000, true, NULL, free_heap_watchdog));
 #endif // HAA_DEBUG
         
         // Arming emergency Setup Mode
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
-        xTimerStart(xTimerCreate(0, pdMS_TO_TICKS(EXIT_EMERGENCY_SETUP_MODE_TIME), pdFALSE, NULL, disable_emergency_setup), XTIMER_BLOCK_TIME);
+        esp_timer_start(esp_timer_create(EXIT_EMERGENCY_SETUP_MODE_TIME, false, NULL, disable_emergency_setup));
         
         name.value = HOMEKIT_STRING(main_config.name_value);
         

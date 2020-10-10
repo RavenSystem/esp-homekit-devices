@@ -217,9 +217,10 @@ typedef struct _str_ch_value {
 } str_ch_value_t;
 
 typedef struct _main_config {
-    uint8_t wifi_status: 3;
+    uint8_t wifi_status: 2;
     uint8_t wifi_channel: 4;
     bool enable_homekit_server: 1;
+    bool setpwm_bool_semaphore: 1;
     int8_t setup_mode_toggle_counter;
     int8_t setup_mode_toggle_counter_max;
     uint8_t ir_tx_freq;
@@ -229,14 +230,13 @@ typedef struct _main_config {
     uint8_t ir_tx_gpio: 5;
     bool ir_tx_inv: 1;
     bool setpwm_is_running: 1;
-    bool setpwm_bool_semaphore: 1;
     uint8_t led_gpio: 5;
     bool wifi_ping_is_running: 1;
     bool ping_is_running: 1;
     bool used_gpio_0: 1;
+    bool used_gpio_1: 1;
     
     uint16_t setup_mode_time;
-    bool used_gpio_1: 1;
     bool used_gpio_2: 1;
     bool used_gpio_3: 1;
     bool used_gpio_4: 1;

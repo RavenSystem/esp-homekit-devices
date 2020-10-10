@@ -429,7 +429,7 @@ static void mdns_announce_netif(struct netif *netif, const ip_addr_t *addr);
 static TimerHandle_t mdns_announce_timer = NULL;
 
 void mdns_clear() {
-    xTimerStop(mdns_announce_timer, 100);
+    xTimerStop(mdns_announce_timer, 0);
     
     if (!xSemaphoreTake(gDictMutex, portMAX_DELAY))
         return;
@@ -619,13 +619,12 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
     free(fullName);
     free(devName);
 
-    xTimerStop(mdns_announce_timer, 100);
+    xTimerStop(mdns_announce_timer, 0);
     
     mdns_announce();
     
 //    if (ttl > 0) {
-        xTimerChangePeriod(mdns_announce_timer, pdMS_TO_TICKS(ttl * TTL_MULTIPLIER_MS), 100);
-        xTimerStart(mdns_announce_timer, 100);
+        xTimerChangePeriod(mdns_announce_timer, pdMS_TO_TICKS(ttl * TTL_MULTIPLIER_MS), 0);
 //    }
 }
 
