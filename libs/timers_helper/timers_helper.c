@@ -11,45 +11,56 @@
 
 #define XTIMER_BLOCK_TIME               (0)
 #define XTIMER_PERIOD_BLOCK_TIME        (0)
+#define XTIMER_MAX_TRIES                (5)
 
 void esp_timer_start(TimerHandle_t xTimer) {
     if (xTimer) {
-        if (!xTimerStart(xTimer, XTIMER_BLOCK_TIME)) {
-            printf("! Timer Start Failed\n ");
+        uint8_t tries = 0;
+        while (!xTimerStart(xTimer, XTIMER_BLOCK_TIME) && tries < XTIMER_MAX_TRIES) {
+            tries++;
+            printf("! Timer Start Failed (%i/%i)\n", tries, XTIMER_MAX_TRIES);
         }
     }
 }
 
 void esp_timer_start_from_ISR(TimerHandle_t xTimer) {
     if (xTimer) {
+        uint8_t tries = 0;
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        if (!xTimerStartFromISR(xTimer, &xHigherPriorityTaskWoken)) {
-            printf("! Timer Start from ISR Failed\n ");
+        while (!xTimerStartFromISR(xTimer, &xHigherPriorityTaskWoken) && tries < XTIMER_MAX_TRIES) {
+            tries++;
+            printf("! Timer Start from ISR Failed (%i/%i)\n", tries, XTIMER_MAX_TRIES);
         }
     }
 }
 
 void esp_timer_stop(TimerHandle_t xTimer) {
     if (xTimer) {
-        if (!xTimerStop(xTimer, XTIMER_BLOCK_TIME)) {
-            printf("! Timer Stop Failed\n ");
+        uint8_t tries = 0;
+        while (!xTimerStop(xTimer, XTIMER_BLOCK_TIME) && tries < XTIMER_MAX_TRIES) {
+            tries++;
+            printf("! Timer Stop Failed (%i/%i)\n", tries, XTIMER_MAX_TRIES);
         }
     }
 }
 
 void esp_timer_stop_from_ISR(TimerHandle_t xTimer) {
     if (xTimer) {
+        uint8_t tries = 0;
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        if (!xTimerStopFromISR(xTimer, &xHigherPriorityTaskWoken)) {
-            printf("! Timer Stop from ISR Failed\n ");
+        while (!xTimerStopFromISR(xTimer, &xHigherPriorityTaskWoken) && tries < XTIMER_MAX_TRIES) {
+            tries++;
+            printf("! Timer Stop from ISR Failed (%i/%i)\n", tries, XTIMER_MAX_TRIES);
         }
     }
 }
 
 void esp_timer_change_period(TimerHandle_t xTimer, const uint32_t new_period_ms) {
     if (xTimer) {
-        if (!xTimerChangePeriod(xTimer, pdMS_TO_TICKS(new_period_ms), XTIMER_PERIOD_BLOCK_TIME)) {
-            printf("! Timer Change Period Failed\n ");
+        uint8_t tries = 0;
+        while (!xTimerChangePeriod(xTimer, pdMS_TO_TICKS(new_period_ms), XTIMER_PERIOD_BLOCK_TIME) && tries < XTIMER_MAX_TRIES) {
+            tries++;
+            printf("! Timer Change Period Failed (%i/%i)\n", tries, XTIMER_MAX_TRIES);
         }
     }
 }
@@ -64,8 +75,10 @@ TimerHandle_t esp_timer_create(const uint32_t period_ms, const bool auto_reload,
 
 void esp_timer_delete(TimerHandle_t xTimer) {
     if (xTimer) {
-        if (!xTimerDelete(xTimer, XTIMER_BLOCK_TIME)) {
-            printf("! Timer Delete Failed\n ");
+        uint8_t tries = 0;
+        while (!xTimerDelete(xTimer, XTIMER_BLOCK_TIME) && tries < XTIMER_MAX_TRIES) {
+            tries++;
+            printf("! Timer Delete Failed (%i/%i)\n", tries, XTIMER_MAX_TRIES);
         }
     }
 }

@@ -849,12 +849,12 @@ static void wifi_config_sta_connect_timeout_task() {
             context->check_counter++;
             if (context->check_counter == 1) {
                 wifi_config_connect();
-                vTaskDelay(pdMS_TO_TICKS(6000));
+                vTaskDelay(pdMS_TO_TICKS(5000));
                 
-            } else if (context->check_counter == 55) {
+            } else if (context->check_counter == 60) {
                 context->check_counter = 0;
                 wifi_config_reset();
-                vTaskDelay(pdMS_TO_TICKS(6000));
+                vTaskDelay(pdMS_TO_TICKS(5000));
             }
         }
     }

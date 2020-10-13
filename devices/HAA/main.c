@@ -334,6 +334,7 @@ void wifi_reconnection_task() {
         } else {
             main_config.wifi_error_count++;
             if (main_config.wifi_error_count >= WIFI_ERROR_COUNT_REBOOT) {
+                main_config.wifi_error_count = 0;
                 sdk_wifi_station_disconnect();
                 led_blink(8);
                 ERROR("Wifi disconnected");
