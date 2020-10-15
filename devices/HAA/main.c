@@ -2620,6 +2620,7 @@ void digstate_0(const uint8_t gpio, void* args, const uint8_t type) {
 // --- AUTO-OFF
 void hkc_autooff_setter_task(TimerHandle_t xTimer) {
     autooff_setter_params_t* autooff_setter_params = (autooff_setter_params_t*) pvTimerGetTimerID(xTimer);
+    INFO("AutoOff Setter");
 
     switch (autooff_setter_params->type) {
         case TYPE_LOCK:
@@ -3326,7 +3327,11 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             
                         case ACC_TYPE_CONTACT_SENSOR:
                         case ACC_TYPE_DOORBELL:
-                            if ((bool) action_acc_manager->value) {
+                            if (action_acc_manager->value == 3.f) {
+                                sensor_status_1(0, ch_group, TYPE_SENSOR);
+                            } else if (action_acc_manager->value == 2.f) {
+                                sensor_status_0(0, ch_group, TYPE_SENSOR);
+                            } else if (action_acc_manager->value == 1.f) {
                                 sensor_1(0, ch_group, TYPE_SENSOR);
                             } else {
                                 sensor_0(0, ch_group, TYPE_SENSOR);
@@ -3334,7 +3339,11 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             break;
                             
                         case ACC_TYPE_MOTION_SENSOR:
-                            if ((bool) action_acc_manager->value) {
+                            if (action_acc_manager->value == 3.f) {
+                                sensor_status_1(0, ch_group, TYPE_SENSOR_BOOL);
+                            } else if (action_acc_manager->value == 2.f) {
+                                sensor_status_0(0, ch_group, TYPE_SENSOR_BOOL);
+                            } else if (action_acc_manager->value == 1.f) {
                                 sensor_1(0, ch_group, TYPE_SENSOR_BOOL);
                             } else {
                                 sensor_0(0, ch_group, TYPE_SENSOR_BOOL);
