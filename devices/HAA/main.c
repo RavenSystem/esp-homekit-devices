@@ -583,10 +583,15 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
             do_actions(ch_group, (uint8_t) ch->value.bool_value);
             
             if (ch->value.bool_value && ch_group->num[0] > 0) {
-                autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                autooff_setter_params->ch = ch;
-                autooff_setter_params->type = TYPE_ON;
-                esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
+                if (ch_group->timer2) {
+                    esp_timer_start(ch_group->timer2);
+                } else {
+                    autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                    autooff_setter_params->ch = ch;
+                    autooff_setter_params->type = TYPE_ON;
+                    ch_group->timer2 = esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task);
+                    esp_timer_start(ch_group->timer2);
+                }
             }
             
             setup_mode_toggle_upcount();
@@ -651,10 +656,15 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
             }
 
             if (ch->value.int_value == 0 && ch_group->num[lock_index] > 0) {
-                autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                autooff_setter_params->ch = ch;
-                autooff_setter_params->type = TYPE_LOCK;
-                esp_timer_start(esp_timer_create(ch_group->num[lock_index] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
+                if (ch_group->timer2) {
+                    esp_timer_start(ch_group->timer2);
+                } else {
+                    autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                    autooff_setter_params->ch = ch;
+                    autooff_setter_params->type = TYPE_LOCK;
+                    ch_group->timer2 = esp_timer_create(ch_group->num[lock_index] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task);
+                    esp_timer_start(ch_group->timer2);
+                }
             }
             
             setup_mode_toggle_upcount();
@@ -722,10 +732,15 @@ void sensor_1(const uint8_t gpio, void* args, const uint8_t type) {
             do_actions(ch_group, 1);
             
             if (ch_group->num[0] > 0) {
-                autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                autooff_setter_params->ch = ch_group->ch0;
-                autooff_setter_params->type = type;
-                esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
+                if (ch_group->timer2) {
+                    esp_timer_start(ch_group->timer2);
+                } else {
+                    autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                    autooff_setter_params->ch = ch_group->ch0;
+                    autooff_setter_params->type = type;
+                    ch_group->timer2 = esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task);
+                    esp_timer_start(ch_group->timer2);
+                }
             }
         }
     }
@@ -891,10 +906,15 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
             do_actions(ch_group, (uint8_t) ch->value.int_value);
             
             if (ch->value.int_value == 1 && ch_group->num[0] > 0) {
-                autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                autooff_setter_params->ch = ch;
-                autooff_setter_params->type = TYPE_VALVE;
-                esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
+                if (ch_group->timer2) {
+                    esp_timer_start(ch_group->timer2);
+                } else {
+                    autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                    autooff_setter_params->ch = ch;
+                    autooff_setter_params->type = TYPE_VALVE;
+                    ch_group->timer2 = esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task);
+                    esp_timer_start(ch_group->timer2);
+                }
             }
             
             setup_mode_toggle_upcount();
@@ -2119,10 +2139,15 @@ void hkc_fan_setter(homekit_characteristic_t* ch0, const homekit_value_t value) 
                 do_wildcard_actions(ch_group, 0, ch_group->ch1->value.float_value);
                 
                 if (ch0->value.bool_value && ch_group->num[0] > 0) {
-                    autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                    autooff_setter_params->ch = ch0;
-                    autooff_setter_params->type = TYPE_FAN;
-                    esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
+                    if (ch_group->timer2) {
+                        esp_timer_start(ch_group->timer2);
+                    } else {
+                        autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                        autooff_setter_params->ch = ch0;
+                        autooff_setter_params->type = TYPE_FAN;
+                        ch_group->timer2 = esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task);
+                        esp_timer_start(ch_group->timer2);
+                    }
                 }
             } else {
                 ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
@@ -2646,8 +2671,9 @@ void hkc_autooff_setter_task(TimerHandle_t xTimer) {
             break;
     }
     
-    free(autooff_setter_params);
     esp_timer_delete(xTimer);
+    ch_group_find(autooff_setter_params->ch)->timer2 = NULL;
+    free(autooff_setter_params);
 }
 
 // --- HTTP/TCP task

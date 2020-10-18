@@ -560,7 +560,11 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
         }
         case ENDPOINT_SETTINGS_UPDATE: {
             esp_timer_delete(context->auto_reboot_timer);
-            vTaskDelete(context->sta_connect_timeout);
+            if (context->sta_connect_timeout) {
+                vTaskDelete(context->sta_connect_timeout);
+            } else {
+                sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
+            }
             wifi_config_context_free(context);
             xTaskCreate(wifi_config_server_on_settings_update_task, "settings_update", 512, client, (tskIDLE_PRIORITY + 0), NULL);
             return 0;
