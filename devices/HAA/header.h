@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "3.5.11"
+#define FIRMWARE_VERSION                    "3.5.12"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
