@@ -35,6 +35,7 @@
 #include <lwip/udp.h>
 #include <lwip/igmp.h>
 #include <lwip/netif.h>
+#include <timers_helper.h>
 
 #include "mdnsresponder.h"
 
@@ -429,7 +430,7 @@ static void mdns_announce_netif(struct netif *netif, const ip_addr_t *addr);
 static TimerHandle_t mdns_announce_timer = NULL;
 
 void mdns_clear() {
-    xTimerStop(mdns_announce_timer, 0);
+    esp_timer_stop(mdns_announce_timer);
     
     if (!xSemaphoreTake(gDictMutex, portMAX_DELAY))
         return;
@@ -619,12 +620,12 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
     free(fullName);
     free(devName);
 
-    xTimerStop(mdns_announce_timer, 0);
+    esp_timer_stop(mdns_announce_timer);
     
     mdns_announce();
     
 //    if (ttl > 0) {
-        xTimerChangePeriod(mdns_announce_timer, pdMS_TO_TICKS(ttl * TTL_MULTIPLIER_MS), 0);
+        esp_timer_change_period(mdns_announce_timer, ttl * TTL_MULTIPLIER_MS);
 //    }
 }
 
@@ -1014,7 +1015,7 @@ void mdns_init()
         return;
     }
 
-    mdns_announce_timer = xTimerCreate(0, pdMS_TO_TICKS(60000), pdTRUE, NULL, mdns_announce);
+    mdns_announce_timer = esp_timer_create(60000, true, NULL, mdns_announce);
     
     udp_bind_netif(gMDNS_pcb, netif);
 
