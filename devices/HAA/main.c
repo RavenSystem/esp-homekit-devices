@@ -3997,61 +3997,65 @@ void normal_mode_init() {
     
     // Digital outputs
     inline void new_action_relay(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
-        action_relay_t* last_action = ch_group->action_relay;
-        
-        void register_action(cJSON* json_accessory, uint8_t new_int_action) {
-            char action[3];
-            itoa(new_int_action, action, 10);
-            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
-                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), DIGITAL_OUTPUTS_ARRAY) != NULL) {
-                    cJSON* json_relays = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), DIGITAL_OUTPUTS_ARRAY);
-                    for (int16_t i = cJSON_GetArraySize(json_relays) - 1; i >= 0; i--) {
-                        action_relay_t* action_relay = malloc(sizeof(action_relay_t));
-                        memset(action_relay, 0, sizeof(*action_relay));
-                        
-                        cJSON* json_relay = cJSON_GetArrayItem(json_relays, i);
-                        
-                        action_relay->action = new_int_action;
-                        
-                        action_relay->value = false;
-                        if (cJSON_GetObjectItemCaseSensitive(json_relay, VALUE) != NULL) {
-                            action_relay->value = (bool) cJSON_GetObjectItemCaseSensitive(json_relay, VALUE)->valuedouble;
-                        }
-                        
-                        action_relay->gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuedouble;
-                        if (!get_used_gpio(action_relay->gpio)) {
-                            change_uart_gpio(action_relay->gpio);
-                            gpio_enable(action_relay->gpio, GPIO_OUTPUT);
-                            gpio_write(action_relay->gpio, action_relay->value);
-                            
-                            set_used_gpio(action_relay->gpio);
-                            
-                            INFO("New GPIO Output %i set to %i", action_relay->gpio, action_relay->value);
-                        }
+   	   action_relay_t* last_action = ch_group->action_relay;
 
-                        action_relay->inching = 0;
-                        if (cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME) != NULL) {
-                            action_relay->inching = (float) cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME)->valuedouble;
-                        }
-                        
-                        action_relay->next = last_action;
-                        last_action = action_relay;
-                        
-                        INFO("New Digital Output Action %i: gpio %i, val %i, inch %g", new_int_action, action_relay->gpio, action_relay->value, action_relay->inching);
-                    }
-                }
-            }
-        }
-        
-        if (fixed_action < MAX_ACTIONS) {
-            for (uint8_t int_action = 0; int_action < MAX_ACTIONS; int_action++) {
-                register_action(json_context, int_action);
-            }
-        } else {
-            register_action(json_context, fixed_action);
-        }
-        
-        ch_group->action_relay = last_action;
+   	   void register_action(cJSON* json_accessory, uint8_t new_int_action) {
+   		   char action[3];
+   		   itoa(new_int_action, action, 10);
+   		   if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+   			   if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), DIGITAL_OUTPUTS_ARRAY) != NULL) {
+   				   cJSON* json_relays = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), DIGITAL_OUTPUTS_ARRAY);
+   				   for (int16_t i = cJSON_GetArraySize(json_relays) - 1; i >= 0; i--) {
+   					   action_relay_t* action_relay = malloc(sizeof(action_relay_t));
+   					   memset(action_relay, 0, sizeof(*action_relay));
+
+   					   cJSON* json_relay = cJSON_GetArrayItem(json_relays, i);
+
+   					   action_relay->action = new_int_action;
+
+   					   action_relay->value = false;
+   					   if (cJSON_GetObjectItemCaseSensitive(json_relay, VALUE) != NULL) {
+   						action_relay->value = (bool) cJSON_GetObjectItemCaseSensitive(json_relay, VALUE)->valuedouble;
+   					   }
+
+   					   action_relay->inching = 0;
+   					   if (cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME) != NULL) {
+   						   action_relay->inching = (float) cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME)->valuedouble;
+   					   }
+   					if(action_relay->inching > 0.0)
+   						action_relay->value = !action_relay->value;
+
+   					   action_relay->gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuedouble;
+   					   if (!get_used_gpio(action_relay->gpio)) {
+   						   change_uart_gpio(action_relay->gpio);
+   						   gpio_enable(action_relay->gpio, GPIO_OUTPUT);
+   						   gpio_write(action_relay->gpio, action_relay->value);
+
+   						   set_used_gpio(action_relay->gpio);
+
+   						   INFO("New GPIO Output %i set to %i", action_relay->gpio, action_relay->value);
+   					   }
+
+
+
+   					   action_relay->next = last_action;
+   					   last_action = action_relay;
+
+   					   INFO("New Digital Output Action %i: gpio %i, val %i, inch %g", new_int_action, action_relay->gpio, action_relay->value, action_relay->inching);
+   				   }
+   			   }
+   		   }
+   	   }
+
+   	   if (fixed_action < MAX_ACTIONS) {
+   		   for (uint8_t int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+   			   register_action(json_context, int_action);
+   		   }
+   	   } else {
+   		   register_action(json_context, fixed_action);
+   	   }
+
+   	   ch_group->action_relay = last_action;
     }
     
     // Accessory Manager
