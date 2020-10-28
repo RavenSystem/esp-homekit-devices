@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "3.5.14"
+#define FIRMWARE_VERSION                    "3.5.15"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -454,8 +454,6 @@
 #define DEBUG(message, ...)                 printf("%s: " message "\n", __func__, ##__VA_ARGS__)
 #define INFO(message, ...)                  printf(message "\n", ##__VA_ARGS__)
 #define ERROR(message, ...)                 printf("! " message "\n", ##__VA_ARGS__)
-
-#define XTIMER_BLOCK_TIME                   (50)
 
 #define FREEHEAP()                          printf("Free Heap: %d\n", xPortGetFreeHeapSize())
 
