@@ -305,11 +305,8 @@ void wifi_reconnection_task() {
         
         if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
             INFO("Wifi reconnecting...");
+            
             main_config.wifi_status = WIFI_STATUS_CONNECTING;
-            do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
-
-            wifi_config_connect();
-            vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
 
         } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
             if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
@@ -335,14 +332,12 @@ void wifi_reconnection_task() {
             main_config.wifi_error_count++;
             if (main_config.wifi_error_count >= WIFI_ERROR_COUNT_REBOOT) {
                 main_config.wifi_error_count = 0;
-                sdk_wifi_station_disconnect();
                 led_blink(8);
-                ERROR("Wifi disconnected");
-                main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
-                do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 5);
+                ERROR("Wifi disconnected for a long time");
                 
-                wifi_config_reset();
-                vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
+                main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
+                
+                do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 5);
             }
         }
     }
@@ -380,7 +375,7 @@ void wifi_watchdog() {
         if (xTaskCreate(wifi_reconnection_task, "reconnect", WIFI_RECONNECTION_TASK_SIZE, NULL, WIFI_RECONNECTION_TASK_PRIORITY, NULL) == pdPASS) {
             esp_timer_stop(WIFI_WATCHDOG_TIMER);
             main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
-            sdk_wifi_station_disconnect();
+            do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
         } else {
             ERROR("Creating wifi_reconnection_task");
         }

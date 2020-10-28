@@ -84,15 +84,14 @@ typedef struct {
     void (*on_wifi_ready)();
 
     TimerHandle_t auto_reboot_timer;
+    TimerHandle_t sta_connect_timeout;
     
     TaskHandle_t http_task_handle;
     TaskHandle_t dns_task_handle;
-    TaskHandle_t sta_connect_timeout;
     
     wifi_network_info_t* wifi_networks;
     SemaphoreHandle_t wifi_networks_mutex;
 
-    uint8_t check_counter: 6;
     bool hostname_ready: 1;
 } wifi_config_context_t;
 
@@ -561,7 +560,7 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
         case ENDPOINT_SETTINGS_UPDATE: {
             esp_timer_delete(context->auto_reboot_timer);
             if (context->sta_connect_timeout) {
-                vTaskDelete(context->sta_connect_timeout);
+                esp_timer_delete(context->sta_connect_timeout);
             } else {
                 sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
             }
@@ -824,46 +823,31 @@ static void wifi_config_softap_stop() {
     UNLOCK_TCPIP_CORE();
 }
 
-static void wifi_config_sta_connect_timeout_task() {
-    for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+static void wifi_config_sta_connect_timeout_callback(TimerHandle_t xTimer) {
+    if (!context->hostname_ready && context->custom_hostname) {
+        struct netif *netif = sdk_system_get_netif(STATION_IF);
+        if (netif && !netif->hostname) {
+            LOCK_TCPIP_CORE();
+            dhcp_release_and_stop(netif);
+            netif->hostname = context->custom_hostname;
+            INFO("Hostname: %s", context->custom_hostname);
+            dhcp_start(netif);
+            UNLOCK_TCPIP_CORE();
+            context->hostname_ready = true;
+        }
+    } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+        // Connected to station, all is dandy
+        esp_timer_delete(xTimer);
         
-        if (!context->hostname_ready && context->custom_hostname) {
-            struct netif *netif = sdk_system_get_netif(STATION_IF);
-            if (netif && !netif->hostname) {
-                LOCK_TCPIP_CORE();
-                dhcp_release_and_stop(netif);
-                netif->hostname = context->custom_hostname;
-                INFO("Hostname: %s", context->custom_hostname);
-                dhcp_start(netif);
-                UNLOCK_TCPIP_CORE();
-                context->hostname_ready = true;
-            }
-        } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
-            wifi_config_softap_stop();
+        wifi_config_softap_stop();
+        
+        if (context->on_wifi_ready) {
+            http_stop();
+            context->on_wifi_ready();
             
-            if (context->on_wifi_ready) {
-                http_stop();
-                context->on_wifi_ready();
-                
-                wifi_config_context_free(context);
-                break;
-            }
-        } else if (context->on_wifi_ready) {
-            context->check_counter++;
-            if (context->check_counter == 1) {
-                wifi_config_connect();
-                vTaskDelay(pdMS_TO_TICKS(5000));
-                
-            } else if (context->check_counter == 60) {
-                context->check_counter = 0;
-                wifi_config_reset();
-                vTaskDelay(pdMS_TO_TICKS(5000));
-            }
+            wifi_config_context_free(context);
         }
     }
-    
-    vTaskDelete(NULL);
 }
 
 static void auto_reboot_run() {
@@ -948,7 +932,8 @@ uint8_t wifi_config_connect() {
 
 static void wifi_config_station_connect() {
     if (wifi_config_connect() == 1) {
-        xTaskCreate(wifi_config_sta_connect_timeout_task, "sta_connect", 512, NULL, (tskIDLE_PRIORITY + 0), &context->sta_connect_timeout);
+        context->sta_connect_timeout = esp_timer_create(500, true, NULL, wifi_config_sta_connect_timeout_callback);
+        esp_timer_start(context->sta_connect_timeout);
         
         if (!context->on_wifi_ready) {
             INFO("HAA Setup");
@@ -995,7 +980,6 @@ void wifi_config_init(const char* ssid_prefix, const char* password, void (*on_w
     }
 
     context->on_wifi_ready = on_wifi_ready;
-    context->check_counter = 1;
 
     wifi_config_station_connect();
 }
