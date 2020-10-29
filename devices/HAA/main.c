@@ -2810,6 +2810,9 @@ void http_get_task(void* pvParameters) {
                             char content_len[4];
                             itoa(content_len_n, content_len, 10);
                             method_req = malloc(48);
+                            if (method_req == NULL) {
+                                return;
+                            }
                             snprintf(method_req, 48, "Content-type: text/html\r\nContent-length: %s\r\n", content_len);
                             
                             if (action_http->method_n == 1) {
@@ -4819,6 +4822,9 @@ void normal_mode_init() {
         }
 
         char* serial_str = malloc(serial_prefix_len);
+        if (serial_str == NULL) {
+            return;
+        }
         uint8_t macaddr[6];
         sdk_wifi_get_macaddr(STATION_IF, macaddr);
         
