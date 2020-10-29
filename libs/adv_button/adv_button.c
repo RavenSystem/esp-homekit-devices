@@ -257,6 +257,9 @@ IRAM static void button_evaluate_fn() {
 void adv_button_init() {
     if (!adv_button_main_config) {
         adv_button_main_config = malloc(sizeof(adv_button_main_config_t));
+        if (adv_button_main_config == NULL) {
+            return;
+        }
         memset(adv_button_main_config, 0, sizeof(*adv_button_main_config));
         
         adv_button_main_config->disable_time = 0;
@@ -312,6 +315,9 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
     
     if (!button) {
         button = malloc(sizeof(adv_button_t));
+        if (button == NULL) {
+            return;
+        }
         memset(button, 0, sizeof(*button));
         button->gpio = gpio;
         button->max_eval = ADV_BUTTON_DEFAULT_EVAL;
@@ -367,6 +373,9 @@ int adv_button_register_callback_fn(const uint8_t gpio, const button_callback_fn
     if (button) {
         adv_button_callback_fn_t *adv_button_callback_fn;
         adv_button_callback_fn = malloc(sizeof(adv_button_callback_fn_t));
+        if (adv_button_callback_fn == NULL) {
+            return;
+        }
         memset(adv_button_callback_fn, 0, sizeof(*adv_button_callback_fn));
         
         adv_button_callback_fn->callback = callback;
@@ -418,6 +427,9 @@ int adv_button_destroy(const uint8_t gpio) {
     
     if (adv_button_main_config->buttons) {
         adv_button_t *button = NULL;
+        if (button == NULL) {
+            return;
+        }
         if (adv_button_main_config->buttons->gpio == gpio) {
             
             gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);

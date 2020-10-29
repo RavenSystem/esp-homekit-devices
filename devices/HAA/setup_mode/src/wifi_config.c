@@ -121,6 +121,9 @@ static void body_malloc(client_t* client) {
 
 static client_t *client_new() {
     client_t *client = malloc(sizeof(client_t));
+    if (client == NULL) {
+        return;
+    }
     memset(client, 0, sizeof(client_t));
     
     body_malloc(client);
@@ -213,6 +216,9 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
         
         if (!net) {
             wifi_network_info_t *net = malloc(sizeof(wifi_network_info_t));
+            if (net == NULL) {
+                return;
+            }
             memset(net, 0, sizeof(*net));
             strncpy(net->ssid, (char *)bss->ssid, sizeof(net->ssid));
             memcpy(net->bssid, bss->bssid, 6);
@@ -639,6 +645,9 @@ static void http_task(void *arg) {
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 
         client_t *client = client_new();
+        if (client == NULL) {
+            return;
+        }
         client->fd = fd;
 
         //int data_total = 0;
@@ -976,6 +985,9 @@ void wifi_config_init(const char* ssid_prefix, const char* password, void (*on_w
     }
 
     context = malloc(sizeof(wifi_config_context_t));
+    if (context == NULL) {
+        return;
+    }
     memset(context, 0, sizeof(*context));
 
     context->ssid_prefix = strndup(ssid_prefix, 33 - 7);

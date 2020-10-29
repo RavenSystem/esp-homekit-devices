@@ -213,6 +213,9 @@ static void adv_logger_init_task() {
             adv_logger_data->udplogstring_size = 63;
             adv_logger_data->udplogstring = malloc(adv_logger_data->udplogstring_size);
         }
+        if (adv_logger_data->udplogstring == NULL) {
+            return;
+        }
         adv_logger_data->udplogstring[0] = 0;
         
         strcat(adv_logger_data->udplogstring, "\r\nAdvanced ESP Logger (c) 2020 José Antonio Jiménez Campos\r\n\r\n");
@@ -265,6 +268,9 @@ void adv_logger_init(const uint8_t log_type) {
 
     } else if (log_type > ADV_LOGGER_UART0) {
         adv_logger_data = malloc(sizeof(adv_logger_data_t));
+        if (adv_logger_data == NULL) {
+            return;
+        }
         memset(adv_logger_data, 0, sizeof(*adv_logger_data));
         
         adv_logger_data->log_type = log_type - ADV_LOGGER_UART0;

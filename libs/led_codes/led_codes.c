@@ -80,6 +80,9 @@ int led_create(const uint8_t gpio, const bool inverted) {
     
     if (!led) {
         led = malloc(sizeof(led_t));
+        if (led == NULL) {
+            return;
+        }
         memset(led, 0, sizeof(*led));
 
         led->next = leds;

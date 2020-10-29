@@ -138,6 +138,9 @@ void change_uart_gpio(const uint8_t gpio) {
 uint16_t process_hexstr(const char* string, char** output_hex_string) {
     const uint16_t len = strlen(string) >> 1;
     char* hex_string = malloc(len + 1);
+    if (hex_string == NULL) {
+        return;
+    }
     memset(hex_string, 0, len + 1);
     
     char buffer[3];
@@ -157,6 +160,9 @@ uint16_t process_hexstr(const char* string, char** output_hex_string) {
 
 action_task_t* new_action_task() {
     action_task_t* action_task = malloc(sizeof(action_task_t));
+    if (action_task == NULL) {
+        return;
+    }
     memset(action_task, 0, sizeof(*action_task));
     
     return action_task;
@@ -164,6 +170,9 @@ action_task_t* new_action_task() {
 
 ch_group_t* new_ch_group() {
     ch_group_t* ch_group = malloc(sizeof(ch_group_t));
+    if (ch_group == NULL) {
+        return;
+    }
     memset(ch_group, 0, sizeof(*ch_group));
     ch_group->main_enabled = true;
     ch_group->child_enabled = true;
@@ -580,6 +589,9 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
             
             if (ch->value.bool_value && ch_group->num[0] > 0) {
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                if (autooff_setter_params == NULL) {
+                    return;
+                }
                 autooff_setter_params->ch = ch;
                 autooff_setter_params->type = TYPE_ON;
                 esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
@@ -648,6 +660,9 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
 
             if (ch->value.int_value == 0 && ch_group->num[lock_index] > 0) {
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                if (autooff_setter_params == NULL) {
+                    return;
+                }
                 autooff_setter_params->ch = ch;
                 autooff_setter_params->type = TYPE_LOCK;
                 esp_timer_start(esp_timer_create(ch_group->num[lock_index] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
@@ -719,6 +734,9 @@ void sensor_1(const uint8_t gpio, void* args, const uint8_t type) {
             
             if (ch_group->num[0] > 0) {
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                if (autooff_setter_params == NULL) {
+                    return;
+                }
                 autooff_setter_params->ch = ch_group->ch0;
                 autooff_setter_params->type = type;
                 esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
@@ -888,6 +906,9 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
             
             if (ch->value.int_value == 1 && ch_group->num[0] > 0) {
                     autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                    if (autooff_setter_params == NULL) {
+                        return;
+                    }
                     autooff_setter_params->ch = ch;
                     autooff_setter_params->type = TYPE_VALVE;
                     esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
@@ -2116,6 +2137,9 @@ void hkc_fan_setter(homekit_characteristic_t* ch0, const homekit_value_t value) 
                 
                 if (ch0->value.bool_value && ch_group->num[0] > 0) {
                     autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                    if (autooff_setter_params == NULL) {
+                        return;
+                    }
                     autooff_setter_params->ch = ch0;
                     autooff_setter_params->type = TYPE_FAN;
                     esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
@@ -2761,6 +2785,9 @@ void http_get_task(void* pvParameters) {
                                     content_len_n += strlen(buffer) - 9;
                                     
                                     str_ch_value_t* str_ch_value = malloc(sizeof(str_ch_value_t));
+                                    if (str_ch_value == NULL) {
+                                        return;
+                                    }
                                     memset(str_ch_value, 0, sizeof(*str_ch_value));
                                     
                                     str_ch_value->string = strdup(buffer);
@@ -2802,6 +2829,9 @@ void http_get_task(void* pvParameters) {
                             action_http->len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(action_http->host) +  strlen(action_http->url) + content_len_n;
                             
                             req = malloc(action_http->len);
+                            if (req == NULL) {
+                                return;
+                            }
                             snprintf(req, action_http->len, "%s /%s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HAA/"FIRMWARE_VERSION" esp8266\r\nConnection: close\r\n%s\r\n",
                                      method,
                                      action_http->url,
@@ -2975,6 +3005,9 @@ void ir_tx_task(void* pvParameters) {
                 }
                 
                 ir_code = malloc(sizeof(uint16_t) * ir_code_len);
+                if (ir_code == NULL) {
+                    return;
+                }
                 
                 INFO("IR Code Len: %i\nIR Protocol: %s", ir_code_len, prot);
                 
@@ -3151,6 +3184,9 @@ void ir_tx_task(void* pvParameters) {
                 ir_code_len = json_ir_code_len >> 1;
                 
                 ir_code = malloc(sizeof(uint16_t) * ir_code_len);
+                if (ir_code == NULL) {
+                    return;
+                }
                 
                 INFO("IR packet (%i)", ir_code_len);
 
@@ -3481,6 +3517,9 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     // UART actions
     if (ch_group->action_uart) {
         action_task_t* action_task = new_action_task();
+        if (action_task == NULL) {
+            return;
+        }
         action_task->action = action;
         action_task->ch_group = ch_group;
         
@@ -3822,6 +3861,9 @@ void normal_mode_init() {
             
             if (!ping_input) {
                 ping_input = malloc(sizeof(ping_input_t));
+                if (ping_input == NULL) {
+                    return;
+                }
                 memset(ping_input, 0, sizeof(*ping_input));
                 
                 ping_input->host = strdup(cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_HOST)->valuestring);
@@ -3843,6 +3885,9 @@ void normal_mode_init() {
             
             ping_input_callback_fn_t* ping_input_callback_fn;
             ping_input_callback_fn = malloc(sizeof(ping_input_callback_fn_t));
+            if (ping_input_callback_fn == NULL) {
+                return;
+            }
             memset(ping_input_callback_fn, 0, sizeof(*ping_input_callback_fn));
             
             ping_input_callback_fn->disable_without_wifi = false;
@@ -3876,10 +3921,16 @@ void normal_mode_init() {
                     state = initial_state;
             } else {
                 char* saved_state_id = malloc(3);
+                if (saved_state_id == NULL) {
+                    return;
+                }
                 uint16_t int_saved_state_id = ((accessory + 10) * 10) + ch_number;
                 
                 itoa(int_saved_state_id, saved_state_id, 10);
                 last_state_t* last_state = malloc(sizeof(last_state_t));
+                if (last_state == NULL) {
+                    return;
+                }
                 memset(last_state, 0, sizeof(*last_state));
                 last_state->id = saved_state_id;
                 last_state->ch = ch;
@@ -3967,6 +4018,9 @@ void normal_mode_init() {
                 cJSON* json_action = cJSON_GetObjectItemCaseSensitive(json_accessory, action);
                 if (cJSON_GetObjectItemCaseSensitive(json_action, COPY_ACTIONS) != NULL) {
                     action_copy_t* action_copy = malloc(sizeof(action_copy_t));
+                    if (action_copy == NULL) {
+                        return;
+                    }
                     memset(action_copy, 0, sizeof(*action_copy));
                     
                     action_copy->action = new_int_action;
@@ -4003,6 +4057,9 @@ void normal_mode_init() {
                     cJSON* json_relays = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), DIGITAL_OUTPUTS_ARRAY);
                     for (int16_t i = cJSON_GetArraySize(json_relays) - 1; i >= 0; i--) {
                         action_relay_t* action_relay = malloc(sizeof(action_relay_t));
+                        if (action_relay == NULL) {
+                            return;
+                        }
                         memset(action_relay, 0, sizeof(*action_relay));
                         
                         cJSON* json_relay = cJSON_GetArrayItem(json_relays, i);
@@ -4063,6 +4120,9 @@ void normal_mode_init() {
                     
                     for (int16_t i = cJSON_GetArraySize(json_acc_managers) - 1; i >= 0; i--) {
                         action_acc_manager_t* action_acc_manager = malloc(sizeof(action_acc_manager_t));
+                        if (action_acc_manager == NULL) {
+                            return;
+                        }
                         memset(action_acc_manager, 0, sizeof(*action_acc_manager));
                         
                         cJSON* json_acc_manager = cJSON_GetArrayItem(json_acc_managers, i);
@@ -4111,6 +4171,9 @@ void normal_mode_init() {
                     cJSON* json_action_systems = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SYSTEM_ACTIONS_ARRAY);
                     for (int16_t i = cJSON_GetArraySize(json_action_systems) - 1; i >= 0; i--) {
                         action_system_t* action_system = malloc(sizeof(action_system_t));
+                        if (action_system == NULL) {
+                            return;
+                        }
                         memset(action_system, 0, sizeof(*action_system));
                         
                         cJSON* json_action_system = cJSON_GetArrayItem(json_action_systems, i);
@@ -4151,6 +4214,9 @@ void normal_mode_init() {
                     cJSON* json_action_https = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), HTTP_ACTIONS_ARRAY);
                     for (int16_t i = cJSON_GetArraySize(json_action_https) - 1; i >= 0; i--) {
                         action_http_t* action_http = malloc(sizeof(action_http_t));
+                        if (action_http == NULL) {
+                            return;
+                        }
                         memset(action_http, 0, sizeof(*action_http));
                         
                         cJSON* json_action_http = cJSON_GetArrayItem(json_action_https, i);
@@ -4221,6 +4287,9 @@ void normal_mode_init() {
                     cJSON* json_action_ir_txs = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), IR_ACTIONS_ARRAY);
                     for (int16_t i = cJSON_GetArraySize(json_action_ir_txs) - 1; i >= 0; i--) {
                         action_ir_tx_t* action_ir_tx = malloc(sizeof(action_ir_tx_t));
+                        if (action_ir_tx == NULL) {
+                            return;
+                        }
                         memset(action_ir_tx, 0, sizeof(*action_ir_tx));
                         
                         cJSON* json_action_ir_tx = cJSON_GetArrayItem(json_action_ir_txs, i);
@@ -4286,6 +4355,9 @@ void normal_mode_init() {
                     cJSON* json_action_uarts = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), UART_ACTIONS_ARRAY);
                     for (int16_t i = cJSON_GetArraySize(json_action_uarts) - 1; i >= 0; i--) {
                         action_uart_t* action_uart = malloc(sizeof(action_uart_t));
+                        if (action_uart == NULL) {
+                            return;
+                        }
                         memset(action_uart, 0, sizeof(*action_uart));
                         
                         cJSON* json_action_uart = cJSON_GetArrayItem(json_action_uarts, i);
@@ -4350,6 +4422,9 @@ void normal_mode_init() {
             cJSON* json_wilcard_actions = cJSON_GetObjectItemCaseSensitive(json_accessory, index);
             for (uint8_t i = 0; i < cJSON_GetArraySize(json_wilcard_actions); i++) {
                 wildcard_action_t* wildcard_action = malloc(sizeof(wildcard_action_t));
+                if (wildcard_action == NULL) {
+                    return;
+                }
                 memset(wildcard_action, 0, sizeof(*wildcard_action));
                 
                 cJSON* json_wilcard_action = cJSON_GetArrayItem(json_wilcard_actions, i);
@@ -4760,10 +4835,21 @@ void normal_mode_init() {
         homekit_characteristic_t* serial = NEW_HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, serial_str);
         
         accessories[accessory] = calloc(1, sizeof(homekit_accessory_t));
+        if (accessories[accessory] == NULL) {
+            return;
+        }
+        
         accessories[accessory]->id = accessory + 1;
         accessories[accessory]->services = calloc(services, sizeof(homekit_service_t*));
-        
+        if (accessories[accessory]->services == NULL) {
+            return;
+        }
+
         accessories[accessory]->services[0] = calloc(1, sizeof(homekit_service_t));
+        if (accessories[accessory]->services[0] == NULL) {
+            return;
+        }
+        
         accessories[accessory]->services[0]->id = 1;
         accessories[accessory]->services[0]->type = HOMEKIT_SERVICE_ACCESSORY_INFORMATION;
         accessories[accessory]->services[0]->characteristics = calloc(7, sizeof(homekit_characteristic_t*));
@@ -4778,6 +4864,10 @@ void normal_mode_init() {
             INFO("HAP v1.1.0");
             services -= 2;
             accessories[accessory]->services[services] = calloc(1, sizeof(homekit_service_t));
+            if (accessories[accessory]->services[services] == NULL) {
+                return;
+            }
+
             accessories[accessory]->services[services]->id = 100;
             accessories[accessory]->services[services]->type = HOMEKIT_SERVICE_HAP_INFORMATION;
             accessories[accessory]->services[services]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
@@ -5869,6 +5959,9 @@ void normal_mode_init() {
             main_config.pwm_timer = esp_timer_create(RGBW_PERIOD, true, NULL, rgbw_set_timer_worker);
             
             main_config.pwm_info = malloc(sizeof(pwm_info_t));
+            if (main_config.pwm_info == NULL) {
+                return;
+            }
             memset(main_config.pwm_info, 0, sizeof(*main_config.pwm_info));
             
             multipwm_init(main_config.pwm_info);
@@ -5890,6 +5983,9 @@ void normal_mode_init() {
         ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
         
         lightbulb_group_t* lightbulb_group = malloc(sizeof(lightbulb_group_t));
+        if (lightbulb_group == NULL) {
+            return;
+        }
         memset(lightbulb_group, 0, sizeof(*lightbulb_group));
         lightbulb_group->ch0 = ch0;
         lightbulb_group->is_pwm = is_pwm;
@@ -6422,6 +6518,9 @@ void normal_mode_init() {
         }
         
         ch_group_t* ch_group = new_ch_group();
+        if (ch_group == NULL) {
+            return;
+        }
         ch_group->accessory = accessory_numerator;
         ch_group->homekit_enabled = acc_homekit_enabled(json_context);
         
@@ -6453,12 +6552,22 @@ void normal_mode_init() {
             INFO("TV Input: %s", name);
             
             homekit_service_t* *service = calloc(1, sizeof(homekit_service_t*));
+            if (service == NULL) {
+                return;
+            }
             
             service[0] = calloc(1, sizeof(homekit_service_t));
+            if (service[0] == NULL) {
+                return;
+            }
+
             service[0]->id = 26 + (service_number * 8);
             service[0]->primary = false;
             service[0]->type = HOMEKIT_SERVICE_INPUT_SOURCE;
             service[0]->characteristics = calloc(7, sizeof(homekit_characteristic_t*));
+            if (service[0]->characteristics == NULL) {
+                return;
+            }
             service[0]->characteristics[0] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "I");
             service[0]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(IDENTIFIER, service_number);
             service[0]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(CONFIGURED_NAME, name, .setter_ex=hkc_tv_input_configured_name);
@@ -6584,6 +6693,9 @@ void normal_mode_init() {
     // *** Accessory Builder
     // Root device
     ch_group_t* root_device_ch_group = new_ch_group();
+    if (root_device_ch_group == NULL) {
+        return;
+    }
     register_actions(root_device_ch_group, json_config, 0);
     set_accessory_ir_protocol(root_device_ch_group, json_config);
     

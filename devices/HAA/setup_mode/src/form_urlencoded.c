@@ -68,6 +68,9 @@ form_param_t *form_params_parse(const char *s) {
         }
 
         form_param_t *param = malloc(sizeof(form_param_t));
+        if (param == NULL) {
+            return;
+        }
         param->name = url_unescape(s+pos, i-pos);
         param->value = NULL;
         param->next = params;

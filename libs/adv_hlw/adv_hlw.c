@@ -180,6 +180,9 @@ int adv_hlw_unit_create(const int8_t gpio_cf, const int8_t gpio_cf1, const int8_
             if (!adv_hlw_unit) {
 
                 adv_hlw_unit = malloc(sizeof(adv_hlw_unit_t));
+                if (adv_hlw_unit == NULL) {
+                    return;
+                }
                 memset(adv_hlw_unit, 0, sizeof(*adv_hlw_unit));
                 
                 adv_hlw_unit->gpio_cf = gpio_cf;
