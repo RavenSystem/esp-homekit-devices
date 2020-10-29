@@ -293,8 +293,6 @@ void adv_button_set_evaluate_delay(const uint8_t new_delay) {
     
     if (new_delay < BUTTON_EVAL_DELAY_MIN) {
         adv_button_main_config->button_evaluate_delay = BUTTON_EVAL_DELAY_MIN;
-    } else if (new_delay > BUTTON_EVAL_DELAY_MAX) {
-        adv_button_main_config->button_evaluate_delay = BUTTON_EVAL_DELAY_MAX;
     } else {
         adv_button_main_config->button_evaluate_delay = new_delay;
     }
