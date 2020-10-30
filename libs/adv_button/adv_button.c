@@ -26,7 +26,6 @@
 
 #define BUTTON_EVAL_DELAY_MIN       (10)
 #define BUTTON_EVAL_DELAY_DEFAULT   (10)
-#define BUTTON_EVAL_DELAY_MAX       (BUTTON_EVAL_DELAY_MIN + 245)
 
 #define DISABLE_PRESS_COUNT         (31)
 
@@ -290,8 +289,6 @@ void adv_button_set_evaluate_delay(const uint8_t new_delay) {
     
     if (new_delay < BUTTON_EVAL_DELAY_MIN) {
         adv_button_main_config->button_evaluate_delay = BUTTON_EVAL_DELAY_MIN;
-    } else if (new_delay > BUTTON_EVAL_DELAY_MAX) {
-        adv_button_main_config->button_evaluate_delay = BUTTON_EVAL_DELAY_MAX;
     } else {
         adv_button_main_config->button_evaluate_delay = new_delay;
     }
@@ -301,7 +298,7 @@ void adv_button_set_evaluate_delay(const uint8_t new_delay) {
 
 void adv_button_set_disable_time() {
     if (adv_button_main_config) {
-        adv_button_main_config->disable_time = xTaskGetTickCountFromISR();
+        adv_button_main_config->disable_time = xTaskGetTickCount();
     }
 }
 
