@@ -257,6 +257,11 @@ void reboot_haa() {
     led_blink(5);
     INFO("\nRebooting...\n");
     esp_timer_start(esp_timer_create(2900, false, NULL, reboot_callback));
+    esp_timer_delete(SAVE_STATES_TIMER);
+    esp_timer_delete(WIFI_WATCHDOG_TIMER);
+    esp_timer_delete(main_config.setup_mode_toggle_timer);
+    sdk_wifi_station_disconnect();
+    
 }
 
 void resend_arp() {

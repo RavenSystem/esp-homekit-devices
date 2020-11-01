@@ -506,7 +506,11 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     static const char payload[] = "HTTP/1.1 204 \r\nContent-Type: text/html\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
     client_send(client, payload, sizeof(payload) - 1);
     
-    vTaskDelay(pdMS_TO_TICKS(250));
+    vTaskDelay(pdMS_TO_TICKS(1500));
+    
+    sdk_wifi_station_disconnect();
+    
+    vTaskDelay(pdMS_TO_TICKS(500));
     
     sdk_system_restart();
 }
@@ -866,11 +870,19 @@ static void auto_reboot_run() {
     bool auto_ota = false;
     sysparam_get_bool(AUTO_OTA_SYSPARAM, &auto_ota);
     if (auto_ota) {
-        INFO("OTA Update");
+        INFO("Auto OTA Update enabled");
         rboot_set_temp_rom(1);
     }
 
-    INFO("Auto Reboot");
+    INFO("\nAuto Rebooting...\n");
+    if (context->sta_connect_timeout) {
+        vTaskDelete(context->sta_connect_timeout);
+    }
+    
+    vTaskDelay(pdMS_TO_TICKS(150));
+    
+    sdk_wifi_station_disconnect();
+    
     vTaskDelay(pdMS_TO_TICKS(150));
     
     sdk_system_restart();
