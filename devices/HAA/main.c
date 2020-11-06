@@ -261,7 +261,6 @@ void reboot_haa() {
     esp_timer_delete(WIFI_WATCHDOG_TIMER);
     esp_timer_delete(main_config.setup_mode_toggle_timer);
     sdk_wifi_station_disconnect();
-    
 }
 
 void resend_arp() {
@@ -316,9 +315,10 @@ void wifi_reconnection_task() {
 
         } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
             if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
+                INFO("Wifi preconnected");
                 main_config.wifi_status = WIFI_STATUS_CONNECTED;
                 main_config.wifi_channel = sdk_wifi_get_channel();
-                INFO("mDNS reannounced");
+                
                 homekit_mdns_announce();
                 
                 vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
@@ -337,11 +337,11 @@ void wifi_reconnection_task() {
         } else {
             main_config.wifi_error_count++;
             if (main_config.wifi_error_count >= WIFI_ERROR_COUNT_REBOOT) {
-                main_config.wifi_error_count = 0;
-                led_blink(8);
                 ERROR("Wifi disconnected for a long time");
-                
+                main_config.wifi_error_count = 0;
                 main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
+                
+                led_blink(6);
                 
                 do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 5);
             }

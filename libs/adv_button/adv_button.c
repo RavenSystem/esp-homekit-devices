@@ -72,6 +72,7 @@ typedef struct _adv_button {
 typedef struct _adv_button_main_config {
     uint32_t disable_time;
     uint16_t button_evaluate_sleep_countdown;
+    uint16_t button_evaluate_sleep_time;
     uint8_t button_evaluate_delay;
     bool button_evaluate_is_working: 1;
     bool is_gpio16: 1;
@@ -182,7 +183,6 @@ static void adv_button_hold_callback(TimerHandle_t xTimer) {
     adv_button_run_callback_fn(button->holdpress_callback_fn, button->gpio);
 }
 
-IRAM static void button_evaluate_fn();
 IRAM static void adv_button_interrupt(const uint8_t gpio) {
     gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, adv_button_interrupt);
     
@@ -192,25 +192,17 @@ IRAM static void adv_button_interrupt(const uint8_t gpio) {
         button = button->next;
     }
 
-    if (xTimerIsTimerActive(adv_button_main_config->button_evaluate_timer) == pdFALSE) {
-        adv_button_main_config->button_evaluate_sleep_countdown = (HOLDPRESS_TIME + 1000) / adv_button_main_config->button_evaluate_delay;
-        
-        esp_timer_start_from_ISR(adv_button_main_config->button_evaluate_timer);
-        button_evaluate_fn();
-    } else {
-        adv_button_main_config->button_evaluate_sleep_countdown = (HOLDPRESS_TIME + 1000) / adv_button_main_config->button_evaluate_delay;
-    }
+    esp_timer_start_from_ISR(adv_button_main_config->button_evaluate_timer);
 }
 
 IRAM static void button_evaluate_fn() {
     if (!adv_button_main_config->button_evaluate_is_working) {
         if (!adv_button_main_config->is_gpio16) {
-            if (adv_button_main_config->button_evaluate_sleep_countdown > 0) {
-                adv_button_main_config->button_evaluate_sleep_countdown--;
-            }
-            
-            if (adv_button_main_config->button_evaluate_sleep_countdown == 0) {
+            if (adv_button_main_config->button_evaluate_sleep_countdown < adv_button_main_config->button_evaluate_sleep_time) {
+                adv_button_main_config->button_evaluate_sleep_countdown++;
+            } else {
                 esp_timer_stop(adv_button_main_config->button_evaluate_timer);
+                adv_button_main_config->button_evaluate_sleep_countdown = 0;
                 
                 adv_button_t* button = adv_button_main_config->buttons;
                 while (button) {
@@ -238,6 +230,7 @@ IRAM static void button_evaluate_fn() {
 
             if (button->state != button->old_state) {
                 button->old_state = button->state;
+                adv_button_main_config->button_evaluate_sleep_countdown = 0;
                 
                 if (button->state ^ button->inverted) {     // 1 HIGH
                     push_up(button->gpio);
@@ -258,12 +251,8 @@ void adv_button_init() {
         adv_button_main_config = malloc(sizeof(adv_button_main_config_t));
         memset(adv_button_main_config, 0, sizeof(*adv_button_main_config));
         
-        adv_button_main_config->disable_time = 0;
         adv_button_main_config->button_evaluate_delay = BUTTON_EVAL_DELAY_DEFAULT;
-        adv_button_main_config->button_evaluate_is_working = false;
-        adv_button_main_config->button_evaluate_sleep_countdown = 1;
-        adv_button_main_config->is_gpio16 = false;
-        adv_button_main_config->buttons = NULL;
+        adv_button_main_config->button_evaluate_sleep_time = (HOLDPRESS_TIME + 1000) / BUTTON_EVAL_DELAY_DEFAULT;
         
         adv_button_main_config->button_evaluate_timer = esp_timer_create(adv_button_main_config->button_evaluate_delay, true, NULL, button_evaluate_fn);
     }
@@ -293,6 +282,7 @@ void adv_button_set_evaluate_delay(const uint8_t new_delay) {
         adv_button_main_config->button_evaluate_delay = new_delay;
     }
     
+    adv_button_main_config->button_evaluate_sleep_time = (HOLDPRESS_TIME + 1000) / adv_button_main_config->button_evaluate_delay;
     esp_timer_change_period(adv_button_main_config->button_evaluate_timer, adv_button_main_config->button_evaluate_delay);
 }
 
@@ -313,8 +303,6 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
         button->gpio = gpio;
         button->max_eval = ADV_BUTTON_DEFAULT_EVAL;
         button->inverted = inverted;
-        button->press_count = 0;
-        adv_button_main_config->button_evaluate_sleep_countdown = 0;
         
         button->next = adv_button_main_config->buttons;
         adv_button_main_config->buttons = button;
