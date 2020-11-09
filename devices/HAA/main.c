@@ -18,16 +18,14 @@
 
 #include <esplibs/libmain.h>
 
-#include "lwip/err.h"
-#include "lwip/sockets.h"
-#include "lwip/sys.h"
-#include "lwip/netdb.h"
-#include "lwip/dns.h"
-#include "lwip/etharp.h"
+#include <lwip/err.h>
+#include <lwip/sockets.h>
+#include <lwip/sys.h>
+#include <lwip/netdb.h>
+#include <lwip/dns.h>
 
 #include <homekit/homekit.h>
 #include <homekit/characteristics.h>
-#include <led_codes.h>
 #include <adv_button.h>
 #include <adv_hlw.h>
 #include <ping.h>
@@ -35,6 +33,7 @@
 #include <timers_helper.h>
 
 #include <multipwm/multipwm.h>
+#include <i2c/i2c.h>
 
 #include <dht.h>
 #include <ds18b20/ds18b20.h>
@@ -57,13 +56,9 @@ main_config_t main_config = {
     
     .setup_mode_toggle_counter = INT8_MIN,
     .setup_mode_toggle_counter_max = SETUP_MODE_DEFAULT_ACTIVATE_COUNT,
-    .led_gpio = GPIO_OVERFLOW,
     .setup_mode_time = 0,
     
     .ping_is_running = false,
-    .pwm_freq = 0,
-    .setpwm_is_running = false,
-    .setpwm_bool_semaphore = true,
     .enable_homekit_server = true,
 
     .ir_tx_freq = 13,
@@ -93,8 +88,100 @@ main_config_t main_config = {
     .ch_groups = NULL,
     .lightbulb_groups = NULL,
     .ping_inputs = NULL,
-    .last_states = NULL
+    .last_states = NULL,
+    
+    .status_led = NULL
 };
+
+void extended_gpio_enable(const uint16_t extended_gpio, const gpio_direction_t direction) {
+    if (extended_gpio < 17) {
+        gpio_enable((uint8_t) extended_gpio, direction);
+    }
+}
+
+void extended_gpio_write(const uint16_t extended_gpio, bool value) {
+    if (extended_gpio < 17) {
+        gpio_write(extended_gpio, value);
+        
+    } else {    // MCP23017
+        const uint8_t gpio_type = extended_gpio / 100;
+        mcp23017_t* mcp23017 = main_config.mcp23017s;
+        while (mcp23017 &&
+               mcp23017->index != gpio_type) {
+            mcp23017 = mcp23017->next;
+        }
+        
+        if (mcp23017) {
+            uint8_t gpio = extended_gpio % 100;
+            uint8_t mcp_outs = mcp23017->a_outs;
+            uint8_t channel = 0;
+            if (gpio > 7) {
+                gpio =- 8;
+                mcp_outs = mcp23017->b_outs;
+                channel = 1;
+            }
+            
+            const uint8_t bit = 1 << gpio;
+            
+            if (value) {
+                mcp_outs |= bit;
+            } else if ((mcp_outs & bit) != 0) {
+                mcp_outs ^= bit;
+            }
+            
+            if (channel == 0) {
+                mcp23017->a_outs = mcp_outs;
+            } else {
+                mcp23017->b_outs = mcp_outs;
+            }
+            
+            i2c_slave_write(mcp23017->bus, mcp23017->addr, &channel, &mcp_outs, 1);
+        }
+    }
+}
+
+void led_code_run(TimerHandle_t xTimer) {
+    uint16_t delay = STATUS_LED_DURATION_OFF;
+    
+    main_config.status_led->status = !main_config.status_led->status;
+    extended_gpio_write(main_config.status_led->gpio, main_config.status_led->status);
+    
+    if (main_config.status_led->status == main_config.status_led->inverted) {
+        main_config.status_led->count++;
+    } else {
+        delay = STATUS_LED_DURATION_ON;
+    }
+    
+    if (main_config.status_led->count < main_config.status_led->times) {
+        esp_timer_change_period(xTimer, delay);
+    }
+}
+
+void led_blink(const uint8_t times) {
+    if (main_config.status_led) {
+        esp_timer_stop(main_config.status_led->timer);
+        
+        main_config.status_led->times = times;
+        main_config.status_led->status = main_config.status_led->inverted;
+        main_config.status_led->count = 0;
+        
+        led_code_run(main_config.status_led->timer);
+    }
+}
+
+void led_create(const uint8_t gpio, const bool inverted) {
+    main_config.status_led = malloc(sizeof(led_t));
+    memset(main_config.status_led, 0, sizeof(*main_config.status_led));
+    
+    main_config.status_led->timer = esp_timer_create(10, false, NULL, led_code_run);
+    
+    main_config.status_led->gpio = gpio;
+    main_config.status_led->inverted = inverted;
+    main_config.status_led->status = inverted;
+    
+    extended_gpio_enable(main_config.status_led->gpio, GPIO_OUTPUT);
+    extended_gpio_write(main_config.status_led->gpio, main_config.status_led->status);
+}
 
 void hkc_autooff_setter_task(TimerHandle_t xTimer);
 void do_actions(ch_group_t* ch_group, uint8_t int_action);
@@ -127,7 +214,7 @@ void disable_emergency_setup(TimerHandle_t xTimer) {
     esp_timer_delete(xTimer);
 }
 
-void change_uart_gpio(const uint8_t gpio) {
+void change_uart_gpio(const uint16_t gpio) {
     if (gpio == 1) {
         gpio_set_iomux_function(1, IOMUX_GPIO1_FUNC_GPIO);
     } else if (gpio == 3) {
@@ -172,6 +259,15 @@ ch_group_t* new_ch_group() {
     main_config.ch_groups = ch_group;
     
     return ch_group;
+}
+
+void haa_pwm_init() {
+    if (!main_config.haa_pwm) {
+        main_config.haa_pwm = malloc(sizeof(haa_pwm_t));
+        memset(main_config.haa_pwm, 0, sizeof(*main_config.haa_pwm));
+        
+        main_config.haa_pwm->setpwm_bool_semaphore = true;
+    }
 }
 
 ch_group_t* ch_group_find(homekit_characteristic_t* ch) {
@@ -245,10 +341,6 @@ bool ping_host(char* host) {
     return ping_result;
 }
 
-inline void led_blink(const int blinks) {
-    led_code(main_config.led_gpio, (blinking_params_t) { blinks, 0 });
-}
-
 void reboot_callback() {
     sdk_system_restart();
 }
@@ -261,15 +353,6 @@ void reboot_haa() {
     esp_timer_delete(WIFI_WATCHDOG_TIMER);
     esp_timer_delete(main_config.setup_mode_toggle_timer);
     sdk_wifi_station_disconnect();
-}
-
-void resend_arp() {
-    struct netif *netif = sdk_system_get_netif(STATION_IF);
-    if (netif) {
-        LOCK_TCPIP_CORE();
-        etharp_gratuitous(netif);
-        UNLOCK_TCPIP_CORE();
-    }
 }
 
 void wifi_ping_task() {
@@ -326,7 +409,7 @@ void wifi_reconnection_task() {
             } else {
                 main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
                 INFO("Wifi reconnected");
-                resend_arp();
+                wifi_config_resend_arp();
                 homekit_mdns_announce();
                 
                 main_config.wifi_error_count = 0;
@@ -358,14 +441,18 @@ void wifi_watchdog() {
         if (main_config.wifi_channel != current_channel) {
             if (xTaskCreate(wifi_reconnection_task, "reconnect", WIFI_RECONNECTION_TASK_SIZE, NULL, WIFI_RECONNECTION_TASK_PRIORITY, NULL) == pdPASS) {
                 esp_timer_stop(WIFI_WATCHDOG_TIMER);
-                
+                INFO("Wifi new Ch: %i", current_channel);
                 main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
-                INFO("Wifi new Ch%i", current_channel);
-                resend_arp();
                 homekit_mdns_announce();
             } else {
                 ERROR("Creating wifi_reconnection_task");
             }
+        }
+        
+        main_config.wifi_arp_count++;
+        if (main_config.wifi_arp_count >= WIFI_ARP_RESEND_PERIOD) {
+            main_config.wifi_arp_count = 0;
+            wifi_config_resend_arp();
         }
         
         if (main_config.wifi_ping_max_errors != 255 && !main_config.wifi_ping_is_running && !homekit_is_pairing()) {
@@ -1496,96 +1583,96 @@ void hsi2rgbw(uint16_t h, uint16_t s, uint16_t v, lightbulb_group_t* lightbulb_g
 }
 
 void multipwm_set_all() {
-    multipwm_stop(main_config.pwm_info);
-    for (uint8_t i = 0; i < main_config.pwm_info->channels; i++) {
-        multipwm_set_duty(main_config.pwm_info, i, main_config.multipwm_duty[i]);
+    multipwm_stop(main_config.haa_pwm->pwm_info);
+    for (uint8_t i = 0; i < main_config.haa_pwm->pwm_info->channels; i++) {
+        multipwm_set_duty(main_config.haa_pwm->pwm_info, i, main_config.haa_pwm->multipwm_duty[i]);
     }
-    multipwm_start(main_config.pwm_info);
+    multipwm_start(main_config.haa_pwm->pwm_info);
 }
 
 void rgbw_set_timer_worker() {
-    if (!main_config.setpwm_bool_semaphore) {
-        main_config.setpwm_bool_semaphore = true;
+    if (!main_config.haa_pwm->setpwm_bool_semaphore) {
+        main_config.haa_pwm->setpwm_bool_semaphore = true;
         
-        uint8_t channels_to_set = main_config.pwm_info->channels;
+        uint8_t channels_to_set = main_config.haa_pwm->pwm_info->channels;
         lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
         
-        while (main_config.setpwm_is_running && lightbulb_group) {
+        while (main_config.haa_pwm->setpwm_is_running && lightbulb_group) {
             if (lightbulb_group->pwm_r != 255) {
-                if (lightbulb_group->target_r - main_config.multipwm_duty[lightbulb_group->pwm_r] >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_r] += lightbulb_group->step;
-                } else if (main_config.multipwm_duty[lightbulb_group->pwm_r] - lightbulb_group->target_r >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_r] -= lightbulb_group->step;
+                if (lightbulb_group->target_r - main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_r] >= lightbulb_group->step) {
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_r] += lightbulb_group->step;
+                } else if (main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_r] - lightbulb_group->target_r >= lightbulb_group->step) {
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_r] -= lightbulb_group->step;
                 } else {
-                    main_config.multipwm_duty[lightbulb_group->pwm_r] = lightbulb_group->target_r;
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_r] = lightbulb_group->target_r;
                     channels_to_set--;
                 }
             }
             
             if (lightbulb_group->pwm_g != 255) {
-                if (lightbulb_group->target_g - main_config.multipwm_duty[lightbulb_group->pwm_g] >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_g] += lightbulb_group->step;
-                } else if (main_config.multipwm_duty[lightbulb_group->pwm_g] - lightbulb_group->target_g >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_g] -= lightbulb_group->step;
+                if (lightbulb_group->target_g - main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_g] >= lightbulb_group->step) {
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_g] += lightbulb_group->step;
+                } else if (main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_g] - lightbulb_group->target_g >= lightbulb_group->step) {
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_g] -= lightbulb_group->step;
                 } else {
-                    main_config.multipwm_duty[lightbulb_group->pwm_g] = lightbulb_group->target_g;
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_g] = lightbulb_group->target_g;
                     channels_to_set--;
                 }
             }
             
             if (lightbulb_group->pwm_b != 255) {
-                if (lightbulb_group->target_b - main_config.multipwm_duty[lightbulb_group->pwm_b] >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_b] += lightbulb_group->step;
-                } else if (main_config.multipwm_duty[lightbulb_group->pwm_b] - lightbulb_group->target_b >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_b] -= lightbulb_group->step;
+                if (lightbulb_group->target_b - main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_b] >= lightbulb_group->step) {
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_b] += lightbulb_group->step;
+                } else if (main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_b] - lightbulb_group->target_b >= lightbulb_group->step) {
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_b] -= lightbulb_group->step;
                 } else {
-                    main_config.multipwm_duty[lightbulb_group->pwm_b] = lightbulb_group->target_b;
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_b] = lightbulb_group->target_b;
                     channels_to_set--;
                 }
             }
             
             if (lightbulb_group->pwm_w != 255) {
-                if (lightbulb_group->target_w - main_config.multipwm_duty[lightbulb_group->pwm_w] >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_w] += lightbulb_group->step;
-                } else if (main_config.multipwm_duty[lightbulb_group->pwm_w] - lightbulb_group->target_w >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_w] -= lightbulb_group->step;
+                if (lightbulb_group->target_w - main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_w] >= lightbulb_group->step) {
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_w] += lightbulb_group->step;
+                } else if (main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_w] - lightbulb_group->target_w >= lightbulb_group->step) {
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_w] -= lightbulb_group->step;
                 } else {
-                    main_config.multipwm_duty[lightbulb_group->pwm_w] = lightbulb_group->target_w;
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_w] = lightbulb_group->target_w;
                     channels_to_set--;
                 }
             }
             
             if (lightbulb_group->pwm_cw != 255) {
-                if (lightbulb_group->target_cw - main_config.multipwm_duty[lightbulb_group->pwm_cw] >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_cw] += lightbulb_group->step;
-                } else if (main_config.multipwm_duty[lightbulb_group->pwm_cw] - lightbulb_group->target_cw >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_cw] -= lightbulb_group->step;
+                if (lightbulb_group->target_cw - main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_cw] >= lightbulb_group->step) {
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_cw] += lightbulb_group->step;
+                } else if (main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_cw] - lightbulb_group->target_cw >= lightbulb_group->step) {
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_cw] -= lightbulb_group->step;
                 } else {
-                    main_config.multipwm_duty[lightbulb_group->pwm_cw] = lightbulb_group->target_cw;
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_cw] = lightbulb_group->target_cw;
                     channels_to_set--;
                 }
             }
             
             if (lightbulb_group->pwm_ww != 255) {
-                if (lightbulb_group->target_ww - main_config.multipwm_duty[lightbulb_group->pwm_ww] >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_ww] += lightbulb_group->step;
-                } else if (main_config.multipwm_duty[lightbulb_group->pwm_ww] - lightbulb_group->target_ww >= lightbulb_group->step) {
-                    main_config.multipwm_duty[lightbulb_group->pwm_ww] -= lightbulb_group->step;
+                if (lightbulb_group->target_ww - main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_ww] >= lightbulb_group->step) {
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_ww] += lightbulb_group->step;
+                } else if (main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_ww] - lightbulb_group->target_ww >= lightbulb_group->step) {
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_ww] -= lightbulb_group->step;
                 } else {
-                    main_config.multipwm_duty[lightbulb_group->pwm_ww] = lightbulb_group->target_ww;
+                    main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_ww] = lightbulb_group->target_ww;
                     channels_to_set--;
                 }
             }
             
-            //INFO("RGBW-CW-WW -> %i, %i, %i, %i, %i, %i", main_config.multipwm_duty[lightbulb_group->pwm_r], main_config.multipwm_duty[lightbulb_group->pwm_g], main_config.multipwm_duty[lightbulb_group->pwm_b], main_config.multipwm_duty[lightbulb_group->pwm_w], main_config.multipwm_duty[lightbulb_group->pwm_cw], main_config.multipwm_duty[lightbulb_group->pwm_ww]);
+            //INFO("RGBW-CW-WW -> %i, %i, %i, %i, %i, %i", main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_r], main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_g], main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_b], main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_w], main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_cw], main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_ww]);
 
             if (channels_to_set == 0) {
-                main_config.setpwm_is_running = false;
-                esp_timer_stop(main_config.pwm_timer);
+                main_config.haa_pwm->setpwm_is_running = false;
+                esp_timer_stop(main_config.haa_pwm->pwm_timer);
                 
                 INFO("Color fixed");
-                for (uint8_t i = 0; i < main_config.pwm_info->channels; i++) {
-                    INFO("PWM Ch %i = %i", i, main_config.multipwm_duty[i]);
+                for (uint8_t i = 0; i < main_config.haa_pwm->pwm_info->channels; i++) {
+                    INFO("PWM Ch %i = %i", i, main_config.haa_pwm->multipwm_duty[i]);
                 }
             }
             
@@ -1594,7 +1681,7 @@ void rgbw_set_timer_worker() {
         
         multipwm_set_all();
 
-        main_config.setpwm_bool_semaphore = false;
+        main_config.haa_pwm->setpwm_bool_semaphore = false;
     } else {
         ERROR("MISSED Color set");
     }
@@ -1657,9 +1744,9 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
         led_blink(1);
         INFO("Target RGBW = %i, %i, %i, %i, %i, %i", lightbulb_group->target_r, lightbulb_group->target_g, lightbulb_group->target_b, lightbulb_group->target_w, lightbulb_group->target_cw, lightbulb_group->target_ww);
         
-        if (lightbulb_group->is_pwm && !main_config.setpwm_is_running) {
-            main_config.setpwm_is_running = true;
-            esp_timer_start(main_config.pwm_timer);
+        if (lightbulb_group->is_pwm && !main_config.haa_pwm->setpwm_is_running) {
+            main_config.haa_pwm->setpwm_is_running = true;
+            esp_timer_start(main_config.haa_pwm->pwm_timer);
         }
         
         do_actions(ch_group, (uint8_t) ch_group->ch0->value.bool_value);
@@ -3261,7 +3348,7 @@ void uart_action_task(void* pvParameters) {
 void autoswitch_timer(TimerHandle_t xTimer) {
     action_relay_t* action_relay = (action_relay_t*) pvTimerGetTimerID(xTimer);
 
-    gpio_write(action_relay->gpio, !action_relay->value);
+    extended_gpio_write(action_relay->gpio, !action_relay->value);
     INFO("AutoSw digO GPIO %i -> %i", action_relay->gpio, !action_relay->value);
     
     esp_timer_delete(xTimer);
@@ -3285,7 +3372,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     action_relay_t* action_relay = ch_group->action_relay;
     while(action_relay) {
         if (action_relay->action == action) {
-            gpio_write(action_relay->gpio, action_relay->value);
+            extended_gpio_write(action_relay->gpio, action_relay->value);
             INFO("Digital Output: gpio %i, val %i, inch %g", action_relay->gpio, action_relay->value, action_relay->inching);
             
             if (action_relay->inching > 0) {
@@ -3657,8 +3744,11 @@ void normal_mode_init() {
         vTaskDelete(NULL);
     }
     
-    bool get_used_gpio(const uint8_t gpio) {
+    bool get_used_gpio(const uint16_t gpio) {
         switch (gpio) {
+            case 0:
+                return main_config.used_gpio_0;
+                
             case 1:
                 return main_config.used_gpio_1;
                 
@@ -3701,13 +3791,17 @@ void normal_mode_init() {
             case 17:
                 return main_config.used_gpio_17;
                 
-            default:    // case 0:
-                return main_config.used_gpio_0;
+            default:
+                return false;
         }
     }
     
-    void set_used_gpio(const uint8_t gpio) {
+    void set_used_gpio(const uint16_t gpio) {
         switch (gpio) {
+            case 0:
+                main_config.used_gpio_0 = true;
+                break;
+                
             case 1:
                 main_config.used_gpio_1 = true;
                 break;
@@ -3764,8 +3858,8 @@ void normal_mode_init() {
                 main_config.used_gpio_17 = true;
                 break;
                 
-            default:    // case 0:
-                main_config.used_gpio_0 = true;
+            default:
+                
                 break;
         }
     }
@@ -4019,11 +4113,11 @@ void normal_mode_init() {
                             action_relay->value = (bool) cJSON_GetObjectItemCaseSensitive(json_relay, VALUE)->valuedouble;
                         }
                         
-                        action_relay->gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuedouble;
+                        action_relay->gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuedouble;
                         if (!get_used_gpio(action_relay->gpio)) {
                             change_uart_gpio(action_relay->gpio);
-                            gpio_enable(action_relay->gpio, GPIO_OUTPUT);
-                            gpio_write(action_relay->gpio, action_relay->value);
+                            extended_gpio_enable(action_relay->gpio, GPIO_OUTPUT);
+                            extended_gpio_write(action_relay->gpio, action_relay->value);
                             
                             set_used_gpio(action_relay->gpio);
                             
@@ -4583,18 +4677,77 @@ void normal_mode_init() {
     }
     INFO("Hostname: %s", custom_hostname);
     
+    // I2C Bus
+    if (cJSON_GetObjectItemCaseSensitive(json_config, I2C_CONFIG_ARRAY) != NULL) {
+        cJSON* json_i2cs = cJSON_GetObjectItemCaseSensitive(json_config, I2C_CONFIG_ARRAY);
+        for (uint8_t i = 0; i < cJSON_GetArraySize(json_i2cs); i++) {
+            cJSON* json_i2c = cJSON_GetArrayItem(json_i2cs, i);
+            
+            const uint8_t i2c_scl_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_i2c, I2C_SCL_GPIO)->valuedouble;
+            if (get_used_gpio(i2c_scl_gpio)) {
+                ERROR("I2C bus: %i, scl %i is used", i, i2c_scl_gpio);
+                break;
+            }
+            set_used_gpio(i2c_scl_gpio);
+            
+            const uint8_t i2c_sda_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_i2c, I2C_SDA_GPIO)->valuedouble;
+            if (get_used_gpio(i2c_sda_gpio)) {
+                ERROR("I2C bus: %i, sda %i is used", i, i2c_sda_gpio);
+                break;
+            }
+            set_used_gpio(i2c_sda_gpio);
+            
+            const uint32_t i2c_freq_hz = (uint32_t) (cJSON_GetObjectItemCaseSensitive(json_i2c, I2C_FREQ_KHZ)->valuedouble * 1000.f);
+            
+            const uint32_t i2c_res = i2c_init_hz(i, i2c_scl_gpio, i2c_sda_gpio, i2c_freq_hz);
+            INFO("I2C bus: %i, scl: %i, sda: %i, freq: %i, res: %i", i, i2c_scl_gpio, i2c_sda_gpio, i2c_freq_hz, i2c_res);
+        }
+    }
+    
+    // MCP23017 Interfaces
+    if (cJSON_GetObjectItemCaseSensitive(json_config, MCP23017_ARRAY) != NULL) {
+        cJSON* json_mcp23017s = cJSON_GetObjectItemCaseSensitive(json_config, MCP23017_ARRAY);
+        for (uint8_t i = 0; i < cJSON_GetArraySize(json_mcp23017s); i++) {
+            cJSON* json_mcp23017 = cJSON_GetArrayItem(json_mcp23017s, i);
+            
+            mcp23017_t* mcp23017 = malloc(sizeof(mcp23017_t));
+            memset(mcp23017, 0, sizeof(*mcp23017));
+
+            mcp23017->next = main_config.mcp23017s;
+            main_config.mcp23017s = mcp23017;
+            
+            mcp23017->index = i + 1;
+            mcp23017->bus = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_mcp23017, I2C_BUS)->valuedouble;
+            mcp23017->addr = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_mcp23017, I2C_ADDR)->valuedouble;
+            
+            uint8_t channel = 0;
+            if (cJSON_GetObjectItemCaseSensitive(json_mcp23017, MCP23017_INITIAL_CHANNEL_A) != NULL) {
+                mcp23017->a_outs = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_mcp23017, MCP23017_INITIAL_CHANNEL_A)->valuedouble;
+            }
+            i2c_slave_write(mcp23017->bus, mcp23017->addr, &channel, &mcp23017->a_outs, 1);
+            
+            channel = 1;
+            if (cJSON_GetObjectItemCaseSensitive(json_mcp23017, MCP23017_INITIAL_CHANNEL_B) != NULL) {
+                mcp23017->b_outs = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_mcp23017, MCP23017_INITIAL_CHANNEL_B)->valuedouble;
+            }
+            i2c_slave_write(mcp23017->bus, mcp23017->addr, &channel, &mcp23017->b_outs, 1);
+            
+            INFO("MCP23017 %i: bus: %i, addr: %i, chA: %i, chB: %i", i, mcp23017->bus, mcp23017->addr, mcp23017->a_outs, mcp23017->b_outs);
+        }
+    }
+    
     // Status LED
     if (cJSON_GetObjectItemCaseSensitive(json_config, STATUS_LED_GPIO) != NULL) {
-        main_config.led_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, STATUS_LED_GPIO)->valuedouble;
+        const uint8_t led_gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, STATUS_LED_GPIO)->valuedouble;
 
         bool led_inverted = true;
         if (cJSON_GetObjectItemCaseSensitive(json_config, INVERTED) != NULL) {
             led_inverted = (bool) cJSON_GetObjectItemCaseSensitive(json_config, INVERTED)->valuedouble;
         }
         
-        change_uart_gpio(main_config.led_gpio);
-        led_create(main_config.led_gpio, led_inverted);
-        INFO("Status LED GPIO: %i, inv: %i", main_config.led_gpio, led_inverted);
+        change_uart_gpio(led_gpio);
+        led_create(led_gpio, led_inverted);
+        INFO("Status LED GPIO: %i, inv: %i", led_gpio, led_inverted);
     }
     
     // IR TX LED Frequency
@@ -4628,9 +4781,10 @@ void normal_mode_init() {
     
     // PWM frequency
     if (cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ) != NULL) {
-        main_config.pwm_freq = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ)->valuedouble;
+        haa_pwm_init();
+        main_config.haa_pwm->pwm_freq = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ)->valuedouble;
+        INFO("PWM Freq: %i", main_config.haa_pwm->pwm_freq);
     }
-    INFO("PWM Freq: %i", main_config.pwm_freq);
     
     // Ping poll period
     if (cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD) != NULL) {
@@ -5871,16 +6025,17 @@ void normal_mode_init() {
 
         if (is_pwm && !main_config.lightbulb_groups) {
             INFO("PWM Init");
-            main_config.pwm_timer = esp_timer_create(RGBW_PERIOD, true, NULL, rgbw_set_timer_worker);
+            haa_pwm_init();
+            main_config.haa_pwm->pwm_timer = esp_timer_create(RGBW_PERIOD, true, NULL, rgbw_set_timer_worker);
             
-            main_config.pwm_info = malloc(sizeof(pwm_info_t));
-            memset(main_config.pwm_info, 0, sizeof(*main_config.pwm_info));
+            main_config.haa_pwm->pwm_info = malloc(sizeof(pwm_info_t));
+            memset(main_config.haa_pwm->pwm_info, 0, sizeof(*main_config.haa_pwm->pwm_info));
             
-            multipwm_init(main_config.pwm_info);
-            if (main_config.pwm_freq > 0) {
-                multipwm_set_freq(main_config.pwm_info, main_config.pwm_freq);
+            multipwm_init(main_config.haa_pwm->pwm_info);
+            if (main_config.haa_pwm->pwm_freq > 0) {
+                multipwm_set_freq(main_config.haa_pwm->pwm_info, main_config.haa_pwm->pwm_freq);
             }
-            main_config.pwm_info->channels = 0;
+            main_config.haa_pwm->pwm_info->channels = 0;
         }
         
         homekit_characteristic_t* ch0 = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .setter_ex=hkc_rgbw_setter);
@@ -5925,60 +6080,60 @@ void normal_mode_init() {
         main_config.lightbulb_groups = lightbulb_group;
 
         if (is_pwm) {
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                lightbulb_group->pwm_r = main_config.pwm_info->channels;
-                main_config.pwm_info->channels++;
-                multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_r, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R)->valuedouble);
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                lightbulb_group->pwm_r = main_config.haa_pwm->pwm_info->channels;
+                main_config.haa_pwm->pwm_info->channels++;
+                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_r, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R)->valuedouble);
             }
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_R) != NULL) {
                 lightbulb_group->factor_r = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_R)->valuedouble;
             }
 
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                lightbulb_group->pwm_g = main_config.pwm_info->channels;
-                main_config.pwm_info->channels++;
-                multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_g, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G)->valuedouble);
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                lightbulb_group->pwm_g = main_config.haa_pwm->pwm_info->channels;
+                main_config.haa_pwm->pwm_info->channels++;
+                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_g, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G)->valuedouble);
             }
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_G) != NULL) {
                 lightbulb_group->factor_g = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_G)->valuedouble;
             }
 
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                lightbulb_group->pwm_b = main_config.pwm_info->channels;
-                main_config.pwm_info->channels++;
-                multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_b, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B)->valuedouble);
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                lightbulb_group->pwm_b = main_config.haa_pwm->pwm_info->channels;
+                main_config.haa_pwm->pwm_info->channels++;
+                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_b, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B)->valuedouble);
             }
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_B) != NULL) {
                 lightbulb_group->factor_b = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_B)->valuedouble;
             }
 
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                lightbulb_group->pwm_w = main_config.pwm_info->channels;
-                main_config.pwm_info->channels++;
-                multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_w, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W)->valuedouble);
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                lightbulb_group->pwm_w = main_config.haa_pwm->pwm_info->channels;
+                main_config.haa_pwm->pwm_info->channels++;
+                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_w, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W)->valuedouble);
             }
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_W) != NULL) {
                 lightbulb_group->factor_w = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_W)->valuedouble;
             }
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_CW) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                lightbulb_group->pwm_cw = main_config.pwm_info->channels;
-                main_config.pwm_info->channels++;
-                multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_cw, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_CW)->valuedouble);
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_CW) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                lightbulb_group->pwm_cw = main_config.haa_pwm->pwm_info->channels;
+                main_config.haa_pwm->pwm_info->channels++;
+                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_cw, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_CW)->valuedouble);
             }
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_CW) != NULL) {
                 lightbulb_group->factor_cw = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_CW)->valuedouble;
             }
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_WW) != NULL && main_config.pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                lightbulb_group->pwm_ww = main_config.pwm_info->channels;
-                main_config.pwm_info->channels++;
-                multipwm_set_pin(main_config.pwm_info, lightbulb_group->pwm_ww, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_WW)->valuedouble);
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_WW) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                lightbulb_group->pwm_ww = main_config.haa_pwm->pwm_info->channels;
+                main_config.haa_pwm->pwm_info->channels++;
+                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_ww, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_WW)->valuedouble);
             }
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_WW) != NULL) {
@@ -6689,7 +6844,7 @@ void normal_mode_init() {
     if (main_config.lightbulb_groups) {
         INFO("Init Lights");
         
-        main_config.setpwm_bool_semaphore = false;
+        main_config.haa_pwm->setpwm_bool_semaphore = false;
         
         lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
         while (lightbulb_group) {

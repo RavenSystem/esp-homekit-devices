@@ -9,10 +9,10 @@ EXTRA_COMPONENTS = \
 	extras/http-parser \
 	extras/dhcpserver \
 	extras/rboot-ota \
+	extras/i2c \
     $(abspath ../../external_libs/wolfssl) \
     $(abspath ../../external_libs/cJSON) \
     $(abspath ../../external_libs/homekit) \
-	$(abspath ../../libs/led_codes) \
     $(abspath ../../libs/adv_button) \
     $(abspath ../../libs/adv_hlw) \
 	$(abspath ../../libs/new_dht) \

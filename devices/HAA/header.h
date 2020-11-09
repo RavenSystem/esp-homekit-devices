@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "3.5.18"
+#define FIRMWARE_VERSION                    "3.6.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -384,6 +384,17 @@
 #define UART_ACTION_UART                    "n"
 #define UART_ACTION_PAUSE                   "d"
 
+#define I2C_CONFIG_ARRAY                    "ic"
+#define I2C_SCL_GPIO                        "c"
+#define I2C_SDA_GPIO                        "d"
+#define I2C_FREQ_KHZ                        "q"
+#define I2C_BUS                             "b"
+#define I2C_ADDR                            "a"
+
+#define MCP23017_ARRAY                      "mc"
+#define MCP23017_INITIAL_CHANNEL_A          "ca"
+#define MCP23017_INITIAL_CHANNEL_B          "cb"
+
 #define ACCESSORY_TYPE                      "t"
 #define ACC_TYPE_ROOT_DEVICE                (0)
 #define ACC_TYPE_SWITCH                     (1)
@@ -437,6 +448,10 @@
 #define WIFI_RECONNECTION_POLL_PERIOD_MS    (5000)
 #define WIFI_PING_ERRORS                    "w"
 #define WIFI_ERROR_COUNT_REBOOT             (60)
+#define WIFI_ARP_RESEND_PERIOD              (15)
+
+#define STATUS_LED_DURATION_ON              (30)
+#define STATUS_LED_DURATION_OFF             (120)
 
 #define SAVE_STATES_DELAY_MS                (5000)
 

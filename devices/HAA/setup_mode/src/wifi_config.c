@@ -18,6 +18,7 @@
 #include <espressif/esp_common.h>
 #include <lwip/sockets.h>
 #include <lwip/dhcp.h>
+#include <lwip/etharp.h>
 #include <spiflash.h>
 
 #include <semphr.h>
@@ -157,6 +158,15 @@ static void client_send_redirect(client_t *client, int code, const char *redirec
     char buffer[128];
     size_t len = snprintf(buffer, sizeof(buffer), "HTTP/1.1 %d \r\nLocation: %s\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", code, redirect_url);
     client_send(client, buffer, len);
+}
+
+void wifi_config_resend_arp() {
+    struct netif *netif = sdk_system_get_netif(STATION_IF);
+    if (netif) {
+        LOCK_TCPIP_CORE();
+        etharp_gratuitous(netif);
+        UNLOCK_TCPIP_CORE();
+    }
 }
 
 uint8_t wifi_config_connect();

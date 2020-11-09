@@ -29,9 +29,9 @@ typedef struct _action_copy {
 
 typedef struct _action_relay {
     uint8_t action;
-    
-    uint8_t gpio: 7;
     bool value: 1;
+    uint16_t gpio;
+    
     float inching;
     
     struct _action_relay* next;
@@ -216,27 +216,58 @@ typedef struct _str_ch_value {
     struct _str_ch_value* next;
 } str_ch_value_t;
 
+typedef struct _mcp23017 {
+    uint8_t index;
+    uint8_t bus;
+    uint8_t addr;
+    uint8_t a_outs;
+    
+    uint8_t b_outs;
+    
+    struct _mcp23017* next;
+} mcp23017_t;
+
+typedef struct _led {
+    uint16_t gpio;
+    uint8_t count;
+    uint8_t times;
+    
+    bool inverted: 1;
+    bool status: 1;
+    
+    TimerHandle_t timer;
+} led_t;
+
+typedef struct _haa_pwm {
+    bool setpwm_bool_semaphore: 1;
+    bool setpwm_is_running: 1;
+    
+    uint16_t pwm_freq;
+    uint16_t multipwm_duty[MULTIPWM_MAX_CHANNELS];
+    
+    TimerHandle_t pwm_timer;
+    pwm_info_t* pwm_info;
+} haa_pwm_t;
+
 typedef struct _main_config {
     uint8_t wifi_status: 2;
     uint8_t wifi_channel: 4;
+    bool wifi_ping_is_running: 1;
     bool enable_homekit_server: 1;
-    bool setpwm_bool_semaphore: 1;
     int8_t setup_mode_toggle_counter;
     int8_t setup_mode_toggle_counter_max;
     uint8_t ir_tx_freq;
     
     uint8_t wifi_ping_max_errors;
     uint8_t wifi_error_count;
+    uint8_t wifi_arp_count;
     uint8_t ir_tx_gpio: 5;
     bool ir_tx_inv: 1;
-    bool setpwm_is_running: 1;
-    uint8_t led_gpio: 5;
-    bool wifi_ping_is_running: 1;
     bool ping_is_running: 1;
     bool used_gpio_0: 1;
-    bool used_gpio_1: 1;
     
     uint16_t setup_mode_time;
+    bool used_gpio_1: 1;
     bool used_gpio_2: 1;
     bool used_gpio_3: 1;
     bool used_gpio_4: 1;
@@ -251,23 +282,22 @@ typedef struct _main_config {
     bool used_gpio_16: 1;
     bool used_gpio_17: 1;
     
-    uint16_t pwm_freq;
-    uint16_t multipwm_duty[MULTIPWM_MAX_CHANNELS];
-    
     char name_value[11];
     char serial_value[13];
     
     float ping_poll_period;
     
     TimerHandle_t setup_mode_toggle_timer;
-    TimerHandle_t pwm_timer;
     
     ch_group_t* ch_groups;
     ping_input_t* ping_inputs;
     lightbulb_group_t* lightbulb_groups;
     last_state_t* last_states;
     
-    pwm_info_t* pwm_info;
+    mcp23017_t* mcp23017s;
+    
+    led_t* status_led;
+    haa_pwm_t* haa_pwm;
 } main_config_t;
 
 #endif // __HAA_TYPES_H__
