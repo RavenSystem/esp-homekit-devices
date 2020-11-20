@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "3.6.0"
+#define FIRMWARE_VERSION                    "3.7.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -53,6 +53,7 @@
 #define DELAYED_SENSOR_START_TASK_SIZE      (512)
 #define TEMPERATURE_TASK_SIZE               (512)
 #define POWER_MONITOR_TASK_SIZE             (512)
+#define LIGHT_SENSOR_TASK_SIZE              (512)
 #define WIFI_RECONNECTION_TASK_SIZE         (512)
 
 // Task Priorities
@@ -67,6 +68,7 @@
 #define DELAYED_SENSOR_START_TASK_PRIORITY  (tskIDLE_PRIORITY + 0)
 #define TEMPERATURE_TASK_PRIORITY           (tskIDLE_PRIORITY + 1)
 #define POWER_MONITOR_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
+#define LIGHT_SENSOR_TASK_PRIORITY          (tskIDLE_PRIORITY + 1)
 #define WIFI_RECONNECTION_TASK_PRIORITY     (tskIDLE_PRIORITY + 0)
 
 // Button Events
@@ -133,7 +135,7 @@
 #define PING_RESPONSE_TYPE                  "r"
 #define PING_IGNORE_LAST_RESPONSE           "i"
 #define PING_DISABLE_WITHOUT_WIFI           "d"
-#define PING_RETRIES                        (3)
+#define PING_RETRIES                        (4)
 #define PING_POLL_PERIOD                    "pt"
 #define PING_POLL_PERIOD_DEFAULT            (4.9)
 #define BUTTON_PRESS_TYPE                   "t"
@@ -331,6 +333,23 @@
 #define PM_POWER_OFFSET_DEFAULT             (0)
 #define PM_POWER_OFFSET                     ch_group->num[9]
 
+#define LIGHT_SENSOR_TYPE_SET               "n"
+#define LIGHT_SENSOR_TYPE_DEFAULT           (0)
+#define LIGHT_SENSOR_TYPE                   ch_group->num[0]
+#define LIGHT_SENSOR_POLL_PERIOD_DEFAULT    (3.f)
+#define LIGHT_SENSOR_FACTOR_SET             "f"
+#define LIGHT_SENSOR_FACTOR_DEFAULT         (1)
+#define LIGHT_SENSOR_FACTOR                 ch_group->num[1]
+#define LIGHT_SENSOR_OFFSET_SET             "o"
+#define LIGHT_SENSOR_OFFSET_DEFAULT         (0)
+#define LIGHT_SENSOR_OFFSET                 ch_group->num[2]
+#define LIGHT_SENSOR_RESISTOR_SET           "re"
+#define LIGHT_SENSOR_RESISTOR_DEFAULT       (10000)
+#define LIGHT_SENSOR_RESISTOR               ch_group->num[3]
+#define LIGHT_SENSOR_POW_SET                "po"
+#define LIGHT_SENSOR_POW_DEFAULT            (1)
+#define LIGHT_SENSOR_POW                    ch_group->num[4]
+
 #define MAX_ACTIONS                         (32)    // from 0 to (MAX_ACTIONS - 1)
 #define MAX_WILDCARD_ACTIONS                (3)     // from 0 to (MAX_WILDCARD_ACTIONS - 1)
 #define WILDCARD_ACTIONS_ARRAY_HEADER       "y"
@@ -448,7 +467,7 @@
 #define WIFI_RECONNECTION_POLL_PERIOD_MS    (5000)
 #define WIFI_PING_ERRORS                    "w"
 #define WIFI_ERROR_COUNT_REBOOT             (60)
-#define WIFI_ARP_RESEND_PERIOD              (15)
+#define WIFI_ARP_RESEND_PERIOD_MIN          (10)
 
 #define STATUS_LED_DURATION_ON              (30)
 #define STATUS_LED_DURATION_OFF             (120)

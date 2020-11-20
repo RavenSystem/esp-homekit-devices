@@ -93,7 +93,7 @@ typedef struct {
     wifi_network_info_t* wifi_networks;
     SemaphoreHandle_t wifi_networks_mutex;
 
-    uint8_t check_counter: 6;
+    uint8_t check_counter: 7;
     bool hostname_ready: 1;
 } wifi_config_context_t;
 
@@ -162,7 +162,7 @@ static void client_send_redirect(client_t *client, int code, const char *redirec
 
 void wifi_config_resend_arp() {
     struct netif *netif = sdk_system_get_netif(STATION_IF);
-    if (netif) {
+    if (netif && netif->flags & NETIF_FLAG_LINK_UP && netif->flags & NETIF_FLAG_UP) {
         LOCK_TCPIP_CORE();
         etharp_gratuitous(netif);
         UNLOCK_TCPIP_CORE();
@@ -865,10 +865,12 @@ static void wifi_config_sta_connect_timeout_task() {
             }
         } else if (context->on_wifi_ready) {
             context->check_counter++;
-            if (context->check_counter == 60) {
+            if (context->check_counter > 60) {
                 context->check_counter = 0;
                 sdk_wifi_station_disconnect();
                 sdk_wifi_station_connect();
+            } else if (context->check_counter % 16 == 0) {
+                wifi_config_resend_arp();
             }
         }
     }
@@ -1013,7 +1015,6 @@ void wifi_config_init(const char* ssid_prefix, const char* password, void (*on_w
     }
 
     context->on_wifi_ready = on_wifi_ready;
-    context->check_counter = 0;
 
     wifi_config_station_connect();
 }

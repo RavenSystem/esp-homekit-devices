@@ -551,18 +551,20 @@ void mdns_add_AAAA(const char* rKey, u32_t ttl, const ip6_addr_t *addr)
 #endif
 
 void mdns_announce() {
-    printf("mDNS reannounced\n");
-    struct netif *netif = sdk_system_get_netif(STATION_IF);
-    for (uint8_t i = 0; i < 5; i++) {
-        if (i > 0) {
-            vTaskDelay(20 / portTICK_PERIOD_MS);
-        }
+    if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+        printf("mDNS reannounced\n");
+        struct netif *netif = sdk_system_get_netif(STATION_IF);
+        for (uint8_t i = 0; i < 10; i++) {
+            if (i > 0) {
+                vTaskDelay(10 / portTICK_PERIOD_MS);
+            }
 #if LWIP_IPV4
-        mdns_announce_netif(netif, &gMulticastV4Addr);
+            mdns_announce_netif(netif, &gMulticastV4Addr);
 #endif
 #if LWIP_IPV6
-        mdns_announce_netif(netif, &gMulticastV6Addr);
+            mdns_announce_netif(netif, &gMulticastV6Addr);
 #endif
+        }
     }
 }
 

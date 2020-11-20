@@ -53,6 +53,8 @@ main_config_t main_config = {
     .wifi_ping_max_errors = 255,
     .wifi_ping_is_running = false,
     .wifi_error_count = 0,
+    .wifi_arp_count = 0,
+    .wifi_arp_count_max = WIFI_ARP_RESEND_PERIOD_MIN,
     
     .setup_mode_toggle_counter = INT8_MIN,
     .setup_mode_toggle_counter_max = SETUP_MODE_DEFAULT_ACTIVATE_COUNT,
@@ -92,6 +94,31 @@ main_config_t main_config = {
     
     .status_led = NULL
 };
+
+// https://martin.ankerl.com/2012/01/25/optimized-approximative-pow-in-c-and-cpp/
+inline double fast_precise_pow(double a, double b) {
+    int e = abs((int)b);
+    
+    union {
+        double d;
+        int x[2];
+    } u = { a };
+    
+    u.x[1] = (int) ((b - e) * (u.x[1] - 1072632447) + 1072632447);
+    u.x[0] = 0;
+    
+    double r = 1.0;
+    
+    while (e) {
+        if (e & 1) {
+            r *= a;
+        }
+        a *= a;
+        e >>= 1;
+    }
+    
+    return r * u.d;
+}
 
 void extended_gpio_enable(const uint16_t extended_gpio, const gpio_direction_t direction) {
     if (extended_gpio < 17) {
@@ -308,6 +335,10 @@ lightbulb_group_t* lightbulb_group_find(homekit_characteristic_t* ch) {
 }
 
 bool ping_host(char* host) {
+    if (main_config.wifi_status < WIFI_STATUS_PRECONNECTED) {
+        return false;
+    }
+    
     bool ping_result = false;
     
     ip_addr_t target_ip;
@@ -419,7 +450,7 @@ void wifi_reconnection_task() {
             
         } else {
             main_config.wifi_error_count++;
-            if (main_config.wifi_error_count >= WIFI_ERROR_COUNT_REBOOT) {
+            if (main_config.wifi_error_count > WIFI_ERROR_COUNT_REBOOT) {
                 ERROR("Wifi disconnected for a long time");
                 main_config.wifi_error_count = 0;
                 main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
@@ -427,6 +458,8 @@ void wifi_reconnection_task() {
                 led_blink(6);
                 
                 do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 5);
+            } else if (main_config.wifi_error_count % WIFI_ARP_RESEND_PERIOD_MIN == 0) {
+                wifi_config_resend_arp();
             }
         }
     }
@@ -450,8 +483,9 @@ void wifi_watchdog() {
         }
         
         main_config.wifi_arp_count++;
-        if (main_config.wifi_arp_count >= WIFI_ARP_RESEND_PERIOD) {
+        if (main_config.wifi_arp_count >= main_config.wifi_arp_count_max) {
             main_config.wifi_arp_count = 0;
+            main_config.wifi_arp_count_max = WIFI_ARP_RESEND_PERIOD_MIN + (hwrand() % 11);
             wifi_config_resend_arp();
         }
         
@@ -509,10 +543,8 @@ void ping_task() {
         uint8_t i = 0;
         do {
             i++;
-            
             ping_result = ping_host(ping_input->host);
-    
-            vTaskDelay(pdMS_TO_TICKS(10));
+            vTaskDelay(pdMS_TO_TICKS(80));
         } while (i < PING_RETRIES && !ping_result);
         
         if (ping_result && (!ping_input->last_response || ping_input->ignore_last_response)) {
@@ -611,8 +643,14 @@ inline void save_states_callback() {
     esp_timer_start(SAVE_STATES_TIMER);
 }
 
+void homekit_characteristic_notify_safe(homekit_characteristic_t *ch, const homekit_value_t value) {
+    if (main_config.wifi_status > WIFI_STATUS_CONNECTING) {
+        homekit_characteristic_notify(ch, value);
+    }
+}
+
 void hkc_group_notify(ch_group_t* ch_group) {
-    if (!ch_group->homekit_enabled) {
+    if (!ch_group->homekit_enabled || main_config.wifi_status < WIFI_STATUS_PRECONNECTED) {
         return;
     }
     
@@ -779,7 +817,7 @@ void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
         led_blink(event_type + 1);
         INFO("Setter EVENT %i", event_type);
         
-        homekit_characteristic_notify(ch_group->ch0, HOMEKIT_UINT8(event_type));
+        homekit_characteristic_notify_safe(ch_group->ch0, HOMEKIT_UINT8(event_type));
         
         do_actions(ch_group, event_type);
         
@@ -1762,7 +1800,7 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
         save_states_callback();
 
     } else {
-        homekit_characteristic_notify(ch_group->ch0, ch_group->ch0->value);
+        homekit_characteristic_notify_safe(ch_group->ch0, ch_group->ch0->value);
     }
 }
 
@@ -2143,7 +2181,7 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
             if ((WINDOW_COVER_CH_CURRENT_POSITION->value.int_value >> 2) != (uint8_t) WINDOW_COVER_MOTOR_POSITION >> 2) {
                 INFO("WC Moving Motor %f, HomeKit %f", WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_HOMEKIT_POSITION);
                 WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_HOMEKIT_POSITION;
-                homekit_characteristic_notify(WINDOW_COVER_CH_CURRENT_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
+                homekit_characteristic_notify_safe(WINDOW_COVER_CH_CURRENT_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
             } else {
                 WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_MOTOR_POSITION;
             }
@@ -2255,6 +2293,53 @@ void hkc_fan_status_setter(homekit_characteristic_t* ch0, const homekit_value_t 
         hkc_group_notify(ch_group_find(ch0));
         
         save_states_callback();
+    }
+}
+
+// --- LIGHT SENSOR
+void light_sensor_task(void* args) {
+    ch_group_t* ch_group = (ch_group_t*) args;
+
+    float luxes = 0.0001f;
+    
+    if (LIGHT_SENSOR_TYPE < 2) {
+        // https://www.allaboutcircuits.com/projects/design-a-luxmeter-using-a-light-dependent-resistor/
+        const float ldr_voltage = (1023.1 / (float) sdk_system_adc_read()) - 1;
+
+        float ldr_resistor;
+        if (LIGHT_SENSOR_TYPE == 0) {
+            ldr_resistor = LIGHT_SENSOR_RESISTOR * ldr_voltage;
+        } else {
+            ldr_resistor = LIGHT_SENSOR_RESISTOR / ldr_voltage;
+        }
+        
+        luxes = 1 / fast_precise_pow(ldr_resistor, LIGHT_SENSOR_POW);
+    }
+    
+    luxes = (luxes * LIGHT_SENSOR_FACTOR) + LIGHT_SENSOR_OFFSET;
+    INFO("Luxes: %g", luxes);
+    
+    if (luxes < 0.0001f) {
+        luxes = 0.0001f;
+    } else if (luxes > 100000.f) {
+        luxes = 100000.f;
+    }
+    
+    if ((uint32_t) ch_group->ch0->value.float_value != (uint32_t) luxes) {
+        do_wildcard_actions(ch_group, 0, luxes);
+        ch_group->ch0->value.float_value = luxes;
+        hkc_group_notify(ch_group);
+    }
+    
+    vTaskDelete(NULL);
+}
+
+void light_sensor_timer_worker(TimerHandle_t xTimer) {
+    if (!homekit_is_pairing()) {
+        void* args = (void*) pvTimerGetTimerID(xTimer);
+        if (xTaskCreate(light_sensor_task, "light_sensor", LIGHT_SENSOR_TASK_SIZE, args, LIGHT_SENSOR_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("Creating light_sensor_task");
+        }
     }
 }
 
@@ -2377,7 +2462,7 @@ void hkc_tv_configured_name(homekit_characteristic_t* ch1, const homekit_value_t
 }
 
 void hkc_tv_input_configured_name(homekit_characteristic_t* ch, const homekit_value_t value) {
-    homekit_characteristic_notify(ch, ch->value);
+    homekit_characteristic_notify_safe(ch, ch->value);
 }
 
 // --- DIGITAL INPUTS
@@ -3582,7 +3667,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     }
     
     // HTTP GET actions
-    if (ch_group->action_http) {
+    if (ch_group->action_http && main_config.wifi_status > WIFI_STATUS_CONNECTING) {
         action_task_t* action_task = new_action_task();
         action_task->action = action;
         action_task->ch_group = ch_group;
@@ -5492,8 +5577,7 @@ void normal_mode_init() {
             }
 
             const float poll_period = sensor_poll_period(json_context, PM_POLL_PERIOD_DEFAULT);
-            ch_group->timer = esp_timer_create(poll_period * 1000, true, (void*) ch_group, power_monitor_timer_worker);
-            esp_timer_start(ch_group->timer);
+            esp_timer_start(esp_timer_create(poll_period * 1000, true, (void*) ch_group, power_monitor_timer_worker));
         }
 
         const bool exec_actions_on_boot = get_exec_actions_on_boot(json_context);
@@ -6573,6 +6657,65 @@ void normal_mode_init() {
         return accessory;
     }
     
+    uint8_t new_light_sensor(uint8_t accessory, cJSON* json_context) {
+        ch_group_t* ch_group = new_ch_group();
+        ch_group->accessory = accessory_numerator;
+        ch_group->homekit_enabled = acc_homekit_enabled(json_context);
+        
+        new_accessory(accessory, 3, ch_group->homekit_enabled, json_context);
+        
+        homekit_characteristic_t* ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_AMBIENT_LIGHT_LEVEL, 0.0001);
+  
+        ch_group->acc_type = ACC_TYPE_LIGHT_SENSOR;
+        ch_group->ch0 = ch0;
+        register_actions(ch_group, json_context, 0);
+        set_accessory_ir_protocol(ch_group, json_context);
+        register_wildcard_actions(ch_group, json_context);
+        ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
+        
+        if (ch_group->homekit_enabled) {
+            accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
+            accessories[accessory]->services[1]->id = 8;
+            accessories[accessory]->services[1]->primary = true;
+            accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_LIGHT_SENSOR;
+            accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[1]->characteristics[0] = ch0;
+        }
+        
+        LIGHT_SENSOR_TYPE = LIGHT_SENSOR_TYPE_DEFAULT;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_TYPE_SET) != NULL) {
+            LIGHT_SENSOR_TYPE = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_TYPE_SET)->valuedouble;
+        }
+        
+        LIGHT_SENSOR_FACTOR = LIGHT_SENSOR_FACTOR_DEFAULT;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_FACTOR_SET) != NULL) {
+            LIGHT_SENSOR_FACTOR = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_FACTOR_SET)->valuedouble;
+        }
+        
+        LIGHT_SENSOR_OFFSET = LIGHT_SENSOR_OFFSET_DEFAULT;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_OFFSET_SET) != NULL) {
+            LIGHT_SENSOR_OFFSET = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_OFFSET_SET)->valuedouble;
+        }
+        
+        LIGHT_SENSOR_RESISTOR = LIGHT_SENSOR_RESISTOR_DEFAULT;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_RESISTOR_SET) != NULL) {
+            LIGHT_SENSOR_RESISTOR = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_RESISTOR_SET)->valuedouble * 1000;
+        }
+        
+        LIGHT_SENSOR_POW = LIGHT_SENSOR_POW_DEFAULT;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_POW_SET) != NULL) {
+            LIGHT_SENSOR_POW = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_POW_SET)->valuedouble;
+        }
+        
+        const float poll_period = sensor_poll_period(json_context, LIGHT_SENSOR_POLL_PERIOD_DEFAULT);
+        esp_timer_start(esp_timer_create(poll_period * 1000, true, (void*) ch_group, light_sensor_timer_worker));
+        
+        if (ch_group->homekit_enabled) {
+            return accessory + 1;
+        }
+        return accessory;
+    }
+    
     uint8_t new_tv(uint8_t accessory, cJSON* json_context) {
         cJSON* json_inputs = cJSON_GetObjectItemCaseSensitive(json_context, TV_INPUTS_ARRAY);
         uint8_t inputs = cJSON_GetArraySize(json_inputs);
@@ -6812,7 +6955,7 @@ void normal_mode_init() {
             acc_count = new_window_cover(acc_count, json_accessory);
 
         } else if (acc_type == ACC_TYPE_LIGHT_SENSOR) {
-            //acc_count = new_light_sensor(acc_count, json_accessory);
+            acc_count = new_light_sensor(acc_count, json_accessory);
             
         } else if (acc_type == ACC_TYPE_TV) {
             acc_count = new_tv(acc_count, json_accessory);
