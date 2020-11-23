@@ -1010,6 +1010,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 #endif
 
     homekit_server->is_pairing = true;
+    mdns_buffer_deinit();
     
     tlv_values_t *message = tlv_new();
     tlv_parse(data, size, message);
@@ -1493,6 +1494,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
         }
     }
 
+    mdns_buffer_init();
     homekit_server->is_pairing = false;
     
     tlv_free(message);

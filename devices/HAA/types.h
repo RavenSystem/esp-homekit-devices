@@ -178,6 +178,8 @@ typedef struct _lightbulb_group {
     float factor_cw;
     float factor_ww;
     
+    float space_map[12];
+    
     bool is_pwm: 1;
     bool armed_autodimmer: 1;
 
@@ -261,11 +263,12 @@ typedef struct _main_config {
     uint8_t wifi_ping_max_errors;
     uint8_t wifi_error_count;
     uint8_t wifi_arp_count;
+    uint8_t wifi_arp_count_max;
+    
     uint8_t ir_tx_gpio: 5;
     bool ir_tx_inv: 1;
     bool ping_is_running: 1;
     bool used_gpio_0: 1;
-    
     uint16_t setup_mode_time;
     bool used_gpio_1: 1;
     bool used_gpio_2: 1;
@@ -275,6 +278,7 @@ typedef struct _main_config {
     bool used_gpio_9: 1;
     bool used_gpio_10: 1;
     bool used_gpio_11: 1;
+    
     bool used_gpio_12: 1;
     bool used_gpio_13: 1;
     bool used_gpio_14: 1;
