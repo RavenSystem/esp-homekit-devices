@@ -134,6 +134,8 @@ static SemaphoreHandle_t gDictMutex = NULL;
 static mdns_rsrc*      gDictP = NULL;       // RR database, linked list
 
 static u8_t* mdns_response = NULL;
+static u8_t* mdns_payload = NULL;
+static uint16_t mdns_payload_len = 0;
 
 //---------------------- Debug/logging utilities -------------------------
 
@@ -445,6 +447,12 @@ void mdns_buffer_deinit() {
     if (mdns_response != NULL) {
         free(mdns_response);
         mdns_response = NULL;
+    }
+    
+    if (mdns_payload != NULL) {
+        free(mdns_payload);
+        mdns_payload = NULL;
+        mdns_payload_len = 0;
     }
 }
 
@@ -975,27 +983,35 @@ static void mdns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_a
     } else if (plen < (SIZEOF_DNS_HDR + SIZEOF_DNS_QUERY + 1 + SIZEOF_DNS_ANSWER + 1)) {
         printf(">>> mdns_recv: pbuf too small\n");
     } else if (mdns_response) {
-        u8_t* mdns_payload = malloc(plen + 1);
-        if (mdns_payload) {
-            //printf(">>> mdns_recv: payload size %i\n", plen);
+        if (plen > mdns_payload_len) {
+            if (mdns_payload) {
+                free(mdns_payload);
+                mdns_payload = NULL;
+                mdns_payload_len = 0;
+            }
             
-            memset(mdns_payload, 0, plen + 1);
+            mdns_payload = malloc(plen);
+            if (mdns_payload) {
+                mdns_payload_len = plen;
+            }
+        }
+
+        if (mdns_payload) {
+            memset(mdns_payload, 0, mdns_payload_len);
 
             if (pbuf_copy_partial(p, mdns_payload, plen, 0) == plen) {
                 struct mdns_hdr* hdrP = (struct mdns_hdr*) mdns_payload;
-    #ifdef qLogAllTraffic
+#ifdef qLogAllTraffic
+                printf(">>> mdns_recv: payload size %i / %i\n", plen, mdns_payload_len);
                 mdns_print_msg(mdns_payload, plen);
-    #endif
+#endif
                 if ( (hdrP->flags1 & (DNS_FLAG1_RESP + DNS_FLAG1_OPMASK + DNS_FLAG1_TRUNC) ) == 0
                      && hdrP->numquestions > 0 )
                     mdns_reply(addr, hdrP);
             }
-            
-            free(mdns_payload);
         } else {
             printf(">>> mdns_recv: no enough memory\n");
         }
-
     }
     pbuf_free(p);
 }

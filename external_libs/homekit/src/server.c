@@ -157,20 +157,12 @@ void homekit_server_on_reset(client_context_t *context);
 
 
 homekit_server_t *server_new() {
-    homekit_server_t *homekit_server = malloc(sizeof(homekit_server_t));
-    FD_ZERO(&homekit_server->fds);
-    homekit_server->max_fd = 0;
-    homekit_server->client_count = 0;
-    homekit_server->accessory_id = NULL;
-    homekit_server->accessory_key = NULL;
-    homekit_server->config = NULL;
-    homekit_server->paired = false;
-    homekit_server->is_pairing = false;
-    homekit_server->pairing_context = NULL;
-    homekit_server->clients = NULL;
+    homekit_server_t* homekit_server = malloc(sizeof(homekit_server_t));
+    memset(homekit_server, 0, sizeof(*homekit_server));
     
-    homekit_server->data_size = 1024 + 18;
-    homekit_server->data_available = 0;
+    FD_ZERO(&homekit_server->fds);
+    
+    homekit_server->data_size = (1024 + 18);
     
     return homekit_server;
 }
@@ -1010,7 +1002,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 #endif
 
     homekit_server->is_pairing = true;
-    mdns_buffer_deinit();
+    homekit_mdns_buffer_deinit();
     
     tlv_values_t *message = tlv_new();
     tlv_parse(data, size, message);
@@ -1494,7 +1486,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
         }
     }
 
-    mdns_buffer_init();
+    homekit_mdns_buffer_init();
     homekit_server->is_pairing = false;
     
     tlv_free(message);

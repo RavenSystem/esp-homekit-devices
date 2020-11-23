@@ -56,7 +56,7 @@ EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=640
 #EXTRA_CFLAGS += -DHOMEKIT_DEBUG=1
 
 ## mDNS Responder DEBUG
-#EXTRA_CFLAGS += -DqDebugLog
+#EXTRA_CFLAGS += -DqDebugLog -DqLogAllTraffic
 
 include $(abspath ../../sdk/esp-open-rtos/common.mk)
 
