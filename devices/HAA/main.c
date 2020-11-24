@@ -424,10 +424,13 @@ void wifi_reconnection_task() {
         if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
             INFO("Wifi reconnecting...");
             sdk_wifi_station_disconnect();
+            sdk_wifi_set_opmode(STATIONAP_MODE);
             sdk_wifi_station_connect();
             main_config.wifi_status = WIFI_STATUS_CONNECTING;
 
         } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+            sdk_wifi_set_opmode(STATION_MODE);
+            
             if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
                 INFO("Wifi preconnected");
                 main_config.wifi_status = WIFI_STATUS_CONNECTED;

@@ -783,7 +783,7 @@ static void dns_stop() {
 }
 
 static void wifi_config_softap_start() {
-    sdk_wifi_set_opmode(STATIONAP_MODE);
+    //sdk_wifi_set_opmode(STATIONAP_MODE);
 
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(SOFTAP_IF, macaddr);
@@ -943,7 +943,7 @@ uint8_t wifi_config_connect() {
         }
 
         sdk_wifi_station_set_config(&sta_config);
-        sdk_wifi_set_opmode(STATION_MODE);
+        //sdk_wifi_set_opmode(STATION_MODE);
         sdk_wifi_station_connect();
         sdk_wifi_station_set_auto_connect(true);
         
@@ -967,6 +967,8 @@ uint8_t wifi_config_connect() {
 }
 
 static void wifi_config_station_connect() {
+    sdk_wifi_set_opmode(STATIONAP_MODE);
+    
     if (wifi_config_connect() == 1) {
         xTaskCreate(wifi_config_sta_connect_timeout_task, "sta_connect", 512, NULL, (tskIDLE_PRIORITY + 0), &context->sta_connect_timeout);
         
