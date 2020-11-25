@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "3.7.3"
+#define FIRMWARE_VERSION                    "3.7.4"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -155,22 +155,22 @@
 #define VALVE_MAX_DURATION_DEFAULT          (3600)
 
 #define THERMOSTAT_TYPE                     "w"
-#define TH_TYPE                             ch_group->num[5]
+#define TH_TYPE                             ch_group->num_05
 #define THERMOSTAT_TYPE_HEATER              (1)
 #define THERMOSTAT_TYPE_COOLER              (2)
 #define THERMOSTAT_TYPE_HEATERCOOLER        (3)
 #define THERMOSTAT_MIN_TEMP                 "m"
-#define TH_MIN_TEMP                         ch_group->num[7]
+#define TH_MIN_TEMP                         ch_group->num_07
 #define THERMOSTAT_DEFAULT_MIN_TEMP         (10)
 #define THERMOSTAT_MAX_TEMP                 "x"
-#define TH_MAX_TEMP                         ch_group->num[8]
+#define TH_MAX_TEMP                         ch_group->num_08
 #define THERMOSTAT_DEFAULT_MAX_TEMP         (38)
 #define THERMOSTAT_DEADBAND                 "d"
-#define TH_DEADBAND                         ch_group->num[6]
+#define TH_DEADBAND                         ch_group->num_06
 #define THERMOSTAT_DEADBAND_FORCE_IDLE      "df"
-#define TH_DEADBAND_FORCE_IDLE              ch_group->num[10]
+#define TH_DEADBAND_FORCE_IDLE              ch_group->num_10
 #define THERMOSTAT_DEADBAND_SOFT_ON         "ds"
-#define TH_DEADBAND_SOFT_ON                 ch_group->num[11]
+#define TH_DEADBAND_SOFT_ON                 ch_group->num_11
 #define THERMOSTAT_MODE_INT                 ch_group->ch4->value.int_value
 #define THERMOSTAT_MODE_OFF                 (0)
 #define THERMOSTAT_MODE_IDLE                (1)
@@ -199,34 +199,38 @@
 #define TH_UPDATE_DELAY_MS                  (4000)
 
 #define TEMPERATURE_SENSOR_GPIO             "g"
-#define TH_SENSOR_GPIO                      ch_group->num[0]
+#define TH_SENSOR_GPIO                      ch_group->num_00
 #define TEMPERATURE_SENSOR_TYPE             "n"
-#define TH_SENSOR_TYPE                      ch_group->num[1]
+#define TH_SENSOR_TYPE                      ch_group->num_01
 #define TEMPERATURE_SENSOR_INDEX            "u"
-#define TH_SENSOR_INDEX                     ch_group->num[4]
+#define TH_SENSOR_INDEX                     ch_group->num_04
 #define TEMPERATURE_SENSOR_POLL_PERIOD      "j"
-#define TH_SENSOR_POLL_PERIOD               ch_group->num[2]
+#define TH_SENSOR_POLL_PERIOD               ch_group->num_02
 #define TH_SENSOR_POLL_PERIOD_DEFAULT       (30)
 #define TH_SENSOR_POLL_PERIOD_MIN           (0.1f)
 #define TEMPERATURE_OFFSET                  "z"
-#define TH_SENSOR_TEMP_OFFSET               ch_group->num[3]
+#define TH_SENSOR_TEMP_OFFSET               ch_group->num_03
 #define HUMIDITY_OFFSET                     "h"
-#define TH_SENSOR_HUM_OFFSET                ch_group->num[4]
+#define TH_SENSOR_HUM_OFFSET                ch_group->num_04
 #define SENSOR_TEMPERATURE_FLOAT            ch_group->ch0->value.float_value
-#define TH_SENSOR_ERROR_COUNT               ch_group->num[9]
+#define TH_SENSOR_ERROR_COUNT               ch_group->num_09
 
 #define LIGHTBULB_PWM_GPIO_R                "r"
 #define LIGHTBULB_PWM_GPIO_G                "g"
 #define LIGHTBULB_PWM_GPIO_B                "v"
-#define LIGHTBULB_PWM_GPIO_W                "w"
+#define LIGHTBULB_PWM_GPIO_W                "w"     // Will be removed
 #define LIGHTBULB_PWM_GPIO_CW               "cw"
 #define LIGHTBULB_PWM_GPIO_WW               "ww"
 #define LIGHTBULB_FACTOR_R                  "fr"
 #define LIGHTBULB_FACTOR_G                  "fg"
 #define LIGHTBULB_FACTOR_B                  "fv"
-#define LIGHTBULB_FACTOR_W                  "fw"
+#define LIGHTBULB_FACTOR_W                  "fw"    // Will be removed
 #define LIGHTBULB_FACTOR_CW                 "fcw"
 #define LIGHTBULB_FACTOR_WW                 "fww"
+#define LIGHTBULB_MAX_POWER                 "mp"
+#define LIGHTBULB_CURVE_FACTOR              "cf"
+#define LIGHTBULB_FLUX_ARRAY                "fa"
+#define LIGHTBULB_COORDINATE_ARRAY          "ca"
 #define RGBW_PERIOD                         (10)
 #define RGBW_STEP                           "st"
 #define RGBW_STEP_DEFAULT                   (1024)
@@ -258,14 +262,14 @@
 #define GARAGE_DOOR_TIME_CLOSE_SET          "c"
 #define GARAGE_DOOR_TIME_MARGIN_SET         "e"
 #define GARAGE_DOOR_TIME_MARGIN_DEFAULT     (0)
-#define GARAGE_DOOR_CURRENT_TIME            ch_group->num[0]
-#define GARAGE_DOOR_WORKING_TIME            ch_group->num[1]
-#define GARAGE_DOOR_TIME_MARGIN             ch_group->num[2]
-#define GARAGE_DOOR_CLOSE_TIME_FACTOR       ch_group->num[3]
-#define GARAGE_DOOR_HAS_F2                  ch_group->num[4]
-#define GARAGE_DOOR_HAS_F3                  ch_group->num[5]
-#define GARAGE_DOOR_HAS_F4                  ch_group->num[6]
-#define GARAGE_DOOR_HAS_F5                  ch_group->num[7]
+#define GARAGE_DOOR_CURRENT_TIME            ch_group->num_00
+#define GARAGE_DOOR_WORKING_TIME            ch_group->num_01
+#define GARAGE_DOOR_TIME_MARGIN             ch_group->num_02
+#define GARAGE_DOOR_CLOSE_TIME_FACTOR       ch_group->num_03
+#define GARAGE_DOOR_HAS_F2                  ch_group->num_04
+#define GARAGE_DOOR_HAS_F3                  ch_group->num_05
+#define GARAGE_DOOR_HAS_F4                  ch_group->num_06
+#define GARAGE_DOOR_HAS_F5                  ch_group->num_07
 
 #define WINDOW_COVER_CLOSING                (0)
 #define WINDOW_COVER_OPENING                (1)
@@ -285,14 +289,14 @@
 #define WINDOW_COVER_POLL_PERIOD_MS         (250)
 #define WINDOW_COVER_MARGIN_SYNC_SET        "m"
 #define WINDOW_COVER_MARGIN_SYNC_DEFAULT    (15)
-#define WINDOW_COVER_TIME_OPEN              ch_group->num[0]
-#define WINDOW_COVER_TIME_CLOSE             ch_group->num[1]
-#define WINDOW_COVER_MOTOR_POSITION         ch_group->num[2]
-#define WINDOW_COVER_HOMEKIT_POSITION       ch_group->num[3]
-#define WINDOW_COVER_CORRECTION             ch_group->num[4]
-#define WINDOW_COVER_MARGIN_SYNC            ch_group->num[5]
-#define WINDOW_COVER_LAST_TIME              ch_group->num[6]
-#define WINDOW_COVER_STOP_ENABLE            ch_group->num[7]
+#define WINDOW_COVER_TIME_OPEN              ch_group->num_00
+#define WINDOW_COVER_TIME_CLOSE             ch_group->num_01
+#define WINDOW_COVER_MOTOR_POSITION         ch_group->num_02
+#define WINDOW_COVER_HOMEKIT_POSITION       ch_group->num_03
+#define WINDOW_COVER_CORRECTION             ch_group->num_04
+#define WINDOW_COVER_MARGIN_SYNC            ch_group->num_05
+#define WINDOW_COVER_LAST_TIME              ch_group->num_06
+#define WINDOW_COVER_STOP_ENABLE            ch_group->num_07
 #define WINDOW_COVER_STOP_ENABLE_DELAY_MS   (80)
 #define WINDOW_COVER_CH_CURRENT_POSITION    ch_group->ch0
 #define WINDOW_COVER_CH_TARGET_POSITION     ch_group->ch1
@@ -306,49 +310,49 @@
 
 #define PM_SENSOR_TYPE_SET                  "n"
 #define PM_SENSOR_TYPE_DEFAULT              (0)
-#define PM_SENSOR_TYPE                      ch_group->num[1]
+#define PM_SENSOR_TYPE                      ch_group->num_01
 #define PM_SENSOR_HLW_GPIO_CF_SET           "c0"
 #define PM_SENSOR_HLW_GPIO_CF1_SET          "c1"
 #define PM_SENSOR_HLW_GPIO_SEL_SET          "sl"
 #define PM_SENSOR_HLW_GPIO_DEFAULT          (-1)
-#define PM_SENSOR_HLW_GPIO                  ch_group->num[2]
-#define PM_SENSOR_HLW_GPIO_CF               ch_group->num[3]
+#define PM_SENSOR_HLW_GPIO                  ch_group->num_02
+#define PM_SENSOR_HLW_GPIO_CF               ch_group->num_03
 #define PM_POLL_PERIOD_DEFAULT              (5.f)
 #define PM_VOLTAGE_FACTOR_SET               "vf"
 #define PM_VOLTAGE_FACTOR_DEFAULT           (1)
-#define PM_VOLTAGE_FACTOR                   ch_group->num[4]
+#define PM_VOLTAGE_FACTOR                   ch_group->num_04
 #define PM_VOLTAGE_OFFSET_SET               "vo"
 #define PM_VOLTAGE_OFFSET_DEFAULT           (0)
-#define PM_VOLTAGE_OFFSET                   ch_group->num[5]
+#define PM_VOLTAGE_OFFSET                   ch_group->num_05
 #define PM_CURRENT_FACTOR_SET               "cf"
 #define PM_CURRENT_FACTOR_DEFAULT           (1)
-#define PM_CURRENT_FACTOR                   ch_group->num[6]
+#define PM_CURRENT_FACTOR                   ch_group->num_06
 #define PM_CURRENT_OFFSET_SET               "co"
 #define PM_CURRENT_OFFSET_DEFAULT           (0)
-#define PM_CURRENT_OFFSET                   ch_group->num[7]
+#define PM_CURRENT_OFFSET                   ch_group->num_07
 #define PM_POWER_FACTOR_SET                 "pf"
 #define PM_POWER_FACTOR_DEFAULT             (1)
-#define PM_POWER_FACTOR                     ch_group->num[8]
+#define PM_POWER_FACTOR                     ch_group->num_08
 #define PM_POWER_OFFSET_SET                 "po"
 #define PM_POWER_OFFSET_DEFAULT             (0)
-#define PM_POWER_OFFSET                     ch_group->num[9]
+#define PM_POWER_OFFSET                     ch_group->num_09
 
 #define LIGHT_SENSOR_TYPE_SET               "n"
 #define LIGHT_SENSOR_TYPE_DEFAULT           (0)
-#define LIGHT_SENSOR_TYPE                   ch_group->num[0]
+#define LIGHT_SENSOR_TYPE                   ch_group->num_00
 #define LIGHT_SENSOR_POLL_PERIOD_DEFAULT    (3.f)
 #define LIGHT_SENSOR_FACTOR_SET             "f"
 #define LIGHT_SENSOR_FACTOR_DEFAULT         (1)
-#define LIGHT_SENSOR_FACTOR                 ch_group->num[1]
+#define LIGHT_SENSOR_FACTOR                 ch_group->num_01
 #define LIGHT_SENSOR_OFFSET_SET             "o"
 #define LIGHT_SENSOR_OFFSET_DEFAULT         (0)
-#define LIGHT_SENSOR_OFFSET                 ch_group->num[2]
+#define LIGHT_SENSOR_OFFSET                 ch_group->num_02
 #define LIGHT_SENSOR_RESISTOR_SET           "re"
 #define LIGHT_SENSOR_RESISTOR_DEFAULT       (10000)
-#define LIGHT_SENSOR_RESISTOR               ch_group->num[3]
+#define LIGHT_SENSOR_RESISTOR               ch_group->num_03
 #define LIGHT_SENSOR_POW_SET                "po"
 #define LIGHT_SENSOR_POW_DEFAULT            (1)
-#define LIGHT_SENSOR_POW                    ch_group->num[4]
+#define LIGHT_SENSOR_POW                    ch_group->num_04
 
 #define MAX_ACTIONS                         (32)    // from 0 to (MAX_ACTIONS - 1)
 #define MAX_WILDCARD_ACTIONS                (3)     // from 0 to (MAX_WILDCARD_ACTIONS - 1)

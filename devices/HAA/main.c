@@ -424,13 +424,10 @@ void wifi_reconnection_task() {
         if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
             INFO("Wifi reconnecting...");
             sdk_wifi_station_disconnect();
-            sdk_wifi_set_opmode(STATIONAP_MODE);
             sdk_wifi_station_connect();
             main_config.wifi_status = WIFI_STATUS_CONNECTING;
 
         } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
-            sdk_wifi_set_opmode(STATION_MODE);
-            
             if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
                 INFO("Wifi preconnected");
                 main_config.wifi_status = WIFI_STATUS_CONNECTED;
@@ -711,11 +708,11 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
             
             do_actions(ch_group, (uint8_t) ch->value.bool_value);
             
-            if (ch->value.bool_value && ch_group->num[0] > 0) {
+            if (ch->value.bool_value && ch_group->num_00 > 0) {
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                 autooff_setter_params->ch = ch;
                 autooff_setter_params->type = TYPE_ON;
-                esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
+                esp_timer_start(esp_timer_create(ch_group->num_00 * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
             }
             
             setup_mode_toggle_upcount();
@@ -769,23 +766,28 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
             
             ch->value = value;
             
-            uint8_t lock_index = 0;
             if (ch == ch_group->ch1) {
                 ch_group->ch0->value = value;
                 do_actions(ch_group, (uint8_t) ch->value.int_value);
+                
+                if (ch->value.int_value == 0 && ch_group->num_00 > 0) {
+                    autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                    autooff_setter_params->ch = ch;
+                    autooff_setter_params->type = TYPE_LOCK;
+                    esp_timer_start(esp_timer_create(ch_group->num_00 * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
+                }
             } else {
                 ch_group->ch2->value = value;
                 do_actions(ch_group, ((uint8_t) ch->value.int_value) + 2);
-                lock_index = 1;
+
+                if (ch->value.int_value == 0 && ch_group->num_01 > 0) {
+                    autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                    autooff_setter_params->ch = ch;
+                    autooff_setter_params->type = TYPE_LOCK;
+                    esp_timer_start(esp_timer_create(ch_group->num_01 * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
+                }
             }
 
-            if (ch->value.int_value == 0 && ch_group->num[lock_index] > 0) {
-                autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                autooff_setter_params->ch = ch;
-                autooff_setter_params->type = TYPE_LOCK;
-                esp_timer_start(esp_timer_create(ch_group->num[lock_index] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
-            }
-            
             setup_mode_toggle_upcount();
             save_states_callback();
         }
@@ -850,11 +852,11 @@ void sensor_1(const uint8_t gpio, void* args, const uint8_t type) {
 
             do_actions(ch_group, 1);
             
-            if (ch_group->num[0] > 0) {
+            if (ch_group->num_00 > 0) {
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                 autooff_setter_params->ch = ch_group->ch0;
                 autooff_setter_params->type = type;
-                esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
+                esp_timer_start(esp_timer_create(ch_group->num_00 * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
             }
         }
     }
@@ -1019,11 +1021,11 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
             
             do_actions(ch_group, (uint8_t) ch->value.int_value);
             
-            if (ch->value.int_value == 1 && ch_group->num[0] > 0) {
+            if (ch->value.int_value == 1 && ch_group->num_00 > 0) {
                     autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                     autooff_setter_params->ch = ch;
                     autooff_setter_params->type = TYPE_VALVE;
-                    esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
+                    esp_timer_start(esp_timer_create(ch_group->num_00 * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
             }
             
             setup_mode_toggle_upcount();
@@ -2247,11 +2249,11 @@ void hkc_fan_setter(homekit_characteristic_t* ch0, const homekit_value_t value) 
             if (value.bool_value) {
                 do_wildcard_actions(ch_group, 0, ch_group->ch1->value.float_value);
                 
-                if (ch0->value.bool_value && ch_group->num[0] > 0) {
+                if (ch0->value.bool_value && ch_group->num_00 > 0) {
                     autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                     autooff_setter_params->ch = ch0;
                     autooff_setter_params->type = TYPE_FAN;
-                    esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
+                    esp_timer_start(esp_timer_create(ch_group->num_00 * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
                 }
             } else {
                 ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
@@ -5079,7 +5081,7 @@ void normal_mode_init() {
         ch_group->ch0 = ch0;
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
-        ch_group->num[0] = autoswitch_time(json_context);
+        ch_group->num_00 = autoswitch_time(json_context);
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
@@ -5261,8 +5263,8 @@ void normal_mode_init() {
         ch_group->ch3 = ch3;
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
-        ch_group->num[0] = autoswitch_time(json_context);
-        ch_group->num[1] = autoswitch_time_1(json_context);
+        ch_group->num_00 = autoswitch_time(json_context);
+        ch_group->num_01 = autoswitch_time_1(json_context);
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
@@ -5481,7 +5483,7 @@ void normal_mode_init() {
         ch_group->ch0 = ch0;
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
-        ch_group->num[0] = autoswitch_time(json_context);
+        ch_group->num_00 = autoswitch_time(json_context);
         
         uint8_t calloc_count = 2;
         
@@ -5677,7 +5679,7 @@ void normal_mode_init() {
         ch_group->ch1 = ch1;
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
-        ch_group->num[0] = autoswitch_time(json_context);
+        ch_group->num_00 = autoswitch_time(json_context);
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));
@@ -6143,21 +6145,38 @@ void normal_mode_init() {
         lightbulb_group->pwm_r = 255;
         lightbulb_group->pwm_g = 255;
         lightbulb_group->pwm_b = 255;
-        lightbulb_group->pwm_w = 255;
+        lightbulb_group->pwm_w = 255;       // Will be removed
         lightbulb_group->pwm_cw = 255;
         lightbulb_group->pwm_ww = 255;
         lightbulb_group->target_r = 0;
         lightbulb_group->target_g = 0;
         lightbulb_group->target_b = 0;
-        lightbulb_group->target_w = 0;
+        lightbulb_group->target_w = 0;      // Will be removed
         lightbulb_group->target_cw = 0;
         lightbulb_group->target_ww = 0;
         lightbulb_group->factor_r = 1;
         lightbulb_group->factor_g = 1;
         lightbulb_group->factor_b = 1;
-        lightbulb_group->factor_w = 1;
+        lightbulb_group->factor_w = 1;      // Will be removed
         lightbulb_group->factor_cw = 1;
         lightbulb_group->factor_ww = 1;
+        lightbulb_group->max_power = 1;
+        lightbulb_group->curve_factor = 1;
+        lightbulb_group->flux_r = 1;
+        lightbulb_group->flux_g = 1;
+        lightbulb_group->flux_b = 1;
+        lightbulb_group->flux_cw = 1;
+        lightbulb_group->flux_ww = 1;
+        lightbulb_group->rx = 0.648428;
+        lightbulb_group->ry = 0.330855;
+        lightbulb_group->gx = 0.321142;
+        lightbulb_group->gy = 0.597873;
+        lightbulb_group->bx = 0.155883;
+        lightbulb_group->by = 0.0660408;
+        lightbulb_group->cwx = 0.322016;
+        lightbulb_group->cwy = 0.331776;
+        lightbulb_group->wwx = 0.436579;
+        lightbulb_group->wwy = 0.404174;
         lightbulb_group->step = RGBW_STEP_DEFAULT;
         lightbulb_group->autodimmer = 0;
         lightbulb_group->armed_autodimmer = false;
@@ -6226,6 +6245,63 @@ void normal_mode_init() {
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_WW) != NULL) {
                 lightbulb_group->factor_ww = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_WW)->valuedouble;
             }
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_MAX_POWER) != NULL) {
+                lightbulb_group->max_power = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_MAX_POWER)->valuedouble;
+            }
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CURVE_FACTOR) != NULL) {
+                lightbulb_group->curve_factor = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CURVE_FACTOR)->valuedouble;
+            }
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FLUX_ARRAY) != NULL) {
+                cJSON* flux_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FLUX_ARRAY);
+                lightbulb_group->flux_r = (float) cJSON_GetArrayItem(flux_array, 0)->valuedouble;
+                lightbulb_group->flux_g = (float) cJSON_GetArrayItem(flux_array, 1)->valuedouble;
+                lightbulb_group->flux_b = (float) cJSON_GetArrayItem(flux_array, 2)->valuedouble;
+                lightbulb_group->flux_cw = (float) cJSON_GetArrayItem(flux_array, 3)->valuedouble;
+                lightbulb_group->flux_ww = (float) cJSON_GetArrayItem(flux_array, 4)->valuedouble;
+            }
+            
+            INFO("Flux array: %g, %g, %g, %g, %g", lightbulb_group->flux_r, lightbulb_group->flux_g, lightbulb_group->flux_b, lightbulb_group->flux_cw, lightbulb_group->flux_ww);
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY) != NULL) {
+                cJSON* coordinate_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY);
+                lightbulb_group->rx = (float) cJSON_GetArrayItem(coordinate_array, 0)->valuedouble;
+                lightbulb_group->ry = (float) cJSON_GetArrayItem(coordinate_array, 1)->valuedouble;
+                lightbulb_group->gx = (float) cJSON_GetArrayItem(coordinate_array, 2)->valuedouble;
+                lightbulb_group->gy = (float) cJSON_GetArrayItem(coordinate_array, 3)->valuedouble;
+                lightbulb_group->bx = (float) cJSON_GetArrayItem(coordinate_array, 4)->valuedouble;
+                lightbulb_group->by = (float) cJSON_GetArrayItem(coordinate_array, 5)->valuedouble;
+                lightbulb_group->cwx = (float) cJSON_GetArrayItem(coordinate_array, 6)->valuedouble;
+                lightbulb_group->cwy = (float) cJSON_GetArrayItem(coordinate_array, 7)->valuedouble;
+                lightbulb_group->wwx = (float) cJSON_GetArrayItem(coordinate_array, 8)->valuedouble;
+                lightbulb_group->wwy = (float) cJSON_GetArrayItem(coordinate_array, 9)->valuedouble;
+            }
+
+            INFO("Coordinate array: %g, %g, %g, %g, %g, %g, %g, %g, %g, %g", lightbulb_group->rx, lightbulb_group->ry, lightbulb_group->gx, lightbulb_group->gy, lightbulb_group->bx, lightbulb_group->by, lightbulb_group->cwx, lightbulb_group->cwy, lightbulb_group->wwx, lightbulb_group->wwy);
+            
+
+            
+            
+            
+            
+            lightbulb_group->vwx = 0.3;
+            
+
+            
+            
+            
+            
+            lightbulb_group->vwy = 0.3;
+            
+            
+            
+            
+            
+            
+            
+            INFO("VM: X = %g, Y = %g", lightbulb_group->vwx, lightbulb_group->vwy);
         }
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, RGBW_STEP) != NULL) {
@@ -6586,7 +6662,7 @@ void normal_mode_init() {
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
         ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
-        ch_group->num[0] = autoswitch_time(json_context);
+        ch_group->num_00 = autoswitch_time(json_context);
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[1] = calloc(1, sizeof(homekit_service_t));

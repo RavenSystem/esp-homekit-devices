@@ -112,7 +112,18 @@ typedef struct _ch_group {
     bool child_enabled: 1;
     bool homekit_enabled: 1;
     
-    float num[12];
+    float num_00;
+    float num_01;
+    float num_02;
+    float num_03;
+    float num_04;
+    float num_05;
+    float num_06;
+    float num_07;
+    float num_08;
+    float num_09;
+    float num_10;
+    float num_11;
     
     homekit_characteristic_t* ch0;
     homekit_characteristic_t* ch1;
@@ -152,7 +163,7 @@ typedef struct _lightbulb_group {
     uint8_t pwm_r;
     uint8_t pwm_g;
     uint8_t pwm_b;
-    uint8_t pwm_w;
+    uint8_t pwm_w;          // Will be removed
     
     uint8_t pwm_cw;
     uint8_t pwm_ww;
@@ -163,7 +174,7 @@ typedef struct _lightbulb_group {
     uint16_t target_g;
     
     uint16_t target_b;
-    uint16_t target_w;
+    uint16_t target_w;      // Will be removed
     
     uint16_t target_cw;
     uint16_t target_ww;
@@ -174,11 +185,32 @@ typedef struct _lightbulb_group {
     float factor_r;
     float factor_g;
     float factor_b;
-    float factor_w;
+    float factor_w;         // Will be removed
     float factor_cw;
     float factor_ww;
     
-    float space_map[12];
+    float max_power;
+    float curve_factor;
+    
+    float flux_r;
+    float flux_g;
+    float flux_b;
+    float flux_cw;
+    float flux_ww;
+    
+    float rx;
+    float ry;
+    float gx;
+    float gy;
+    float bx;
+    float by;
+    float cwx;
+    float cwy;
+    float wwx;
+    float wwy;
+    
+    float vwx;
+    float vwy;
     
     bool is_pwm: 1;
     bool armed_autodimmer: 1;
