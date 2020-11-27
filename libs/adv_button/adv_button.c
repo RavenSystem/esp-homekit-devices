@@ -313,6 +313,8 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
         
         gpio_set_pullup(gpio, pullup_resistor, pullup_resistor);
         
+        vTaskDelay(pdMS_TO_TICKS(100));
+        
         button->state = gpio_read(gpio);
         
         button->old_state = button->state;

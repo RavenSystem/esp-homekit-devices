@@ -439,6 +439,11 @@ static void wifi_config_server_on_settings(client_t *client) {
     }
     client_send_chunk(client, html_wifi_mode_3);
     
+    if (int8_value == 4) {
+        client_send_chunk(client, "selected");
+    }
+    client_send_chunk(client, html_wifi_mode_4);
+    
     // Wifi Networks
     char buffer[120];
     char bssid[13];
@@ -1070,7 +1075,7 @@ uint8_t wifi_config_connect() {
             INFO("Saved BSSID: none");
         }
         
-        if (wifi_mode < 2 || (context && !context->on_wifi_ready)) {
+        if (wifi_mode < 2) {
             if (wifi_mode == 1 && wifi_bssid) {
                 sta_config.bssid_set = 1;
                 memcpy(sta_config.bssid, wifi_bssid, 6);
@@ -1095,7 +1100,11 @@ uint8_t wifi_config_connect() {
             sdk_wifi_station_set_config(&sta_config);
             sdk_wifi_station_set_auto_connect(true);
             
-            wifi_config_smart_connect();
+            if (wifi_mode == 4) {
+                xTaskCreate(wifi_scan_sc_task, "wifi_scan_smart", 384, NULL, (tskIDLE_PRIORITY + 2), NULL);
+            } else {
+                wifi_config_smart_connect();
+            }
         }
         
         free(wifi_ssid);

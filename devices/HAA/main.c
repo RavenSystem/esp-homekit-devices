@@ -7193,6 +7193,9 @@ void normal_mode_init() {
 
     int8_t wifi_mode = 0;
     sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
+    if (wifi_mode == 4) {
+        wifi_mode = 1;
+    }
     main_config.wifi_mode = (uint8_t) wifi_mode;
     
     wifi_config_init("HAA", NULL, run_homekit_server_delayed, custom_hostname);
