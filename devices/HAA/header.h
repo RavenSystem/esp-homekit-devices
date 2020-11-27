@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "3.7.4"
+#define FIRMWARE_VERSION                    "3.8.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -20,6 +20,7 @@
 #define HAA_JSON_SYSPARAM                   "haa_conf"
 #define HAA_SETUP_MODE_SYSPARAM             "setup"
 #define LAST_CONFIG_NUMBER                  "hkcf"
+#define WIFI_MODE_SYSPARAM                  "wifi_mode"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -470,8 +471,11 @@
 #define WIFI_WATCHDOG_POLL_PERIOD_MS        (1000)
 #define WIFI_RECONNECTION_POLL_PERIOD_MS    (5000)
 #define WIFI_PING_ERRORS                    "w"
-#define WIFI_ERROR_COUNT_REBOOT             (60)
-#define WIFI_ARP_RESEND_PERIOD_MIN          (10)
+#define WIFI_ERROR_COUNT_REBOOT             (60)    // - MARGIN
+#define WIFI_ARP_RESEND_PERIOD              (20)
+#define WIFI_ARP_RESEND_MARGIN              (10)
+#define WIFI_ROAMING_PERIOD                 (1950)  // + MARGIN
+#define WIFI_ROAMING_MARGIN                 (300)
 
 #define STATUS_LED_DURATION_ON              (30)
 #define STATUS_LED_DURATION_OFF             (120)

@@ -54,7 +54,8 @@ main_config_t main_config = {
     .wifi_ping_is_running = false,
     .wifi_error_count = 0,
     .wifi_arp_count = 0,
-    .wifi_arp_count_max = WIFI_ARP_RESEND_PERIOD_MIN,
+    .wifi_roaming_count = 0,
+    .wifi_roaming_count_max = WIFI_ROAMING_PERIOD,
     
     .setup_mode_toggle_counter = INT8_MIN,
     .setup_mode_toggle_counter_max = SETUP_MODE_DEFAULT_ACTIVATE_COUNT,
@@ -335,7 +336,7 @@ lightbulb_group_t* lightbulb_group_find(homekit_characteristic_t* ch) {
 }
 
 bool ping_host(char* host) {
-    if (main_config.wifi_status < WIFI_STATUS_PRECONNECTED) {
+    if (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
         return false;
     }
     
@@ -424,7 +425,7 @@ void wifi_reconnection_task() {
         if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
             INFO("Wifi reconnecting...");
             sdk_wifi_station_disconnect();
-            sdk_wifi_station_connect();
+            wifi_config_smart_connect();
             main_config.wifi_status = WIFI_STATUS_CONNECTING;
 
         } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
@@ -458,7 +459,7 @@ void wifi_reconnection_task() {
                 led_blink(6);
                 
                 do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 5);
-            } else if (main_config.wifi_error_count % WIFI_ARP_RESEND_PERIOD_MIN == 0) {
+            } else if (main_config.wifi_error_count % WIFI_ARP_RESEND_PERIOD == 0) {
                 wifi_config_resend_arp();
             }
         }
@@ -471,7 +472,20 @@ void wifi_reconnection_task() {
 void wifi_watchdog() {
     if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
         uint8_t current_channel = sdk_wifi_get_channel();
-        if (main_config.wifi_channel != current_channel) {
+        if (main_config.wifi_mode == 3) {
+            if (main_config.wifi_roaming_count == 0) {
+                esp_timer_change_period(WIFI_WATCHDOG_TIMER, WIFI_WATCHDOG_POLL_PERIOD_MS);
+            }
+            
+            main_config.wifi_roaming_count++;
+            
+            if (main_config.wifi_roaming_count > main_config.wifi_roaming_count_max) {
+                esp_timer_change_period(WIFI_WATCHDOG_TIMER, WIFI_WATCHDOG_POLL_PERIOD_MS + 6000);
+                main_config.wifi_roaming_count_max = WIFI_ROAMING_PERIOD + (hwrand() % WIFI_ROAMING_MARGIN);
+                main_config.wifi_roaming_count = 0;
+                wifi_config_smart_connect();
+            }
+        } else if (main_config.wifi_channel != current_channel) {
             if (xTaskCreate(wifi_reconnection_task, "reconnect", WIFI_RECONNECTION_TASK_SIZE, NULL, WIFI_RECONNECTION_TASK_PRIORITY, NULL) == pdPASS) {
                 esp_timer_stop(WIFI_WATCHDOG_TIMER);
                 INFO("Wifi new Ch: %i", current_channel);
@@ -483,9 +497,8 @@ void wifi_watchdog() {
         }
         
         main_config.wifi_arp_count++;
-        if (main_config.wifi_arp_count >= main_config.wifi_arp_count_max) {
-            main_config.wifi_arp_count = 0;
-            main_config.wifi_arp_count_max = WIFI_ARP_RESEND_PERIOD_MIN + (hwrand() % 11);
+        if (main_config.wifi_arp_count > WIFI_ARP_RESEND_PERIOD) {
+            main_config.wifi_arp_count = hwrand() % WIFI_ARP_RESEND_MARGIN;
             wifi_config_resend_arp();
         }
         
@@ -529,7 +542,7 @@ void ping_task() {
         
         while (ping_input_callback_fn) {
             if (!ping_input_callback_fn->disable_without_wifi ||
-                (ping_input_callback_fn->disable_without_wifi && main_config.wifi_status >= WIFI_STATUS_PRECONNECTED)) {
+                (ping_input_callback_fn->disable_without_wifi && sdk_wifi_station_get_connect_status() == STATION_GOT_IP)) {
                 ping_input_callback_fn->callback(0, ping_input_callback_fn->ch_group, ping_input_callback_fn->param);
             }
             ping_input_callback_fn = ping_input_callback_fn->next;
@@ -644,13 +657,13 @@ inline void save_states_callback() {
 }
 
 void homekit_characteristic_notify_safe(homekit_characteristic_t *ch, const homekit_value_t value) {
-    if (main_config.wifi_status > WIFI_STATUS_CONNECTING) {
+    if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         homekit_characteristic_notify(ch, value);
     }
 }
 
 void hkc_group_notify(ch_group_t* ch_group) {
-    if (!ch_group->homekit_enabled || main_config.wifi_status < WIFI_STATUS_PRECONNECTED) {
+    if (!ch_group->homekit_enabled || sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
         return;
     }
     
@@ -3672,7 +3685,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     }
     
     // HTTP GET actions
-    if (ch_group->action_http && main_config.wifi_status > WIFI_STATUS_CONNECTING) {
+    if (ch_group->action_http && sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         action_task_t* action_task = new_action_task();
         action_task->action = action;
         action_task->ch_group = ch_group;
@@ -7178,6 +7191,10 @@ void normal_mode_init() {
         ERROR("Creating delayed_sensor_starter_task");
     }
 
+    int8_t wifi_mode = 0;
+    sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
+    main_config.wifi_mode = (uint8_t) wifi_mode;
+    
     wifi_config_init("HAA", NULL, run_homekit_server_delayed, custom_hostname);
     
     led_blink(3);
