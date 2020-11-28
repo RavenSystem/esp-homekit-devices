@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "3.8.1"
+#define FIRMWARE_VERSION                    "3.8.2"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -86,7 +86,7 @@
 // JSON
 #define GENERAL_CONFIG                      "c"
 #define MDNS_TTL                            "ttl"
-#define MDNS_TTL_DEFAULT                    (360)
+#define MDNS_TTL_DEFAULT                    (4500)
 #define CUSTOM_HOSTNAME                     "n"
 #define LOG_OUTPUT                          "o"
 #define ALLOWED_SETUP_MODE_TIME             "m"

@@ -597,7 +597,7 @@ void mdns_announce() {
     }
 }
 
-#define TTL_MULTIPLIER_MS   333.3                       // Set to 1000 to use standard time
+#define TTL_MULTIPLIER_MS   1000                        // Set to 1000 to use standard time
 
 void mdns_add_facility_work(const char* instanceName,   // Friendly name, need not be unique
                             const char* serviceName,    // Must be "_name", e.g. "_hap" or "_http"
@@ -660,7 +660,7 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
     mdns_announce();
     
 //    if (ttl > 0) {
-        esp_timer_change_period(mdns_announce_timer, ttl * TTL_MULTIPLIER_MS);
+        esp_timer_change_period(mdns_announce_timer, (ttl - 1) * TTL_MULTIPLIER_MS);
 //    }
 }
 
@@ -740,7 +740,7 @@ static int mdns_add_to_answer(mdns_rsrc* rsrcP, u8_t* resp, int respLen)
 //---------------------------------------------------------------------------
 
 // Send UDP to multicast address
-static void mdns_send_mcast(const ip_addr_t *addr, u8_t* msgP, int nBytes)
+static void mdns_send_mcast(const ip_addr_t *addr, u8_t* msgP, int nBytes, const u8_t unicast)
 {
     struct pbuf* p;
     err_t err;
@@ -753,7 +753,9 @@ static void mdns_send_mcast(const ip_addr_t *addr, u8_t* msgP, int nBytes)
     if (p) {
         memcpy(p->payload, msgP, nBytes);
         const ip_addr_t *dest_addr;
-        if (IP_IS_V6_VAL(*addr)) {
+        if (unicast) {
+            dest_addr = addr;
+        } else if (IP_IS_V6_VAL(*addr)) {
 #if LWIP_IPV6
             dest_addr = &gMulticastV6Addr;
 #endif
@@ -789,7 +791,9 @@ static void mdns_reply(const ip_addr_t *addr, struct mdns_hdr* hdrP)
     }
     memset(mdns_response, 0, MDNS_RESPONDER_REPLY_SIZE);
 
-    //printf(">>> mdns_reply\n");
+#ifdef qDebugLog
+    printf(">>> mdns_reply\n");
+#endif
     
     // Build response header
     rHdr = (struct mdns_hdr*) mdns_response;
@@ -805,6 +809,7 @@ static void mdns_reply(const ip_addr_t *addr, struct mdns_hdr* hdrP)
     extra = NULL;
     qp = qBase + SIZEOF_DNS_HDR;
     nquestions = htons(hdrP->numquestions);
+    u8_t unicast = 1;
 
     if (xSemaphoreTake(gDictMutex, portMAX_DELAY)) {
 
@@ -867,6 +872,12 @@ static void mdns_reply(const ip_addr_t *addr, struct mdns_hdr* hdrP)
                         if (rsrcP->rNext && rsrcP->rNext->rType == DNS_RRTYPE_A)
                             extra = rsrcP->rNext;
                     }
+#ifdef qDebugLog
+                    printf("qUnicast: %i\n", qUnicast);
+#endif
+                    if (!qUnicast) {
+                        unicast = 0;
+                    }
                 }
             }
         } // for nQuestions
@@ -891,7 +902,10 @@ static void mdns_reply(const ip_addr_t *addr, struct mdns_hdr* hdrP)
                 respLen = new_len;
             }
         }
-        mdns_send_mcast(addr, mdns_response, respLen);
+#ifdef qDebugLog
+        printf("*** Sending response (unicast: %i)...\n", unicast);
+#endif
+        mdns_send_mcast(addr, mdns_response, respLen, unicast);
     }
 }
 
@@ -958,7 +972,7 @@ static void mdns_announce_netif(struct netif *netif, const ip_addr_t *addr)
     }
 
     if (respLen > SIZEOF_DNS_HDR) {
-        mdns_send_mcast(addr, mdns_response, respLen);
+        mdns_send_mcast(addr, mdns_response, respLen, 0);
     }
 }
 
