@@ -581,19 +581,14 @@ void mdns_add_AAAA(const char* rKey, u32_t ttl, const ip6_addr_t *addr)
 
 void mdns_announce() {
     if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
-        printf("mDNS reannounced\n");
+        printf("mDNS announced\n");
         struct netif *netif = sdk_system_get_netif(STATION_IF);
-        for (uint8_t i = 0; i < 10; i++) {
-            if (i > 0) {
-                vTaskDelay(10 / portTICK_PERIOD_MS);
-            }
 #if LWIP_IPV4
-            mdns_announce_netif(netif, &gMulticastV4Addr);
+        mdns_announce_netif(netif, &gMulticastV4Addr);
 #endif
 #if LWIP_IPV6
-            mdns_announce_netif(netif, &gMulticastV6Addr);
+        mdns_announce_netif(netif, &gMulticastV6Addr);
 #endif
-        }
     }
 }
 
@@ -762,15 +757,24 @@ static void mdns_send_mcast(const ip_addr_t *addr, u8_t* msgP, int nBytes, const
         } else {
             dest_addr = &gMulticastV4Addr;
         }
-        LOCK_TCPIP_CORE();
-        err = udp_sendto(gMDNS_pcb, p, dest_addr, LWIP_IANA_PORT_MDNS);
-        UNLOCK_TCPIP_CORE();
-        if (err == ERR_OK) {
+
+        for (uint8_t i = 0; i < 4; i++) {
+            if (i > 0) {
+                vTaskDelay(20 / portTICK_PERIOD_MS);
+            }
+            LOCK_TCPIP_CORE();
+            err = udp_sendto(gMDNS_pcb, p, dest_addr, LWIP_IANA_PORT_MDNS);
+            UNLOCK_TCPIP_CORE();
+            if (err == ERR_OK) {
 #ifdef qDebugLog
-            printf(" - responded with %d bytes err %d\n", nBytes, err);
+                printf(" - responded to " IPSTR " with %d bytes err %d\n", IP2STR(dest_addr), nBytes, err);
 #endif
-        } else
-            printf(">>> mdns_send failed %d\n", err);
+                break;
+            } else {
+                printf(">>> mdns_send failed %i/6 (errno %d)\n", i + 1, err);
+            }
+        }
+        
         pbuf_free(p);
     } else {
         printf(">>> mdns_send: alloc failed[%d]\n", nBytes);
