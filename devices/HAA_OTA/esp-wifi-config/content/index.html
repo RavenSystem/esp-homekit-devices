@@ -2,6 +2,7 @@
 html,input,textarea{font-size:38px;font-family:Arial;}
 h1{font-size:120%;text-align:center;}
 h2{font-size:75%;text-align:center;}
+body{background-color:#ffb84d;}
 body .container{width:22em;margin:0 auto;padding:0.5em;}
 label{display:block;}
 input[type=text],input[type=password]{width:100%;box-sizing:border-box;}
@@ -22,7 +23,7 @@ input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
 .nonetworks{text-align:center;margin:1em 0;}
 .field{margin-bottom:0.5em;}
 .field.required label::before{content:"*";color:red;}
-</style></head><body><div class="container"><h1>Home Accessory Architect<br>Installer v4.2.6</h1>
+</style></head><body><div class="container"><h1>Home Accessory Architect<br>Installer v4.3.0</h1>
 <form action="/settings" method="post">
 <div class="field required conf">
 <label for="conf">JSON Config:</label>
@@ -34,6 +35,9 @@ input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
 <label for="wifimode"> WiFi connection mode <select name="wifimode">
 <option value="0" <!-- part HTML_WIFI_MODE_0 -->>Normal</option>
 <option value="1" <!-- part HTML_WIFI_MODE_1 -->>Force BSSID</option>
+<option value="2" <!-- part HTML_WIFI_MODE_2 -->>Passive Roaming</option>
+<option value="3" <!-- part HTML_WIFI_MODE_3 -->>Active Roaming</option>
+<option value="4" <!-- part HTML_WIFI_MODE_4 -->>Roaming at boot</option>
 </select></label></div>
 <input type="submit" id="join" value="Save" /><br><br>
 <input type="button" id="refresh" value="⟲ WiFi Networks" onClick="window.location.reload(true)"/>

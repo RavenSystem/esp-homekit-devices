@@ -44,7 +44,7 @@ bool is_ssl = true;
 uint8_t tries_count = 0;
 
 void ota_task(void *arg) {
-    printf("\nHAA Installer Version: %s\n\n", OTAVERSION);
+    printf("\n\nHAA Installer Version: %s\n\n\n", OTAVERSION);
 
 #ifdef HAABOOT
     sysparam_set_string(USER_VERSION_SYSPARAM, "0.0.0");
