@@ -1002,7 +1002,6 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 #endif
 
     homekit_server->is_pairing = true;
-    homekit_mdns_buffer_deinit();
     
     tlv_values_t *message = tlv_new();
     tlv_parse(data, size, message);
@@ -1085,6 +1084,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
         }
         case 3: {
             CLIENT_INFO(context, "Pair 2/3");
+            homekit_mdns_buffer_deinit();
             DEBUG_HEAP();
             tlv_t *device_public_key = tlv_get_value(message, TLVType_PublicKey);
             if (!device_public_key) {
@@ -1486,10 +1486,11 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
         }
     }
 
-    homekit_mdns_buffer_init();
+    
     homekit_server->is_pairing = false;
     
     tlv_free(message);
+    homekit_mdns_buffer_init();
 
 #ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
     sdk_system_restoreclock();
