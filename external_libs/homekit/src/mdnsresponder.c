@@ -579,7 +579,7 @@ void mdns_add_AAAA(const char* rKey, u32_t ttl, const ip6_addr_t *addr)
 }
 #endif
 
-void mdns_announce() {
+static void internal_mdns_announce() {
     if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         printf("mDNS announced\n");
         struct netif *netif = sdk_system_get_netif(STATION_IF);
@@ -590,6 +590,11 @@ void mdns_announce() {
         mdns_announce_netif(netif, &gMulticastV6Addr);
 #endif
     }
+}
+
+void mdns_announce() {
+    esp_timer_start(mdns_announce_timer);
+    internal_mdns_announce();
 }
 
 #define TTL_MULTIPLIER_MS   1000                        // Set to 1000 to use standard time
@@ -652,7 +657,7 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
 
     esp_timer_stop(mdns_announce_timer);
     
-    mdns_announce();
+    internal_mdns_announce();
     
 //    if (ttl > 0) {
         esp_timer_change_period(mdns_announce_timer, (ttl - 1) * TTL_MULTIPLIER_MS);
@@ -1093,7 +1098,7 @@ void mdns_init()
         return;
     }
 
-    mdns_announce_timer = esp_timer_create(60000, true, NULL, mdns_announce);
+    mdns_announce_timer = esp_timer_create(60000, true, NULL, internal_mdns_announce);
     
     udp_bind_netif(gMDNS_pcb, netif);
 

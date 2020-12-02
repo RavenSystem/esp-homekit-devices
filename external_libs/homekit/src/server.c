@@ -1084,7 +1084,6 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
         }
         case 3: {
             CLIENT_INFO(context, "Pair 2/3");
-            homekit_mdns_buffer_deinit();
             DEBUG_HEAP();
             tlv_t *device_public_key = tlv_get_value(message, TLVType_PublicKey);
             if (!device_public_key) {
@@ -1100,6 +1099,8 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 break;
             }
 
+            homekit_mdns_buffer_deinit();
+            
             CLIENT_DEBUG(context, "Computing SRP shared secret");
             DEBUG_HEAP();
             int r = crypto_srp_compute_key(
@@ -1108,6 +1109,9 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 homekit_server->pairing_context->public_key,
                 homekit_server->pairing_context->public_key_size
             );
+            
+            homekit_mdns_buffer_init();
+            
             if (r) {
                 CLIENT_ERROR(context, "Compute SRP shared secret (%d)", r);
                 send_tlv_error_response(context, 4, TLVError_Authentication);
@@ -1490,7 +1494,6 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
     homekit_server->is_pairing = false;
     
     tlv_free(message);
-    homekit_mdns_buffer_init();
 
 #ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
     sdk_system_restoreclock();
