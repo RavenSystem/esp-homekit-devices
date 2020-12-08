@@ -430,23 +430,23 @@ void wifi_reconnection_task() {
 
         } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
             if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
-                INFO("Wifi preconnected");
+                INFO("Wifi reconnected");
                 main_config.wifi_status = WIFI_STATUS_CONNECTED;
                 main_config.wifi_channel = sdk_wifi_get_channel();
                 
                 homekit_mdns_announce();
-                
-                vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
 
             } else {
                 main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
-                INFO("Wifi reconnected");
+                INFO("Wifi preconnected");
                 wifi_config_resend_arp();
                 homekit_mdns_announce();
                 
                 main_config.wifi_error_count = 0;
                 
                 do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 3);
+                
+                vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
             }
             
         } else {
