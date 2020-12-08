@@ -228,9 +228,7 @@ void user_init(void) {
     if (status != SYSPARAM_OK) {
         printf("No sysparam, erasing...\n");
         
-        for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
-            spiflash_erase_sector(SYSPARAMSECTOR + (SECTORSIZE * i));
-        }
+        wifi_config_remove_sys_param();
         
         printf("Creating new...\n");
         status = sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
