@@ -114,6 +114,26 @@ static void wifi_config_station_connect();
 static void wifi_config_softap_start();
 static void wifi_config_softap_stop();
 
+int wifi_config_remove_sys_param() {
+    unsigned char blank[1];
+    blank[0] = 0;
+    for (uint16_t i = 0; i < (SECTORSIZE * SYSPARAMSIZE); i++) {
+        if (!spiflash_write(SYSPARAMSECTOR + i, blank, 1)) {
+            ERROR("Failed to format sysparam sectors");
+            return -1;
+        }
+    }
+    
+    for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
+        if (!spiflash_erase_sector(SYSPARAMSECTOR + (SECTORSIZE * i))) {
+            ERROR("Failed to erase sysparam sectors");
+            return -2;
+        }
+    }
+    
+    return 0;
+}
+
 static void body_malloc(client_t* client) {
     uint16_t body_size = MAX_BODY_LEN;
     do {
@@ -537,11 +557,9 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     form_param_t *reset_sys_param = form_params_find(form, "reset_sys");
     
     if (reset_sys_param) {
-        for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
-            spiflash_erase_sector(SYSPARAMSECTOR + (SECTORSIZE * i));
-        }
-        
+        wifi_config_remove_sys_param();
         wifi_config_reset();
+        
     } else {
         form_param_t *conf_param = form_params_find(form, "conf");
         form_param_t *reset_param = form_params_find(form, "reset");

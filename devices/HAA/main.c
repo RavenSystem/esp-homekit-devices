@@ -144,7 +144,7 @@ void extended_gpio_write(const uint16_t extended_gpio, bool value) {
             uint8_t mcp_outs = mcp23017->a_outs;
             uint8_t channel = 0;
             if (gpio > 7) {
-                gpio =- 8;
+                gpio -= 8;
                 mcp_outs = mcp23017->b_outs;
                 channel = 1;
             }
@@ -7225,9 +7225,7 @@ void user_init(void) {
     } else {
         ERROR("HAA Sysparam. Creating...");
 
-        for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
-            spiflash_erase_sector(SYSPARAMSECTOR + (SECTORSIZE * i));
-        }
+        wifi_config_remove_sys_param();
 
         sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
         sysparam_init(SYSPARAMSECTOR, 0);

@@ -5,3 +5,4 @@ uint8_t wifi_config_connect();
 void wifi_config_smart_connect();
 void wifi_config_reset();
 void wifi_config_resend_arp();
+int wifi_config_remove_sys_param();

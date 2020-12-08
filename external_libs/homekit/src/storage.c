@@ -48,6 +48,16 @@ int homekit_storage_init() {
 
     if (strncmp(magic, magic1, sizeof(magic1))) {
         INFO("Formatting flash at 0x%x", SPIFLASH_BASE_ADDR);
+        
+        byte blank[1];
+        blank[0] = 0;
+        for (uint16_t i = 0; i < 1024; i++) {
+            if (!spiflash_write(SPIFLASH_BASE_ADDR + i, blank, 1)) {
+                ERROR("Failed to format flash");
+                return -1;
+            }
+        }
+        
         if (!spiflash_erase_sector(SPIFLASH_BASE_ADDR)) {
             ERROR("Failed to erase flash");
             return -1;
