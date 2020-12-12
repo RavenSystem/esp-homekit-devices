@@ -3224,7 +3224,7 @@ void http_get_task(void* pvParameters) {
                                     
                                     str_ch_value->string = strdup(buffer);
                                     str_ch_value->next = NULL;
-                                    INFO("Wildcard value: %s", str_ch_value->string);
+                                    INFO("Wildcard val %s", str_ch_value->string);
                                     
                                     if (str_ch_value_first == NULL) {
                                         str_ch_value_first = str_ch_value;
@@ -3760,7 +3760,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         if (action_acc_manager->action == action) {
             ch_group_t* ch_group = ch_group_find_by_acc(action_acc_manager->accessory);
             if (ch_group) {
-                INFO("<%i> Acc Manager: target %i, val %g", ch_group->accessory, action_acc_manager->accessory, action_acc_manager->value);
+                INFO("Acc Manager: target %i, val %g", action_acc_manager->accessory, action_acc_manager->value);
                 
                 if (action_acc_manager->value == -10000.f) {
                     ch_group->main_enabled = false;
@@ -3907,7 +3907,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                     }
                 }
             } else {
-                ERROR("<%i> Target not found", ch_group->accessory);
+                ERROR("Target not found");
             }
         }
 
