@@ -1314,6 +1314,8 @@ void process_th_task(void* args) {
     
     INFO("<%i> TH Process", ch_group->accessory);
     
+    bool mode_has_changed = false;
+    
     void heating(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
         INFO("<%i> Heating", ch_group->accessory);
         if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband - deadband_soft_on)) {
@@ -1321,6 +1323,7 @@ void process_th_task(void* args) {
             if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_HEATER_ON) {
                 THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_ON;
                 do_actions(ch_group, THERMOSTAT_ACTION_HEATER_ON);
+                mode_has_changed = true;
             }
             
         } else if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband)) {
@@ -1328,6 +1331,7 @@ void process_th_task(void* args) {
             if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_HEATER_SOFT_ON) {
                 THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_SOFT_ON;
                 do_actions(ch_group, THERMOSTAT_ACTION_HEATER_SOFT_ON);
+                mode_has_changed = true;
             }
             
         } else if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT + deadband)) {
@@ -1336,11 +1340,13 @@ void process_th_task(void* args) {
                     if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_HEATER_SOFT_ON) {
                         THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_SOFT_ON;
                         do_actions(ch_group, THERMOSTAT_ACTION_HEATER_SOFT_ON);
+                        mode_has_changed = true;
                     }
                 } else {
                     if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_HEATER_ON) {
                         THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_ON;
                         do_actions(ch_group, THERMOSTAT_ACTION_HEATER_ON);
+                        mode_has_changed = true;
                     }
                 }
                 
@@ -1349,6 +1355,7 @@ void process_th_task(void* args) {
                 if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_HEATER_IDLE) {
                     THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_IDLE;
                     do_actions(ch_group, THERMOSTAT_ACTION_HEATER_IDLE);
+                    mode_has_changed = true;
                 }
             }
             
@@ -1358,6 +1365,7 @@ void process_th_task(void* args) {
             if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_HEATER_FORCE_IDLE) {
                 THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_FORCE_IDLE;
                 do_actions(ch_group, THERMOSTAT_ACTION_HEATER_FORCE_IDLE);
+                mode_has_changed = true;
             }
             
         } else {
@@ -1367,6 +1375,7 @@ void process_th_task(void* args) {
                 if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_HEATER_IDLE) {
                     THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_IDLE;
                     do_actions(ch_group, THERMOSTAT_ACTION_HEATER_IDLE);
+                    mode_has_changed = true;
                 }
             }
         }
@@ -1379,6 +1388,7 @@ void process_th_task(void* args) {
             if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_COOLER_ON) {
                 THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_ON;
                 do_actions(ch_group, THERMOSTAT_ACTION_COOLER_ON);
+                mode_has_changed = true;
             }
             
         } else if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband)) {
@@ -1386,6 +1396,7 @@ void process_th_task(void* args) {
             if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_COOLER_SOFT_ON) {
                 THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_SOFT_ON;
                 do_actions(ch_group, THERMOSTAT_ACTION_COOLER_SOFT_ON);
+                mode_has_changed = true;
             }
             
         } else if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT - deadband)) {
@@ -1394,11 +1405,13 @@ void process_th_task(void* args) {
                     if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_COOLER_SOFT_ON) {
                         THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_SOFT_ON;
                         do_actions(ch_group, THERMOSTAT_ACTION_COOLER_SOFT_ON);
+                        mode_has_changed = true;
                     }
                 } else {
                     if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_COOLER_ON) {
                         THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_ON;
                         do_actions(ch_group, THERMOSTAT_ACTION_COOLER_ON);
+                        mode_has_changed = true;
                     }
                 }
                 
@@ -1407,6 +1420,7 @@ void process_th_task(void* args) {
                 if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_COOLER_IDLE) {
                     THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_IDLE;
                     do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
+                    mode_has_changed = true;
                 }
             }
             
@@ -1416,6 +1430,7 @@ void process_th_task(void* args) {
             if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_COOLER_FORCE_IDLE) {
                 THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_FORCE_IDLE;
                 do_actions(ch_group, THERMOSTAT_ACTION_COOLER_FORCE_IDLE);
+                mode_has_changed = true;
             }
             
         } else {
@@ -1425,6 +1440,7 @@ void process_th_task(void* args) {
                 if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_COOLER_IDLE) {
                     THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_IDLE;
                     do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
+                    mode_has_changed = true;
                 }
             }
         }
@@ -1471,12 +1487,13 @@ void process_th_task(void* args) {
         if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_TOTAL_OFF) {
             THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_TOTAL_OFF;
             do_actions(ch_group, THERMOSTAT_ACTION_TOTAL_OFF);
+            mode_has_changed = true;
         }
     }
     
     hkc_group_notify(ch_group);
     
-    if (TH_IAIRZONING_CONTROLLER < 0) {
+    if (TH_IAIRZONING_CONTROLLER < 0 && mode_has_changed) {
         esp_timer_start(ch_group_find_by_acc(- ((int8_t) TH_IAIRZONING_CONTROLLER))->timer2);
     }
     
