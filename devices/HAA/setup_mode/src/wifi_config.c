@@ -1029,7 +1029,7 @@ static void wifi_config_sta_connect_timeout_task() {
             }
         } else if (context->on_wifi_ready) {
             context->check_counter++;
-            if (context->check_counter > 80) {
+            if (context->check_counter > 120) {
                 context->check_counter = 0;
                 wifi_config_smart_connect();
             } else if (context->check_counter % 16 == 0) {

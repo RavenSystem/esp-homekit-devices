@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "3.8.7"
+#define FIRMWARE_VERSION                    "4.0.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -45,32 +45,34 @@
 // Task Stack Sizes
 #define INITIAL_SETUP_TASK_SIZE             (1024)
 #define PING_TASK_SIZE                      (512)
-#define AUTOSWITCH_TASK_SIZE                (512)
-#define AUTOOFF_SETTER_TASK_SIZE            (512)
 #define AUTODIMMER_TASK_SIZE                (configMINIMAL_STACK_SIZE)
 #define IR_TX_TASK_SIZE                     (512)
 #define UART_ACTION_TASK_SIZE               (512)
 #define HTTP_GET_TASK_SIZE                  (512)
 #define DELAYED_SENSOR_START_TASK_SIZE      (512)
 #define TEMPERATURE_TASK_SIZE               (512)
+#define PROCESS_TH_TASK_SIZE                (512)
+#define SET_ZONES_TASK_SIZE                 (512)
 #define POWER_MONITOR_TASK_SIZE             (512)
 #define LIGHT_SENSOR_TASK_SIZE              (512)
+#define WIFI_WATCHDOG_TASK_SIZE             (512)
 #define WIFI_RECONNECTION_TASK_SIZE         (512)
 
 // Task Priorities
 #define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
-#define PING_TASK_PRIORITY                  (tskIDLE_PRIORITY + 0)
-#define AUTOSWITCH_TASK_PRIORITY            (tskIDLE_PRIORITY + 1)
-#define AUTOOFF_SETTER_TASK_PRIORITY        (tskIDLE_PRIORITY + 1)
+#define PING_TASK_PRIORITY                  (tskIDLE_PRIORITY + 1)
 #define AUTODIMMER_TASK_PRIORITY            (tskIDLE_PRIORITY + 1)
 #define IR_TX_TASK_PRIORITY                 (tskIDLE_PRIORITY + 1)
 #define UART_ACTION_TASK_PRIORITY           (tskIDLE_PRIORITY + 1)
 #define HTTP_GET_TASK_PRIORITY              (tskIDLE_PRIORITY + 1)
-#define DELAYED_SENSOR_START_TASK_PRIORITY  (tskIDLE_PRIORITY + 0)
+#define DELAYED_SENSOR_START_TASK_PRIORITY  (tskIDLE_PRIORITY + 1)
 #define TEMPERATURE_TASK_PRIORITY           (tskIDLE_PRIORITY + 1)
+#define PROCESS_TH_TASK_PRIORITY            (tskIDLE_PRIORITY + 1)
+#define SET_ZONES_TASK_PRIORITY             (tskIDLE_PRIORITY + 1)
 #define POWER_MONITOR_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
 #define LIGHT_SENSOR_TASK_PRIORITY          (tskIDLE_PRIORITY + 1)
-#define WIFI_RECONNECTION_TASK_PRIORITY     (tskIDLE_PRIORITY + 0)
+#define WIFI_WATCHDOG_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
+#define WIFI_RECONNECTION_TASK_PRIORITY     (tskIDLE_PRIORITY + 1)
 
 // Button Events
 #define SINGLEPRESS_EVENT                   (0)
@@ -172,7 +174,13 @@
 #define TH_DEADBAND_FORCE_IDLE              ch_group->num_10
 #define THERMOSTAT_DEADBAND_SOFT_ON         "ds"
 #define TH_DEADBAND_SOFT_ON                 ch_group->num_11
+#define THERMOSTAT_IAIRZONING_CONTROLLER    "ia"
+#define TH_IAIRZONING_CONTROLLER            ch_group->num_02
+#define TH_IAIRZONING_GATE_CURRENT_STATE    ch_group->num_12
+#define TH_IAIRZONING_GATE_CLOSE            (0)
+#define TH_IAIRZONING_GATE_OPEN             (1)
 #define THERMOSTAT_MODE_INT                 ch_group->ch4->value.int_value
+#define THERMOSTAT_CURRENT_ACTION           ch_group->last_wildcard_action[2]
 #define THERMOSTAT_MODE_OFF                 (0)
 #define THERMOSTAT_MODE_IDLE                (1)
 #define THERMOSTAT_MODE_HEATER              (2)
@@ -192,12 +200,17 @@
 #define THERMOSTAT_ACTION_COOLER_FORCE_IDLE (9)
 #define THERMOSTAT_ACTION_HEATER_SOFT_ON    (10)
 #define THERMOSTAT_ACTION_COOLER_SOFT_ON    (11)
+#define THERMOSTAT_ACTION_GATE_CLOSE        (12)
+#define THERMOSTAT_ACTION_GATE_OPEN         (13)
 #define THERMOSTAT_TEMP_UP                  (0)
 #define THERMOSTAT_TEMP_DOWN                (1)
 #define TH_SENSOR_MAX_ALLOWED_ERRORS        (3)
 #define TH_HEATER_TARGET_TEMP_FLOAT         ch_group->ch6->value.float_value
 #define TH_COOLER_TARGET_TEMP_FLOAT         ch_group->ch7->value.float_value
-#define TH_UPDATE_DELAY_MS                  (4000)
+#define TH_UPDATE_DELAY_MS                  (6000)
+
+#define IAIRZONING_LAST_ACTION              iairzoning_group->num_00
+#define IAIRZONING_MAIN_MODE                iairzoning_group->num_01
 
 #define TEMPERATURE_SENSOR_GPIO             "g"
 #define TH_SENSOR_GPIO                      ch_group->num_00
@@ -447,8 +460,9 @@
 #define ACC_TYPE_LIGHT_SENSOR               (50)
 #define ACC_TYPE_TV                         (60)
 #define ACC_TYPE_FAN                        (65)
-#define ACC_POWER_MONITOR_INIT              (75)
-#define ACC_POWER_MONITOR_END               (83)
+#define ACC_TYPE_POWER_MONITOR_INIT         (75)
+#define ACC_TYPE_POWER_MONITOR_END          (83)
+#define ACC_TYPE_IAIRZONING                 (99)
 
 #define SERIAL_STRING                       "sn"
 #define SERIAL_STRING_LEN                   (11)
@@ -471,7 +485,7 @@
 #define WIFI_WATCHDOG_POLL_PERIOD_MS        (1000)
 #define WIFI_RECONNECTION_POLL_PERIOD_MS    (5000)
 #define WIFI_PING_ERRORS                    "w"
-#define WIFI_ERROR_COUNT_REBOOT             (60)    // - MARGIN
+#define WIFI_ERROR_COUNT_REBOOT             (120)    // - MARGIN
 #define WIFI_ARP_RESEND_PERIOD              (20)
 #define WIFI_ARP_RESEND_MARGIN              (10)
 #define WIFI_ROAMING_PERIOD                 (1950)  // + MARGIN

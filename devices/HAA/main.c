@@ -52,6 +52,7 @@ main_config_t main_config = {
     .wifi_channel = 0,
     .wifi_ping_max_errors = 255,
     .wifi_ping_is_running = false,
+    .wifi_watchdog_is_running = false,
     .wifi_error_count = 0,
     .wifi_arp_count = 0,
     .wifi_roaming_count = 0,
@@ -390,6 +391,8 @@ void reboot_haa() {
 void wifi_ping_task() {
     main_config.wifi_ping_is_running = true;
     
+    vTaskDelay(pdMS_TO_TICKS(20));
+    
     struct ip_info info;
     bool ping_result = true;
     
@@ -435,7 +438,7 @@ void wifi_reconnection_task() {
                 main_config.wifi_channel = sdk_wifi_get_channel();
                 
                 homekit_mdns_announce();
-
+                
             } else {
                 main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
                 INFO("Wifi preconnected");
@@ -465,11 +468,16 @@ void wifi_reconnection_task() {
         }
     }
     
+    vTaskDelay(pdMS_TO_TICKS(500));
+    
     esp_timer_start(WIFI_WATCHDOG_TIMER);
+    
     vTaskDelete(NULL);
 }
 
-void wifi_watchdog() {
+void wifi_watchdog_task() {
+    main_config.wifi_watchdog_is_running = true;
+    
     if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
         uint8_t current_channel = sdk_wifi_get_channel();
         if (main_config.wifi_mode == 3) {
@@ -493,6 +501,7 @@ void wifi_watchdog() {
                 homekit_mdns_announce();
             } else {
                 ERROR("Creating wifi_reconnection_task");
+                FREEHEAP();
             }
         }
         
@@ -504,8 +513,9 @@ void wifi_watchdog() {
         
         if (main_config.wifi_ping_max_errors != 255 && !main_config.wifi_ping_is_running && !homekit_is_pairing()) {
             main_config.wifi_error_count = 0;
-            if (xTaskCreate(wifi_ping_task, "wifi_ping_task", PING_TASK_SIZE, NULL, PING_TASK_PRIORITY, NULL) != pdPASS) {
+            if (xTaskCreate(wifi_ping_task, "wifi_ping", PING_TASK_SIZE, NULL, PING_TASK_PRIORITY, NULL) != pdPASS) {
                 ERROR("Creating wifi_ping_task");
+                FREEHEAP();
             }
         }
         
@@ -518,6 +528,20 @@ void wifi_watchdog() {
             do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
         } else {
             ERROR("Creating wifi_reconnection_task");
+            FREEHEAP();
+        }
+    }
+    
+    main_config.wifi_watchdog_is_running = false;
+    
+    vTaskDelete(NULL);
+}
+
+void wifi_watchdog() {
+    if (!main_config.wifi_watchdog_is_running && !homekit_is_pairing()) {
+        if (xTaskCreate(wifi_watchdog_task, "wifi_watchdog", WIFI_WATCHDOG_TASK_SIZE, NULL, WIFI_WATCHDOG_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("Creating wifi_watchdog_task");
+            FREEHEAP();
         }
     }
 }
@@ -533,9 +557,11 @@ ping_input_t* ping_input_find_by_host(char* host) {
 }
 
 void ping_task() {
+    main_config.ping_is_running = true;
+    
     INFO("Ping...");
     
-    main_config.ping_is_running = true;
+    vTaskDelay(pdMS_TO_TICKS(20));
 
     void ping_input_run_callback_fn(ping_input_callback_fn_t* callbacks) {
         ping_input_callback_fn_t* ping_input_callback_fn = callbacks;
@@ -583,6 +609,7 @@ void ping_task_timer_worker() {
     if (!main_config.ping_is_running && !homekit_is_pairing()) {
         if (xTaskCreate(ping_task, "ping_task", PING_TASK_SIZE, NULL, PING_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("Creating ping_task");
+            FREEHEAP();
         }
     }
 }
@@ -696,9 +723,10 @@ void hkc_group_notify(ch_group_t* ch_group) {
 }
 
 void hkc_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
-    INFO("Setter");
+    ch_group_t* ch_group = ch_group_find(ch);
+    INFO("<%i> Generic setter", ch_group->accessory);
     ch->value = value;
-    hkc_group_notify(ch_group_find(ch));
+    hkc_group_notify(ch_group);
     
     save_states_callback();
 }
@@ -715,7 +743,7 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     if (ch_group->main_enabled) {
         if (ch->value.bool_value != value.bool_value) {
             led_blink(1);
-            INFO("Setter ON");
+            INFO("<%i> Setter ON %i", ch_group->accessory, value.bool_value);
             
             ch->value = value;
             
@@ -749,10 +777,11 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
 void hkc_on_status_setter(homekit_characteristic_t* ch0, const homekit_value_t value) {
     if (ch0->value.bool_value != value.bool_value) {
         led_blink(1);
-        INFO("Setter Status ON");
+        ch_group_t* ch_group = ch_group_find(ch0);
+        INFO("<%i> Setter Status ON %i", ch_group->accessory, value.bool_value);
         ch0->value = value;
         
-        hkc_group_notify(ch_group_find(ch0));
+        hkc_group_notify(ch_group);
     }
 }
 
@@ -775,7 +804,7 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
     if (ch_group->main_enabled) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            INFO("Setter LOCK");
+            INFO("<%i> Setter LOCK %i", ch_group->accessory, value.int_value);
             
             ch->value = value;
             
@@ -812,10 +841,11 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
 void hkc_lock_status_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     if (ch->value.int_value != value.int_value) {
         led_blink(1);
-        INFO("Setter Status LOCK");
-        ch->value = value;
-        
         ch_group_t* ch_group = ch_group_find(ch);
+        
+        INFO("<%i> Setter Status LOCK %i", ch_group->accessory, value.int_value);
+        
+        ch->value = value;
         
         if (ch == ch_group->ch1) {
             ch_group->ch0->value = value;
@@ -833,7 +863,7 @@ void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
     
     if (ch_group->child_enabled) {
         led_blink(event_type + 1);
-        INFO("Setter EVENT %i", event_type);
+        INFO("<%i> Setter EVENT %i", ch_group->accessory, event_type);
         
         homekit_characteristic_notify_safe(ch_group->ch0, HOMEKIT_UINT8(event_type));
         
@@ -845,9 +875,9 @@ void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
 
 // --- SENSORS
 void sensor_1(const uint8_t gpio, void* args, const uint8_t type) {
-    INFO("DigI Sensor GPIO %i", gpio);
-    
     ch_group_t* ch_group = args;
+    
+    INFO("<%i> DigI Sensor GPIO %i", ch_group->accessory, gpio);
 
     if (ch_group->main_enabled) {
         if ((type == TYPE_SENSOR &&
@@ -855,7 +885,7 @@ void sensor_1(const uint8_t gpio, void* args, const uint8_t type) {
             (type == TYPE_SENSOR_BOOL &&
             ch_group->ch0->value.bool_value == false)) {
             led_blink(1);
-            INFO("Sensor ON");
+            INFO("<%i> Sensor ON", ch_group->accessory);
             
             if (type == TYPE_SENSOR) {
                 ch_group->ch0->value = HOMEKIT_UINT8(1);
@@ -878,16 +908,16 @@ void sensor_1(const uint8_t gpio, void* args, const uint8_t type) {
 }
 
 void sensor_status_1(const uint8_t gpio, void* args, const uint8_t type) {
-    INFO("DigI Sensor Status GPIO %i", gpio);
-    
     ch_group_t* ch_group = args;
+    
+    INFO("<%i> DigI Sensor Status GPIO %i", ch_group->accessory, gpio);
 
     if ((type == TYPE_SENSOR &&
         ch_group->ch0->value.int_value == 0) ||
         (type == TYPE_SENSOR_BOOL &&
         ch_group->ch0->value.bool_value == false)) {
         led_blink(1);
-        INFO("Sensor Status ON");
+        INFO("<%i> Sensor Status ON", ch_group->accessory);
         
         if (type == TYPE_SENSOR) {
             ch_group->ch0->value = HOMEKIT_UINT8(1);
@@ -900,9 +930,9 @@ void sensor_status_1(const uint8_t gpio, void* args, const uint8_t type) {
 }
 
 void sensor_0(const uint8_t gpio, void* args, const uint8_t type) {
-    INFO("DigI Sensor GPIO %i", gpio);
-    
     ch_group_t* ch_group = args;
+    
+    INFO("<%i> DigI Sensor GPIO %i", ch_group->accessory, gpio);
     
     if (ch_group->main_enabled) {
         if ((type == TYPE_SENSOR &&
@@ -911,7 +941,7 @@ void sensor_0(const uint8_t gpio, void* args, const uint8_t type) {
             ch_group->ch0->value.bool_value == true) ||
             ch_group->acc_type == ACC_TYPE_DOORBELL) {
             led_blink(1);
-            INFO("Sensor OFF");
+            INFO("<%i> Sensor OFF", ch_group->accessory);
             
             if (type == TYPE_SENSOR) {
                 ch_group->ch0->value = HOMEKIT_UINT8(0);
@@ -927,9 +957,9 @@ void sensor_0(const uint8_t gpio, void* args, const uint8_t type) {
 }
 
 void sensor_status_0(const uint8_t gpio, void* args, const uint8_t type) {
-    INFO("DigI Sensor Status GPIO %i", gpio);
-    
     ch_group_t* ch_group = args;
+    
+    INFO("<%i> DigI Sensor Status GPIO %i", ch_group->accessory, gpio);
 
     if ((type == TYPE_SENSOR &&
         ch_group->ch0->value.int_value == 1) ||
@@ -937,7 +967,7 @@ void sensor_status_0(const uint8_t gpio, void* args, const uint8_t type) {
         ch_group->ch0->value.bool_value == true) ||
         ch_group->acc_type == ACC_TYPE_DOORBELL) {
         led_blink(1);
-        INFO("Sensor Status OFF");
+        INFO("<%i> Sensor Status OFF", ch_group->accessory);
         
         if (type == TYPE_SENSOR) {
             ch_group->ch0->value = HOMEKIT_UINT8(0);
@@ -978,7 +1008,7 @@ void power_monitor_task(void* args) {
     
     power = (PM_POWER_FACTOR * power) + PM_POWER_OFFSET;
     
-    INFO("PM Acc %i: V = %g, C = %g, P = %g", ch_group->accessory, voltage, current, power);
+    INFO("<%i> PM: V = %g, C = %g, P = %g", ch_group->accessory, voltage, current, power);
     
     if (PM_SENSOR_TYPE < 2.f) {
         if (current < 0) {
@@ -1006,7 +1036,7 @@ void power_monitor_task(void* args) {
             hkc_group_notify(ch_group);
         }
     } else {
-        ERROR("PM Read");
+        ERROR("<%i> PM Read", ch_group->accessory);
     }
     
     vTaskDelete(NULL);
@@ -1014,9 +1044,9 @@ void power_monitor_task(void* args) {
 
 void power_monitor_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
-        void* args = (void*) pvTimerGetTimerID(xTimer);
-        if (xTaskCreate(power_monitor_task, "power_monitor", POWER_MONITOR_TASK_SIZE, args, POWER_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
+        if (xTaskCreate(power_monitor_task, "power_monitor", POWER_MONITOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), POWER_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("Creating power_monitor_task");
+            FREEHEAP();
         }
     }
 }
@@ -1027,7 +1057,7 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
     if (ch_group->main_enabled) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            INFO("Setter VALVE");
+            INFO("<%i> Setter VALVE", ch_group->accessory);
             
             ch->value = value;
             ch_group->ch1->value = value;
@@ -1062,11 +1092,12 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
 void hkc_valve_status_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     if (ch->value.int_value != value.int_value) {
         led_blink(1);
-        INFO("Setter Status VALVE");
         
         ch->value = value;
         ch_group_t* ch_group = ch_group_find(ch);
         ch_group->ch1->value = value;
+        
+        INFO("<%i> Setter Status VALVE", ch_group->accessory);
         
         hkc_group_notify(ch_group);
     }
@@ -1085,44 +1116,238 @@ void valve_timer_worker(TimerHandle_t xTimer) {
     }
 }
 
+// --- IAIRZONING
+void set_zones_task(void* args) {
+    ch_group_t* iairzoning_group = args;
+    
+    INFO("<%i> iAirZoning evaluation", iairzoning_group->accessory);
+
+    uint8_t iairzoning_final_main_mode = IAIRZONING_LAST_ACTION;
+    
+    // Fix impossible cases
+    ch_group_t* ch_group = main_config.ch_groups;
+    while (ch_group) {
+        if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == - (int8_t) TH_IAIRZONING_CONTROLLER) {
+            switch ((uint8_t) THERMOSTAT_CURRENT_ACTION) {
+                case THERMOSTAT_ACTION_HEATER_ON:
+                case THERMOSTAT_ACTION_HEATER_IDLE:
+                case THERMOSTAT_ACTION_HEATER_FORCE_IDLE:
+                case THERMOSTAT_ACTION_HEATER_SOFT_ON:
+                    if (IAIRZONING_MAIN_MODE == THERMOSTAT_MODE_COOLER) {
+                        THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_TOTAL_OFF;
+                        hkc_setter(ch_group->ch1, HOMEKIT_UINT8(THERMOSTAT_MODE_OFF));
+                    } else {
+                        IAIRZONING_MAIN_MODE = THERMOSTAT_MODE_HEATER;
+                    }
+                    break;
+                    
+                case THERMOSTAT_ACTION_COOLER_ON:
+                case THERMOSTAT_ACTION_COOLER_IDLE:
+                case THERMOSTAT_ACTION_COOLER_FORCE_IDLE:
+                    if (IAIRZONING_MAIN_MODE == THERMOSTAT_MODE_HEATER) {
+                        THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_TOTAL_OFF;
+                        hkc_setter(ch_group->ch1, HOMEKIT_UINT8(THERMOSTAT_MODE_OFF));
+                    } else {
+                        IAIRZONING_MAIN_MODE = THERMOSTAT_MODE_COOLER;
+                    }
+                    break;
+                    
+                default:    // THERMOSTAT_OFF
+                    // Do nothing
+                    break;
+            }
+        }
+
+        ch_group = ch_group->next;
+    }
+    
+    bool thermostat_all_off = true;
+    bool thermostat_all_idle = true;
+    bool thermostat_all_soft_on = true;
+    bool thermostat_force_idle = false;
+    ch_group = main_config.ch_groups;
+    while (ch_group && thermostat_all_idle) {
+        if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == - (int8_t) TH_IAIRZONING_CONTROLLER) {
+            if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_TOTAL_OFF) {
+                thermostat_all_off = false;
+                
+                if (THERMOSTAT_CURRENT_ACTION == THERMOSTAT_ACTION_HEATER_ON ||
+                    THERMOSTAT_CURRENT_ACTION == THERMOSTAT_ACTION_COOLER_ON) {
+                    thermostat_all_idle = false;
+                    thermostat_all_soft_on = false;
+                    
+                } else if (THERMOSTAT_CURRENT_ACTION == THERMOSTAT_ACTION_HEATER_SOFT_ON ||
+                           THERMOSTAT_CURRENT_ACTION == THERMOSTAT_ACTION_COOLER_SOFT_ON) {
+                    thermostat_all_idle = false;
+
+                } else if (THERMOSTAT_CURRENT_ACTION == THERMOSTAT_ACTION_HEATER_FORCE_IDLE ||
+                           THERMOSTAT_CURRENT_ACTION == THERMOSTAT_ACTION_COOLER_FORCE_IDLE) {
+                    thermostat_force_idle = true;
+                    
+                }
+            }
+        }
+        
+        ch_group = ch_group->next;
+    }
+    
+    INFO("<%i> iAirZoning All OFF: %i, all IDLE: %i, all soft ON: %i, force IDLE: %i",
+         iairzoning_group->accessory,
+         thermostat_all_off,
+         thermostat_all_idle,
+         thermostat_all_soft_on,
+         thermostat_force_idle);
+    
+    if (thermostat_all_off) {
+        if (IAIRZONING_MAIN_MODE != THERMOSTAT_MODE_OFF) {
+            IAIRZONING_MAIN_MODE = THERMOSTAT_MODE_OFF;
+            iairzoning_final_main_mode = THERMOSTAT_ACTION_TOTAL_OFF;
+            
+            // Open all gates
+            ch_group = main_config.ch_groups;
+            while (ch_group) {
+                if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == - (int8_t) TH_IAIRZONING_CONTROLLER) {
+                    if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_OPEN) {
+                        TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_OPEN;
+                        do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
+                    }
+                }
+
+                ch_group = ch_group->next;
+            }
+        }
+        
+    } else {
+        if (thermostat_all_idle) {
+            if (IAIRZONING_MAIN_MODE == THERMOSTAT_MODE_HEATER) {
+                if (thermostat_force_idle) {
+                    iairzoning_final_main_mode = THERMOSTAT_ACTION_HEATER_FORCE_IDLE;
+                } else {
+                    iairzoning_final_main_mode = THERMOSTAT_ACTION_HEATER_IDLE;
+                }
+            } else {
+                if (thermostat_force_idle) {
+                    iairzoning_final_main_mode = THERMOSTAT_ACTION_COOLER_FORCE_IDLE;
+                } else {
+                    iairzoning_final_main_mode = THERMOSTAT_ACTION_COOLER_IDLE;
+                }
+            }
+        } else if (thermostat_all_soft_on) {
+            if (IAIRZONING_MAIN_MODE == THERMOSTAT_MODE_HEATER) {
+                iairzoning_final_main_mode = THERMOSTAT_ACTION_HEATER_SOFT_ON;
+            } else {
+                iairzoning_final_main_mode = THERMOSTAT_ACTION_COOLER_SOFT_ON;
+            }
+        } else {
+            if (IAIRZONING_MAIN_MODE == THERMOSTAT_MODE_HEATER) {
+                iairzoning_final_main_mode = THERMOSTAT_ACTION_HEATER_ON;
+            } else {
+                iairzoning_final_main_mode = THERMOSTAT_ACTION_COOLER_ON;
+            }
+        }
+        
+        ch_group = main_config.ch_groups;
+        while (ch_group) {
+            if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == - (int8_t) TH_IAIRZONING_CONTROLLER) {
+                switch ((uint8_t) THERMOSTAT_CURRENT_ACTION) {
+                    case THERMOSTAT_ACTION_HEATER_ON:
+                    case THERMOSTAT_ACTION_COOLER_ON:
+                    case THERMOSTAT_ACTION_HEATER_SOFT_ON:
+                    case THERMOSTAT_ACTION_COOLER_SOFT_ON:
+                        if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_OPEN) {
+                            TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_OPEN;
+                            do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
+                        }
+                        break;
+                        
+                    case THERMOSTAT_ACTION_HEATER_IDLE:
+                    case THERMOSTAT_ACTION_COOLER_IDLE:
+                    case THERMOSTAT_ACTION_HEATER_FORCE_IDLE:
+                    case THERMOSTAT_ACTION_COOLER_FORCE_IDLE:
+                        if (thermostat_all_idle) {
+                            if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_OPEN) {
+                                TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_OPEN;
+                                do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
+                            }
+                        } else {
+                            if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_CLOSE) {
+                                TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_CLOSE;
+                                do_actions(ch_group, THERMOSTAT_ACTION_GATE_CLOSE);
+                            }
+                        }
+                        break;
+                        
+                    default:    // THERMOSTAT_OFF
+                        if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_CLOSE) {
+                            TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_CLOSE;
+                            do_actions(ch_group, THERMOSTAT_ACTION_GATE_CLOSE);
+                        }
+                        break;
+                }
+            }
+
+            ch_group = ch_group->next;
+            
+            vTaskDelay(pdMS_TO_TICKS(20));
+        }
+    }
+    
+    if (iairzoning_final_main_mode != IAIRZONING_LAST_ACTION) {
+        INFO("<%i> iAirZoning set mode %i", iairzoning_group->accessory, iairzoning_final_main_mode);
+        IAIRZONING_LAST_ACTION = iairzoning_final_main_mode;
+        do_actions(iairzoning_group, iairzoning_final_main_mode);
+    }
+    
+    vTaskDelete(NULL);
+}
+
+void set_zones_timer_worker(TimerHandle_t xTimer) {
+    if (xTaskCreate(set_zones_task, "set_zones", SET_ZONES_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), SET_ZONES_TASK_PRIORITY, NULL) != pdPASS) {
+        ERROR("Creating set_zones_task");
+        FREEHEAP();
+    }
+}
+
 // --- THERMOSTAT
-void process_th(void* args) {
+void process_th_task(void* args) {
     ch_group_t* ch_group = args;
     
+    INFO("<%i> TH Process", ch_group->accessory);
+    
     void heating(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
-        INFO("TH Heater");
+        INFO("<%i> Heating", ch_group->accessory);
         if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband - deadband_soft_on)) {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_HEATER;
-            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_ON) {
-                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_ON;
+            if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_HEATER_ON) {
+                THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_ON;
                 do_actions(ch_group, THERMOSTAT_ACTION_HEATER_ON);
             }
             
         } else if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband)) {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_HEATER;
-            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_SOFT_ON) {
-                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_SOFT_ON;
+            if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_HEATER_SOFT_ON) {
+                THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_SOFT_ON;
                 do_actions(ch_group, THERMOSTAT_ACTION_HEATER_SOFT_ON);
             }
             
         } else if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT + deadband)) {
             if (THERMOSTAT_MODE_INT == THERMOSTAT_MODE_HEATER) {
                 if (TH_DEADBAND_SOFT_ON > 0.000f) {
-                    if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_SOFT_ON) {
-                        ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_SOFT_ON;
+                    if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_HEATER_SOFT_ON) {
+                        THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_SOFT_ON;
                         do_actions(ch_group, THERMOSTAT_ACTION_HEATER_SOFT_ON);
                     }
                 } else {
-                    if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_ON) {
-                        ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_ON;
+                    if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_HEATER_ON) {
+                        THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_ON;
                         do_actions(ch_group, THERMOSTAT_ACTION_HEATER_ON);
                     }
                 }
                 
             } else {
                 THERMOSTAT_MODE_INT = THERMOSTAT_MODE_IDLE;
-                if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_IDLE) {
-                    ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_IDLE;
+                if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_HEATER_IDLE) {
+                    THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_IDLE;
                     do_actions(ch_group, THERMOSTAT_ACTION_HEATER_IDLE);
                 }
             }
@@ -1130,17 +1355,17 @@ void process_th(void* args) {
         } else if (SENSOR_TEMPERATURE_FLOAT >= (TH_HEATER_TARGET_TEMP_FLOAT + deadband + deadband_force_idle) &&
                    TH_DEADBAND_FORCE_IDLE > 0.000f) {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_IDLE;
-            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_FORCE_IDLE) {
-                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_FORCE_IDLE;
+            if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_HEATER_FORCE_IDLE) {
+                THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_FORCE_IDLE;
                 do_actions(ch_group, THERMOSTAT_ACTION_HEATER_FORCE_IDLE);
             }
             
         } else {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_IDLE;
             if (TH_DEADBAND_FORCE_IDLE == 0.000f ||
-                ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_FORCE_IDLE) {
-                if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_HEATER_IDLE) {
-                    ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_HEATER_IDLE;
+                THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_HEATER_FORCE_IDLE) {
+                if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_HEATER_IDLE) {
+                    THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_IDLE;
                     do_actions(ch_group, THERMOSTAT_ACTION_HEATER_IDLE);
                 }
             }
@@ -1148,39 +1373,39 @@ void process_th(void* args) {
     }
     
     void cooling(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
-        INFO("TH Cooler");
+        INFO("<%i> Cooling", ch_group->accessory);
         if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband + deadband_soft_on)) {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_COOLER;
-            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_ON) {
-                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_ON;
+            if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_COOLER_ON) {
+                THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_ON;
                 do_actions(ch_group, THERMOSTAT_ACTION_COOLER_ON);
             }
             
         } else if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband)) {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_COOLER;
-            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_SOFT_ON) {
-                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_SOFT_ON;
+            if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_COOLER_SOFT_ON) {
+                THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_SOFT_ON;
                 do_actions(ch_group, THERMOSTAT_ACTION_COOLER_SOFT_ON);
             }
             
         } else if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT - deadband)) {
             if (THERMOSTAT_MODE_INT == THERMOSTAT_MODE_COOLER) {
                 if (TH_DEADBAND_SOFT_ON > 0.000f) {
-                    if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_SOFT_ON) {
-                        ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_SOFT_ON;
+                    if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_COOLER_SOFT_ON) {
+                        THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_SOFT_ON;
                         do_actions(ch_group, THERMOSTAT_ACTION_COOLER_SOFT_ON);
                     }
                 } else {
-                    if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_ON) {
-                        ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_ON;
+                    if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_COOLER_ON) {
+                        THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_ON;
                         do_actions(ch_group, THERMOSTAT_ACTION_COOLER_ON);
                     }
                 }
                 
             } else {
                 THERMOSTAT_MODE_INT = THERMOSTAT_MODE_IDLE;
-                if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_IDLE) {
-                    ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_IDLE;
+                if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_COOLER_IDLE) {
+                    THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_IDLE;
                     do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
                 }
             }
@@ -1188,8 +1413,8 @@ void process_th(void* args) {
         } else if (SENSOR_TEMPERATURE_FLOAT <= (TH_COOLER_TARGET_TEMP_FLOAT - deadband - deadband_force_idle) &&
                    TH_DEADBAND_FORCE_IDLE > 0.000f) {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_IDLE;
-            if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_FORCE_IDLE) {
-                ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_FORCE_IDLE;
+            if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_COOLER_FORCE_IDLE) {
+                THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_FORCE_IDLE;
                 do_actions(ch_group, THERMOSTAT_ACTION_COOLER_FORCE_IDLE);
             }
             
@@ -1197,8 +1422,8 @@ void process_th(void* args) {
             THERMOSTAT_MODE_INT = THERMOSTAT_MODE_IDLE;
             if (TH_DEADBAND_FORCE_IDLE == 0.000f ||
                 ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_FORCE_IDLE) {
-                if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_COOLER_IDLE) {
-                    ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_COOLER_IDLE;
+                if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_COOLER_IDLE) {
+                    THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_IDLE;
                     do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
                 }
             }
@@ -1223,10 +1448,10 @@ void process_th(void* args) {
             } else if (SENSOR_TEMPERATURE_FLOAT <= TH_HEATER_TARGET_TEMP_FLOAT) {
                 is_heater = true;
             } else if (SENSOR_TEMPERATURE_FLOAT < TH_COOLER_TARGET_TEMP_FLOAT &&
-                       (ch_group->last_wildcard_action[2] == THERMOSTAT_ACTION_HEATER_IDLE ||
-                       ch_group->last_wildcard_action[2] == THERMOSTAT_ACTION_HEATER_ON ||
-                       ch_group->last_wildcard_action[2] == THERMOSTAT_ACTION_HEATER_FORCE_IDLE ||
-                       ch_group->last_wildcard_action[2] == THERMOSTAT_ACTION_HEATER_SOFT_ON)) {
+                       (THERMOSTAT_CURRENT_ACTION == THERMOSTAT_ACTION_HEATER_IDLE ||
+                        THERMOSTAT_CURRENT_ACTION == THERMOSTAT_ACTION_HEATER_ON ||
+                        THERMOSTAT_CURRENT_ACTION == THERMOSTAT_ACTION_HEATER_FORCE_IDLE ||
+                        THERMOSTAT_CURRENT_ACTION == THERMOSTAT_ACTION_HEATER_SOFT_ON)) {
                 is_heater = true;
             }
             
@@ -1241,34 +1466,42 @@ void process_th(void* args) {
         }
         
     } else {
-        INFO("TH Off");
+        INFO("<%i> Off", ch_group->accessory);
         THERMOSTAT_MODE_INT = THERMOSTAT_MODE_OFF;
-        if (ch_group->last_wildcard_action[2] != THERMOSTAT_ACTION_TOTAL_OFF) {
-            ch_group->last_wildcard_action[2] = THERMOSTAT_ACTION_TOTAL_OFF;
+        if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_TOTAL_OFF) {
+            THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_TOTAL_OFF;
             do_actions(ch_group, THERMOSTAT_ACTION_TOTAL_OFF);
         }
     }
     
     hkc_group_notify(ch_group);
     
+    if (TH_IAIRZONING_CONTROLLER < 0) {
+        esp_timer_start(ch_group_find_by_acc(- ((int8_t) TH_IAIRZONING_CONTROLLER))->timer2);
+    }
+    
     save_states_callback();
+    
+    vTaskDelete(NULL);
 }
 
 void process_th_timer(TimerHandle_t xTimer) {
-    ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
-    process_th(ch_group);
+    if (xTaskCreate(process_th_task, "process_th", PROCESS_TH_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_TH_TASK_PRIORITY, NULL) != pdPASS) {
+        ERROR("Creating process_th_task");
+        FREEHEAP();
+    }
 }
 
 void update_th(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("Setter TH");
+        INFO("<%i> Setter TH", ch_group->accessory);
         
         ch->value = value;
         
         esp_timer_start(ch_group->timer2);
-        
+
     } else {
         hkc_group_notify(ch_group);
     }
@@ -1375,8 +1608,6 @@ void th_input_temp(const uint8_t gpio, void* args, const uint8_t type) {
 
 // --- TEMPERATURE
 void temperature_task(void* args) {
-    INFO("Read TH sensor");
-    
     float taylor_log(float x) {
         // https://stackoverflow.com/questions/46879166/finding-the-natural-logarithm-of-a-number-using-taylor-series-in-c
         if (x <= 0.0) {
@@ -1403,129 +1634,154 @@ void temperature_task(void* args) {
     
     float humidity_value, temperature_value;
     bool get_temp = false;
+    uint8_t iairzoning = 0;
     
-    if (TH_SENSOR_TYPE != 3 && TH_SENSOR_TYPE < 5) {
-        dht_sensor_type_t current_sensor_type = DHT_TYPE_DHT22; // TH_SENSOR_TYPE == 2
-        
-        if (TH_SENSOR_TYPE == 1) {
-            current_sensor_type = DHT_TYPE_DHT11;
-        } else if (TH_SENSOR_TYPE == 4) {
-            current_sensor_type = DHT_TYPE_SI7021;
-        }
-        
-        get_temp = dht_read_float_data(current_sensor_type, TH_SENSOR_GPIO, &humidity_value, &temperature_value);
-        
-    } else if (TH_SENSOR_TYPE == 3) {
-        ds18b20_addr_t ds18b20_addr[(uint8_t) TH_SENSOR_INDEX];
-        
-        if (ds18b20_scan_devices(TH_SENSOR_GPIO, ds18b20_addr, (uint8_t) TH_SENSOR_INDEX) >= (uint8_t) TH_SENSOR_INDEX) {
-            float temps[1];
-            ds18b20_addr_t ds18b20_addr_single[1];
-            ds18b20_addr_single[0] = ds18b20_addr[((uint8_t) TH_SENSOR_INDEX) - 1];
-            ds18b20_measure_and_read_multi(TH_SENSOR_GPIO, ds18b20_addr_single, 1, temps);
-            temperature_value = temps[0];
-            humidity_value = 0.0;
-            get_temp = true;
-        }
-        
-    } else {
-        float adc = sdk_system_adc_read();
-        if (TH_SENSOR_TYPE == 5) {
-            // https://github.com/arendst/Tasmota/blob/7177c7d8e003bb420d8cae39f544c2b8a9af09fe/tasmota/xsns_02_analog.ino#L201
-            temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 + taylor_log(((32000 * adc) / ((1024 * 3.3) - adc)) / 10000))) - 15;
-            
-        } else if (TH_SENSOR_TYPE == 6) {
-            temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 - taylor_log(((32000 * adc) / ((1024 * 3.3) - adc)) / 10000))) + 15;
-            
-        } else if (TH_SENSOR_TYPE == 7) {
-            temperature_value = 1024 - adc;
-            
-        } else {    // TH_SENSOR_TYPE == 8
-            temperature_value = adc;
-        }
-        
-        if (TH_SENSOR_HUM_OFFSET != 0.000000f) {
-            temperature_value *= TH_SENSOR_HUM_OFFSET;
-        }
-        
-        get_temp = true;
+    if (ch_group->acc_type == ACC_TYPE_IAIRZONING) {
+        INFO("<%i> iAirZoning sensors", ch_group->accessory);
+        iairzoning = ch_group->accessory;
+        ch_group = main_config.ch_groups;
     }
     
-    /*
-     * Only for tests. Keep comment for releases
-     */
-    //get_temp = true; temperature_value = 23;
-    
-    if (get_temp) {
-        TH_SENSOR_ERROR_COUNT = 0;
+    while (ch_group) {
+        get_temp = false;
         
-        if (ch_group->ch0) {
-            temperature_value += TH_SENSOR_TEMP_OFFSET;
-            if (temperature_value < -100) {
-                temperature_value = -100;
-            } else if (temperature_value > 200) {
-                temperature_value = 200;
-            }
+        if (iairzoning == 0 || (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning == - (int8_t) TH_IAIRZONING_CONTROLLER)) {
+            INFO("<%i> Read TH sensor", ch_group->accessory);
             
-            INFO("TEMP %g", temperature_value);
-            
-            if (temperature_value != ch_group->ch0->value.float_value) {
-                ch_group->ch0->value = HOMEKIT_FLOAT(temperature_value);
+            if (TH_SENSOR_TYPE != 3 && TH_SENSOR_TYPE < 5) {
+                dht_sensor_type_t current_sensor_type = DHT_TYPE_DHT22; // TH_SENSOR_TYPE == 2
                 
-                if (ch_group->ch5) {
-                    update_th(ch_group->ch0, ch_group->ch0->value);
+                if (TH_SENSOR_TYPE == 1) {
+                    current_sensor_type = DHT_TYPE_DHT11;
+                } else if (TH_SENSOR_TYPE == 4) {
+                    current_sensor_type = DHT_TYPE_SI7021;
                 }
                 
-                do_wildcard_actions(ch_group, 0, temperature_value);
-            }
-        }
-        
-        if (ch_group->ch1) {
-            humidity_value += TH_SENSOR_HUM_OFFSET;
-            if (humidity_value < 0) {
-                humidity_value = 0;
-            } else if (humidity_value > 100) {
-                humidity_value = 100;
-            }
-
-            INFO("HUM %g", humidity_value);
-            
-            if (humidity_value != ch_group->ch1->value.float_value) {
-                ch_group->ch1->value = HOMEKIT_FLOAT(humidity_value);
+                get_temp = dht_read_float_data(current_sensor_type, TH_SENSOR_GPIO, &humidity_value, &temperature_value);
                 
-                do_wildcard_actions(ch_group, 1, humidity_value);
+            } else if (TH_SENSOR_TYPE == 3) {
+                ds18b20_addr_t ds18b20_addr[(uint8_t) TH_SENSOR_INDEX];
+                
+                if (ds18b20_scan_devices(TH_SENSOR_GPIO, ds18b20_addr, (uint8_t) TH_SENSOR_INDEX) >= (uint8_t) TH_SENSOR_INDEX) {
+                    float temps[1];
+                    ds18b20_addr_t ds18b20_addr_single[1];
+                    ds18b20_addr_single[0] = ds18b20_addr[((uint8_t) TH_SENSOR_INDEX) - 1];
+                    ds18b20_measure_and_read_multi(TH_SENSOR_GPIO, ds18b20_addr_single, 1, temps);
+                    temperature_value = temps[0];
+                    humidity_value = 0.0;
+                    get_temp = true;
+                }
+                
+            } else {
+                float adc = sdk_system_adc_read();
+                if (TH_SENSOR_TYPE == 5) {
+                    // https://github.com/arendst/Tasmota/blob/7177c7d8e003bb420d8cae39f544c2b8a9af09fe/tasmota/xsns_02_analog.ino#L201
+                    temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 + taylor_log(((32000 * adc) / ((1024 * 3.3) - adc)) / 10000))) - 15;
+                    
+                } else if (TH_SENSOR_TYPE == 6) {
+                    temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 - taylor_log(((32000 * adc) / ((1024 * 3.3) - adc)) / 10000))) + 15;
+                    
+                } else if (TH_SENSOR_TYPE == 7) {
+                    temperature_value = 1024 - adc;
+                    
+                } else {    // TH_SENSOR_TYPE == 8
+                    temperature_value = adc;
+                }
+                
+                if (TH_SENSOR_HUM_OFFSET != 0.000000f) {
+                    temperature_value *= TH_SENSOR_HUM_OFFSET;
+                }
+                
+                get_temp = true;
             }
-        }
-        
-    } else {
-        led_blink(5);
-        ERROR("Sensor");
-        
-        TH_SENSOR_ERROR_COUNT++;
-
-        if ((uint8_t) TH_SENSOR_ERROR_COUNT > TH_SENSOR_MAX_ALLOWED_ERRORS) {
-            TH_SENSOR_ERROR_COUNT = 0;
             
-            ch_group->ch0->value.float_value = 0;
-            if (ch_group->ch1) {
-                ch_group->ch1->value.float_value = 0;
+            /*
+             * Only for tests. Keep comment for releases
+             */
+            //get_temp = true; temperature_value = 23;
+            
+            if (get_temp) {
+                TH_SENSOR_ERROR_COUNT = 0;
+                
+                if (ch_group->ch0) {
+                    temperature_value += TH_SENSOR_TEMP_OFFSET;
+                    if (temperature_value < -100) {
+                        temperature_value = -100;
+                    } else if (temperature_value > 200) {
+                        temperature_value = 200;
+                    }
+                    
+                    INFO("<%i> TEMP %g", ch_group->accessory, temperature_value);
+                    
+                    if (temperature_value != ch_group->ch0->value.float_value) {
+                        ch_group->ch0->value = HOMEKIT_FLOAT(temperature_value);
+                        
+                        if (ch_group->ch5) {
+                            update_th(ch_group->ch0, ch_group->ch0->value);
+                        }
+                        
+                        do_wildcard_actions(ch_group, 0, temperature_value);
+                    }
+                }
+                
+                if (ch_group->ch1) {
+                    humidity_value += TH_SENSOR_HUM_OFFSET;
+                    if (humidity_value < 0) {
+                        humidity_value = 0;
+                    } else if (humidity_value > 100) {
+                        humidity_value = 100;
+                    }
+
+                    INFO("<%i> HUM %g", ch_group->accessory, humidity_value);
+                    
+                    if (humidity_value != ch_group->ch1->value.float_value) {
+                        ch_group->ch1->value = HOMEKIT_FLOAT(humidity_value);
+                        
+                        do_wildcard_actions(ch_group, 1, humidity_value);
+                    }
+                }
+                
+            } else {
+                led_blink(5);
+                ERROR("<%i> Sensor", ch_group->accessory);
+                
+                TH_SENSOR_ERROR_COUNT++;
+
+                if ((uint8_t) TH_SENSOR_ERROR_COUNT > TH_SENSOR_MAX_ALLOWED_ERRORS) {
+                    TH_SENSOR_ERROR_COUNT = 0;
+                    
+                    if (ch_group->ch0) {
+                        ch_group->ch0->value.float_value = 0;
+                    }
+                    if (ch_group->ch1) {
+                        ch_group->ch1->value.float_value = 0;
+                    }
+
+                    do_actions(ch_group, THERMOSTAT_ACTION_SENSOR_ERROR);
+                }
+
             }
-
-            do_actions(ch_group, THERMOSTAT_ACTION_SENSOR_ERROR);
+            
+            hkc_group_notify(ch_group);
         }
+        
+        if (iairzoning > 0) {
+            ch_group = ch_group->next;
+            vTaskDelay(pdMS_TO_TICKS(100));
 
+        } else {
+            ch_group = NULL;
+        }
     }
-    
-    hkc_group_notify(ch_group);
     
     vTaskDelete(NULL);
 }
 
 void temperature_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
-        void* args = (void*) pvTimerGetTimerID(xTimer);
-        if (xTaskCreate(temperature_task, "temperature", TEMPERATURE_TASK_SIZE, args, TEMPERATURE_TASK_PRIORITY, NULL) != pdPASS) {
+        if (xTaskCreate(temperature_task, "temperature", TEMPERATURE_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), TEMPERATURE_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("Creating temperature_task");
+            FREEHEAP();
         }
     }
 }
@@ -1584,7 +1840,7 @@ void hsi2rgbw(uint16_t h, uint16_t s, uint16_t v, lightbulb_group_t* lightbulb_g
 
     uint32_t r, g, b;
     
-    INFO("light switch %i", i);
+    INFO("Light switch %i", i);
     switch (i) {
         case 0:
             r = rgb_max;
@@ -1798,7 +2054,7 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
         }
         
         led_blink(1);
-        INFO("Target RGBW = %i, %i, %i, %i, %i, %i", lightbulb_group->target_r, lightbulb_group->target_g, lightbulb_group->target_b, lightbulb_group->target_w, lightbulb_group->target_cw, lightbulb_group->target_ww);
+        INFO("<%i> Target RGBW-CW-WW = %i, %i, %i, %i, %i, %i", ch_group->accessory, lightbulb_group->target_r, lightbulb_group->target_g, lightbulb_group->target_b, lightbulb_group->target_w, lightbulb_group->target_cw, lightbulb_group->target_ww);
         
         if (lightbulb_group->is_pwm && !main_config.haa_pwm->setpwm_is_running) {
             main_config.haa_pwm->setpwm_is_running = true;
@@ -1845,11 +2101,11 @@ void rgbw_brightness(const uint8_t gpio, void* args, const uint8_t type) {
 }
 
 void autodimmer_task(void* args) {
-    INFO("AUTODimmer started");
-    
     homekit_characteristic_t* ch = args;
     ch_group_t* ch_group = ch_group_find(ch);
     lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_group->ch0);
+    
+    INFO("<%i> AUTODimmer started", ch_group->accessory);
     
     lightbulb_group->autodimmer = 4 * 100 / lightbulb_group->autodimmer_task_step;
     while(lightbulb_group->autodimmer > 0) {
@@ -1872,7 +2128,7 @@ void autodimmer_task(void* args) {
         }
     }
     
-    INFO("AUTODimmer stopped");
+    INFO("<%i> AUTODimmer stopped", ch_group->accessory);
     
     vTaskDelete(NULL);
 }
@@ -1897,7 +2153,7 @@ void autodimmer_call(homekit_characteristic_t* ch0, const homekit_value_t value)
             lightbulb_group->armed_autodimmer = false;
             esp_timer_stop(ch_group->timer);
             if (xTaskCreate(autodimmer_task, "autodimmer", AUTODIMMER_TASK_SIZE, (void*) ch0, AUTODIMMER_TASK_PRIORITY, NULL) != pdPASS) {
-                ERROR("Creating autodimmer_task");
+                ERROR("<%i> Creating autodimmer_task", ch_group->accessory);
             }
         } else {
             esp_timer_start(ch_group->timer);
@@ -1912,7 +2168,7 @@ void garage_door_stop(const uint8_t gpio, void* args, const uint8_t type) {
     
     if (ch_group->ch0->value.int_value == GARAGE_DOOR_OPENING || ch_group->ch0->value.int_value == GARAGE_DOOR_CLOSING) {
         led_blink(1);
-        INFO("GD stop");
+        INFO("<%i> GD stop", ch_group->accessory);
         
         ch_group->ch0->value.int_value = GARAGE_DOOR_STOPPED;
         
@@ -1928,7 +2184,7 @@ void garage_door_obstruction(const uint8_t gpio, void* args, const uint8_t type)
     ch_group_t* ch_group = args;
     
     led_blink(1);
-    INFO("GD obstr: %i", type);
+    INFO("<%i> GD obstr %i", ch_group->accessory, type);
     
     ch_group->ch2->value.bool_value = (bool) type;
     
@@ -1941,7 +2197,7 @@ void garage_door_sensor(const uint8_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
     led_blink(1);
-    INFO("GD sensor: %i", type);
+    INFO("<%i> GD sensor %i", ch_group->accessory, type);
     
     ch_group->ch0->value.int_value = type;
     
@@ -1980,7 +2236,7 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
 
         if (value.int_value != current_door_state) {
             led_blink(1);
-            INFO("Setter GD");
+            INFO("<%i> Setter GD %i", ch_group->accessory, value.int_value);
             
             ch1->value = value;
 
@@ -2078,7 +2334,7 @@ void window_cover_stop(ch_group_t* ch_group) {
             break;
     }
 
-    INFO("WC Stopped Motor %f, HomeKit %f", WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_HOMEKIT_POSITION);
+    INFO("<%i> WC Stopped Motor %f, HomeKit %f", ch_group->accessory, WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_HOMEKIT_POSITION);
     
     normalize_position(ch_group);
     
@@ -2106,7 +2362,7 @@ void window_cover_obstruction(const uint8_t gpio, void* args, const uint8_t type
     ch_group_t* ch_group = args;
     
     led_blink(1);
-    INFO("WC obstr: %i", type);
+    INFO("<%i> WC obstr %i", ch_group->accessory, type);
     
     ch_group->ch3->value.bool_value = (bool) type;
     
@@ -2131,7 +2387,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
     
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("Setter WC: Current: %i, Target: %i", WINDOW_COVER_CH_CURRENT_POSITION->value.int_value, value.int_value);
+        INFO("<%i> Setter WC: Current: %i, Target: %i", ch_group->accessory, WINDOW_COVER_CH_CURRENT_POSITION->value.int_value, value.int_value);
         
         ch1->value = value;
 
@@ -2197,7 +2453,7 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
             WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = 100;
         } else {
             if ((WINDOW_COVER_CH_CURRENT_POSITION->value.int_value >> 2) != (uint8_t) WINDOW_COVER_MOTOR_POSITION >> 2) {
-                INFO("WC Moving Motor %f, HomeKit %f", WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_HOMEKIT_POSITION);
+                INFO("<%i> WC Moving Motor %f, HomeKit %f", ch_group->accessory, WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_HOMEKIT_POSITION);
                 WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_HOMEKIT_POSITION;
                 homekit_characteristic_notify_safe(WINDOW_COVER_CH_CURRENT_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
             } else {
@@ -2253,7 +2509,7 @@ void hkc_fan_setter(homekit_characteristic_t* ch0, const homekit_value_t value) 
     if (ch_group->main_enabled) {
         if (ch0->value.bool_value != value.bool_value) {
             led_blink(1);
-            INFO("Setter FAN");
+            INFO("<%i> Setter FAN %i", ch_group->accessory, value.bool_value);
             
             ch0->value = value;
             
@@ -2286,7 +2542,7 @@ void hkc_fan_speed_setter(homekit_characteristic_t* ch1, const homekit_value_t v
     if (ch_group->main_enabled) {
         if (ch1->value.float_value != value.float_value) {
             led_blink(1);
-            INFO("Setter Speed FAN");
+            INFO("<%i> Setter Speed FAN %g", ch_group->accessory, value.float_value);
             
             ch1->value = value;
             
@@ -2302,13 +2558,15 @@ void hkc_fan_speed_setter(homekit_characteristic_t* ch1, const homekit_value_t v
 }
 
 void hkc_fan_status_setter(homekit_characteristic_t* ch0, const homekit_value_t value) {
-    if (ch0->value.int_value != value.int_value) {
+    if (ch0->value.bool_value != value.bool_value) {
         led_blink(1);
-        INFO("Setter Status FAN");
+        ch_group_t* ch_group = ch_group_find(ch0);
+        
+        INFO("<%i> Setter Status FAN %i", ch_group->accessory, value.bool_value);
         
         ch0->value = value;
         
-        hkc_group_notify(ch_group_find(ch0));
+        hkc_group_notify(ch_group);
         
         save_states_callback();
     }
@@ -2335,7 +2593,7 @@ void light_sensor_task(void* args) {
     }
     
     luxes = (luxes * LIGHT_SENSOR_FACTOR) + LIGHT_SENSOR_OFFSET;
-    INFO("Luxes: %g", luxes);
+    INFO("<%i> Luxes %g", ch_group->accessory, luxes);
     
     if (luxes < 0.0001f) {
         luxes = 0.0001f;
@@ -2354,9 +2612,9 @@ void light_sensor_task(void* args) {
 
 void light_sensor_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
-        void* args = (void*) pvTimerGetTimerID(xTimer);
-        if (xTaskCreate(light_sensor_task, "light_sensor", LIGHT_SENSOR_TASK_SIZE, args, LIGHT_SENSOR_TASK_PRIORITY, NULL) != pdPASS) {
+        if (xTaskCreate(light_sensor_task, "light_sensor", LIGHT_SENSOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), LIGHT_SENSOR_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("Creating light_sensor_task");
+            FREEHEAP();
         }
     }
 }
@@ -2367,7 +2625,7 @@ void hkc_tv_active(homekit_characteristic_t* ch0, const homekit_value_t value) {
     if (ch_group->main_enabled) {
         if (ch0->value.int_value != value.int_value) {
             led_blink(1);
-            INFO("Setter TV ON %i", value.int_value);
+            INFO("<%i> Setter TV ON %i", ch_group->accessory, value.int_value);
             
             ch0->value = value;
             
@@ -2384,11 +2642,13 @@ void hkc_tv_active(homekit_characteristic_t* ch0, const homekit_value_t value) {
 void hkc_tv_status_active(homekit_characteristic_t* ch0, const homekit_value_t value) {
     if (ch0->value.int_value != value.int_value) {
         led_blink(1);
-        INFO("Setter Status TV ON %i", value.int_value);
+        ch_group_t* ch_group = ch_group_find(ch0);
+        
+        INFO("<%i> Setter Status TV ON %i", ch_group->accessory, value.int_value);
         
         ch0->value = value;
         
-        hkc_group_notify(ch_group_find(ch0));
+        hkc_group_notify(ch_group);
         
         save_states_callback();
     }
@@ -2399,7 +2659,7 @@ void hkc_tv_active_identifier(homekit_characteristic_t* ch, const homekit_value_
     if (ch_group->main_enabled) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            INFO("Setter TV Input %i", value.int_value);
+            INFO("<%i> Setter TV Input %i", ch_group->accessory, value.int_value);
             
             ch->value = value;
 
@@ -2414,7 +2674,7 @@ void hkc_tv_key(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("Setter TV Key %i", value.int_value + 2);
+        INFO("<%i> Setter TV Key %i", ch_group->accessory, value.int_value + 2);
         
         ch->value = value;
         
@@ -2428,7 +2688,7 @@ void hkc_tv_power_mode(homekit_characteristic_t* ch, const homekit_value_t value
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("Setter TV Settings %i", value.int_value + 30);
+        INFO("<%i> Setter TV Settings %i", ch_group->accessory, value.int_value + 30);
         
         ch->value = value;
         
@@ -2442,7 +2702,7 @@ void hkc_tv_mute(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("Setter TV Mute %i", value.int_value + 20);
+        INFO("<%i> Setter TV Mute %i", ch_group->accessory, value.int_value + 20);
         
         ch->value = value;
         
@@ -2456,7 +2716,7 @@ void hkc_tv_volume(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("Setter TV Volume %i", value.int_value + 22);
+        INFO("<%i> Setter TV Volume %i", ch_group->accessory, value.int_value + 22);
         
         ch->value = value;
         
@@ -2467,14 +2727,16 @@ void hkc_tv_volume(homekit_characteristic_t* ch, const homekit_value_t value) {
 }
 
 void hkc_tv_configured_name(homekit_characteristic_t* ch1, const homekit_value_t value) {
-    INFO("Setter TV Name %s", value.string_value);
+    ch_group_t* ch_group = ch_group_find(ch1);
+    
+    INFO("<%i> Setter TV Name %s", ch_group->accessory, value.string_value);
     
     char* new_name = strdup(value.string_value);
     
     homekit_value_destruct(&ch1->value);
     ch1->value = HOMEKIT_STRING(new_name);
 
-    hkc_group_notify(ch_group_find(ch1));
+    hkc_group_notify(ch_group);
 
     save_states_callback();
 }
@@ -2485,9 +2747,9 @@ void hkc_tv_input_configured_name(homekit_characteristic_t* ch, const homekit_va
 
 // --- DIGITAL INPUTS
 void window_cover_diginput(const uint8_t gpio, void* args, const uint8_t type) {
-    INFO("WC DigI GPIO %i", gpio);
-    
     ch_group_t* ch_group = args;
+    
+    INFO("<%i> WC DigI GPIO %i", ch_group->accessory, gpio);
 
     if (ch_group->child_enabled) {
         switch (type) {
@@ -2519,7 +2781,7 @@ void window_cover_diginput(const uint8_t gpio, void* args, const uint8_t type) {
                 if ((int8_t) WINDOW_COVER_STOP_ENABLE == 1) {
                     hkc_window_cover_setter(ch_group->ch1, WINDOW_COVER_CH_CURRENT_POSITION->value);
                 } else {
-                    INFO("WC DigI Stop ignored");
+                    INFO("<%i> WC DigI Stop ignored", ch_group->accessory);
                 }
                 break;
         }
@@ -2527,10 +2789,10 @@ void window_cover_diginput(const uint8_t gpio, void* args, const uint8_t type) {
 }
 
 void diginput(const uint8_t gpio, void* args, const uint8_t type) {
-    INFO("DigI GPIO %i", gpio);
-    
     ch_group_t* ch_group = args;
     
+    INFO("<%i> DigI GPIO %i", ch_group->accessory, gpio);
+
     if (ch_group->child_enabled) {
         switch (type) {
             case TYPE_LOCK:
@@ -2601,9 +2863,9 @@ void diginput(const uint8_t gpio, void* args, const uint8_t type) {
 }
 
 void diginput_1(const uint8_t gpio, void* args, const uint8_t type) {
-    INFO("DigI GPIO %i", gpio);
-    
     ch_group_t* ch_group = args;
+    
+    INFO("<%i> DigI 1 GPIO %i", ch_group->accessory, gpio);
 
     if (ch_group->child_enabled) {
         switch (type) {
@@ -2659,9 +2921,9 @@ void diginput_1(const uint8_t gpio, void* args, const uint8_t type) {
 }
 
 void digstate_1(const uint8_t gpio, void* args, const uint8_t type) {
-    INFO("DigI GPIO %i", gpio);
-    
     ch_group_t* ch_group = args;
+    
+    INFO("<%i> DigI S1 GPIO %i", ch_group->accessory, gpio);
 
     if (ch_group->child_enabled) {
         switch (type) {
@@ -2705,9 +2967,9 @@ void digstate_1(const uint8_t gpio, void* args, const uint8_t type) {
 }
 
 void diginput_0(const uint8_t gpio, void* args, const uint8_t type) {
-    INFO("DigI GPIO %i", gpio);
-    
     ch_group_t* ch_group = args;
+    
+    INFO("<%i> DigI 0 GPIO %i", ch_group->accessory, gpio);
 
     if (ch_group->child_enabled) {
         switch (type) {
@@ -2763,9 +3025,9 @@ void diginput_0(const uint8_t gpio, void* args, const uint8_t type) {
 }
 
 void digstate_0(const uint8_t gpio, void* args, const uint8_t type) {
-    INFO("DigI GPIO %i", gpio);
-    
     ch_group_t* ch_group = args;
+    
+    INFO("<%i> DigI S0 GPIO %i", ch_group->accessory, gpio);
 
     if (ch_group->child_enabled) {
         switch (type) {
@@ -2843,12 +3105,14 @@ void hkc_autooff_setter_task(TimerHandle_t xTimer) {
 
 // --- HTTP/TCP task
 void http_get_task(void* pvParameters) {
+    vTaskDelay(pdMS_TO_TICKS(20));
+    
     action_task_t* action_task = pvParameters;
     action_http_t* action_http = action_task->ch_group->action_http;
     
     while(action_http) {
         if (action_http->action == action_task->action) {
-            INFO("HTTP/TCP Action %s:%i", action_http->host, action_http->port_n);
+            INFO("<%i> HTTP/TCP Action %s:%i", action_task->ch_group->accessory, action_http->host, action_http->port_n);
             
             const struct addrinfo hints = {
                 .ai_family = AF_UNSPEC,
@@ -3037,10 +3301,10 @@ void http_get_task(void* pvParameters) {
                         }
                         
                         if (write(s, req, action_http->len) >= 0) {
-                            INFO("Payload:\n%s", req);
+                            INFO("<%i> Payload:\n%s", action_task->ch_group->accessory, req);
                             
                         } else {
-                            ERROR("HTTP");
+                            ERROR("<%i> HTTP", action_task->ch_group->accessory);
                         }
                         
                         if (method_req) {
@@ -3051,15 +3315,15 @@ void http_get_task(void* pvParameters) {
                             free(req);
                         }
                     } else {
-                        ERROR("Connection");
+                        ERROR("<%i> Connection", action_task->ch_group->accessory);
                     }
                 } else {
-                    ERROR("Socket");
+                    ERROR("<%i> Socket", action_task->ch_group->accessory);
                 }
                 
                 close(s);
             } else {
-                ERROR("DNS");
+                ERROR("<%i> DNS", action_task->ch_group->accessory);
             }
             
             freeaddrinfo(res);
@@ -3076,6 +3340,8 @@ void http_get_task(void* pvParameters) {
 
 // --- IR Send task
 void ir_tx_task(void* pvParameters) {
+    vTaskDelay(pdMS_TO_TICKS(20));
+    
     action_task_t* action_task = pvParameters;
     action_ir_tx_t* action_ir_tx = action_task->ch_group->action_ir_tx;
     
@@ -3106,7 +3372,7 @@ void ir_tx_task(void* pvParameters) {
                 const uint16_t json_ir_code_len = strlen(action_ir_tx->prot_code);
                 ir_code_len = 3;
                 
-                printf("IR Protocol bits: ");
+                printf("<%i> IR Protocol bits: ", action_task->ch_group->accessory);
                 
                 switch (ir_action_protocol_len) {
                     case IR_ACTION_PROTOCOL_LEN_4BITS:
@@ -3171,7 +3437,7 @@ void ir_tx_task(void* pvParameters) {
                 
                 ir_code = malloc(sizeof(uint16_t) * ir_code_len);
                 
-                INFO("IR Code Len: %i\nIR Protocol: %s", ir_code_len, prot);
+                INFO("<%i> IR Code Len: %i\nIR Protocol: %s", action_task->ch_group->accessory, ir_code_len, prot);
                 
                 uint16_t bit0_mark = 0, bit0_space = 0, bit1_mark = 0, bit1_space = 0;
                 uint16_t bit2_mark = 0, bit2_space = 0, bit3_mark = 0, bit3_space = 0;
@@ -3331,7 +3597,7 @@ void ir_tx_task(void* pvParameters) {
                     }
                 }
                 
-                INFO("\nIR code: %s", action_ir_tx->prot_code);
+                INFO("\n<%i> IR code: %s", action_task->ch_group->accessory, action_ir_tx->prot_code);
                 for (uint16_t i = 0; i < ir_code_len; i++) {
                     printf("%s%5d ", i & 1 ? "-" : "+", ir_code[i]);
                     if (i % 16 == 15) {
@@ -3347,7 +3613,7 @@ void ir_tx_task(void* pvParameters) {
                 
                 ir_code = malloc(sizeof(uint16_t) * ir_code_len);
                 
-                INFO("IR packet (%i)", ir_code_len);
+                INFO("<%i> IR packet (%i)", action_task->ch_group->accessory, ir_code_len);
 
                 uint16_t index, packet;
                 for (uint16_t i = 0; i < ir_code_len; i++) {
@@ -3399,7 +3665,7 @@ void ir_tx_task(void* pvParameters) {
 
                 taskEXIT_CRITICAL();
                 
-                INFO("IR %i sent", r);
+                INFO("<%i> IR %i sent", action_task->ch_group->accessory, r);
                 
                 vTaskDelay(pdMS_TO_TICKS(action_ir_tx->pause));
             }
@@ -3418,12 +3684,14 @@ void ir_tx_task(void* pvParameters) {
 
 // --- UART action task
 void uart_action_task(void* pvParameters) {
+    vTaskDelay(pdMS_TO_TICKS(20));
+    
     action_task_t* action_task = pvParameters;
     action_uart_t* action_uart = action_task->ch_group->action_uart;
 
     while (action_uart) {
         if (action_uart->action == action_task->action) {
-            INFO("UART Action");
+            INFO("<%i> UART Action", action_task->ch_group->accessory);
             
             taskENTER_CRITICAL();
             
@@ -3458,7 +3726,7 @@ void autoswitch_timer(TimerHandle_t xTimer) {
 }
 
 void do_actions(ch_group_t* ch_group, uint8_t action) {
-    INFO("Exec Action: acc %i, action %i", ch_group->accessory, action);
+    INFO("<%i> Exec Action %i", ch_group->accessory, action);
     
     // Copy actions
     action_copy_t* action_copy = ch_group->action_copy;
@@ -3476,7 +3744,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     while(action_relay) {
         if (action_relay->action == action) {
             extended_gpio_write(action_relay->gpio, action_relay->value);
-            INFO("Digital Output: gpio %i, val %i, inch %g", action_relay->gpio, action_relay->value, action_relay->inching);
+            INFO("<%i> Digital Output: gpio %i, val %i, inch %g", ch_group->accessory, action_relay->gpio, action_relay->value, action_relay->inching);
             
             if (action_relay->inching > 0) {
                 esp_timer_start(esp_timer_create(action_relay->inching * 1000, false, (void*) action_relay, autoswitch_timer));
@@ -3492,7 +3760,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         if (action_acc_manager->action == action) {
             ch_group_t* ch_group = ch_group_find_by_acc(action_acc_manager->accessory);
             if (ch_group) {
-                INFO("Acc Manager: target %i, val %g", action_acc_manager->accessory, action_acc_manager->value);
+                INFO("<%i> Acc Manager: target %i, val %g", ch_group->accessory, action_acc_manager->accessory, action_acc_manager->value);
                 
                 if (action_acc_manager->value == -10000.f) {
                     ch_group->main_enabled = false;
@@ -3630,6 +3898,8 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 if (ch_group->ch2) {
                                     ch_group->ch2->value = ch_group->ch1->value;
                                 }
+                            } else if ((int8_t) action_acc_manager->value > 1) {
+                                hkc_on_status_setter(ch_group->ch0, HOMEKIT_BOOL((bool) (action_acc_manager->value - 2)));
                             } else {
                                 hkc_on_setter(ch_group->ch0, HOMEKIT_BOOL((bool) action_acc_manager->value));
                             }
@@ -3637,7 +3907,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                     }
                 }
             } else {
-                ERROR("Target not found");
+                ERROR("<%i> Target not found", ch_group->accessory);
             }
         }
 
@@ -3648,7 +3918,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     action_system_t* action_system = ch_group->action_system;
     while(action_system) {
         if (action_system->action == action) {
-            INFO("System Action: val %i", action_system->value);
+            INFO("<%i> System Action: val %i", ch_group->accessory, action_system->value);
             
             char* ota = NULL;
             
@@ -3680,7 +3950,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         action_task->ch_group = ch_group;
         
         if (xTaskCreate(uart_action_task, "uart_action", UART_ACTION_TASK_SIZE, action_task, UART_ACTION_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating uart_action_task");
+            ERROR("<%i> Creating uart_action_task", ch_group->accessory);
         }
     }
     
@@ -3691,7 +3961,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         action_task->ch_group = ch_group;
         
         if (xTaskCreate(http_get_task, "http_get", HTTP_GET_TASK_SIZE, action_task, HTTP_GET_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating http_get_task");
+            ERROR("<%i> Creating http_get_task", ch_group->accessory);
         }
     }
     
@@ -3702,13 +3972,13 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         action_task->ch_group = ch_group;
         
         if (xTaskCreate(ir_tx_task, "ir_tx", IR_TX_TASK_SIZE, action_task, IR_TX_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating ir_tx_task");
+            ERROR("<%i> Creating ir_tx_task", ch_group->accessory);
         }
     }
 }
 
 void do_wildcard_actions(ch_group_t* ch_group, uint8_t index, const float action_value) {
-    INFO("Wildcard %i %.2f", index, action_value);
+    INFO("<%i> Wildcard %i %.2f", ch_group->accessory, index, action_value);
     float last_value, last_diff = 1000000;
     wildcard_action_t* wildcard_action = ch_group->wildcard_action;
     wildcard_action_t* last_wildcard_action = NULL;
@@ -3730,7 +4000,7 @@ void do_wildcard_actions(ch_group_t* ch_group, uint8_t index, const float action
     if (last_wildcard_action != NULL) {
         if (ch_group->last_wildcard_action[index] != last_value || last_wildcard_action->repeat) {
             ch_group->last_wildcard_action[index] = last_value;
-            INFO("Wilcard Action %i %.2f", index, last_value);
+            INFO("<%i> Wilcard Action %i %.2f", ch_group->accessory, index, last_value);
             do_actions(ch_group, last_wildcard_action->target_action);
         }
     }
@@ -3745,29 +4015,27 @@ void identify(homekit_value_t _value) {
 // ---------
 
 void delayed_sensor_starter_task() {
-    ch_group_t* ch_group = main_config.ch_groups;
-    
-    bool is_first = true;
-    
+    uint8_t accessory = 1;
+    ch_group_t* ch_group = ch_group_find_by_acc(1);
+
     while (ch_group) {
         if ((ch_group->acc_type == ACC_TYPE_THERMOSTAT ||
             ch_group->acc_type == ACC_TYPE_TEMP_SENSOR ||
             ch_group->acc_type == ACC_TYPE_HUM_SENSOR ||
-            ch_group->acc_type == ACC_TYPE_TH_SENSOR) &&
+            ch_group->acc_type == ACC_TYPE_TH_SENSOR ||
+            ch_group->acc_type == ACC_TYPE_IAIRZONING) &&
             ch_group->timer) {
             
-            if (!is_first) {
-                vTaskDelay(pdMS_TO_TICKS(3000));
-            }
-            is_first = false;
+            vTaskDelay(pdMS_TO_TICKS(3000));
             
-            INFO("Starting delayed sensor for acc %i", ch_group->accessory);
+            INFO("<%i> Starting delayed sensor", ch_group->accessory);
             
             temperature_timer_worker(ch_group->timer);
             esp_timer_start(ch_group->timer);
         }
 
-        ch_group = ch_group->next;
+        accessory++;
+        ch_group = ch_group_find_by_acc(accessory);
     }
     
     vTaskDelete(NULL);
@@ -3808,7 +4076,7 @@ void run_homekit_server(TimerHandle_t xTimer) {
 }
 
 void run_homekit_server_delayed() {
-    esp_timer_start(esp_timer_create(100, false, NULL, run_homekit_server));
+    esp_timer_start(esp_timer_create(200, false, NULL, run_homekit_server));
 }
 
 void printf_header() {
@@ -5946,9 +6214,13 @@ void normal_mode_init() {
         ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
         ch_group->last_wildcard_action[2] = NO_LAST_WILDCARD_ACTION;
         
+        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER) != NULL) {
+            TH_IAIRZONING_CONTROLLER = -((float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER)->valuedouble);
+        }
+        
         ch_group->timer2 = esp_timer_create(TH_UPDATE_DELAY_MS, false, (void*) ch_group, process_th_timer);
         
-        if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 4) {
+        if ((TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 4) && TH_IAIRZONING_CONTROLLER > 0) {
             th_sensor_starter(ch_group);
         }
         
@@ -5991,6 +6263,28 @@ void normal_mode_init() {
         if (ch_group->homekit_enabled) {
             return accessory + 1;
         }
+        return accessory;
+    }
+    
+    uint8_t new_iairzoning(uint8_t accessory, cJSON* json_context) {
+        ch_group_t* ch_group = new_ch_group();
+        ch_group->accessory = accessory_numerator;
+        accessory_numerator++;
+        ch_group->acc_type = ACC_TYPE_IAIRZONING;
+        
+        register_actions(ch_group, json_context, 0);
+        set_accessory_ir_protocol(ch_group, json_context);
+        ch_group->num_00 = NO_LAST_WILDCARD_ACTION;
+        ch_group->num_01 = NO_LAST_WILDCARD_ACTION;
+        ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
+        ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
+        ch_group->last_wildcard_action[2] = NO_LAST_WILDCARD_ACTION;
+        
+        ch_group->timer2 = esp_timer_create(TH_UPDATE_DELAY_MS, false, (void*) ch_group, set_zones_timer_worker);
+        
+        TH_SENSOR_POLL_PERIOD = sensor_poll_period(json_context, TH_SENSOR_POLL_PERIOD_DEFAULT);
+        th_sensor_starter(ch_group);
+        
         return accessory;
     }
     
@@ -6995,13 +7289,13 @@ void normal_mode_init() {
     
     // Bridge
     if (bridge_needed) {
-        INFO("BRIDGE CREATED");
+        INFO("\n* ACCESSORY BRIDGE");
         new_accessory(0, 2, true, NULL);
         acc_count++;
     }
     
     for (uint8_t i = 0; i < total_accessories; i++) {
-        INFO("\nACCESSORY %i", accessory_numerator);
+        INFO("\n* ACCESSORY %i", accessory_numerator);
         uint8_t acc_type = ACC_TYPE_SWITCH;
         if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE) != NULL) {
             acc_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_accessories, i), ACCESSORY_TYPE)->valuedouble;
@@ -7010,52 +7304,71 @@ void normal_mode_init() {
         cJSON* json_accessory = cJSON_GetArrayItem(json_accessories, i);
         
         // Creating HomeKit Accessory
-        INFO("Type %i", acc_type);
+        printf("Type %i: ", acc_type);
         if (acc_type == ACC_TYPE_BUTTON) {
+            INFO("BUTON EVENT");
             acc_count = new_button_event(acc_count, json_accessory);
             
         } else if (acc_type == ACC_TYPE_LOCK || acc_type == ACC_TYPE_DOUBLE_LOCK) {
+            INFO("LOCK");
             acc_count = new_lock(acc_count, json_accessory, acc_type);
             
         } else if ((acc_type >= ACC_TYPE_CONTACT_SENSOR && acc_type <= ACC_TYPE_DOORBELL) ||
-                   (acc_type >= ACC_POWER_MONITOR_INIT && acc_type <= ACC_POWER_MONITOR_END)) {
+                   (acc_type >= ACC_TYPE_POWER_MONITOR_INIT && acc_type <= ACC_TYPE_POWER_MONITOR_END)) {
+            INFO("BINARY SENSOR");
             acc_count = new_sensor(acc_count, json_accessory, acc_type);
             
         } else if (acc_type == ACC_TYPE_WATER_VALVE) {
+            INFO("WATER VALVE");
             acc_count = new_water_valve(acc_count, json_accessory);
         
         } else if (acc_type == ACC_TYPE_THERMOSTAT ||
                    acc_type == ACC_TYPE_THERMOSTAT_WITH_HUM) {
+            INFO("THERMOSTAT");
             acc_count = new_thermostat(acc_count, json_accessory, acc_type);
             
         } else if (acc_type == ACC_TYPE_TEMP_SENSOR) {
+            INFO("TEMPERATURE SENSOR");
             acc_count = new_temp_sensor(acc_count, json_accessory);
             
         } else if (acc_type == ACC_TYPE_HUM_SENSOR) {
+            INFO("HUMIDITY SENSOR");
             acc_count = new_hum_sensor(acc_count, json_accessory);
             
         } else if (acc_type == ACC_TYPE_TH_SENSOR) {
+            INFO("TEMPERATURE AND HUMIDITY SENSOR");
             acc_count = new_th_sensor(acc_count, json_accessory);
             
         } else if (acc_type == ACC_TYPE_LIGHTBULB) {
+            INFO("LIGHTBULB");
             acc_count = new_lightbulb(acc_count, json_accessory);
             
         } else if (acc_type == ACC_TYPE_GARAGE_DOOR) {
+            INFO("GARAGE DOOR");
             acc_count = new_garage_door(acc_count, json_accessory);
             
         } else if (acc_type == ACC_TYPE_WINDOW_COVER) {
+            INFO("WINDOW COVER");
             acc_count = new_window_cover(acc_count, json_accessory);
 
         } else if (acc_type == ACC_TYPE_LIGHT_SENSOR) {
+            INFO("LIGHTSENSOR");
             acc_count = new_light_sensor(acc_count, json_accessory);
             
         } else if (acc_type == ACC_TYPE_TV) {
+            INFO("TV");
             acc_count = new_tv(acc_count, json_accessory);
             
         } else if (acc_type == ACC_TYPE_FAN) {
+            INFO("FAN");
             acc_count = new_fan(acc_count, json_accessory);
+            
+        } else if (acc_type == ACC_TYPE_IAIRZONING) {+
+            INFO("IAIRZONING");
+            acc_count = new_iairzoning(acc_count, json_accessory);
         
         } else {    // acc_type == ACC_TYPE_SWITCH || acc_type == ACC_TYPE_OUTLET
+            INFO("SWITCH/OUTLET");
             acc_count = new_switch(acc_count, json_accessory, acc_type);
         }
         
@@ -7148,6 +7461,7 @@ void normal_mode_init() {
                 
             case ACC_TYPE_THERMOSTAT:
             case ACC_TYPE_THERMOSTAT_WITH_HUM:
+            case ACC_TYPE_IAIRZONING:
                 config.category = homekit_accessory_category_air_conditioner;
                 break;
                 
@@ -7189,6 +7503,7 @@ void normal_mode_init() {
     
     if (xTaskCreate(delayed_sensor_starter_task, "delayed_sensor", DELAYED_SENSOR_START_TASK_SIZE, NULL, DELAYED_SENSOR_START_TASK_PRIORITY, NULL) != pdPASS) {
         ERROR("Creating delayed_sensor_starter_task");
+        FREEHEAP();
     }
 
     int8_t wifi_mode = 0;
@@ -7265,6 +7580,7 @@ void user_init(void) {
         
         if (xTaskCreate(normal_mode_init, "normal_init", INITIAL_SETUP_TASK_SIZE, NULL, INITIAL_SETUP_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("Creating normal_mode_init");
+            FREEHEAP();
         }
     }
 }
