@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.0.2"
+#define FIRMWARE_VERSION                    "4.1.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -57,6 +57,7 @@
 #define LIGHT_SENSOR_TASK_SIZE              (512)
 #define WIFI_WATCHDOG_TASK_SIZE             (512)
 #define WIFI_RECONNECTION_TASK_SIZE         (512)
+#define IR_CAPTURE_TASK_SIZE                (768)
 
 // Task Priorities
 #define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
@@ -73,6 +74,7 @@
 #define LIGHT_SENSOR_TASK_PRIORITY          (tskIDLE_PRIORITY + 1)
 #define WIFI_WATCHDOG_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
 #define WIFI_RECONNECTION_TASK_PRIORITY     (tskIDLE_PRIORITY + 1)
+#define IR_CAPTURE_TASK_PRIORITY            (tskIDLE_PRIORITY + 8)
 
 // Button Events
 #define SINGLEPRESS_EVENT                   (0)

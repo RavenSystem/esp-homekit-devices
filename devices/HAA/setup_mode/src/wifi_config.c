@@ -567,6 +567,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         form_param_t *ota_param = form_params_find(form, "ota");
         form_param_t *autoota_param = form_params_find(form, "autoota");
         form_param_t *wifimode_param = form_params_find(form, "wifimode");
+        form_param_t *irrx_param = form_params_find(form, "irrx");
         form_param_t *ssid_param = form_params_find(form, "ssid");
         form_param_t *bssid_param = form_params_find(form, "bssid");
         form_param_t *password_param = form_params_find(form, "password");
@@ -601,6 +602,13 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         if (nowifi_param) {
             sysparam_set_data(WIFI_SSID_SYSPARAM, NULL, 0, false);
             sysparam_set_data(WIFI_PASSWORD_SYSPARAM, NULL, 0, false);
+        }
+        
+        if (irrx_param && irrx_param->value) {
+            const int8_t irrx_gpio = (strtol(irrx_param->value, NULL, 10)) + 100;
+            if (irrx_gpio >= 100) {
+                sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, irrx_gpio);
+            }
         }
         
         int last_config_number = 0;

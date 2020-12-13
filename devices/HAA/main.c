@@ -6227,6 +6227,7 @@ void normal_mode_init() {
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
         th_sensor(ch_group, json_context);
+        TH_IAIRZONING_GATE_CURRENT_STATE = NO_LAST_WILDCARD_ACTION;
         ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
         ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
         ch_group->last_wildcard_action[2] = NO_LAST_WILDCARD_ACTION;
@@ -7541,6 +7542,58 @@ void normal_mode_init() {
     vTaskDelete(NULL);
 }
 
+void ir_capture_task(void* args) {
+    const int ir_capture_gpio = ((int) args) - 100;
+    INFO("\nIR Capture GPIO: %i\n", ir_capture_gpio);
+    
+    bool read, last = true;
+    uint16_t buffer[1024], i, c = 0;
+    uint32_t new_time, current_time = sdk_system_get_time();
+    
+    gpio_enable(ir_capture_gpio, GPIO_INPUT);
+    
+    for (;;) {
+        read = gpio_read(ir_capture_gpio);
+        if (read != last) {
+            new_time = sdk_system_get_time();
+            buffer[c] = new_time - current_time;
+            current_time = new_time;
+            last = read;
+            c++;
+        }
+        
+        if (sdk_system_get_time() - current_time > UINT16_MAX) {
+            current_time = sdk_system_get_time();
+            if (c > 0) {
+                
+                INFO("Packets: %i", c - 1);
+                INFO("Standard Format");
+                for (i = 1; i < c; i++) {
+                    printf("%s%5d ", i & 1 ? "+" : "-", buffer[i]);
+                    
+                    if ((i - 1) % 16 == 15) {
+                        INFO("");
+                    }
+                }
+                INFO("\n");
+                
+                INFO("HAA RAW Format");
+                for (i = 1; i < c; i++) {
+                    char haa_code[] = "00";
+                    
+                    haa_code[0] = baseRaw_dic[(buffer[i] / IR_CODE_SCALE) / IR_CODE_LEN];
+                    haa_code[1] = baseRaw_dic[(buffer[i] / IR_CODE_SCALE) % IR_CODE_LEN];
+                    
+                    printf("%s", haa_code);
+                }
+                INFO("\n");
+
+                c = 0;
+            }
+        }
+    }
+}
+
 void user_init(void) {
     sdk_wifi_station_set_auto_connect(false);
     sdk_wifi_set_opmode(STATION_MODE);
@@ -7576,8 +7629,19 @@ void user_init(void) {
     //sysparam_set_string("ota_repo", "1");             // Simulates Installation with OTA. Only for tests. Keep comment for releases
     
     sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &haa_setup);
-    
-    if (haa_setup > 0) {
+    if (haa_setup > 99) {
+        sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
+        
+        uart_set_baud(0, 115200);
+        printf_header();
+        INFO("IR CAPTURE MODE\n");
+        const int ir_capture_gpio = haa_setup;
+        if (xTaskCreate(ir_capture_task, "ir_capture", IR_CAPTURE_TASK_SIZE, (void*) ir_capture_gpio, IR_CAPTURE_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("Creating ir_capture_task");
+            FREEHEAP();
+        }
+        
+    } else if (haa_setup > 0) {
         uart_set_baud(0, 115200);
         printf_header();
         INFO("SETUP MODE");

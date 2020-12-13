@@ -22,7 +22,7 @@ input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
 .nonetworks{text-align:center;margin:1em 0;}
 .field{margin-bottom:0.5em;}
 .field.required label::before{content:"*";color:red;}
-</style></head><body><div class="container"><h1>Home Accessory Architect v4.0.2</h1>
+</style></head><body><div class="container"><h1>Home Accessory Architect v4.1.0</h1>
 <form action="/settings" method="post">
 <div class="field required conf">
 <label for="conf">JSON Config:</label>
@@ -39,6 +39,19 @@ input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
 <option value="2" <!-- part HTML_WIFI_MODE_2 -->>Passive Roaming</option>
 <option value="3" <!-- part HTML_WIFI_MODE_3 -->>Active Roaming</option>
 <option value="4" <!-- part HTML_WIFI_MODE_4 -->>Roaming at boot</option>
+</select></label>
+<label for="irrx"> IR capture GPIO <select name="irrx">
+<option value="-1" selected>-</option>
+<option value="0">0</option>
+<option value="2">2</option>
+<option value="3">3</option>
+<option value="4">4</option>
+<option value="5">5</option>
+<option value="12">12</option>
+<option value="13">13</option>
+<option value="14">14</option>
+<option value="15">15</option>
+<option value="16">16</option>
 </select></label></div>
 <input type="submit" id="join" value="Save" /><br><br>
 <input type="button" id="refresh" value="⟲ WiFi Networks" onClick="window.location.reload(true)"/>
