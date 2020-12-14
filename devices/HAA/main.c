@@ -4505,9 +4505,11 @@ void normal_mode_init() {
                         if (!get_used_gpio(action_relay->gpio)) {
                             change_uart_gpio(action_relay->gpio);
                             extended_gpio_enable(action_relay->gpio, GPIO_OUTPUT);
-                            extended_gpio_write(action_relay->gpio, action_relay->value);
                             
-                            set_used_gpio(action_relay->gpio);
+                            if (action_relay->gpio < 17) {
+                                extended_gpio_write(action_relay->gpio, action_relay->value);
+                                set_used_gpio(action_relay->gpio);
+                            }
                             
                             INFO("New GPIO Output %i set to %i", action_relay->gpio, action_relay->value);
                         }

@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.1.0"
+#define FIRMWARE_VERSION                    "4.1.1"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -484,14 +484,14 @@
 #define WIFI_STATUS_CONNECTING              (1)
 #define WIFI_STATUS_PRECONNECTED            (2)
 #define WIFI_STATUS_CONNECTED               (3)
-#define WIFI_WATCHDOG_POLL_PERIOD_MS        (1000)
+#define WIFI_WATCHDOG_POLL_PERIOD_MS        (2000)
 #define WIFI_RECONNECTION_POLL_PERIOD_MS    (5000)
 #define WIFI_PING_ERRORS                    "w"
-#define WIFI_ERROR_COUNT_REBOOT             (120)    // - MARGIN
-#define WIFI_ARP_RESEND_PERIOD              (20)
-#define WIFI_ARP_RESEND_MARGIN              (10)
-#define WIFI_ROAMING_PERIOD                 (1950)  // + MARGIN
-#define WIFI_ROAMING_MARGIN                 (300)
+#define WIFI_ERROR_COUNT_REBOOT             (120)   // - MARGIN
+#define WIFI_ARP_RESEND_PERIOD              (10)    // * WIFI_WATCHDOG_POLL_PERIOD_MS
+#define WIFI_ARP_RESEND_MARGIN              (5)     // * WIFI_WATCHDOG_POLL_PERIOD_MS
+#define WIFI_ROAMING_PERIOD                 (975)   // + MARGIN      * WIFI_WATCHDOG_POLL_PERIOD_MS
+#define WIFI_ROAMING_MARGIN                 (150)   // * WIFI_WATCHDOG_POLL_PERIOD_MS
 
 #define STATUS_LED_DURATION_ON              (30)
 #define STATUS_LED_DURATION_OFF             (120)
