@@ -391,7 +391,7 @@ void reboot_haa() {
 void wifi_ping_task() {
     main_config.wifi_ping_is_running = true;
     
-    vTaskDelay(pdMS_TO_TICKS(20));
+    vTaskDelay(pdMS_TO_TICKS(100));
     
     struct ip_info info;
     bool ping_result = true;
@@ -559,9 +559,9 @@ ping_input_t* ping_input_find_by_host(char* host) {
 void ping_task() {
     main_config.ping_is_running = true;
     
-    INFO("Ping...");
+    vTaskDelay(pdMS_TO_TICKS(100));
     
-    vTaskDelay(pdMS_TO_TICKS(20));
+    INFO("Ping...");
 
     void ping_input_run_callback_fn(ping_input_callback_fn_t* callbacks) {
         ping_input_callback_fn_t* ping_input_callback_fn = callbacks;
@@ -1211,6 +1211,8 @@ void set_zones_task(void* args) {
                         TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_OPEN;
                         do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
                     }
+                    
+                    vTaskDelay(pdMS_TO_TICKS(500));
                 }
 
                 ch_group = ch_group->next;
@@ -1284,11 +1286,11 @@ void set_zones_task(void* args) {
                         }
                         break;
                 }
+                
+                vTaskDelay(pdMS_TO_TICKS(500));
             }
 
             ch_group = ch_group->next;
-            
-            vTaskDelay(pdMS_TO_TICKS(20));
         }
     }
     
@@ -1783,9 +1785,12 @@ void temperature_task(void* args) {
         }
         
         if (iairzoning > 0) {
-            ch_group = ch_group->next;
-            vTaskDelay(pdMS_TO_TICKS(100));
+            if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning == - (int8_t) TH_IAIRZONING_CONTROLLER) {
+                vTaskDelay(pdMS_TO_TICKS(1000));
+            }
 
+            ch_group = ch_group->next;
+            
         } else {
             ch_group = NULL;
         }
@@ -3122,7 +3127,7 @@ void hkc_autooff_setter_task(TimerHandle_t xTimer) {
 
 // --- HTTP/TCP task
 void http_get_task(void* pvParameters) {
-    vTaskDelay(pdMS_TO_TICKS(20));
+    vTaskDelay(pdMS_TO_TICKS(100));
     
     action_task_t* action_task = pvParameters;
     action_http_t* action_http = action_task->ch_group->action_http;
@@ -3357,7 +3362,7 @@ void http_get_task(void* pvParameters) {
 
 // --- IR Send task
 void ir_tx_task(void* pvParameters) {
-    vTaskDelay(pdMS_TO_TICKS(20));
+    vTaskDelay(pdMS_TO_TICKS(100));
     
     action_task_t* action_task = pvParameters;
     action_ir_tx_t* action_ir_tx = action_task->ch_group->action_ir_tx;
@@ -4034,6 +4039,8 @@ void identify(homekit_value_t _value) {
 void delayed_sensor_starter_task() {
     uint8_t accessory = 1;
     ch_group_t* ch_group = ch_group_find_by_acc(1);
+    
+    bool was_iairzoning = false;
 
     while (ch_group) {
         if ((ch_group->acc_type == ACC_TYPE_THERMOSTAT ||
@@ -4044,6 +4051,15 @@ void delayed_sensor_starter_task() {
             ch_group->timer) {
             
             vTaskDelay(pdMS_TO_TICKS(3000));
+            
+            if (was_iairzoning) {
+                was_iairzoning = false;
+                vTaskDelay(pdMS_TO_TICKS(10000));
+            }
+            
+            if (ch_group->acc_type == ACC_TYPE_IAIRZONING) {
+                was_iairzoning = true;
+            }
             
             INFO("<%i> Starting delayed sensor", ch_group->accessory);
             
