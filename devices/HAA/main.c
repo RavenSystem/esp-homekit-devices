@@ -4037,38 +4037,56 @@ void identify(homekit_value_t _value) {
 // ---------
 
 void delayed_sensor_starter_task() {
-    uint8_t accessory = 1;
-    ch_group_t* ch_group = ch_group_find_by_acc(1);
+    vTaskDelay(pdMS_TO_TICKS(3000));
     
-    bool was_iairzoning = false;
-
+    ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
-        if ((ch_group->acc_type == ACC_TYPE_THERMOSTAT ||
-            ch_group->acc_type == ACC_TYPE_TEMP_SENSOR ||
-            ch_group->acc_type == ACC_TYPE_HUM_SENSOR ||
-            ch_group->acc_type == ACC_TYPE_TH_SENSOR ||
-            ch_group->acc_type == ACC_TYPE_IAIRZONING) &&
+        if ((ch_group->acc_type == ACC_TYPE_TEMP_SENSOR ||
+            ch_group->acc_type == ACC_TYPE_HUM_SENSOR) &&
             ch_group->timer) {
-            
-            vTaskDelay(pdMS_TO_TICKS(3000));
-            
-            if (was_iairzoning) {
-                was_iairzoning = false;
-                vTaskDelay(pdMS_TO_TICKS(10000));
-            }
-            
-            if (ch_group->acc_type == ACC_TYPE_IAIRZONING) {
-                was_iairzoning = true;
-            }
             
             INFO("<%i> Starting delayed sensor", ch_group->accessory);
             
             temperature_timer_worker(ch_group->timer);
             esp_timer_start(ch_group->timer);
+            
+            vTaskDelay(pdMS_TO_TICKS(3000));
         }
 
-        accessory++;
-        ch_group = ch_group_find_by_acc(accessory);
+        ch_group = ch_group->next;
+    }
+    
+    ch_group = main_config.ch_groups;
+    while (ch_group) {
+        if ((ch_group->acc_type == ACC_TYPE_THERMOSTAT ||
+            ch_group->acc_type == ACC_TYPE_TH_SENSOR) &&
+            ch_group->timer) {
+            
+            INFO("<%i> Starting delayed Thermostat", ch_group->accessory);
+            
+            temperature_timer_worker(ch_group->timer);
+            esp_timer_start(ch_group->timer);
+            
+            vTaskDelay(pdMS_TO_TICKS(4000));
+        }
+
+        ch_group = ch_group->next;
+    }
+    
+    ch_group = main_config.ch_groups;
+    while (ch_group) {
+        if (ch_group->acc_type == ACC_TYPE_IAIRZONING &&
+            ch_group->timer) {
+
+            INFO("<%i> Starting delayed iAirZoning", ch_group->accessory);
+            
+            temperature_timer_worker(ch_group->timer);
+            esp_timer_start(ch_group->timer);
+            
+            vTaskDelay(pdMS_TO_TICKS(9500));
+        }
+
+        ch_group = ch_group->next;
     }
     
     vTaskDelete(NULL);

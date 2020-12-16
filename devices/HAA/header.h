@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.1.2"
+#define FIRMWARE_VERSION                    "4.1.3"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -209,7 +209,7 @@
 #define TH_SENSOR_MAX_ALLOWED_ERRORS        (3)
 #define TH_HEATER_TARGET_TEMP_FLOAT         ch_group->ch6->value.float_value
 #define TH_COOLER_TARGET_TEMP_FLOAT         ch_group->ch7->value.float_value
-#define TH_UPDATE_DELAY_MS                  (6000)
+#define TH_UPDATE_DELAY_MS                  (5500)
 
 #define IAIRZONING_LAST_ACTION              iairzoning_group->num_00
 #define IAIRZONING_MAIN_MODE                iairzoning_group->num_01
