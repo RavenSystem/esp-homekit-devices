@@ -17,9 +17,14 @@
 #include <FreeRTOS.h>
 #include <task.h>
 #include <string.h>
-#include <lwip/sockets.h>
 #include <stdout_redirect.h>
 #include <semphr.h>
+
+#include <lwip/err.h>
+#include <lwip/sockets.h>
+#include <lwip/sys.h>
+#include <lwip/netdb.h>
+#include <lwip/dns.h>
 
 #define HEADER_LEN                          (23)
 #define UDP_LOG_LEN                         (1472)
@@ -32,11 +37,10 @@
 #define ADV_LOGGER_INIT_TASK_PRIORITY       (tskIDLE_PRIORITY + 0)
 #define ADV_LOGGER_BUFFERED_TASK_PRIORITY   (configMAX_PRIORITIES)
 
-#define DESTINATION_PORT                (28338)     // 45678 in reversed bytes
-#define SOURCE_PORT                     (40109)     // 44444 in reversed bytes
+#define ADV_LOGGER_DEFAULT_DESTINATION      "255.255.255.255:45678"
 
 typedef struct _adv_logger_data {
-    int lSocket;
+    int socket;
     
     char* udplogstring;
     char* header;
@@ -51,7 +55,7 @@ typedef struct _adv_logger_data {
     TaskHandle_t xHandle;
     SemaphoreHandle_t log_sender_semaphore;
     
-    struct sockaddr_in sLocalAddr, sDestAddr;
+    struct addrinfo* res;
 } adv_logger_data_t;
 
 static adv_logger_data_t* adv_logger_data = NULL;
@@ -144,7 +148,7 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
     }
     
     if (!adv_logger_data->is_buffered && adv_logger_data->ready_to_send && adv_logger_data->udplogstring_len > 0 && xSemaphoreTake(adv_logger_data->log_sender_semaphore, pdMS_TO_TICKS(10)) == pdTRUE) {
-        lwip_sendto(adv_logger_data->lSocket, adv_logger_data->udplogstring, adv_logger_data->udplogstring_len, 0, (struct sockaddr*) &adv_logger_data->sDestAddr, sizeof(adv_logger_data->sDestAddr));
+        lwip_sendto(adv_logger_data->socket, adv_logger_data->udplogstring, adv_logger_data->udplogstring_len, 0, adv_logger_data->res->ai_addr, adv_logger_data->res->ai_addrlen);
         free(adv_logger_data->udplogstring);
         adv_logger_data->udplogstring = NULL;
         adv_logger_data->udplogstring_len = 0;
@@ -161,28 +165,30 @@ static void adv_logger_buffered_task() {
     for (;;) {
         i++;
         
-        if ((i == 5 && adv_logger_data->udplogstring_len > 0) || adv_logger_data->udplogstring_len > (UDP_LOG_LEN >> 1)) {
+        if ((i == 8 && adv_logger_data->udplogstring_len > 0) || adv_logger_data->udplogstring_len > (UDP_LOG_LEN >> 1)) {
             adv_logger_data->ready_to_send = false;
-            lwip_sendto(adv_logger_data->lSocket, adv_logger_data->udplogstring, adv_logger_data->udplogstring_len, 0, (struct sockaddr*) &adv_logger_data->sDestAddr, sizeof(adv_logger_data->sDestAddr));
+            lwip_sendto(adv_logger_data->socket, adv_logger_data->udplogstring, adv_logger_data->udplogstring_len, 0, adv_logger_data->res->ai_addr, adv_logger_data->res->ai_addrlen);
             adv_logger_data->udplogstring_len = 0;
             adv_logger_data->ready_to_send = true;
             
             i = 0;
         }
 
-        if (i == 5) {
+        if (i == 8) {
             i = 0;
         }
         
-        vTaskDelay(pdMS_TO_TICKS(20));
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
-static void adv_logger_init_task() {
+static void adv_logger_init_task(void* args) {
+    char* destination = (char*) args;
+    
     struct ip_info info;
 
     while (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
-        vTaskDelay(200 / portTICK_PERIOD_MS);
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
     
     if (sdk_wifi_get_ip_info(STATION_IF, &info)) {
@@ -190,22 +196,26 @@ static void adv_logger_init_task() {
         sdk_wifi_get_macaddr(STATION_IF, macaddr);
         snprintf(adv_logger_data->header, HEADER_LEN, IPSTR"-%02X%02X%02X", IP2STR(&info.ip), macaddr[3], macaddr[4], macaddr[5]);
         
-        adv_logger_data->lSocket = lwip_socket(AF_INET, SOCK_DGRAM, 0);
-        memset((char*) &adv_logger_data->sLocalAddr, 0, sizeof(adv_logger_data->sLocalAddr));
-        memset((char*) &adv_logger_data->sDestAddr, 0, sizeof(adv_logger_data->sDestAddr));
+        const struct addrinfo hints = {
+            .ai_family = AF_UNSPEC,
+            .ai_socktype = SOCK_DGRAM,
+        };
         
-        // Source
-        adv_logger_data->sLocalAddr.sin_family = AF_INET;
-        adv_logger_data->sLocalAddr.sin_len = sizeof(adv_logger_data->sLocalAddr);
-        adv_logger_data->sLocalAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-        adv_logger_data->sLocalAddr.sin_port = SOURCE_PORT;
-        lwip_bind(adv_logger_data->lSocket, (struct sockaddr*) &adv_logger_data->sLocalAddr, sizeof(adv_logger_data->sLocalAddr));
+        char* dest_port = strchr(destination, ':');
+        dest_port[0] = 0;
+        dest_port += 1;
+
+        while(getaddrinfo(destination, dest_port, &hints, &adv_logger_data->res) != 0) {
+            vTaskDelay(pdMS_TO_TICKS(200));
+        }
         
-        // Destination
-        adv_logger_data->sDestAddr.sin_family = AF_INET;
-        adv_logger_data->sDestAddr.sin_len = sizeof(adv_logger_data->sDestAddr);
-        adv_logger_data->sDestAddr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
-        adv_logger_data->sDestAddr.sin_port = DESTINATION_PORT;
+        free(destination);
+        free(dest_port);
+        
+        while (adv_logger_data->socket < 0) {
+            adv_logger_data->socket = socket(adv_logger_data->res->ai_family, adv_logger_data->res->ai_socktype, 0);
+            vTaskDelay(pdMS_TO_TICKS(200));
+        }
         
         if (adv_logger_data->is_buffered) {
             adv_logger_data->udplogstring = malloc(UDP_LOG_LEN);
@@ -255,7 +265,7 @@ int adv_logger_remove() {
     return -1;
 }
 
-void adv_logger_init(const uint8_t log_type) {
+void adv_logger_init(const uint8_t log_type, char* dest_addr) {
     adv_logger_remove();
     
     adv_logger_original_write_function = get_write_stdout();
@@ -279,12 +289,22 @@ void adv_logger_init(const uint8_t log_type) {
         }
 
         if (log_type > ADV_LOGGER_UART1) {
+            adv_logger_data->socket = -1;
             adv_logger_data->header = malloc(HEADER_LEN);
             if (!adv_logger_data->is_buffered) {
                 adv_logger_data->log_sender_semaphore = xSemaphoreCreateMutex();
             }
             
-            xTaskCreate(adv_logger_init_task, "adv_logger_init", ADV_LOGGER_INIT_TASK_SIZE, NULL, ADV_LOGGER_INIT_TASK_PRIORITY, NULL);
+            char* destination;
+            
+            if (dest_addr != NULL) {
+                destination = strdup(dest_addr);
+            } else {
+                destination = malloc(strlen(ADV_LOGGER_DEFAULT_DESTINATION));
+                snprintf(destination, strlen(ADV_LOGGER_DEFAULT_DESTINATION), ADV_LOGGER_DEFAULT_DESTINATION);
+            }
+            
+            xTaskCreate(adv_logger_init_task, "adv_logger_init", ADV_LOGGER_INIT_TASK_SIZE, (void*) destination, ADV_LOGGER_INIT_TASK_PRIORITY, NULL);
         }
         
         set_write_stdout(adv_logger_write);

@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.1.3"
+#define FIRMWARE_VERSION                    "4.2.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -93,6 +93,7 @@
 #define MDNS_TTL_DEFAULT                    (4500)
 #define CUSTOM_HOSTNAME                     "n"
 #define LOG_OUTPUT                          "o"
+#define LOG_OUTPUT_TARGET                   "ot"
 #define ALLOWED_SETUP_MODE_TIME             "m"
 #define STATUS_LED_GPIO                     "l"
 #define INVERTED                            "i"

@@ -32,7 +32,7 @@ extern "C" {
 #define ADV_LOGGER_UART1_UDP_BUFFERED   (8)
 
 
-void adv_logger_init(const uint8_t log_type);
+void adv_logger_init(const uint8_t log_type, char* dest_addr);
 
 int adv_logger_remove();
 
