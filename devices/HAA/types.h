@@ -55,7 +55,7 @@ typedef struct _action_system {
     struct _action_system* next;
 } action_system_t;
 
-typedef struct _action_http {
+typedef struct _action_network {
     uint8_t action;
     
     uint8_t method_n;
@@ -66,9 +66,10 @@ typedef struct _action_http {
     char* host;
     char* url;
     char* content;
+    uint8_t* raw;
     
-    struct _action_http* next;
-} action_http_t;
+    struct _action_network* next;
+} action_network_t;
 
 typedef struct _action_ir_tx {
     uint8_t action;
@@ -91,7 +92,7 @@ typedef struct _action_uart {
     uint16_t len;
     
     uint16_t pause;
-    char* command;
+    uint8_t* command;
     
     struct _action_uart* next;
 } action_uart_t;
@@ -144,7 +145,7 @@ typedef struct _ch_group {
     action_relay_t* action_relay;
     action_acc_manager_t* action_acc_manager;
     action_system_t* action_system;
-    action_http_t* action_http;
+    action_network_t* action_network;
     action_ir_tx_t* action_ir_tx;
     action_uart_t* action_uart;
     

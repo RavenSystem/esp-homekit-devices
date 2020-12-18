@@ -300,8 +300,8 @@ void adv_logger_init(const uint8_t log_type, char* dest_addr) {
             if (dest_addr != NULL) {
                 destination = strdup(dest_addr);
             } else {
-                destination = malloc(strlen(ADV_LOGGER_DEFAULT_DESTINATION));
-                snprintf(destination, strlen(ADV_LOGGER_DEFAULT_DESTINATION), ADV_LOGGER_DEFAULT_DESTINATION);
+                destination = malloc(strlen(ADV_LOGGER_DEFAULT_DESTINATION) + 1);
+                snprintf(destination, strlen(ADV_LOGGER_DEFAULT_DESTINATION) + 1, ADV_LOGGER_DEFAULT_DESTINATION);
             }
             
             xTaskCreate(adv_logger_init_task, "adv_logger_init", ADV_LOGGER_INIT_TASK_SIZE, (void*) destination, ADV_LOGGER_INIT_TASK_PRIORITY, NULL);

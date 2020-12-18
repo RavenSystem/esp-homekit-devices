@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.2.0"
+#define FIRMWARE_VERSION                    "4.3.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -48,7 +48,7 @@
 #define AUTODIMMER_TASK_SIZE                (configMINIMAL_STACK_SIZE)
 #define IR_TX_TASK_SIZE                     (512)
 #define UART_ACTION_TASK_SIZE               (512)
-#define HTTP_GET_TASK_SIZE                  (512)
+#define NETWORK_ACTION_TASK_SIZE            (512)
 #define DELAYED_SENSOR_START_TASK_SIZE      (512)
 #define TEMPERATURE_TASK_SIZE               (512)
 #define PROCESS_TH_TASK_SIZE                (512)
@@ -65,7 +65,7 @@
 #define AUTODIMMER_TASK_PRIORITY            (tskIDLE_PRIORITY + 1)
 #define IR_TX_TASK_PRIORITY                 (tskIDLE_PRIORITY + 1)
 #define UART_ACTION_TASK_PRIORITY           (tskIDLE_PRIORITY + 1)
-#define HTTP_GET_TASK_PRIORITY              (tskIDLE_PRIORITY + 1)
+#define NETWORK_ACTION_TASK_PRIORITY        (tskIDLE_PRIORITY + 1)
 #define DELAYED_SENSOR_START_TASK_PRIORITY  (tskIDLE_PRIORITY + 1)
 #define TEMPERATURE_TASK_PRIORITY           (tskIDLE_PRIORITY + 1)
 #define PROCESS_TH_TASK_PRIORITY            (tskIDLE_PRIORITY + 1)
@@ -380,7 +380,7 @@
 #define COPY_ACTIONS                        "a"
 #define DIGITAL_OUTPUTS_ARRAY               "r"
 #define SYSTEM_ACTIONS_ARRAY                "s"
-#define HTTP_ACTIONS_ARRAY                  "h"
+#define NETWORK_ACTIONS_ARRAY                  "h"
 #define IR_ACTIONS_ARRAY                    "i"
 #define IR_ACTION_PROTOCOL                  "p"
 #define IR_ACTION_PROTOCOL_LEN_2BITS        (14)
@@ -411,12 +411,12 @@
 #define IR_ACTION_REPEATS                   "r"
 #define IR_ACTION_REPEATS_PAUSE             "d"
 #define SYSTEM_ACTION                       "a"
-#define HTTP_ACTION_HOST                    "h"
-#define HTTP_ACTION_PORT                    "p"
-#define HTTP_ACTION_URL                     "u"
-#define HTTP_ACTION_METHOD                  "m"
-#define HTTP_ACTION_CONTENT                 "c"
-#define HTTP_ACTION_WILDCARD_VALUE          "#HAA@"
+#define NETWORK_ACTION_HOST                 "h"
+#define NETWORK_ACTION_PORT                 "p"
+#define NETWORK_ACTION_URL                  "u"
+#define NETWORK_ACTION_METHOD               "m"
+#define NETWORK_ACTION_CONTENT              "c"
+#define NETWORK_ACTION_WILDCARD_VALUE       "#HAA@"
 #define SYSTEM_ACTION_REBOOT                (0)
 #define SYSTEM_ACTION_SETUP_MODE            (1)
 #define SYSTEM_ACTION_OTA_UPDATE            (2)

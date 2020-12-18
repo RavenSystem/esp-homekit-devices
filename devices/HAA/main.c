@@ -251,10 +251,10 @@ void change_uart_gpio(const uint16_t gpio) {
     }
 }
 
-uint16_t process_hexstr(const char* string, char** output_hex_string) {
+uint16_t process_hexstr(const char* string, uint8_t** output_hex_string) {
     const uint16_t len = strlen(string) >> 1;
-    char* hex_string = malloc(len + 1);
-    memset(hex_string, 0, len + 1);
+    uint8_t* hex_string = malloc(len);
+    memset(hex_string, 0, len);
     
     char buffer[3];
     buffer[2] = 0;
@@ -3127,31 +3127,31 @@ void hkc_autooff_setter_task(TimerHandle_t xTimer) {
     esp_timer_delete(xTimer);
 }
 
-// --- TCP/UDP task
-void http_get_task(void* pvParameters) {
+// --- Network Action task
+void net_action_task(void* pvParameters) {
     vTaskDelay(pdMS_TO_TICKS(50));
     
     action_task_t* action_task = pvParameters;
-    action_http_t* action_http = action_task->ch_group->action_http;
+    action_network_t* action_network = action_task->ch_group->action_network;
     
-    while(action_http) {
-        if (action_http->action == action_task->action) {
+    while (action_network) {
+        if (action_network->action == action_task->action) {
             for (uint8_t tries = 1; tries < 5; tries++) {
-                INFO("<%i> TCP/UDP Action %s:%i (%i)", action_task->ch_group->accessory, action_http->host, action_http->port_n, tries);
+                INFO("<%i> Network Action %s:%i (attempt %i)", action_task->ch_group->accessory, action_network->host, action_network->port_n, tries);
                 
                 struct addrinfo* res;
                 
                 char port[6];
                 memset(port, 0, 6);
-                itoa(action_http->port_n, port, 10);
+                itoa(action_network->port_n, port, 10);
                 
-                if (action_http->method_n < 10) {
+                if (action_network->method_n < 10) {
                     const struct addrinfo hints = {
                         .ai_family = AF_UNSPEC,
                         .ai_socktype = SOCK_STREAM,
                     };
                     
-                    int getaddr_result = getaddrinfo(action_http->host, port, &hints, &res);
+                    int getaddr_result = getaddrinfo(action_network->host, port, &hints, &res);
                     if (getaddr_result == 0) {
                         int s = socket(res->ai_family, res->ai_socktype, 0);
                         if (s >= 0) {
@@ -3162,14 +3162,16 @@ void http_get_task(void* pvParameters) {
                                 
                                 char* method = "GET";
                                 char* method_req = NULL;
-                                if (action_http->method_n == 1 || action_http->method_n == 2) {
-                                    content_len_n = strlen(action_http->content);
+                                if (action_network->method_n == 1 ||
+                                    action_network->method_n == 2 ||
+                                    action_network->method_n == 3) {
+                                    content_len_n = strlen(action_network->content);
                                     
-                                    char* content_search = action_http->content;
+                                    char* content_search = action_network->content;
                                     str_ch_value_t* str_ch_value_last = NULL;
                                     
                                     do {
-                                        content_search = strstr(content_search, HTTP_ACTION_WILDCARD_VALUE);
+                                        content_search = strstr(content_search, NETWORK_ACTION_WILDCARD_VALUE);
                                         if (content_search) {
                                             char buffer[10];
                                             buffer[2] = 0;
@@ -3273,7 +3275,7 @@ void http_get_task(void* pvParameters) {
                                     method_req = malloc(48);
                                     snprintf(method_req, 48, "Content-type: text/html\r\nContent-length: %s\r\n", content_len);
                                     
-                                    if (action_http->method_n == 1) {
+                                    if (action_network->method_n == 1) {
                                         method = "PUT";
                                     } else {
                                         method = "POST";
@@ -3283,26 +3285,26 @@ void http_get_task(void* pvParameters) {
                                 
                                 char* req = NULL;
                                 
-                                if (action_http->method_n == 3) {
-                                    req = action_http->content;
+                                if (action_network->method_n == 3) {
+                                    req = action_network->content;
                                     
-                                } else {
-                                    action_http->len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(action_http->host) +  strlen(action_http->url) + content_len_n;
+                                } else if (action_network->method_n != 4) {
+                                    action_network->len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(action_network->host) +  strlen(action_network->url) + content_len_n;
                                     
-                                    req = malloc(action_http->len);
-                                    snprintf(req, action_http->len, "%s /%s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HAA/"FIRMWARE_VERSION" esp8266\r\nConnection: close\r\n%s\r\n",
+                                    req = malloc(action_network->len);
+                                    snprintf(req, action_network->len, "%s /%s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HAA/"FIRMWARE_VERSION" esp8266\r\nConnection: close\r\n%s\r\n",
                                              method,
-                                             action_http->url,
-                                             action_http->host,
+                                             action_network->url,
+                                             action_network->host,
                                              (method_req != NULL) ? method_req : "");
 
                                     if (str_ch_value_first) {
                                         str_ch_value_t* str_ch_value = str_ch_value_first;
-                                        char* content_search = action_http->content;
-                                        char* last_pos = action_http->content;
+                                        char* content_search = action_network->content;
+                                        char* last_pos = action_network->content;
                                         
                                         do {
-                                            content_search = strstr(last_pos, HTTP_ACTION_WILDCARD_VALUE);
+                                            content_search = strstr(last_pos, NETWORK_ACTION_WILDCARD_VALUE);
                                             
                                             if (content_search - last_pos > 0) {
                                                 strncat(req, last_pos, content_search - last_pos);
@@ -3324,14 +3326,24 @@ void http_get_task(void* pvParameters) {
                                         strcat(req, last_pos);
                                         
                                     } else {
-                                        strcat(req, action_http->content);
+                                        strcat(req, action_network->content);
                                     }
                                     
                                 }
                                 
-                                int result = write(s, req, action_http->len);
+                                int result = -1;
+                                if (action_network->method_n == 4) {
+                                    result = write(s, action_network->raw, action_network->len);
+                                } else {
+                                    result = write(s, req, action_network->len);
+                                }
+
                                 if (result >= 0) {
-                                    INFO("<%i> Payload:\n%s", action_task->ch_group->accessory, req);
+                                    if (action_network->method_n == 4) {
+                                        INFO("<%i> Payload RAW", action_task->ch_group->accessory);
+                                    } else {
+                                        INFO("<%i> Payload:\n%s", action_task->ch_group->accessory, req);
+                                    }
                                     break;
                                     
                                 } else {
@@ -3342,7 +3354,7 @@ void http_get_task(void* pvParameters) {
                                     free(method_req);
                                 }
                                 
-                                if (req && action_http->method_n != 3) {
+                                if (req && action_network->method_n != 3) {
                                     free(req);
                                 }
                             } else {
@@ -3363,18 +3375,46 @@ void http_get_task(void* pvParameters) {
                         .ai_socktype = SOCK_DGRAM,
                     };
                     
-                    int getaddr_result = getaddrinfo(action_http->host, port, &hints, &res);
+                    int getaddr_result = getaddrinfo(action_network->host, port, &hints, &res);
                     if (getaddr_result == 0) {
                         int s = socket(res->ai_family, res->ai_socktype, 0);
                         if (s >= 0) {
-                            if (lwip_sendto(s, action_http->content, action_http->len, 0, res->ai_addr, res->ai_addrlen) > 0) {
-                                INFO("<%i> Payload:\n%s", action_task->ch_group->accessory, action_http->content);
+                            uint8_t* wol = NULL;
+                            if (action_network->method_n == 12) {
+                                wol = malloc(102);
+                                for (uint8_t i = 0; i < 6; i++) {
+                                    wol[i] = 255;
+                                }
+                                
+                                for (uint8_t i = 6; i < 102; i += 6) {
+                                    for (uint8_t j = 0; j < 6; j++) {
+                                        wol[i + j] = action_network->raw[j];
+                                    }
+                                }
+                            }
+                            
+                            int result = -1;
+                            if (action_network->method_n == 13) {
+                                result = lwip_sendto(s, action_network->content, action_network->len, 0, res->ai_addr, res->ai_addrlen);
+                            } else {
+                                result = lwip_sendto(s, wol ? wol : action_network->raw, wol ? 102 : action_network->len, 0, res->ai_addr, res->ai_addrlen);
+                            }
+                            
+                            if (result > 0) {
+                                if (action_network->method_n == 13) {
+                                    INFO("<%i> Payload:\n%s", action_task->ch_group->accessory, action_network->content);
+                                } else {
+                                    INFO("<%i> Payload RAW", action_task->ch_group->accessory);
+                                }
                                 break;
                                 
                             } else {
                                 ERROR("<%i> UDP", action_task->ch_group->accessory);
                             }
                             
+                            if (wol) {
+                                free(wol);
+                            }
                         } else {
                             ERROR("<%i> Socket (%i)", action_task->ch_group->accessory, s);
                         }
@@ -3392,7 +3432,7 @@ void http_get_task(void* pvParameters) {
             }
         }
         
-        action_http = action_http->next;
+        action_network = action_network->next;
     }
     
     free(pvParameters);
@@ -4015,14 +4055,14 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         }
     }
     
-    // HTTP GET actions
-    if (ch_group->action_http && sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+    // Network actions
+    if (ch_group->action_network && sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         action_task_t* action_task = new_action_task();
         action_task->action = action;
         action_task->ch_group = ch_group;
         
-        if (xTaskCreate(http_get_task, "http_get", HTTP_GET_TASK_SIZE, action_task, HTTP_GET_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("<%i> Creating http_get_task", ch_group->accessory);
+        if (xTaskCreate(net_action_task, "net_action", NETWORK_ACTION_TASK_SIZE, action_task, NETWORK_ACTION_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("<%i> Creating net_action_task", ch_group->accessory);
         }
     }
     
@@ -4702,61 +4742,62 @@ void normal_mode_init() {
     }
     
     // HTTP/TCP Actions
-    inline void new_action_http(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
-        action_http_t* last_action = ch_group->action_http;
+    inline void new_action_network(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+        action_network_t* last_action = ch_group->action_network;
         
         void register_action(cJSON* json_accessory, uint8_t new_int_action) {
             char action[3];
             itoa(new_int_action, action, 10);
             if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
-                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), HTTP_ACTIONS_ARRAY) != NULL) {
-                    cJSON* json_action_https = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), HTTP_ACTIONS_ARRAY);
-                    for (int16_t i = cJSON_GetArraySize(json_action_https) - 1; i >= 0; i--) {
-                        action_http_t* action_http = malloc(sizeof(action_http_t));
-                        memset(action_http, 0, sizeof(*action_http));
+                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), NETWORK_ACTIONS_ARRAY) != NULL) {
+                    cJSON* json_action_networks = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), NETWORK_ACTIONS_ARRAY);
+                    for (int16_t i = cJSON_GetArraySize(json_action_networks) - 1; i >= 0; i--) {
+                        action_network_t* action_network = malloc(sizeof(action_network_t));
+                        memset(action_network, 0, sizeof(*action_network));
                         
-                        cJSON* json_action_http = cJSON_GetArrayItem(json_action_https, i);
+                        cJSON* json_action_network = cJSON_GetArrayItem(json_action_networks, i);
                         
-                        action_http->action = new_int_action;
+                        action_network->action = new_int_action;
                         
-                        action_http->host = strdup(cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_HOST)->valuestring);
+                        action_network->host = strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_HOST)->valuestring);
                         
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_URL) != NULL) {
-                            action_http->url = strdup(cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_URL)->valuestring);
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_URL) != NULL) {
+                            action_network->url = strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_URL)->valuestring);
                         } else {
-                            action_http->url = strdup("");
+                            action_network->url = strdup("");
                         }
                         
-                        action_http->port_n = 80;
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_PORT) != NULL) {
-                            action_http->port_n = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_PORT)->valuedouble;
+                        action_network->port_n = 80;
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_PORT) != NULL) {
+                            action_network->port_n = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_PORT)->valuedouble;
                         }
                         
-                        action_http->method_n = 0;
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_METHOD) != NULL) {
-                            action_http->method_n = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_METHOD)->valuedouble;
+                        action_network->method_n = 0;
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_METHOD) != NULL) {
+                            action_network->method_n = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_METHOD)->valuedouble;
                         }
                         
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_CONTENT) != NULL) {
-                            action_http->content = strdup(cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_CONTENT)->valuestring);
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT) != NULL) {
+                            action_network->content = strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT)->valuestring);
                         } else {
-                            action_http->content = strdup("");
+                            action_network->content = strdup("");
                         }
                         
-                        INFO("New HTTP/TCP Action %i: host %s:%i, method %i, content %s", new_int_action, action_http->url, action_http->port_n, action_http->method_n, action_http->content);
+                        INFO("New Network Action %i: host %s:%i, method %i, content %s", new_int_action, action_network->url, action_network->port_n, action_network->method_n, action_network->content);
                         
-                        if (action_http->method_n == 3 ||
-                            action_http->method_n == 13) {
-                            action_http->len = strlen(action_http->content);
-                        } else if (action_http->method_n == 4 ||
-                                   action_http->method_n == 14) {
-                            action_http->method_n -= 1;
-                            free(action_http->content);
-                            action_http->len = process_hexstr(cJSON_GetObjectItemCaseSensitive(json_action_http, HTTP_ACTION_CONTENT)->valuestring, &action_http->content);
+                        if (action_network->method_n == 3 ||
+                            action_network->method_n == 13) {
+                            action_network->len = strlen(action_network->content);
+                        } else if (action_network->method_n == 4 ||
+                                   action_network->method_n == 12 ||
+                                   action_network->method_n == 14) {
+                            
+                            free(action_network->content);
+                            action_network->len = process_hexstr(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT)->valuestring, &action_network->raw);
                         }
                         
-                        action_http->next = last_action;
-                        last_action = action_http;
+                        action_network->next = last_action;
+                        last_action = action_network;
                     }
                 }
             }
@@ -4770,7 +4811,7 @@ void normal_mode_init() {
             register_action(json_context, fixed_action);
         }
         
-        ch_group->action_http = last_action;
+        ch_group->action_network = last_action;
     }
     
     // IR TX Actions
@@ -4895,7 +4936,7 @@ void normal_mode_init() {
         new_action_relay(ch_group, json_accessory, fixed_action);
         new_action_acc_manager(ch_group, json_accessory, fixed_action);
         new_action_system(ch_group, json_accessory, fixed_action);
-        new_action_http(ch_group, json_accessory, fixed_action);
+        new_action_network(ch_group, json_accessory, fixed_action);
         new_action_ir_tx(ch_group, json_accessory, fixed_action);
         new_action_uart(ch_group, json_accessory, fixed_action);
     }
