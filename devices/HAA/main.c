@@ -3129,313 +3129,334 @@ void hkc_autooff_setter_task(TimerHandle_t xTimer) {
 
 // --- Network Action task
 void net_action_task(void* pvParameters) {
-    vTaskDelay(pdMS_TO_TICKS(50));
-    
     action_task_t* action_task = pvParameters;
     action_network_t* action_network = action_task->ch_group->action_network;
     
     while (action_network) {
         if (action_network->action == action_task->action) {
-            for (uint8_t tries = 1; tries < 5; tries++) {
-                INFO("<%i> Network Action %s:%i (attempt %i)", action_task->ch_group->accessory, action_network->host, action_network->port_n, tries);
+            vTaskDelay(pdMS_TO_TICKS(20));
+            
+            INFO("<%i> Network Action %s:%i", action_task->ch_group->accessory, action_network->host, action_network->port_n);
+            
+            struct addrinfo* res;
+            
+            char port[6];
+            memset(port, 0, 6);
+            itoa(action_network->port_n, port, 10);
+            
+            if (action_network->method_n < 10) {
+                const struct addrinfo hints = {
+                    .ai_family = AF_UNSPEC,
+                    .ai_socktype = SOCK_STREAM,
+                };
                 
-                struct addrinfo* res;
-                
-                char port[6];
-                memset(port, 0, 6);
-                itoa(action_network->port_n, port, 10);
-                
-                if (action_network->method_n < 10) {
-                    const struct addrinfo hints = {
-                        .ai_family = AF_UNSPEC,
-                        .ai_socktype = SOCK_STREAM,
-                    };
-                    
-                    int getaddr_result = getaddrinfo(action_network->host, port, &hints, &res);
-                    if (getaddr_result == 0) {
-                        int s = socket(res->ai_family, res->ai_socktype, 0);
-                        if (s >= 0) {
-                            int connect_result = connect(s, res->ai_addr, res->ai_addrlen);
-                            if (connect_result == 0) {
-                                uint16_t content_len_n = 0;
-                                str_ch_value_t* str_ch_value_first = NULL;
+                int getaddr_result = getaddrinfo(action_network->host, port, &hints, &res);
+                if (getaddr_result == 0) {
+                    int s = socket(res->ai_family, res->ai_socktype, 0);
+                    if (s >= 0) {
+                        const struct timeval rcvtimeout = { 2, 0 };
+                        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
+                        const struct timeval sndtimeout = { 2, 0 };
+                        setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
+
+                        int connect_result = connect(s, res->ai_addr, res->ai_addrlen);
+                        if (connect_result == 0) {
+                            uint16_t content_len_n = 0;
+                            str_ch_value_t* str_ch_value_first = NULL;
+                            
+                            char* method = "GET";
+                            char* method_req = NULL;
+                            if (action_network->method_n == 1 ||
+                                action_network->method_n == 2 ||
+                                action_network->method_n == 3) {
+                                content_len_n = strlen(action_network->content);
                                 
-                                char* method = "GET";
-                                char* method_req = NULL;
-                                if (action_network->method_n == 1 ||
-                                    action_network->method_n == 2 ||
-                                    action_network->method_n == 3) {
-                                    content_len_n = strlen(action_network->content);
-                                    
-                                    char* content_search = action_network->content;
-                                    str_ch_value_t* str_ch_value_last = NULL;
-                                    
-                                    do {
-                                        content_search = strstr(content_search, NETWORK_ACTION_WILDCARD_VALUE);
-                                        if (content_search) {
-                                            char buffer[10];
-                                            buffer[2] = 0;
-                                            
-                                            buffer[0] = content_search[5];
-                                            buffer[1] = content_search[6];
-                                            
-                                            uint8_t acc_number = (uint8_t) strtol(buffer, NULL, 10);
-                                            
-                                            ch_group_t* ch_group_found = action_task->ch_group;
-                                            
-                                            if (acc_number > 0) {
-                                                ch_group_found = ch_group_find_by_acc(acc_number);
-                                            }
-                                            
-                                            buffer[0] = content_search[7];
-                                            buffer[1] = content_search[8];
-
-                                            homekit_value_t* value;
-                                            
-                                            switch ((uint8_t) strtol(buffer, NULL, 10)) {
-                                                case 1:
-                                                    value = &ch_group_found->ch1->value;
-                                                    break;
-                                                    
-                                                case 2:
-                                                    value = &ch_group_found->ch2->value;
-                                                    break;
-                                                    
-                                                case 3:
-                                                    value = &ch_group_found->ch3->value;
-                                                    break;
-                                                    
-                                                case 4:
-                                                    value = &ch_group_found->ch4->value;
-                                                    break;
-                                                    
-                                                case 5:
-                                                    value = &ch_group_found->ch5->value;
-                                                    break;
-                                                    
-                                                case 6:
-                                                    value = &ch_group_found->ch6->value;
-                                                    break;
-                                                    
-                                                case 7:
-                                                    value = &ch_group_found->ch7->value;
-                                                    break;
-                                                    
-                                                default:    // case 0:
-                                                    value = &ch_group_found->ch0->value;
-                                                    break;
-                                            }
-                                            
-                                            switch (value->format) {
-                                                case homekit_format_bool:
-                                                    snprintf(buffer, 10, "%i", value->bool_value);
-                                                    break;
-                                                    
-                                                case homekit_format_uint8:
-                                                case homekit_format_uint16:
-                                                case homekit_format_uint32:
-                                                case homekit_format_uint64:
-                                                case homekit_format_int:
-                                                    snprintf(buffer, 10, "%i", value->int_value);
-                                                    break;
-
-                                                case homekit_format_float:
-                                                    snprintf(buffer, 10, "%.3f", value->float_value);
-                                                    break;
-                                                    
-                                                default:
-                                                    buffer[0] = 0;
-                                                    break;
-                                            }
-                                            
-                                            content_len_n += strlen(buffer) - 9;
-                                            
-                                            str_ch_value_t* str_ch_value = malloc(sizeof(str_ch_value_t));
-                                            memset(str_ch_value, 0, sizeof(*str_ch_value));
-                                            
-                                            str_ch_value->string = strdup(buffer);
-                                            str_ch_value->next = NULL;
-                                            INFO("Wildcard val %s", str_ch_value->string);
-                                            
-                                            if (str_ch_value_first == NULL) {
-                                                str_ch_value_first = str_ch_value;
-                                                str_ch_value_last = str_ch_value;
-                                            } else {
-                                                str_ch_value_last->next = str_ch_value;
-                                                str_ch_value_last = str_ch_value;
-                                            }
-
-                                            content_search += 9;
+                                char* content_search = action_network->content;
+                                str_ch_value_t* str_ch_value_last = NULL;
+                                
+                                do {
+                                    content_search = strstr(content_search, NETWORK_ACTION_WILDCARD_VALUE);
+                                    if (content_search) {
+                                        char buffer[10];
+                                        buffer[2] = 0;
+                                        
+                                        buffer[0] = content_search[5];
+                                        buffer[1] = content_search[6];
+                                        
+                                        uint8_t acc_number = (uint8_t) strtol(buffer, NULL, 10);
+                                        
+                                        ch_group_t* ch_group_found = action_task->ch_group;
+                                        
+                                        if (acc_number > 0) {
+                                            ch_group_found = ch_group_find_by_acc(acc_number);
                                         }
                                         
-                                    } while (content_search);
+                                        buffer[0] = content_search[7];
+                                        buffer[1] = content_search[8];
 
-                                    char content_len[4];
-                                    itoa(content_len_n, content_len, 10);
-                                    method_req = malloc(48);
-                                    snprintf(method_req, 48, "Content-type: text/html\r\nContent-length: %s\r\n", content_len);
-                                    
-                                    if (action_network->method_n == 1) {
-                                        method = "PUT";
-                                    } else {
-                                        method = "POST";
+                                        homekit_value_t* value;
+                                        
+                                        switch ((uint8_t) strtol(buffer, NULL, 10)) {
+                                            case 1:
+                                                value = &ch_group_found->ch1->value;
+                                                break;
+                                                
+                                            case 2:
+                                                value = &ch_group_found->ch2->value;
+                                                break;
+                                                
+                                            case 3:
+                                                value = &ch_group_found->ch3->value;
+                                                break;
+                                                
+                                            case 4:
+                                                value = &ch_group_found->ch4->value;
+                                                break;
+                                                
+                                            case 5:
+                                                value = &ch_group_found->ch5->value;
+                                                break;
+                                                
+                                            case 6:
+                                                value = &ch_group_found->ch6->value;
+                                                break;
+                                                
+                                            case 7:
+                                                value = &ch_group_found->ch7->value;
+                                                break;
+                                                
+                                            default:    // case 0:
+                                                value = &ch_group_found->ch0->value;
+                                                break;
+                                        }
+                                        
+                                        switch (value->format) {
+                                            case homekit_format_bool:
+                                                snprintf(buffer, 10, "%i", value->bool_value);
+                                                break;
+                                                
+                                            case homekit_format_uint8:
+                                            case homekit_format_uint16:
+                                            case homekit_format_uint32:
+                                            case homekit_format_uint64:
+                                            case homekit_format_int:
+                                                snprintf(buffer, 10, "%i", value->int_value);
+                                                break;
+
+                                            case homekit_format_float:
+                                                snprintf(buffer, 10, "%.3f", value->float_value);
+                                                break;
+                                                
+                                            default:
+                                                buffer[0] = 0;
+                                                break;
+                                        }
+                                        
+                                        content_len_n += strlen(buffer) - 9;
+                                        
+                                        str_ch_value_t* str_ch_value = malloc(sizeof(str_ch_value_t));
+                                        memset(str_ch_value, 0, sizeof(*str_ch_value));
+                                        
+                                        str_ch_value->string = strdup(buffer);
+                                        str_ch_value->next = NULL;
+                                        INFO("Wildcard val %s", str_ch_value->string);
+                                        
+                                        if (str_ch_value_first == NULL) {
+                                            str_ch_value_first = str_ch_value;
+                                            str_ch_value_last = str_ch_value;
+                                        } else {
+                                            str_ch_value_last->next = str_ch_value;
+                                            str_ch_value_last = str_ch_value;
+                                        }
+
+                                        content_search += 9;
                                     }
-
-                                }
-                                
-                                char* req = NULL;
-                                
-                                if (action_network->method_n == 3) {
-                                    req = action_network->content;
                                     
-                                } else if (action_network->method_n != 4) {
-                                    action_network->len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(action_network->host) +  strlen(action_network->url) + content_len_n;
-                                    
-                                    req = malloc(action_network->len);
-                                    snprintf(req, action_network->len, "%s /%s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HAA/"FIRMWARE_VERSION" esp8266\r\nConnection: close\r\n%s\r\n",
-                                             method,
-                                             action_network->url,
-                                             action_network->host,
-                                             (method_req != NULL) ? method_req : "");
+                                } while (content_search);
 
-                                    if (str_ch_value_first) {
-                                        str_ch_value_t* str_ch_value = str_ch_value_first;
-                                        char* content_search = action_network->content;
-                                        char* last_pos = action_network->content;
-                                        
-                                        do {
-                                            content_search = strstr(last_pos, NETWORK_ACTION_WILDCARD_VALUE);
-                                            
-                                            if (content_search - last_pos > 0) {
-                                                strncat(req, last_pos, content_search - last_pos);
-                                            }
-                                            
-                                            strcat(req, str_ch_value->string);
-                                            
-                                            free(str_ch_value->string);
-
-                                            str_ch_value_t* str_ch_value_old = str_ch_value;
-                                            str_ch_value = str_ch_value->next;
-                                            
-                                            free(str_ch_value_old);
-
-                                            last_pos = content_search + 9;
-                                            
-                                        } while (str_ch_value);
-                                        
-                                        strcat(req, last_pos);
-                                        
-                                    } else {
-                                        strcat(req, action_network->content);
-                                    }
-                                    
-                                }
+                                char content_len[4];
+                                itoa(content_len_n, content_len, 10);
+                                method_req = malloc(48);
+                                snprintf(method_req, 48, "Content-type: text/html\r\nContent-length: %s\r\n", content_len);
                                 
-                                int result = -1;
-                                if (action_network->method_n == 4) {
-                                    result = write(s, action_network->raw, action_network->len);
+                                if (action_network->method_n == 1) {
+                                    method = "PUT";
                                 } else {
-                                    result = write(s, req, action_network->len);
+                                    method = "POST";
                                 }
 
-                                if (result >= 0) {
-                                    if (action_network->method_n == 4) {
-                                        INFO("<%i> Payload RAW", action_task->ch_group->accessory);
-                                    } else {
-                                        INFO("<%i> Payload:\n%s", action_task->ch_group->accessory, req);
-                                    }
-                                    break;
-                                    
-                                } else {
-                                    ERROR("<%i> TCP (%i)", action_task->ch_group->accessory, result);
-                                }
-                                
-                                if (method_req) {
-                                    free(method_req);
-                                }
-                                
-                                if (req && action_network->method_n != 3) {
-                                    free(req);
-                                }
-                            } else {
-                                ERROR("<%i> Connection (%i)", action_task->ch_group->accessory, connect_result);
                             }
-                        } else {
-                            ERROR("<%i> Socket (%i)", action_task->ch_group->accessory, s);
-                        }
-                        
-                        close(s);
-                    } else {
-                        ERROR("<%i> DNS (%i)", action_task->ch_group->accessory, getaddr_result);
-                    }
+                            
+                            char* req = NULL;
+                            
+                            if (action_network->method_n == 3) {
+                                req = action_network->content;
+                                
+                            } else if (action_network->method_n != 4) {
+                                action_network->len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(action_network->host) +  strlen(action_network->url) + content_len_n;
+                                
+                                req = malloc(action_network->len);
+                                snprintf(req, action_network->len, "%s /%s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HAA/"FIRMWARE_VERSION" esp8266\r\nConnection: close\r\n%s\r\n",
+                                         method,
+                                         action_network->url,
+                                         action_network->host,
+                                         (method_req != NULL) ? method_req : "");
 
-                } else {
-                    const struct addrinfo hints = {
-                        .ai_family = AF_UNSPEC,
-                        .ai_socktype = SOCK_DGRAM,
-                    };
-                    
-                    int getaddr_result = getaddrinfo(action_network->host, port, &hints, &res);
-                    if (getaddr_result == 0) {
-                        int s = socket(res->ai_family, res->ai_socktype, 0);
-                        if (s >= 0) {
-                            uint8_t* wol = NULL;
-                            if (action_network->method_n == 12) {
-                                wol = malloc(102);
-                                for (uint8_t i = 0; i < 6; i++) {
-                                    wol[i] = 255;
+                                if (str_ch_value_first) {
+                                    str_ch_value_t* str_ch_value = str_ch_value_first;
+                                    char* content_search = action_network->content;
+                                    char* last_pos = action_network->content;
+                                    
+                                    do {
+                                        content_search = strstr(last_pos, NETWORK_ACTION_WILDCARD_VALUE);
+                                        
+                                        if (content_search - last_pos > 0) {
+                                            strncat(req, last_pos, content_search - last_pos);
+                                        }
+                                        
+                                        strcat(req, str_ch_value->string);
+                                        
+                                        free(str_ch_value->string);
+
+                                        str_ch_value_t* str_ch_value_old = str_ch_value;
+                                        str_ch_value = str_ch_value->next;
+                                        
+                                        free(str_ch_value_old);
+
+                                        last_pos = content_search + 9;
+                                        
+                                    } while (str_ch_value);
+                                    
+                                    strcat(req, last_pos);
+                                    
+                                } else {
+                                    strcat(req, action_network->content);
                                 }
                                 
-                                for (uint8_t i = 6; i < 102; i += 6) {
-                                    for (uint8_t j = 0; j < 6; j++) {
-                                        wol[i + j] = action_network->raw[j];
-                                    }
-                                }
                             }
                             
                             int result = -1;
-                            if (action_network->method_n == 13) {
-                                result = lwip_sendto(s, action_network->content, action_network->len, 0, res->ai_addr, res->ai_addrlen);
+                            if (action_network->method_n == 4) {
+                                result = write(s, action_network->raw, action_network->len);
                             } else {
-                                result = lwip_sendto(s, wol ? wol : action_network->raw, wol ? 102 : action_network->len, 0, res->ai_addr, res->ai_addrlen);
+                                result = write(s, req, action_network->len);
                             }
-                            
-                            if (result > 0) {
-                                if (action_network->method_n == 13) {
-                                    INFO("<%i> Payload:\n%s", action_task->ch_group->accessory, action_network->content);
-                                } else {
+
+                            if (result >= 0) {
+                                if (action_network->method_n == 4) {
                                     INFO("<%i> Payload RAW", action_task->ch_group->accessory);
+                                } else {
+                                    INFO("<%i> Payload:\n%s", action_task->ch_group->accessory, req);
                                 }
-                                break;
                                 
+                                INFO("<%i> TCP Response:", action_task->ch_group->accessory);
+                                ssize_t read_byte;
+                                do {
+                                    uint8_t recv_buffer[64];
+                                    read_byte = read(s, recv_buffer, 64);
+                                    printf("%s", recv_buffer);
+                                } while (read_byte > 0);
+                                INFO("");
                             } else {
-                                ERROR("<%i> UDP", action_task->ch_group->accessory);
+                                ERROR("<%i> TCP (%i)", action_task->ch_group->accessory, result);
                             }
                             
-                            if (wol) {
-                                free(wol);
+                            if (method_req) {
+                                free(method_req);
                             }
+                            
+                            if (req && action_network->method_n != 3) {
+                                free(req);
+                            }
+
                         } else {
-                            ERROR("<%i> Socket (%i)", action_task->ch_group->accessory, s);
+                            ERROR("<%i> Connection (%i)", action_task->ch_group->accessory, connect_result);
                         }
-                    
-                        close(s);
-                    
                     } else {
-                        ERROR("<%i> DNS (%i)", action_task->ch_group->accessory, getaddr_result);
+                        ERROR("<%i> Socket (%i)", action_task->ch_group->accessory, s);
                     }
-                }
-                
-                freeaddrinfo(res);
                     
-                vTaskDelay(pdMS_TO_TICKS(100));
+                    close(s);
+                } else {
+                    ERROR("<%i> DNS (%i)", action_task->ch_group->accessory, getaddr_result);
+                }
+
+            } else {
+                const struct addrinfo hints = {
+                    .ai_family = AF_UNSPEC,
+                    .ai_socktype = SOCK_DGRAM,
+                };
+                
+                int getaddr_result = getaddrinfo(action_network->host, port, &hints, &res);
+                if (getaddr_result == 0) {
+                    int s = socket(res->ai_family, res->ai_socktype, 0);
+                    if (s >= 0) {
+                        uint8_t* wol = NULL;
+                        if (action_network->method_n == 12) {
+                            wol = malloc(102);
+                            for (uint8_t i = 0; i < 6; i++) {
+                                wol[i] = 255;
+                            }
+                            
+                            for (uint8_t i = 6; i < 102; i += 6) {
+                                for (uint8_t j = 0; j < 6; j++) {
+                                    wol[i + j] = action_network->raw[j];
+                                }
+                            }
+                        }
+                        
+                        int result = -1;
+                        if (action_network->method_n == 13) {
+                            result = lwip_sendto(s, action_network->content, action_network->len, 0, res->ai_addr, res->ai_addrlen);
+                        } else {
+                            uint8_t wol_attemps = 1;
+                            if (wol) {
+                                wol_attemps = 5;
+                            }
+                            
+                            for (uint8_t udp_sent = 0; udp_sent < wol_attemps; udp_sent++) {
+                                result = lwip_sendto(s, wol ? wol : action_network->raw, wol ? 102 : action_network->len, 0, res->ai_addr, res->ai_addrlen);
+                                if (wol) {
+                                    vTaskDelay(pdMS_TO_TICKS(10));
+                                }
+                            }
+                        }
+                        
+                        if (result > 0) {
+                            if (action_network->method_n == 13) {
+                                INFO("<%i> Payload:\n%s", action_task->ch_group->accessory, action_network->content);
+                            } else {
+                                INFO("<%i> Payload RAW", action_task->ch_group->accessory);
+                            }
+                            
+                        } else {
+                            ERROR("<%i> UDP", action_task->ch_group->accessory);
+                        }
+                        
+                        if (wol) {
+                            free(wol);
+                        }
+                    } else {
+                        ERROR("<%i> Socket (%i)", action_task->ch_group->accessory, s);
+                    }
+                
+                    close(s);
+                
+                } else {
+                    ERROR("<%i> DNS (%i)", action_task->ch_group->accessory, getaddr_result);
+                }
             }
+            
+            freeaddrinfo(res);
         }
         
         action_network = action_network->next;
     }
     
     free(pvParameters);
+    
+    INFO("<%i> Network Action done", action_task->ch_group->accessory);
+    
     vTaskDelete(NULL);
 }
 
