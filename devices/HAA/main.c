@@ -3133,7 +3133,9 @@ void net_action_task(void* pvParameters) {
     action_network_t* action_network = action_task->ch_group->action_network;
     
     while (action_network) {
-        if (action_network->action == action_task->action) {
+        if (action_network->action == action_task->action && !action_network->is_running) {
+            action_network->is_running = true;
+            
             vTaskDelay(pdMS_TO_TICKS(20));
             
             INFO("<%i> Network Action %s:%i", action_task->ch_group->accessory, action_network->host, action_network->port_n);
@@ -3284,7 +3286,6 @@ void net_action_task(void* pvParameters) {
                                 } else {
                                     method = "POST";
                                 }
-
                             }
                             
                             char* req = NULL;
@@ -3351,12 +3352,17 @@ void net_action_task(void* pvParameters) {
                                 
                                 INFO("<%i> TCP Response:", action_task->ch_group->accessory);
                                 ssize_t read_byte;
+                                uint16_t total_recv = 0;
                                 do {
                                     uint8_t recv_buffer[64];
                                     read_byte = read(s, recv_buffer, 64);
                                     printf("%s", recv_buffer);
-                                } while (read_byte > 0);
+                                    recv_buffer[0] = 0;
+                                    total_recv += 64;
+                                } while (read_byte > 0 && total_recv < 1024);
+                                
                                 INFO("");
+                                
                             } else {
                                 ERROR("<%i> TCP (%i)", action_task->ch_group->accessory, result);
                             }
@@ -3448,14 +3454,16 @@ void net_action_task(void* pvParameters) {
             }
             
             freeaddrinfo(res);
+            
+            INFO("<%i> Network Action %s:%i done", action_task->ch_group->accessory, action_network->host, action_network->port_n);
+            
+            action_network->is_running = false;
         }
         
         action_network = action_network->next;
     }
     
     free(pvParameters);
-    
-    INFO("<%i> Network Action done", action_task->ch_group->accessory);
     
     vTaskDelete(NULL);
 }

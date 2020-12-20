@@ -62,6 +62,7 @@ typedef struct _action_network {
     uint16_t port_n;
     
     uint16_t len;
+    bool is_running: 1;
     
     char* host;
     char* url;
