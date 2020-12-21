@@ -391,7 +391,7 @@ void reboot_haa() {
 void wifi_ping_task() {
     main_config.wifi_ping_is_running = true;
     
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(50));
     
     struct ip_info info;
     bool ping_result = true;
@@ -513,7 +513,7 @@ void wifi_watchdog_task() {
         
         if (main_config.wifi_ping_max_errors != 255 && !main_config.wifi_ping_is_running && !homekit_is_pairing()) {
             main_config.wifi_error_count = 0;
-            if (xTaskCreate(wifi_ping_task, "wifi_ping", PING_TASK_SIZE, NULL, PING_TASK_PRIORITY, NULL) != pdPASS) {
+            if (xTaskCreate(wifi_ping_task, "wifi_ping", WIFI_PING_TASK_SIZE, NULL, WIFI_PING_TASK_PRIORITY, NULL) != pdPASS) {
                 ERROR("Creating wifi_ping_task");
                 FREEHEAP();
             }
@@ -559,7 +559,7 @@ ping_input_t* ping_input_find_by_host(char* host) {
 void ping_task() {
     main_config.ping_is_running = true;
     
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(50));
     
     INFO("Ping...");
 
@@ -3470,7 +3470,7 @@ void net_action_task(void* pvParameters) {
 
 // --- IR Send task
 void ir_tx_task(void* pvParameters) {
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(pdMS_TO_TICKS(50));
     
     action_task_t* action_task = pvParameters;
     action_ir_tx_t* action_ir_tx = action_task->ch_group->action_ir_tx;

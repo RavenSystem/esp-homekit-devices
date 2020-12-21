@@ -3135,8 +3135,9 @@ IRAM void homekit_server_close_client(client_context_t *context) {
 
 client_context_t *homekit_server_accept_client() {
     int s = accept(homekit_server->listen_fd, (struct sockaddr *)NULL, (socklen_t *)NULL);
-    if (s < 0)
+    if (s < 0) {
         return NULL;
+    }
 
     if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS) {
         HOMEKIT_INFO("Max client connections reached (%d)", HOMEKIT_MAX_CLIENTS);
@@ -3175,8 +3176,20 @@ client_context_t *homekit_server_accept_client() {
         context = next;
     }
 
-    const struct timeval rcvtimeout = { 10, 0 };    // 10 second timeout
+    const struct timeval rcvtimeout = { 60, 0 };
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
+    
+    const int yes = 1;
+    setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes));
+    
+    const int idle = 60;
+    setsockopt(s, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
+
+    const int interval = 15;
+    setsockopt(s, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval));
+
+    const int maxpkt = 4;
+    setsockopt(s, IPPROTO_TCP, TCP_KEEPCNT, &maxpkt, sizeof(maxpkt));
 
     context = client_context_new();
 

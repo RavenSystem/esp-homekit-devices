@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.3.2"
+#define FIRMWARE_VERSION                    "4.3.3"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -43,20 +43,23 @@
 #define TYPE_DOUBLE_LOCK                    (10)
 
 // Task Stack Sizes
+#define GLOBAL_TASK_SIZE                    (448)
+
 #define INITIAL_SETUP_TASK_SIZE             (1024)
-#define PING_TASK_SIZE                      (512)
-#define AUTODIMMER_TASK_SIZE                (configMINIMAL_STACK_SIZE)
-#define IR_TX_TASK_SIZE                     (512)
-#define UART_ACTION_TASK_SIZE               (512)
-#define NETWORK_ACTION_TASK_SIZE            (512)
-#define DELAYED_SENSOR_START_TASK_SIZE      (512)
-#define TEMPERATURE_TASK_SIZE               (512)
-#define PROCESS_TH_TASK_SIZE                (512)
-#define SET_ZONES_TASK_SIZE                 (512)
-#define POWER_MONITOR_TASK_SIZE             (512)
-#define LIGHT_SENSOR_TASK_SIZE              (512)
-#define WIFI_WATCHDOG_TASK_SIZE             (512)
-#define WIFI_RECONNECTION_TASK_SIZE         (512)
+#define PING_TASK_SIZE                      GLOBAL_TASK_SIZE
+#define AUTODIMMER_TASK_SIZE                GLOBAL_TASK_SIZE
+#define IR_TX_TASK_SIZE                     (384)
+#define UART_ACTION_TASK_SIZE               (384)
+#define NETWORK_ACTION_TASK_SIZE            (448)
+#define DELAYED_SENSOR_START_TASK_SIZE      GLOBAL_TASK_SIZE
+#define TEMPERATURE_TASK_SIZE               GLOBAL_TASK_SIZE
+#define PROCESS_TH_TASK_SIZE                GLOBAL_TASK_SIZE
+#define SET_ZONES_TASK_SIZE                 GLOBAL_TASK_SIZE
+#define POWER_MONITOR_TASK_SIZE             GLOBAL_TASK_SIZE
+#define LIGHT_SENSOR_TASK_SIZE              GLOBAL_TASK_SIZE
+#define WIFI_PING_TASK_SIZE                 (384)
+#define WIFI_WATCHDOG_TASK_SIZE             GLOBAL_TASK_SIZE
+#define WIFI_RECONNECTION_TASK_SIZE         GLOBAL_TASK_SIZE
 #define IR_CAPTURE_TASK_SIZE                (768)
 
 // Task Priorities
@@ -72,6 +75,7 @@
 #define SET_ZONES_TASK_PRIORITY             (tskIDLE_PRIORITY + 1)
 #define POWER_MONITOR_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
 #define LIGHT_SENSOR_TASK_PRIORITY          (tskIDLE_PRIORITY + 1)
+#define WIFI_PING_TASK_PRIORITY             (tskIDLE_PRIORITY + 1)
 #define WIFI_WATCHDOG_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
 #define WIFI_RECONNECTION_TASK_PRIORITY     (tskIDLE_PRIORITY + 1)
 #define IR_CAPTURE_TASK_PRIORITY            (tskIDLE_PRIORITY + 8)
