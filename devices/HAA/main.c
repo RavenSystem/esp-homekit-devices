@@ -1852,7 +1852,9 @@ float white_factor(const float r, const float g, const uint16_t b, const float w
 }
 
 //https://github.com/espressif/esp-idf/examples/peripherals/rmt/led_strip/main/led_strip_main.c
-void hsi2rgbw(uint16_t h, uint16_t s, uint16_t v, lightbulb_group_t* lightbulb_group) {
+void hsi2rgbw(uint16_t h, uint16_t s, uint16_t v, ch_group_t* ch_group) {
+    lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_group->ch0);
+    
     h %= 360; // h -> [0,360]
     const uint32_t rgb_max = v * (PWM_SCALE / 100.00f);
     const uint32_t rgb_min = rgb_max * (100 - s) / 100.f;
@@ -1910,12 +1912,12 @@ void hsi2rgbw(uint16_t h, uint16_t s, uint16_t v, lightbulb_group_t* lightbulb_g
     const uint32_t cw = cw_f * PWM_SCALE;
     const uint32_t ww = ww_f * PWM_SCALE;
     
-    lightbulb_group->target_r  = lightbulb_group->factor_r  * ((r  > PWM_SCALE) ? PWM_SCALE : r);
-    lightbulb_group->target_g  = lightbulb_group->factor_g  * ((g  > PWM_SCALE) ? PWM_SCALE : g);
-    lightbulb_group->target_b  = lightbulb_group->factor_b  * ((b  > PWM_SCALE) ? PWM_SCALE : b);
-    lightbulb_group->target_w  = lightbulb_group->factor_w  * ((rgb_min > PWM_SCALE) ? PWM_SCALE : rgb_min);
-    lightbulb_group->target_cw = lightbulb_group->factor_cw * ((cw > PWM_SCALE) ? PWM_SCALE : cw);
-    lightbulb_group->target_ww = lightbulb_group->factor_ww * ((ww > PWM_SCALE) ? PWM_SCALE : ww);
+    lightbulb_group->target_r  = LIGHTBULB_FACTOR_R  * ((r  > PWM_SCALE) ? PWM_SCALE : r);
+    lightbulb_group->target_g  = LIGHTBULB_FACTOR_G  * ((g  > PWM_SCALE) ? PWM_SCALE : g);
+    lightbulb_group->target_b  = LIGHTBULB_FACTOR_B  * ((b  > PWM_SCALE) ? PWM_SCALE : b);
+    lightbulb_group->target_w  = LIGHTBULB_FACTOR_W  * ((rgb_min > PWM_SCALE) ? PWM_SCALE : rgb_min);
+    lightbulb_group->target_cw = LIGHTBULB_FACTOR_CW * ((cw > PWM_SCALE) ? PWM_SCALE : cw);
+    lightbulb_group->target_ww = LIGHTBULB_FACTOR_WW * ((ww > PWM_SCALE) ? PWM_SCALE : ww);
 }
 
 void multipwm_set_all() {
@@ -2043,10 +2045,10 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
                 setup_mode_toggle_upcount();
             }
             
-            if (lightbulb_group->pwm_r != 255) {            // RGB, RGB-W, RGB-CW-WW, RGB-W-CW-WW
-                hsi2rgbw(ch_group->ch2->value.float_value, ch_group->ch3->value.float_value, ch_group->ch1->value.int_value, lightbulb_group);
+            if ((uint8_t) LIGHTBULB_CHANNELS >= 3) {            // RGB, RGB-W, RGB-CW-WW, RGB-W-CW-WW
+                hsi2rgbw(ch_group->ch2->value.float_value, ch_group->ch3->value.float_value, ch_group->ch1->value.int_value, ch_group);
                 
-            } else if (lightbulb_group->pwm_b != 255) {     // Custom Color Temperature
+            } else if ((uint8_t) LIGHTBULB_CHANNELS == 2) {     // Custom Color Temperature
                 uint16_t target_color = 0;
                 
                 if (ch_group->ch2->value.int_value >= COLOR_TEMP_MAX - 5) {
@@ -2056,13 +2058,13 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
                     target_color = PWM_SCALE * (((0.09 + sqrt(0.18 + (0.1352 * (ch_group->ch2->value.int_value - COLOR_TEMP_MIN - 1)))) / 0.0676) - 1) / 100;
                 }
                 
-                const uint32_t w = lightbulb_group->factor_w * target_color * ch_group->ch1->value.int_value / 100;
-                const uint32_t b = lightbulb_group->factor_b * (PWM_SCALE - target_color) * ch_group->ch1->value.int_value / 100;
+                const uint32_t w = LIGHTBULB_FACTOR_W * target_color * ch_group->ch1->value.int_value / 100;
+                const uint32_t b = LIGHTBULB_FACTOR_B * (PWM_SCALE - target_color) * ch_group->ch1->value.int_value / 100;
                 lightbulb_group->target_w = ((w > PWM_SCALE) ? PWM_SCALE : w);
                 lightbulb_group->target_b = ((b > PWM_SCALE) ? PWM_SCALE : b);
                 
             } else {                                        // One Color Dimmer
-                const uint32_t w = lightbulb_group->factor_w * PWM_SCALE * ch_group->ch1->value.int_value / 100;
+                const uint32_t w = LIGHTBULB_FACTOR_W * PWM_SCALE * ch_group->ch1->value.int_value / 100;
                 lightbulb_group->target_w = ((w > PWM_SCALE) ? PWM_SCALE : w);
             }
         } else {
@@ -2080,7 +2082,7 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
         led_blink(1);
         INFO("<%i> Target RGBW-CW-WW = %i, %i, %i, %i, %i, %i", ch_group->accessory, lightbulb_group->target_r, lightbulb_group->target_g, lightbulb_group->target_b, lightbulb_group->target_w, lightbulb_group->target_cw, lightbulb_group->target_ww);
         
-        if (lightbulb_group->is_pwm && !main_config.haa_pwm->setpwm_is_running) {
+        if ((uint8_t) LIGHTBULB_TYPE == 1 && !main_config.haa_pwm->setpwm_is_running) {
             main_config.haa_pwm->setpwm_is_running = true;
             esp_timer_start(main_config.haa_pwm->pwm_timer);
         }
@@ -6584,13 +6586,13 @@ void normal_mode_init() {
         
         new_accessory(accessory, 3, ch_group->homekit_enabled, json_context);
         
-        bool is_pwm = true;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R) == NULL &&
-            cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W) == NULL) {
-            is_pwm = false;
+        LIGHTBULB_TYPE = 1;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R_SET) == NULL &&
+            cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W_SET) == NULL) {
+            LIGHTBULB_TYPE = 0;
         }
 
-        if (is_pwm && !main_config.lightbulb_groups) {
+        if ((uint8_t) LIGHTBULB_TYPE == 1 && !main_config.lightbulb_groups) {
             INFO("PWM Init");
             haa_pwm_init();
             main_config.haa_pwm->pwm_timer = esp_timer_create(RGBW_PERIOD, true, NULL, rgbw_set_timer_worker);
@@ -6619,7 +6621,7 @@ void normal_mode_init() {
         lightbulb_group_t* lightbulb_group = malloc(sizeof(lightbulb_group_t));
         memset(lightbulb_group, 0, sizeof(*lightbulb_group));
         lightbulb_group->ch0 = ch0;
-        lightbulb_group->is_pwm = is_pwm;
+        LIGHTBULB_CHANNELS = 1;
         lightbulb_group->pwm_r = 255;
         lightbulb_group->pwm_g = 255;
         lightbulb_group->pwm_b = 255;
@@ -6632,14 +6634,14 @@ void normal_mode_init() {
         lightbulb_group->target_w = 0;      // Will be removed
         lightbulb_group->target_cw = 0;
         lightbulb_group->target_ww = 0;
-        lightbulb_group->factor_r = 1;
-        lightbulb_group->factor_g = 1;
-        lightbulb_group->factor_b = 1;
-        lightbulb_group->factor_w = 1;      // Will be removed
-        lightbulb_group->factor_cw = 1;
-        lightbulb_group->factor_ww = 1;
-        lightbulb_group->max_power = 1;
-        lightbulb_group->curve_factor = 1;
+        LIGHTBULB_FACTOR_R = 1;
+        LIGHTBULB_FACTOR_G = 1;
+        LIGHTBULB_FACTOR_B = 1;
+        LIGHTBULB_FACTOR_W = 1;      // Will be removed
+        LIGHTBULB_FACTOR_CW = 1;
+        LIGHTBULB_FACTOR_WW = 1;
+        LIGHTBULB_MAX_POWER = 1;
+        LIGHTBULB_CURVE_FACTOR = 1;
         lightbulb_group->flux_r = 1;
         lightbulb_group->flux_g = 1;
         lightbulb_group->flux_b = 1;
@@ -6663,77 +6665,83 @@ void normal_mode_init() {
         lightbulb_group->next = main_config.lightbulb_groups;
         main_config.lightbulb_groups = lightbulb_group;
 
-        if (is_pwm) {
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                lightbulb_group->pwm_r = main_config.haa_pwm->pwm_info->channels;
-                main_config.haa_pwm->pwm_info->channels++;
-                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_r, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R)->valuedouble);
-            }
-            
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_R) != NULL) {
-                lightbulb_group->factor_r = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_R)->valuedouble;
-            }
-
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
-                lightbulb_group->pwm_g = main_config.haa_pwm->pwm_info->channels;
-                main_config.haa_pwm->pwm_info->channels++;
-                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_g, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G)->valuedouble);
-            }
-            
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_G) != NULL) {
-                lightbulb_group->factor_g = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_G)->valuedouble;
-            }
-
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+        if ((uint8_t) LIGHTBULB_TYPE == 1) {
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B_SET) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                LIGHTBULB_CHANNELS = 2;
                 lightbulb_group->pwm_b = main_config.haa_pwm->pwm_info->channels;
                 main_config.haa_pwm->pwm_info->channels++;
-                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_b, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B)->valuedouble);
+                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_b, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_B_SET)->valuedouble);
             }
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_B) != NULL) {
-                lightbulb_group->factor_b = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_B)->valuedouble;
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_B_SET) != NULL) {
+                LIGHTBULB_FACTOR_B = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_B_SET)->valuedouble;
+            }
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R_SET) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                LIGHTBULB_CHANNELS = 3;
+                lightbulb_group->pwm_r = main_config.haa_pwm->pwm_info->channels;
+                main_config.haa_pwm->pwm_info->channels++;
+                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_r, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_R_SET)->valuedouble);
+            }
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_R_SET) != NULL) {
+                LIGHTBULB_FACTOR_R = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_R_SET)->valuedouble;
             }
 
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G_SET) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                lightbulb_group->pwm_g = main_config.haa_pwm->pwm_info->channels;
+                main_config.haa_pwm->pwm_info->channels++;
+                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_g, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_G_SET)->valuedouble);
+            }
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_G_SET) != NULL) {
+                LIGHTBULB_FACTOR_G = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_G_SET)->valuedouble;
+            }
+
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W_SET) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
                 lightbulb_group->pwm_w = main_config.haa_pwm->pwm_info->channels;
                 main_config.haa_pwm->pwm_info->channels++;
-                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_w, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W)->valuedouble);
+                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_w, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_W_SET)->valuedouble);
             }
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_W) != NULL) {
-                lightbulb_group->factor_w = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_W)->valuedouble;
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_W_SET) != NULL) {
+                LIGHTBULB_FACTOR_W = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_W_SET)->valuedouble;
             }
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_CW) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_CW_SET) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                LIGHTBULB_CHANNELS++;
                 lightbulb_group->pwm_cw = main_config.haa_pwm->pwm_info->channels;
                 main_config.haa_pwm->pwm_info->channels++;
-                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_cw, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_CW)->valuedouble);
+                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_cw, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_CW_SET)->valuedouble);
             }
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_CW) != NULL) {
-                lightbulb_group->factor_cw = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_CW)->valuedouble;
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_CW_SET) != NULL) {
+                LIGHTBULB_FACTOR_CW = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_CW_SET)->valuedouble;
             }
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_WW) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_WW_SET) != NULL && main_config.haa_pwm->pwm_info->channels < MULTIPWM_MAX_CHANNELS) {
+                LIGHTBULB_CHANNELS++;
                 lightbulb_group->pwm_ww = main_config.haa_pwm->pwm_info->channels;
                 main_config.haa_pwm->pwm_info->channels++;
-                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_ww, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_WW)->valuedouble);
+                multipwm_set_pin(main_config.haa_pwm->pwm_info, lightbulb_group->pwm_ww, (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_GPIO_WW_SET)->valuedouble);
             }
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_WW) != NULL) {
-                lightbulb_group->factor_ww = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_WW)->valuedouble;
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_WW_SET) != NULL) {
+                LIGHTBULB_FACTOR_WW = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_WW_SET)->valuedouble;
             }
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_MAX_POWER) != NULL) {
-                lightbulb_group->max_power = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_MAX_POWER)->valuedouble;
+            INFO("Lightbulb channels: %i", (uint8_t) LIGHTBULB_CHANNELS);
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_MAX_POWER_SET) != NULL) {
+                LIGHTBULB_MAX_POWER = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_MAX_POWER_SET)->valuedouble;
             }
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CURVE_FACTOR) != NULL) {
-                lightbulb_group->curve_factor = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CURVE_FACTOR)->valuedouble;
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CURVE_FACTOR_SET) != NULL) {
+                LIGHTBULB_CURVE_FACTOR = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CURVE_FACTOR_SET)->valuedouble;
             }
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FLUX_ARRAY) != NULL) {
-                cJSON* flux_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FLUX_ARRAY);
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FLUX_ARRAY_SET) != NULL) {
+                cJSON* flux_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FLUX_ARRAY_SET);
                 lightbulb_group->flux_r = (float) cJSON_GetArrayItem(flux_array, 0)->valuedouble;
                 lightbulb_group->flux_g = (float) cJSON_GetArrayItem(flux_array, 1)->valuedouble;
                 lightbulb_group->flux_b = (float) cJSON_GetArrayItem(flux_array, 2)->valuedouble;
@@ -6743,8 +6751,8 @@ void normal_mode_init() {
             
             INFO("Flux array: %g, %g, %g, %g, %g", lightbulb_group->flux_r, lightbulb_group->flux_g, lightbulb_group->flux_b, lightbulb_group->flux_cw, lightbulb_group->flux_ww);
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY) != NULL) {
-                cJSON* coordinate_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY);
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY_SET) != NULL) {
+                cJSON* coordinate_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY_SET);
                 lightbulb_group->rx = (float) cJSON_GetArrayItem(coordinate_array, 0)->valuedouble;
                 lightbulb_group->ry = (float) cJSON_GetArrayItem(coordinate_array, 1)->valuedouble;
                 lightbulb_group->gx = (float) cJSON_GetArrayItem(coordinate_array, 2)->valuedouble;
@@ -6782,16 +6790,16 @@ void normal_mode_init() {
             INFO("VM: X = %g, Y = %g", lightbulb_group->vwx, lightbulb_group->vwy);
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, RGBW_STEP) != NULL) {
-            lightbulb_group->step = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_context, RGBW_STEP)->valuedouble;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, RGBW_STEP_SET) != NULL) {
+            lightbulb_group->step = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_context, RGBW_STEP_SET)->valuedouble;
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, AUTODIMMER_TASK_DELAY) != NULL) {
-            lightbulb_group->autodimmer_task_delay = cJSON_GetObjectItemCaseSensitive(json_context, AUTODIMMER_TASK_DELAY)->valuedouble * (1000 / portTICK_PERIOD_MS);
+        if (cJSON_GetObjectItemCaseSensitive(json_context, AUTODIMMER_TASK_DELAY_SET) != NULL) {
+            lightbulb_group->autodimmer_task_delay = cJSON_GetObjectItemCaseSensitive(json_context, AUTODIMMER_TASK_DELAY_SET)->valuedouble * (1000 / portTICK_PERIOD_MS);
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, AUTODIMMER_TASK_STEP) != NULL) {
-            lightbulb_group->autodimmer_task_step = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, AUTODIMMER_TASK_STEP)->valuedouble;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, AUTODIMMER_TASK_STEP_SET) != NULL) {
+            lightbulb_group->autodimmer_task_step = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, AUTODIMMER_TASK_STEP_SET)->valuedouble;
         }
 
         if (ch_group->homekit_enabled) {

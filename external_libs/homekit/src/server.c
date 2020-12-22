@@ -1015,6 +1015,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             if (homekit_server->paired) {
                 CLIENT_INFO(context, "Already paired");
                 send_tlv_error_response(context, 2, TLVError_Unavailable);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1022,6 +1023,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 if (homekit_server->pairing_context->client != context) {
                     CLIENT_INFO(context, "Another pairing in progress");
                     send_tlv_error_response(context, 2, TLVError_Busy);
+                    homekit_server->is_pairing = false;
                     break;
                 }
             } else {
@@ -1053,6 +1055,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 homekit_server->pairing_context = NULL;
 
                 send_tlv_error_response(context, 2, TLVError_Unknown);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1069,6 +1072,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 homekit_server->pairing_context = NULL;
 
                 send_tlv_error_response(context, 2, TLVError_Unknown);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1082,6 +1086,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             send_tlv_response(context, response);
             break;
         }
+            
         case 3: {
             CLIENT_INFO(context, "Pair 2/3");
             DEBUG_HEAP();
@@ -1089,6 +1094,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             if (!device_public_key) {
                 CLIENT_ERROR(context, "Payload: no device public key");
                 send_tlv_error_response(context, 4, TLVError_Authentication);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1096,10 +1102,12 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             if (!proof) {
                 CLIENT_ERROR(context, "Payload: no device proof");
                 send_tlv_error_response(context, 4, TLVError_Authentication);
+                homekit_server->is_pairing = false;
                 break;
             }
 
             homekit_mdns_buffer_deinit();
+            homekit_mdns_buffer_init();
             
             CLIENT_DEBUG(context, "Computing SRP shared secret");
             DEBUG_HEAP();
@@ -1110,11 +1118,10 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 homekit_server->pairing_context->public_key_size
             );
             
-            homekit_mdns_buffer_init();
-            
             if (r) {
                 CLIENT_ERROR(context, "Compute SRP shared secret (%d)", r);
                 send_tlv_error_response(context, 4, TLVError_Authentication);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1128,6 +1135,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             if (r) {
                 CLIENT_ERROR(context, "Verify peer's proof (%d)", r);
                 send_tlv_error_response(context, 4, TLVError_Authentication);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1147,6 +1155,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             send_tlv_response(context, response);
             break;
         }
+            
         case 5: {
             CLIENT_INFO(context, "Pair 3/3");
             DEBUG_HEAP();
@@ -1168,6 +1177,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             if (r) {
                 CLIENT_ERROR(context, "Generate shared secret (%d)", r);
                 send_tlv_error_response(context, 6, TLVError_Authentication);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1175,6 +1185,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             if (!tlv_encrypted_data) {
                 CLIENT_ERROR(context, "Payload: no encrypted data");
                 send_tlv_error_response(context, 6, TLVError_Authentication);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1199,6 +1210,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 free(decrypted_data);
 
                 send_tlv_error_response(context, 6, TLVError_Authentication);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1211,6 +1223,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 free(decrypted_data);
 
                 send_tlv_error_response(context, 6, TLVError_Authentication);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1223,6 +1236,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 tlv_free(decrypted_message);
 
                 send_tlv_error_response(context, 6, TLVError_Authentication);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1233,6 +1247,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 tlv_free(decrypted_message);
 
                 send_tlv_error_response(context, 6, TLVError_Authentication);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1243,6 +1258,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 tlv_free(decrypted_message);
 
                 send_tlv_error_response(context, 6, TLVError_Authentication);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1259,6 +1275,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 tlv_free(decrypted_message);
 
                 send_tlv_error_response(context, 6, TLVError_Authentication);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1281,6 +1298,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 tlv_free(decrypted_message);
 
                 send_tlv_error_response(context, 6, TLVError_Authentication);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1310,6 +1328,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 tlv_free(decrypted_message);
 
                 send_tlv_error_response(context, 6, TLVError_Authentication);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1325,6 +1344,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 crypto_ed25519_free(device_key);
                 tlv_free(decrypted_message);
                 send_tlv_error_response(context, 6, TLVError_Unknown);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1349,6 +1369,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 free(accessory_public_key);
 
                 send_tlv_error_response(context, 6, TLVError_Authentication);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1373,6 +1394,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 free(accessory_public_key);
 
                 send_tlv_error_response(context, 6, TLVError_Unknown);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1404,6 +1426,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 free(accessory_info);
 
                 send_tlv_error_response(context, 6, TLVError_Unknown);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1434,6 +1457,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 tlv_free(response_message);
 
                 send_tlv_error_response(context, 6, TLVError_Unknown);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1462,6 +1486,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 free(encrypted_response_data);
 
                 send_tlv_error_response(context, 6, TLVError_Unknown);
+                homekit_server->is_pairing = false;
                 break;
             }
 
@@ -1478,20 +1503,22 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             homekit_server->pairing_context = NULL;
 
             homekit_server->paired = 1;
+            
+            homekit_mdns_buffer_deinit();
             homekit_setup_mdns();
 
             CLIENT_INFO(context, "Successfully paired");
-
+            
+            homekit_server->is_pairing = false;
             break;
         }
+            
         default: {
+            homekit_server->is_pairing = false;
             CLIENT_ERROR(context, "Unknown state: %d",
                   tlv_get_integer_value(message, TLVType_State, -1));
         }
     }
-
-    
-    homekit_server->is_pairing = false;
     
     tlv_free(message);
 
@@ -3157,31 +3184,38 @@ client_context_t *homekit_server_accept_client() {
     
     HOMEKIT_INFO("[%d] New %s:%d", s, address_buffer, addr.sin_port);
     
-    /* Check and remove any old conection with same IP addr and port */
-    struct sockaddr_in old_addr;
-    client_context_t *context = homekit_server->clients;
-    while (context) {
-        client_context_t *next = context->next;
+    /*
+    client_context_t *context = NULL;
+    
+    // Check and remove any old conection with same IP addr and port
+    if (!homekit_server->is_pairing) {
+        struct sockaddr_in old_addr;
+        context = homekit_server->clients;
+        while (context) {
+            client_context_t *next = context->next;
 
-        if (getpeername(context->socket, (struct sockaddr *)&old_addr , &addr_len) == 0 &&
-            old_addr.sin_addr.s_addr == addr.sin_addr.s_addr &&
-            old_addr.sin_port != addr.sin_port) {
-            char old_address_buffer[INET_ADDRSTRLEN];
-            inet_ntop(AF_INET, &old_addr.sin_addr, old_address_buffer, sizeof(old_address_buffer));
-            HOMEKIT_INFO("[%d] Duplicated connection, closing old on port %d", s, old_addr.sin_port);
-            context->disconnect = true;
-            //homekit_server_close_client(context);
+            if (getpeername(context->socket, (struct sockaddr *)&old_addr , &addr_len) == 0 &&
+                old_addr.sin_addr.s_addr == addr.sin_addr.s_addr &&
+                old_addr.sin_port != addr.sin_port) {
+                char old_address_buffer[INET_ADDRSTRLEN];
+                inet_ntop(AF_INET, &old_addr.sin_addr, old_address_buffer, sizeof(old_address_buffer));
+                HOMEKIT_INFO("[%d] Duplicated connection, closing old on port %d", s, old_addr.sin_port);
+                context->disconnect = true;
+                //homekit_server_close_client(context);
+            }
+
+            context = next;
         }
-
-        context = next;
     }
-
-    const struct timeval rcvtimeout = { 60, 0 };
+     */
+    
+    const struct timeval rcvtimeout = { 10, 0 };
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
     
-    const int yes = 1;
-    setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes));
+    const int keepalive = 0;
+    setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive));
     
+    /*
     const int idle = 60;
     setsockopt(s, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
 
@@ -3190,8 +3224,9 @@ client_context_t *homekit_server_accept_client() {
 
     const int maxpkt = 4;
     setsockopt(s, IPPROTO_TCP, TCP_KEEPCNT, &maxpkt, sizeof(maxpkt));
-
-    context = client_context_new();
+     */
+    
+    client_context_t *context = client_context_new();
 
     context->socket = s;
     context->next = homekit_server->clients;
@@ -3200,8 +3235,9 @@ client_context_t *homekit_server_accept_client() {
 
     FD_SET(s, &homekit_server->fds);
     homekit_server->client_count++;
-    if (s > homekit_server->max_fd)
+    if (s > homekit_server->max_fd) {
         homekit_server->max_fd = s;
+    }
 
     HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_CLIENT_CONNECTED);
 

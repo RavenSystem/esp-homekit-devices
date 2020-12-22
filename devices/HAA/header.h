@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.3.3"
+#define FIRMWARE_VERSION                    "4.3.4"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -236,24 +236,34 @@
 #define SENSOR_TEMPERATURE_FLOAT            ch_group->ch0->value.float_value
 #define TH_SENSOR_ERROR_COUNT               ch_group->num_09
 
-#define LIGHTBULB_PWM_GPIO_R                "r"
-#define LIGHTBULB_PWM_GPIO_G                "g"
-#define LIGHTBULB_PWM_GPIO_B                "v"
-#define LIGHTBULB_PWM_GPIO_W                "w"     // Will be removed
-#define LIGHTBULB_PWM_GPIO_CW               "cw"
-#define LIGHTBULB_PWM_GPIO_WW               "ww"
-#define LIGHTBULB_FACTOR_R                  "fr"
-#define LIGHTBULB_FACTOR_G                  "fg"
-#define LIGHTBULB_FACTOR_B                  "fv"
-#define LIGHTBULB_FACTOR_W                  "fw"    // Will be removed
-#define LIGHTBULB_FACTOR_CW                 "fcw"
-#define LIGHTBULB_FACTOR_WW                 "fww"
-#define LIGHTBULB_MAX_POWER                 "mp"
-#define LIGHTBULB_CURVE_FACTOR              "cf"
-#define LIGHTBULB_FLUX_ARRAY                "fa"
-#define LIGHTBULB_COORDINATE_ARRAY          "ca"
+#define LIGHTBULB_TYPE                      ch_group->num_00
+#define LIGHTBULB_CHANNELS                  ch_group->num_01
+#define LIGHTBULB_PWM_GPIO_R_SET            "r"
+#define LIGHTBULB_PWM_GPIO_G_SET            "g"
+#define LIGHTBULB_PWM_GPIO_B_SET            "v"
+#define LIGHTBULB_PWM_GPIO_W_SET            "w"                 // Will be removed
+#define LIGHTBULB_PWM_GPIO_CW_SET           "cw"
+#define LIGHTBULB_PWM_GPIO_WW_SET           "ww"
+#define LIGHTBULB_FACTOR_R_SET              "fr"
+#define LIGHTBULB_FACTOR_R                  ch_group->num_02
+#define LIGHTBULB_FACTOR_G_SET              "fg"
+#define LIGHTBULB_FACTOR_G                  ch_group->num_03
+#define LIGHTBULB_FACTOR_B_SET              "fv"
+#define LIGHTBULB_FACTOR_B                  ch_group->num_04
+#define LIGHTBULB_FACTOR_W_SET              "fw"                // Will be removed
+#define LIGHTBULB_FACTOR_W                  ch_group->num_12    // Will be removed
+#define LIGHTBULB_FACTOR_CW_SET             "fcw"
+#define LIGHTBULB_FACTOR_CW                 ch_group->num_05
+#define LIGHTBULB_FACTOR_WW_SET             "fww"
+#define LIGHTBULB_FACTOR_WW                 ch_group->num_06
+#define LIGHTBULB_MAX_POWER_SET             "mp"
+#define LIGHTBULB_MAX_POWER                 ch_group->num_07
+#define LIGHTBULB_CURVE_FACTOR_SET          "cf"
+#define LIGHTBULB_CURVE_FACTOR              ch_group->num_08
+#define LIGHTBULB_FLUX_ARRAY_SET            "fa"
+#define LIGHTBULB_COORDINATE_ARRAY_SET      "ca"
 #define RGBW_PERIOD                         (10)
-#define RGBW_STEP                           "st"
+#define RGBW_STEP_SET                       "st"
 #define RGBW_STEP_DEFAULT                   (1024)
 #define PWM_SCALE                           (UINT16_MAX - 1)
 #define COLOR_TEMP_MIN                      (71)
@@ -261,9 +271,9 @@
 #define LIGHTBULB_BRIGHTNESS_UP             (0)
 #define LIGHTBULB_BRIGHTNESS_DOWN           (1)
 #define AUTODIMMER_DELAY                    (500)
-#define AUTODIMMER_TASK_DELAY               "d"
+#define AUTODIMMER_TASK_DELAY_SET           "d"
 #define AUTODIMMER_TASK_DELAY_DEFAULT       (1000)
-#define AUTODIMMER_TASK_STEP                "e"
+#define AUTODIMMER_TASK_STEP_SET            "e"
 #define AUTODIMMER_TASK_STEP_DEFAULT        (20)
 
 #define CW_RED                              (52200)

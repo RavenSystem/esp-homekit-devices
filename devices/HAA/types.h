@@ -184,16 +184,6 @@ typedef struct _lightbulb_group {
     
     uint16_t step;
     uint16_t autodimmer_task_delay;
-
-    float factor_r;
-    float factor_g;
-    float factor_b;
-    float factor_w;         // Will be removed
-    float factor_cw;
-    float factor_ww;
-    
-    float max_power;
-    float curve_factor;
     
     float flux_r;
     float flux_g;
@@ -215,7 +205,6 @@ typedef struct _lightbulb_group {
     float vwx;
     float vwy;
     
-    bool is_pwm: 1;
     bool armed_autodimmer: 1;
 
     homekit_characteristic_t* ch0;

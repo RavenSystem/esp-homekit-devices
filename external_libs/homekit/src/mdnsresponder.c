@@ -659,9 +659,7 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
     
     internal_mdns_announce();
     
-//    if (ttl > 0) {
-        esp_timer_change_period(mdns_announce_timer, (ttl - 1) * TTL_MULTIPLIER_MS);
-//    }
+    esp_timer_change_period(mdns_announce_timer, (ttl - 1) * TTL_MULTIPLIER_MS);
 }
 
 void mdns_add_facility(const char* instanceName,   // Friendly name, need not be unique
@@ -677,13 +675,12 @@ void mdns_add_facility(const char* instanceName,   // Friendly name, need not be
     }
     
     vTaskDelayMs(500);
-/*
-    if (strstr(addText, "sf=1") != NULL) {
-        mdns_add_facility_work(instanceName, serviceName, addText, flags, onPort, 0);
-        vTaskDelayMs(2000);
-        mdns_clear();
+
+    if (ttl < 1000 && strstr(addText, "sf=1") != NULL) {
+        printf("mDNS changes TTL to 4500 for pairing\n");
+        ttl = 4500;
     }
-*/
+
     mdns_add_facility_work(instanceName, serviceName, addText, flags, onPort, ttl);
 }
 
