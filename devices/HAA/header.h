@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.3.4"
+#define FIRMWARE_VERSION                    "4.4.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -43,18 +43,19 @@
 #define TYPE_DOUBLE_LOCK                    (10)
 
 // Task Stack Sizes
-#define GLOBAL_TASK_SIZE                    (448)
+#define GLOBAL_TASK_SIZE                    (512)
 
 #define INITIAL_SETUP_TASK_SIZE             (1024)
 #define PING_TASK_SIZE                      GLOBAL_TASK_SIZE
 #define AUTODIMMER_TASK_SIZE                GLOBAL_TASK_SIZE
 #define IR_TX_TASK_SIZE                     (384)
 #define UART_ACTION_TASK_SIZE               (384)
-#define NETWORK_ACTION_TASK_SIZE            (448)
+#define NETWORK_ACTION_TASK_SIZE            (480)
 #define DELAYED_SENSOR_START_TASK_SIZE      GLOBAL_TASK_SIZE
 #define TEMPERATURE_TASK_SIZE               GLOBAL_TASK_SIZE
 #define PROCESS_TH_TASK_SIZE                GLOBAL_TASK_SIZE
 #define SET_ZONES_TASK_SIZE                 GLOBAL_TASK_SIZE
+#define LIGHTBULB_TASK_SIZE                 GLOBAL_TASK_SIZE
 #define POWER_MONITOR_TASK_SIZE             GLOBAL_TASK_SIZE
 #define LIGHT_SENSOR_TASK_SIZE              GLOBAL_TASK_SIZE
 #define WIFI_PING_TASK_SIZE                 (384)
@@ -73,6 +74,7 @@
 #define TEMPERATURE_TASK_PRIORITY           (tskIDLE_PRIORITY + 1)
 #define PROCESS_TH_TASK_PRIORITY            (tskIDLE_PRIORITY + 1)
 #define SET_ZONES_TASK_PRIORITY             (tskIDLE_PRIORITY + 1)
+#define LIGHTBULB_TASK_PRIORITY             (tskIDLE_PRIORITY + 1)
 #define POWER_MONITOR_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
 #define LIGHT_SENSOR_TASK_PRIORITY          (tskIDLE_PRIORITY + 1)
 #define WIFI_PING_TASK_PRIORITY             (tskIDLE_PRIORITY + 1)
@@ -275,6 +277,7 @@
 #define AUTODIMMER_TASK_DELAY_DEFAULT       (1000)
 #define AUTODIMMER_TASK_STEP_SET            "e"
 #define AUTODIMMER_TASK_STEP_DEFAULT        (20)
+#define LIGHTBULB_SET_DELAY_MS              (300)
 
 #define CW_RED                              (52200)
 #define CW_GREEN                            (56000)
@@ -429,6 +432,7 @@
 #define NETWORK_ACTION_PORT                 "p"
 #define NETWORK_ACTION_URL                  "u"
 #define NETWORK_ACTION_METHOD               "m"
+#define NETWORK_ACTION_HEADER               "e"
 #define NETWORK_ACTION_CONTENT              "c"
 #define NETWORK_ACTION_WILDCARD_VALUE       "#HAA@"
 #define SYSTEM_ACTION_REBOOT                (0)

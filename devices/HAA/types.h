@@ -66,6 +66,7 @@ typedef struct _action_network {
     
     char* host;
     char* url;
+    char* header;
     char* content;
     uint8_t* raw;
     
@@ -185,25 +186,15 @@ typedef struct _lightbulb_group {
     uint16_t step;
     uint16_t autodimmer_task_delay;
     
-    float flux_r;
-    float flux_g;
-    float flux_b;
-    float flux_cw;
-    float flux_ww;
+    float flux[5];
     
-    float rx;
-    float ry;
-    float gx;
-    float gy;
-    float bx;
-    float by;
-    float cwx;
-    float cwy;
-    float wwx;
-    float wwy;
+    float r[2];
+    float g[2];
+    float b[2];
+    float cw[2];
+    float ww[2];
     
-    float vwx;
-    float vwy;
+    float vw[2];
     
     bool armed_autodimmer: 1;
 
