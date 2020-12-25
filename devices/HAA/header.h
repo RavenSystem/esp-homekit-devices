@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.4.0"
+#define FIRMWARE_VERSION                    "4.4.1"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -239,6 +239,7 @@
 #define TH_SENSOR_ERROR_COUNT               ch_group->num_09
 
 #define LIGHTBULB_TYPE                      ch_group->num_00
+#define LIGHTBULB_CHANNELS_SET              "n"
 #define LIGHTBULB_CHANNELS                  ch_group->num_01
 #define LIGHTBULB_PWM_GPIO_R_SET            "r"
 #define LIGHTBULB_PWM_GPIO_G_SET            "g"
@@ -264,6 +265,7 @@
 #define LIGHTBULB_CURVE_FACTOR              ch_group->num_08
 #define LIGHTBULB_FLUX_ARRAY_SET            "fa"
 #define LIGHTBULB_COORDINATE_ARRAY_SET      "ca"
+#define LIGHTBULB_TRANSF_MATRIX_SET         "tm"
 #define RGBW_PERIOD                         (10)
 #define RGBW_STEP_SET                       "st"
 #define RGBW_STEP_DEFAULT                   (1024)
@@ -277,7 +279,7 @@
 #define AUTODIMMER_TASK_DELAY_DEFAULT       (1000)
 #define AUTODIMMER_TASK_STEP_SET            "e"
 #define AUTODIMMER_TASK_STEP_DEFAULT        (20)
-#define LIGHTBULB_SET_DELAY_MS              (300)
+#define LIGHTBULB_SET_DELAY_MS              (200)
 
 #define CW_RED                              (52200)
 #define CW_GREEN                            (56000)

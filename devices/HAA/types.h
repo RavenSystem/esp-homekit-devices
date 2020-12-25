@@ -164,15 +164,17 @@ typedef struct _action_task {
 } action_task_t;
 
 typedef struct _lightbulb_group {
-    uint8_t pwm_r;
-    uint8_t pwm_g;
-    uint8_t pwm_b;
-    uint8_t pwm_w;          // Will be removed
-    
-    uint8_t pwm_cw;
-    uint8_t pwm_ww;
     uint8_t autodimmer;
     uint8_t autodimmer_task_step;
+    uint8_t pwm_r: 5;
+    uint8_t pwm_g: 5;
+    uint8_t pwm_b: 5;
+    bool armed_autodimmer: 1;
+    
+    uint8_t pwm_w: 5;          // Will be removed
+    
+    uint8_t pwm_cw: 5;
+    uint8_t pwm_ww: 5;
     
     uint16_t target_r;
     uint16_t target_g;
@@ -194,9 +196,7 @@ typedef struct _lightbulb_group {
     float cw[2];
     float ww[2];
     
-    float vw[2];
-    
-    bool armed_autodimmer: 1;
+    float tm[9];
 
     homekit_characteristic_t* ch0;
     

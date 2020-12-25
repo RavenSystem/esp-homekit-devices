@@ -1815,7 +1815,7 @@ void temperature_timer_worker(TimerHandle_t xTimer) {
 
 // Helper function to compute intersections, used only once for init: PRODUCING WRONG Y COORDINATE,+>* ugh
 void intersect(float p[], float p1[], float p2[], float p3[], float p4[]) {
-    float denom = (p1[0] - p2[0]) * (p3[1] - p4[1]) - (p1[1] - p2[1]) * (p3[0] - p4[0]);
+    const float denom = (p1[0] - p2[0]) * (p3[1] - p4[1]) - (p1[1] - p2[1]) * (p3[0] - p4[0]);
     p[0] = ((p1[0] * p2[1] - p1[1] * p2[0]) * (p3[0] - p4[0]) - (p1[0] - p2[0]) * (p3[0] * p4[1] - p3[1] * p4[0])) / denom;
     p[1] = ((p1[0] * p2[1] - p1[1] * p2[0]) * (p3[1] - p4[1]) - (p1[1] - p2[1]) * (p3[0] * p4[1] - p3[1] * p4[0])) / denom;
 }
@@ -1946,7 +1946,7 @@ void rgbw_set_timer_worker() {
         lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
         
         while (main_config.haa_pwm->setpwm_is_running && lightbulb_group) {
-            if (lightbulb_group->pwm_r != 255) {
+            if (lightbulb_group->pwm_r != GPIO_OVERFLOW) {
                 if (lightbulb_group->target_r - main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_r] >= lightbulb_group->step) {
                     main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_r] += lightbulb_group->step;
                 } else if (main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_r] - lightbulb_group->target_r >= lightbulb_group->step) {
@@ -1957,7 +1957,7 @@ void rgbw_set_timer_worker() {
                 }
             }
             
-            if (lightbulb_group->pwm_g != 255) {
+            if (lightbulb_group->pwm_g != GPIO_OVERFLOW) {
                 if (lightbulb_group->target_g - main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_g] >= lightbulb_group->step) {
                     main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_g] += lightbulb_group->step;
                 } else if (main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_g] - lightbulb_group->target_g >= lightbulb_group->step) {
@@ -1968,7 +1968,7 @@ void rgbw_set_timer_worker() {
                 }
             }
             
-            if (lightbulb_group->pwm_b != 255) {
+            if (lightbulb_group->pwm_b != GPIO_OVERFLOW) {
                 if (lightbulb_group->target_b - main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_b] >= lightbulb_group->step) {
                     main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_b] += lightbulb_group->step;
                 } else if (main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_b] - lightbulb_group->target_b >= lightbulb_group->step) {
@@ -1979,7 +1979,7 @@ void rgbw_set_timer_worker() {
                 }
             }
             
-            if (lightbulb_group->pwm_w != 255) {
+            if (lightbulb_group->pwm_w != GPIO_OVERFLOW) {
                 if (lightbulb_group->target_w - main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_w] >= lightbulb_group->step) {
                     main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_w] += lightbulb_group->step;
                 } else if (main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_w] - lightbulb_group->target_w >= lightbulb_group->step) {
@@ -1990,7 +1990,7 @@ void rgbw_set_timer_worker() {
                 }
             }
             
-            if (lightbulb_group->pwm_cw != 255) {
+            if (lightbulb_group->pwm_cw != GPIO_OVERFLOW) {
                 if (lightbulb_group->target_cw - main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_cw] >= lightbulb_group->step) {
                     main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_cw] += lightbulb_group->step;
                 } else if (main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_cw] - lightbulb_group->target_cw >= lightbulb_group->step) {
@@ -2001,7 +2001,7 @@ void rgbw_set_timer_worker() {
                 }
             }
             
-            if (lightbulb_group->pwm_ww != 255) {
+            if (lightbulb_group->pwm_ww != GPIO_OVERFLOW) {
                 if (lightbulb_group->target_ww - main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_ww] >= lightbulb_group->step) {
                     main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_ww] += lightbulb_group->step;
                 } else if (main_config.haa_pwm->multipwm_duty[lightbulb_group->pwm_ww] - lightbulb_group->target_ww >= lightbulb_group->step) {
@@ -6668,6 +6668,11 @@ void normal_mode_init() {
             main_config.haa_pwm->pwm_info->channels = 0;
         }
         
+        LIGHTBULB_CHANNELS = 1;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CHANNELS_SET) != NULL) {
+            LIGHTBULB_CHANNELS = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CHANNELS_SET)->valuedouble;
+        }
+        
         homekit_characteristic_t* ch0 = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .setter_ex=hkc_rgbw_setter);
         homekit_characteristic_t* ch1 = NEW_HOMEKIT_CHARACTERISTIC(BRIGHTNESS, 100, .setter_ex=hkc_rgbw_setter);
  
@@ -6682,13 +6687,12 @@ void normal_mode_init() {
         lightbulb_group_t* lightbulb_group = malloc(sizeof(lightbulb_group_t));
         memset(lightbulb_group, 0, sizeof(*lightbulb_group));
         lightbulb_group->ch0 = ch0;
-        LIGHTBULB_CHANNELS = 1;
-        lightbulb_group->pwm_r = 255;
-        lightbulb_group->pwm_g = 255;
-        lightbulb_group->pwm_b = 255;
-        lightbulb_group->pwm_w = 255;       // Will be removed
-        lightbulb_group->pwm_cw = 255;
-        lightbulb_group->pwm_ww = 255;
+        lightbulb_group->pwm_r = GPIO_OVERFLOW;
+        lightbulb_group->pwm_g = GPIO_OVERFLOW;
+        lightbulb_group->pwm_b = GPIO_OVERFLOW;
+        lightbulb_group->pwm_w = GPIO_OVERFLOW;     // Will be removed
+        lightbulb_group->pwm_cw = GPIO_OVERFLOW;
+        lightbulb_group->pwm_ww = GPIO_OVERFLOW;
         lightbulb_group->target_r = 0;
         lightbulb_group->target_g = 0;
         lightbulb_group->target_b = 0;
@@ -6698,28 +6702,35 @@ void normal_mode_init() {
         LIGHTBULB_FACTOR_R = 1;
         LIGHTBULB_FACTOR_G = 1;
         LIGHTBULB_FACTOR_B = 1;
-        LIGHTBULB_FACTOR_W = 1;      // Will be removed
+        LIGHTBULB_FACTOR_W = 1;             // Will be removed
         LIGHTBULB_FACTOR_CW = 1;
         LIGHTBULB_FACTOR_WW = 1;
         LIGHTBULB_MAX_POWER = 1;
-        LIGHTBULB_CURVE_FACTOR = 1;
+        LIGHTBULB_CURVE_FACTOR = 0;
         lightbulb_group->flux[0] = 1;
         lightbulb_group->flux[1] = 1;
         lightbulb_group->flux[2] = 1;
-        lightbulb_group->flux[3] = 1;
-        lightbulb_group->flux[4] = 1;
-        lightbulb_group->r[0] = 0.648428;
-        lightbulb_group->r[1] = 0.330855;
-        lightbulb_group->g[0] = 0.321142;
-        lightbulb_group->g[1] = 0.597873;
-        lightbulb_group->b[0] = 0.155883;
-        lightbulb_group->b[1] = 0.0660408;
-        lightbulb_group->cw[0] = 0.322016;
-        lightbulb_group->cw[1] = 0.331776;
-        lightbulb_group->ww[0] = 0.436579;
-        lightbulb_group->ww[1] = 0.404174;
-        lightbulb_group->vw[0] = 0;
-        lightbulb_group->vw[1] = 0;
+        lightbulb_group->flux[3] = 3;
+        lightbulb_group->flux[4] = 3;
+        lightbulb_group->r[0] = 0.6914;
+        lightbulb_group->r[1] = 0.3077;
+        lightbulb_group->g[0] = 0.1451;
+        lightbulb_group->g[1] = 0.7097;
+        lightbulb_group->b[0] = 0.1350;
+        lightbulb_group->b[1] = 0.0622;
+        lightbulb_group->cw[0] = 0.3115;
+        lightbulb_group->cw[1] = 0.3338;
+        lightbulb_group->ww[0] = 0.4784;
+        lightbulb_group->ww[1] = 0.4065;
+        lightbulb_group->tm[0] = 0.05008169696668266;
+        lightbulb_group->tm[1] = 0.3284098565360351;
+        lightbulb_group->tm[2] = 0.7200084464972822;
+        lightbulb_group->tm[3] = 0.0212174812472722;
+        lightbulb_group->tm[4] = 0.6114036059981985;
+        lightbulb_group->tm[5] = 0.36737891275452916;
+        lightbulb_group->tm[6] = 0.24997900312962434;
+        lightbulb_group->tm[7] = 0.0828173812577186;
+        lightbulb_group->tm[8] = 0.023003615612657027;
         lightbulb_group->step = RGBW_STEP_DEFAULT;
         lightbulb_group->autodimmer = 0;
         lightbulb_group->armed_autodimmer = false;
@@ -6794,7 +6805,9 @@ void normal_mode_init() {
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_WW_SET) != NULL) {
                 LIGHTBULB_FACTOR_WW = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FACTOR_WW_SET)->valuedouble;
             }
-            
+        }
+        
+        if ((uint8_t) LIGHTBULB_TYPE != 0) {
             INFO("Lightbulb channels: %i", (uint8_t) LIGHTBULB_CHANNELS);
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_MAX_POWER_SET) != NULL) {
@@ -6835,16 +6848,21 @@ void normal_mode_init() {
             }
 
             INFO("Coordinate array: [%g, %g], [%g, %g], [%g, %g], [%g, %g], [%g, %g]", lightbulb_group->r[0], lightbulb_group->r[1],
-                                                                            lightbulb_group->g[0], lightbulb_group->g[1],
-                                                                            lightbulb_group->b[0], lightbulb_group->b[1],
-                                                                            lightbulb_group->cw[0], lightbulb_group->cw[1],
-                                                                            lightbulb_group->ww[0], lightbulb_group->ww[1]);
+                                                                                        lightbulb_group->g[0], lightbulb_group->g[1],
+                                                                                        lightbulb_group->b[0], lightbulb_group->b[1],
+                                                                                        lightbulb_group->cw[0], lightbulb_group->cw[1],
+                                                                                        lightbulb_group->ww[0], lightbulb_group->ww[1]);
             
-            // (Kevin) Compute the virtual white if 5-channel; assumes the last two are whites
-            if ((uint8_t) LIGHTBULB_CHANNELS == 5) {
-                intersect(lightbulb_group->vw, lightbulb_group->r, lightbulb_group->cw, lightbulb_group->b, lightbulb_group->ww); // defined with the rest of my color functions, only used once up here
-                INFO("VM: X = %g, Y = %g", lightbulb_group->vw[0], lightbulb_group->vw[1]);
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_TRANSF_MATRIX_SET) != NULL) {
+                cJSON* transf_matrix = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_TRANSF_MATRIX_SET);
+                for (uint8_t i = 0; i < 9; i++) {
+                    lightbulb_group->tm[i] = (float) cJSON_GetArrayItem(transf_matrix, i)->valuedouble;
+                }
             }
+            
+            INFO("Transformation Matrix: [%g, %g, %g], [%g, %g, %g], [%g, %g, %g]", lightbulb_group->tm[0], lightbulb_group->tm[1], lightbulb_group->tm[2],
+                                                                                    lightbulb_group->tm[3], lightbulb_group->tm[4], lightbulb_group->tm[5],
+                                                                                    lightbulb_group->tm[6], lightbulb_group->tm[7], lightbulb_group->tm[8]);
         }
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, RGBW_STEP_SET) != NULL) {
@@ -7633,7 +7651,9 @@ void normal_mode_init() {
     if (main_config.lightbulb_groups) {
         INFO("Init Lights");
         
-        main_config.haa_pwm->setpwm_bool_semaphore = false;
+        if (main_config.haa_pwm) {
+            main_config.haa_pwm->setpwm_bool_semaphore = false;
+        }
         
         lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
         while (lightbulb_group) {
