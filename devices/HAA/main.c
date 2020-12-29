@@ -337,7 +337,7 @@ lightbulb_group_t* lightbulb_group_find(homekit_characteristic_t* ch) {
 }
 
 bool ping_host(char* host) {
-    if (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
+    if (!wifi_config_got_ip()) {
         return false;
     }
     
@@ -431,7 +431,7 @@ void wifi_reconnection_task() {
             wifi_config_smart_connect();
             main_config.wifi_status = WIFI_STATUS_CONNECTING;
 
-        } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+        } else if (wifi_config_got_ip()) {
             if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
                 INFO("Wifi reconnected");
                 main_config.wifi_status = WIFI_STATUS_CONNECTED;
@@ -478,7 +478,7 @@ void wifi_reconnection_task() {
 void wifi_watchdog_task() {
     main_config.wifi_watchdog_is_running = true;
     
-    if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
+    if (wifi_config_got_ip() && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
         uint8_t current_channel = sdk_wifi_get_channel();
         if (main_config.wifi_mode == 3) {
             if (main_config.wifi_roaming_count == 0) {
@@ -512,7 +512,6 @@ void wifi_watchdog_task() {
         }
         
         if (main_config.wifi_ping_max_errors != 255 && !main_config.wifi_ping_is_running && !homekit_is_pairing()) {
-            main_config.wifi_error_count = 0;
             if (xTaskCreate(wifi_ping_task, "wifi_ping", WIFI_PING_TASK_SIZE, NULL, WIFI_PING_TASK_PRIORITY, NULL) != pdPASS) {
                 ERROR("Creating wifi_ping_task");
                 FREEHEAP();
@@ -568,7 +567,7 @@ void ping_task() {
         
         while (ping_input_callback_fn) {
             if (!ping_input_callback_fn->disable_without_wifi ||
-                (ping_input_callback_fn->disable_without_wifi && sdk_wifi_station_get_connect_status() == STATION_GOT_IP)) {
+                (ping_input_callback_fn->disable_without_wifi && wifi_config_got_ip())) {
                 ping_input_callback_fn->callback(0, ping_input_callback_fn->ch_group, ping_input_callback_fn->param);
             }
             ping_input_callback_fn = ping_input_callback_fn->next;
@@ -684,13 +683,13 @@ inline void save_states_callback() {
 }
 
 void homekit_characteristic_notify_safe(homekit_characteristic_t *ch, const homekit_value_t value) {
-    if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+    if (wifi_config_got_ip()) {
         homekit_characteristic_notify(ch, value);
     }
 }
 
 void hkc_group_notify(ch_group_t* ch_group) {
-    if (!ch_group->homekit_enabled || sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
+    if (!ch_group->homekit_enabled || !wifi_config_got_ip()) {
         return;
     }
     
@@ -3183,7 +3182,7 @@ void net_action_task(void* pvParameters) {
             action_network->is_running = true;
             
             vTaskDelay(pdMS_TO_TICKS(10));
-            
+            FREEHEAP();
             INFO("<%i> Network Action %s:%i", action_task->ch_group->accessory, action_network->host, action_network->port_n);
             
             struct addrinfo* res;
@@ -3503,7 +3502,7 @@ void net_action_task(void* pvParameters) {
             freeaddrinfo(res);
             
             INFO("<%i> Network Action %s:%i done", action_task->ch_group->accessory, action_network->host, action_network->port_n);
-            
+            FREEHEAP();
             action_network->is_running = false;
         }
         
@@ -4132,7 +4131,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     }
     
     // Network actions
-    if (ch_group->action_network && sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+    if (ch_group->action_network && wifi_config_got_ip()) {
         action_task_t* action_task = new_action_task();
         action_task->action = action;
         action_task->ch_group = ch_group;
@@ -6699,12 +6698,12 @@ void normal_mode_init() {
         lightbulb_group->target_w = 0;      // Will be removed
         lightbulb_group->target_cw = 0;
         lightbulb_group->target_ww = 0;
-        LIGHTBULB_FACTOR_R = 1;
-        LIGHTBULB_FACTOR_G = 1;
-        LIGHTBULB_FACTOR_B = 1;
+        LIGHTBULB_FACTOR_R = 1;             // Will be removed
+        LIGHTBULB_FACTOR_G = 1;             // Will be removed
+        LIGHTBULB_FACTOR_B = 1;             // Will be removed
         LIGHTBULB_FACTOR_W = 1;             // Will be removed
-        LIGHTBULB_FACTOR_CW = 1;
-        LIGHTBULB_FACTOR_WW = 1;
+        LIGHTBULB_FACTOR_CW = 1;            // Will be removed
+        LIGHTBULB_FACTOR_WW = 1;            // Will be removed
         LIGHTBULB_MAX_POWER = 1;
         LIGHTBULB_CURVE_FACTOR = 0;
         lightbulb_group->flux[0] = 1;
@@ -6722,15 +6721,8 @@ void normal_mode_init() {
         lightbulb_group->cw[1] = 0.3338;
         lightbulb_group->ww[0] = 0.4784;
         lightbulb_group->ww[1] = 0.4065;
-        lightbulb_group->tm[0] = 0.05008169696668266;
-        lightbulb_group->tm[1] = 0.3284098565360351;
-        lightbulb_group->tm[2] = 0.7200084464972822;
-        lightbulb_group->tm[3] = 0.0212174812472722;
-        lightbulb_group->tm[4] = 0.6114036059981985;
-        lightbulb_group->tm[5] = 0.36737891275452916;
-        lightbulb_group->tm[6] = 0.24997900312962434;
-        lightbulb_group->tm[7] = 0.0828173812577186;
-        lightbulb_group->tm[8] = 0.023003615612657027;
+        lightbulb_group->wp[0] = 0;
+        lightbulb_group->wp[1] = 0;
         lightbulb_group->step = RGBW_STEP_DEFAULT;
         lightbulb_group->autodimmer = 0;
         lightbulb_group->armed_autodimmer = false;
@@ -6853,16 +6845,13 @@ void normal_mode_init() {
                                                                                         lightbulb_group->cw[0], lightbulb_group->cw[1],
                                                                                         lightbulb_group->ww[0], lightbulb_group->ww[1]);
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_TRANSF_MATRIX_SET) != NULL) {
-                cJSON* transf_matrix = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_TRANSF_MATRIX_SET);
-                for (uint8_t i = 0; i < 9; i++) {
-                    lightbulb_group->tm[i] = (float) cJSON_GetArrayItem(transf_matrix, i)->valuedouble;
-                }
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_WHITE_POINT_SET) != NULL) {
+                cJSON* white_point = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_WHITE_POINT_SET);
+                lightbulb_group->wp[0] = (float) cJSON_GetArrayItem(white_point, 0)->valuedouble;
+                lightbulb_group->wp[1] = (float) cJSON_GetArrayItem(white_point, 1)->valuedouble;
             }
             
-            INFO("Transformation Matrix: [%g, %g, %g], [%g, %g, %g], [%g, %g, %g]", lightbulb_group->tm[0], lightbulb_group->tm[1], lightbulb_group->tm[2],
-                                                                                    lightbulb_group->tm[3], lightbulb_group->tm[4], lightbulb_group->tm[5],
-                                                                                    lightbulb_group->tm[6], lightbulb_group->tm[7], lightbulb_group->tm[8]);
+            INFO("White point: [%g, %g]", lightbulb_group->wp[0], lightbulb_group->wp[1]);
         }
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, RGBW_STEP_SET) != NULL) {

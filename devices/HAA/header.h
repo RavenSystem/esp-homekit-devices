@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.4.1"
+#define FIRMWARE_VERSION                    "4.4.2"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -247,25 +247,25 @@
 #define LIGHTBULB_PWM_GPIO_W_SET            "w"                 // Will be removed
 #define LIGHTBULB_PWM_GPIO_CW_SET           "cw"
 #define LIGHTBULB_PWM_GPIO_WW_SET           "ww"
-#define LIGHTBULB_FACTOR_R_SET              "fr"
-#define LIGHTBULB_FACTOR_R                  ch_group->num_02
-#define LIGHTBULB_FACTOR_G_SET              "fg"
-#define LIGHTBULB_FACTOR_G                  ch_group->num_03
-#define LIGHTBULB_FACTOR_B_SET              "fv"
-#define LIGHTBULB_FACTOR_B                  ch_group->num_04
+#define LIGHTBULB_FACTOR_R_SET              "fr"                // Will be removed
+#define LIGHTBULB_FACTOR_R                  ch_group->num_02    // Will be removed
+#define LIGHTBULB_FACTOR_G_SET              "fg"                // Will be removed
+#define LIGHTBULB_FACTOR_G                  ch_group->num_03    // Will be removed
+#define LIGHTBULB_FACTOR_B_SET              "fv"                // Will be removed
+#define LIGHTBULB_FACTOR_B                  ch_group->num_04    // Will be removed
 #define LIGHTBULB_FACTOR_W_SET              "fw"                // Will be removed
 #define LIGHTBULB_FACTOR_W                  ch_group->num_12    // Will be removed
-#define LIGHTBULB_FACTOR_CW_SET             "fcw"
-#define LIGHTBULB_FACTOR_CW                 ch_group->num_05
-#define LIGHTBULB_FACTOR_WW_SET             "fww"
-#define LIGHTBULB_FACTOR_WW                 ch_group->num_06
+#define LIGHTBULB_FACTOR_CW_SET             "fcw"               // Will be removed
+#define LIGHTBULB_FACTOR_CW                 ch_group->num_05    // Will be removed
+#define LIGHTBULB_FACTOR_WW_SET             "fww"               // Will be removed
+#define LIGHTBULB_FACTOR_WW                 ch_group->num_06    // Will be removed
 #define LIGHTBULB_MAX_POWER_SET             "mp"
 #define LIGHTBULB_MAX_POWER                 ch_group->num_07
 #define LIGHTBULB_CURVE_FACTOR_SET          "cf"
 #define LIGHTBULB_CURVE_FACTOR              ch_group->num_08
 #define LIGHTBULB_FLUX_ARRAY_SET            "fa"
 #define LIGHTBULB_COORDINATE_ARRAY_SET      "ca"
-#define LIGHTBULB_TRANSF_MATRIX_SET         "tm"
+#define LIGHTBULB_WHITE_POINT_SET           "wp"
 #define RGBW_PERIOD                         (10)
 #define RGBW_STEP_SET                       "st"
 #define RGBW_STEP_DEFAULT                   (1024)

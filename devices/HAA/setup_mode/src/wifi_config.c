@@ -182,6 +182,15 @@ static void client_send_redirect(client_t *client, int code, const char *redirec
     client_send(client, buffer, len);
 }
 
+bool wifi_config_got_ip() {
+    struct ip_info info;
+    if (sdk_wifi_get_ip_info(STATION_IF, &info) && ip4_addr1_16(&info.ip) != 0) {
+        return true;
+    }
+        
+    return false;
+}
+
 void wifi_config_resend_arp() {
     struct netif *netif = sdk_system_get_netif(STATION_IF);
     if (netif && netif->flags & NETIF_FLAG_LINK_UP && netif->flags & NETIF_FLAG_UP) {
@@ -285,7 +294,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
         if (wifi_bssid && memcmp(best_bssid, wifi_bssid, 6) == 0) {
             INFO("Best BSSID is the same");
             free(wifi_bssid);
-            if (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
+            if (!wifi_config_got_ip()) {
                 sdk_wifi_station_connect();
             }
             return;
@@ -1025,7 +1034,7 @@ static void wifi_config_sta_connect_timeout_task() {
                 UNLOCK_TCPIP_CORE();
                 context->hostname_ready = true;
             }
-        } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+        } else if (wifi_config_got_ip()) {
             wifi_config_softap_stop();
             
             if (context->on_wifi_ready) {

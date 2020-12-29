@@ -196,7 +196,7 @@ typedef struct _lightbulb_group {
     float cw[2];
     float ww[2];
     
-    float tm[9];
+    float wp[2];
 
     homekit_characteristic_t* ch0;
     
