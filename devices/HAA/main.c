@@ -3182,7 +3182,7 @@ void net_action_task(void* pvParameters) {
             action_network->is_running = true;
             
             vTaskDelay(pdMS_TO_TICKS(10));
-            FREEHEAP();
+
             INFO("<%i> Network Action %s:%i", action_task->ch_group->accessory, action_network->host, action_network->port_n);
             
             struct addrinfo* res;
@@ -3502,7 +3502,7 @@ void net_action_task(void* pvParameters) {
             freeaddrinfo(res);
             
             INFO("<%i> Network Action %s:%i done", action_task->ch_group->accessory, action_network->host, action_network->port_n);
-            FREEHEAP();
+
             action_network->is_running = false;
         }
         

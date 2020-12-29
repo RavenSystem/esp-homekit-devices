@@ -1010,7 +1010,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 
     switch(tlv_get_integer_value(message, TLVType_State, -1)) {
         case 1: {
-            CLIENT_INFO(context, "Pair 1/3");
+            CLIENT_INFO(context, "Pairing 1/3");
             DEBUG_HEAP();
             if (homekit_server->paired) {
                 CLIENT_INFO(context, "Already paired");
@@ -1084,11 +1084,13 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             free(salt);
 
             send_tlv_response(context, response);
+            
+            CLIENT_INFO(context, "Pair done 1/3");
             break;
         }
             
         case 3: {
-            CLIENT_INFO(context, "Pair 2/3");
+            CLIENT_INFO(context, "Pairing 2/3");
             DEBUG_HEAP();
             tlv_t *device_public_key = tlv_get_value(message, TLVType_PublicKey);
             if (!device_public_key) {
@@ -1153,11 +1155,13 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             free(server_proof);
 
             send_tlv_response(context, response);
+            
+            CLIENT_INFO(context, "Pair done 2/3");
             break;
         }
             
         case 5: {
-            CLIENT_INFO(context, "Pair 3/3");
+            CLIENT_INFO(context, "Pairing 3/3");
             DEBUG_HEAP();
 
             int r;
@@ -1507,7 +1511,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             homekit_mdns_buffer_deinit();
             homekit_setup_mdns();
 
-            CLIENT_INFO(context, "Successfully paired");
+            CLIENT_INFO(context, "Pair done 3/3");
             
             homekit_server->is_pairing = false;
             break;
