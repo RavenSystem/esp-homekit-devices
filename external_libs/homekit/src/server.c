@@ -3428,27 +3428,27 @@ void homekit_setup_mdns() {
     // accessory category identifier
     homekit_mdns_add_txt("ci", "%d", homekit_server->config->category);
 
-    if (homekit_server->config->setupId) {
-        HOMEKIT_DEBUG_LOG("Accessory Setup ID = %s", homekit_server->config->setupId);
+    homekit_server->config->setupId = "JOSE";
 
-        size_t data_size = strlen(homekit_server->config->setupId) + strlen(homekit_server->accessory_id) + 1;
-        char *data = malloc(data_size);
-        snprintf(data, data_size, "%s%s", homekit_server->config->setupId, homekit_server->accessory_id);
-        data[data_size-1] = 0;
+    HOMEKIT_DEBUG_LOG("Accessory Setup ID = %s", homekit_server->config->setupId);
 
-        unsigned char shaHash[SHA512_DIGEST_SIZE];
-        wc_Sha512Hash((const unsigned char *)data, data_size-1, shaHash);
+    size_t data_size = strlen(homekit_server->config->setupId) + strlen(homekit_server->accessory_id) + 1;
+    char *data = malloc(data_size);
+    snprintf(data, data_size, "%s%s", homekit_server->config->setupId, homekit_server->accessory_id);
+    data[data_size-1] = 0;
 
-        free(data);
+    unsigned char shaHash[SHA512_DIGEST_SIZE];
+    wc_Sha512Hash((const unsigned char *)data, data_size-1, shaHash);
 
-        unsigned char encodedHash[9];
-        memset(encodedHash, 0, sizeof(encodedHash));
+    free(data);
 
-        word32 len = sizeof(encodedHash);
-        Base64_Encode_NoNl((const unsigned char *)shaHash, 4, encodedHash, &len);
+    unsigned char encodedHash[9];
+    memset(encodedHash, 0, sizeof(encodedHash));
 
-        homekit_mdns_add_txt("sh", "%s", encodedHash);
-    }
+    word32 len = sizeof(encodedHash);
+    Base64_Encode_NoNl((const unsigned char *)shaHash, 4, encodedHash, &len);
+
+    homekit_mdns_add_txt("sh", "%s", encodedHash);
 
     homekit_mdns_configure_finalize(homekit_server->config->mdns_ttl);
 }

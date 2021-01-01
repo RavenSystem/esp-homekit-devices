@@ -49,7 +49,6 @@
 
 main_config_t main_config = {
     .wifi_status = WIFI_STATUS_CONNECTED,
-    .wifi_channel = 0,
     .wifi_ping_max_errors = 255,
     .wifi_ping_is_running = false,
     .wifi_watchdog_is_running = false,
@@ -422,6 +421,9 @@ void wifi_ping_task() {
 }
 
 void wifi_reconnection_task() {
+    main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
+    do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
+    
     while (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
         vTaskDelay(pdMS_TO_TICKS(1000));
         
@@ -435,7 +437,6 @@ void wifi_reconnection_task() {
             if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
                 INFO("Wifi reconnected");
                 main_config.wifi_status = WIFI_STATUS_CONNECTED;
-                main_config.wifi_channel = sdk_wifi_get_channel();
                 
                 homekit_mdns_announce();
                 
@@ -469,9 +470,7 @@ void wifi_reconnection_task() {
     }
     
     vTaskDelay(pdMS_TO_TICKS(500));
-    
-    esp_timer_start(WIFI_WATCHDOG_TIMER);
-    
+
     vTaskDelete(NULL);
 }
 
@@ -479,7 +478,6 @@ void wifi_watchdog_task() {
     main_config.wifi_watchdog_is_running = true;
     
     if (wifi_config_got_ip() && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
-        uint8_t current_channel = sdk_wifi_get_channel();
         if (main_config.wifi_mode == 3) {
             if (main_config.wifi_roaming_count == 0) {
                 esp_timer_change_period(WIFI_WATCHDOG_TIMER, WIFI_WATCHDOG_POLL_PERIOD_MS);
@@ -492,16 +490,6 @@ void wifi_watchdog_task() {
                 main_config.wifi_roaming_count_max = WIFI_ROAMING_PERIOD + (hwrand() % WIFI_ROAMING_MARGIN);
                 main_config.wifi_roaming_count = 0;
                 wifi_config_smart_connect();
-            }
-        } else if (main_config.wifi_channel != current_channel) {
-            if (xTaskCreate(wifi_reconnection_task, "reconnect", WIFI_RECONNECTION_TASK_SIZE, NULL, WIFI_RECONNECTION_TASK_PRIORITY, NULL) == pdPASS) {
-                esp_timer_stop(WIFI_WATCHDOG_TIMER);
-                INFO("Wifi new Ch: %i", current_channel);
-                main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
-                homekit_mdns_announce();
-            } else {
-                ERROR("Creating wifi_reconnection_task");
-                FREEHEAP();
             }
         }
         
@@ -521,11 +509,7 @@ void wifi_watchdog_task() {
     } else {
         ERROR("Wifi error");
         main_config.wifi_error_count = 0;
-        if (xTaskCreate(wifi_reconnection_task, "reconnect", WIFI_RECONNECTION_TASK_SIZE, NULL, WIFI_RECONNECTION_TASK_PRIORITY, NULL) == pdPASS) {
-            esp_timer_stop(WIFI_WATCHDOG_TIMER);
-            main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
-            do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
-        } else {
+        if (xTaskCreate(wifi_reconnection_task, "reconnect", WIFI_RECONNECTION_TASK_SIZE, NULL, WIFI_RECONNECTION_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("Creating wifi_reconnection_task");
             FREEHEAP();
         }
@@ -537,7 +521,7 @@ void wifi_watchdog_task() {
 }
 
 void wifi_watchdog() {
-    if (!main_config.wifi_watchdog_is_running && !homekit_is_pairing()) {
+    if (!main_config.wifi_watchdog_is_running && !homekit_is_pairing() && main_config.wifi_status == WIFI_STATUS_CONNECTED) {
         if (xTaskCreate(wifi_watchdog_task, "wifi_watchdog", WIFI_WATCHDOG_TASK_SIZE, NULL, WIFI_WATCHDOG_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("Creating wifi_watchdog_task");
             FREEHEAP();
@@ -4256,8 +4240,6 @@ homekit_characteristic_t hap_version = HOMEKIT_CHARACTERISTIC_(VERSION, "1.1.0")
 homekit_server_config_t config;
 
 void run_homekit_server(TimerHandle_t xTimer) {
-    main_config.wifi_channel = sdk_wifi_get_channel();
-
     FREEHEAP();
     
     if (main_config.enable_homekit_server) {
@@ -7746,7 +7728,6 @@ void normal_mode_init() {
     INFO("Device Category: %i\n", config.category);
     
     config.accessories = accessories;
-    config.setupId = "JOSE";
     config.config_number = last_config_number;
     
     main_config.setup_mode_toggle_counter = 0;

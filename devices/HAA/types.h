@@ -268,9 +268,8 @@ typedef struct _haa_pwm {
 
 typedef struct _main_config {
     uint8_t wifi_status: 2;
-    uint8_t wifi_channel: 4;
+    uint8_t ir_tx_gpio: 5;
     bool wifi_ping_is_running: 1;
-    bool enable_homekit_server: 1;
     int8_t setup_mode_toggle_counter;
     int8_t setup_mode_toggle_counter_max;
     uint8_t ir_tx_freq: 6;
@@ -280,17 +279,18 @@ typedef struct _main_config {
     uint8_t wifi_ping_max_errors;
     uint8_t wifi_error_count;
     uint8_t wifi_arp_count;
-    uint8_t ir_tx_gpio: 5;
+    
+    uint8_t wifi_mode: 3;
+    bool enable_homekit_server: 1;
     bool ping_is_running: 1;
     bool used_gpio_0: 1;
     bool used_gpio_1: 1;
+    bool used_gpio_2: 1;
     
     uint16_t setup_mode_time;
     uint16_t wifi_roaming_count;
     
     uint16_t wifi_roaming_count_max;
-    uint8_t wifi_mode: 3;
-    bool used_gpio_2: 1;
     bool used_gpio_3: 1;
     bool used_gpio_4: 1;
     bool used_gpio_5: 1;

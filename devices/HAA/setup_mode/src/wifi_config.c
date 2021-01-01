@@ -228,7 +228,7 @@ static void wifi_smart_connect_task(void* arg) {
     memcpy(sta_config.bssid, best_bssid, 6);
     
     sdk_wifi_station_set_config(&sta_config);
-    sdk_wifi_station_set_auto_connect(true);
+    sdk_wifi_station_set_auto_connect(false);
     sdk_wifi_station_connect();
     
     free(wifi_ssid);
@@ -1125,7 +1125,7 @@ uint8_t wifi_config_connect() {
 
             sdk_wifi_set_opmode(STATION_MODE);
             sdk_wifi_station_set_config(&sta_config);
-            sdk_wifi_station_set_auto_connect(true);
+            sdk_wifi_station_set_auto_connect(false);
             sdk_wifi_station_connect();
             
         } else {
@@ -1133,7 +1133,7 @@ uint8_t wifi_config_connect() {
             sysparam_set_data(WIFI_BSSID_SYSPARAM, NULL, 0, false);
             sdk_wifi_set_opmode(STATION_MODE);
             sdk_wifi_station_set_config(&sta_config);
-            sdk_wifi_station_set_auto_connect(true);
+            sdk_wifi_station_set_auto_connect(false);
             
             if (wifi_mode == 4) {
                 xTaskCreate(wifi_scan_sc_task, "wifi_scan_smart", 384, NULL, (tskIDLE_PRIORITY + 2), NULL);
