@@ -182,6 +182,10 @@ int tlv_format(const tlv_values_t *values, byte *buffer, size_t *size) {
 
 
 int tlv_parse(const byte *buffer, size_t length, tlv_values_t *values) {
+    if (length <= 1) {
+        return -1;
+    }
+    
     size_t i = 0;
     while (i < length) {
         byte type = buffer[i];

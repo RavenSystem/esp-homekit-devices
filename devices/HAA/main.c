@@ -337,7 +337,7 @@ lightbulb_group_t* lightbulb_group_find(homekit_characteristic_t* ch) {
 }
 
 bool ping_host(char* host) {
-    if (!wifi_config_got_ip()) {
+    if (main_config.wifi_status < WIFI_STATUS_PRECONNECTED) {
         return false;
     }
     
@@ -567,7 +567,7 @@ void ping_task() {
         
         while (ping_input_callback_fn) {
             if (!ping_input_callback_fn->disable_without_wifi ||
-                (ping_input_callback_fn->disable_without_wifi && wifi_config_got_ip())) {
+                (ping_input_callback_fn->disable_without_wifi && main_config.wifi_status >= WIFI_STATUS_PRECONNECTED)) {
                 ping_input_callback_fn->callback(0, ping_input_callback_fn->ch_group, ping_input_callback_fn->param);
             }
             ping_input_callback_fn = ping_input_callback_fn->next;
@@ -683,13 +683,13 @@ inline void save_states_callback() {
 }
 
 void homekit_characteristic_notify_safe(homekit_characteristic_t *ch, const homekit_value_t value) {
-    if (wifi_config_got_ip()) {
+    if (main_config.wifi_status >= WIFI_STATUS_PRECONNECTED) {
         homekit_characteristic_notify(ch, value);
     }
 }
 
 void hkc_group_notify(ch_group_t* ch_group) {
-    if (!ch_group->homekit_enabled || !wifi_config_got_ip()) {
+    if (!ch_group->homekit_enabled || main_config.wifi_status < WIFI_STATUS_PRECONNECTED) {
         return;
     }
     
@@ -3501,9 +3501,9 @@ void net_action_task(void* pvParameters) {
             
             freeaddrinfo(res);
             
-            INFO("<%i> Network Action %s:%i done", action_task->ch_group->accessory, action_network->host, action_network->port_n);
-
             action_network->is_running = false;
+            
+            INFO("<%i> Network Action %s:%i done", action_task->ch_group->accessory, action_network->host, action_network->port_n);
         }
         
         action_network = action_network->next;
@@ -4131,7 +4131,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     }
     
     // Network actions
-    if (ch_group->action_network && wifi_config_got_ip()) {
+    if (ch_group->action_network && main_config.wifi_status >= WIFI_STATUS_PRECONNECTED) {
         action_task_t* action_task = new_action_task();
         action_task->action = action;
         action_task->ch_group = ch_group;
@@ -7646,7 +7646,7 @@ void normal_mode_init() {
         
         lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
         while (lightbulb_group) {
-            vTaskDelay(pdMS_TO_TICKS(200));
+            vTaskDelay(pdMS_TO_TICKS(50));
             
             ch_group_t* ch_group = ch_group_find(lightbulb_group->ch0);
             bool kill_switch = false;
