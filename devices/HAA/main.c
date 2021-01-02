@@ -422,10 +422,11 @@ void wifi_ping_task() {
 
 void wifi_reconnection_task() {
     main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
+    esp_timer_stop(WIFI_WATCHDOG_TIMER);
     do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
     
     while (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(2000));
         
         if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
             INFO("Wifi reconnecting...");
@@ -440,6 +441,8 @@ void wifi_reconnection_task() {
                 
                 homekit_mdns_announce();
                 
+                esp_timer_start(WIFI_WATCHDOG_TIMER);
+                                        
             } else {
                 main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
                 INFO("Wifi preconnected");
@@ -450,12 +453,12 @@ void wifi_reconnection_task() {
                 
                 do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 3);
                 
-                vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
+                vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECTION_DELAY_MS));
             }
             
         } else {
             main_config.wifi_error_count++;
-            if (main_config.wifi_error_count > WIFI_ERROR_COUNT_REBOOT) {
+            if (main_config.wifi_error_count > WIFI_DISCONNECTED_LONG_TIME) {
                 ERROR("Wifi disconnected for a long time");
                 main_config.wifi_error_count = 0;
                 main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
@@ -468,8 +471,6 @@ void wifi_reconnection_task() {
             }
         }
     }
-    
-    vTaskDelay(pdMS_TO_TICKS(500));
 
     vTaskDelete(NULL);
 }
@@ -486,7 +487,7 @@ void wifi_watchdog_task() {
             main_config.wifi_roaming_count++;
             
             if (main_config.wifi_roaming_count > main_config.wifi_roaming_count_max) {
-                esp_timer_change_period(WIFI_WATCHDOG_TIMER, WIFI_WATCHDOG_POLL_PERIOD_MS + 6000);
+                esp_timer_change_period(WIFI_WATCHDOG_TIMER, WIFI_WATCHDOG_POLL_PERIOD_MS + 5000);
                 main_config.wifi_roaming_count_max = WIFI_ROAMING_PERIOD + (hwrand() % WIFI_ROAMING_MARGIN);
                 main_config.wifi_roaming_count = 0;
                 wifi_config_smart_connect();
@@ -3160,6 +3161,7 @@ void hkc_autooff_setter_task(TimerHandle_t xTimer) {
 void net_action_task(void* pvParameters) {
     action_task_t* action_task = pvParameters;
     action_network_t* action_network = action_task->ch_group->action_network;
+    main_config.wifi_watchdog_is_running = true;
     
     while (action_network) {
         if (action_network->action == action_task->action && !action_network->is_running) {
@@ -3185,9 +3187,9 @@ void net_action_task(void* pvParameters) {
                 if (getaddr_result == 0) {
                     int s = socket(res->ai_family, res->ai_socktype, 0);
                     if (s >= 0) {
-                        const struct timeval rcvtimeout = { 1, 0 };
+                        const struct timeval rcvtimeout = { 2, 0 };
                         setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
-                        const struct timeval sndtimeout = { 1, 0 };
+                        const struct timeval sndtimeout = { 2, 0 };
                         setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
 
                         int connect_result = connect(s, res->ai_addr, res->ai_addrlen);
@@ -3381,17 +3383,18 @@ void net_action_task(void* pvParameters) {
                                 }
                                 
                                 INFO("<%i> TCP Response:", action_task->ch_group->accessory);
-                                ssize_t read_byte;
+                                int read_byte;
                                 uint16_t total_recv = 0;
                                 do {
                                     uint8_t recv_buffer[64];
+                                    memset(recv_buffer, 0, 64);
                                     read_byte = read(s, recv_buffer, 64);
                                     printf("%s", recv_buffer);
                                     recv_buffer[0] = 0;
                                     total_recv += 64;
-                                } while (read_byte > 0 && total_recv < 1024);
+                                } while (read_byte > 0 && total_recv < 2048);
                                 
-                                INFO("");
+                                INFO("Error: %i", read_byte);
                                 
                             } else {
                                 ERROR("<%i> TCP (%i)", action_task->ch_group->accessory, result);
@@ -3492,6 +3495,8 @@ void net_action_task(void* pvParameters) {
         
         action_network = action_network->next;
     }
+    
+    main_config.wifi_watchdog_is_running = false;
     
     free(pvParameters);
     

@@ -1021,8 +1021,6 @@ static void wifi_config_softap_stop() {
 
 static void wifi_config_sta_connect_timeout_task() {
     for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        
         if (!context->hostname_ready && context->custom_hostname) {
             struct netif *netif = sdk_system_get_netif(STATION_IF);
             if (netif && !netif->hostname) {
@@ -1046,13 +1044,15 @@ static void wifi_config_sta_connect_timeout_task() {
             }
         } else if (context->on_wifi_ready) {
             context->check_counter++;
-            if (context->check_counter > 120) {
+            if (context->check_counter > 90) {
                 context->check_counter = 0;
                 wifi_config_smart_connect();
-            } else if (context->check_counter % 16 == 0) {
+            } else if (context->check_counter % 12 == 0) {
                 wifi_config_resend_arp();
             }
         }
+        
+        vTaskDelay(pdMS_TO_TICKS(1500));
     }
     
     vTaskDelete(NULL);
