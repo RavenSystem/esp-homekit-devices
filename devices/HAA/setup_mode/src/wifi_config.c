@@ -546,9 +546,12 @@ static void wifi_config_context_free(wifi_config_context_t *context) {
 }
 
 static void wifi_config_server_on_settings_update_task(void* args) {
-    INFO("Update settings");
-    
     client_t* client = args;
+    
+    static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<center>OK</center>";
+    client_send(client, payload, sizeof(payload) - 1);
+    
+    INFO("Update settings");
 
     vTaskDelay(pdMS_TO_TICKS(100));
 
@@ -694,9 +697,6 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     
     INFO("\nRebooting...\n\n");
     
-    static const char payload[] = "HTTP/1.1 204 \r\nContent-Type: text/html\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-    client_send(client, payload, sizeof(payload) - 1);
-    
     vTaskDelay(pdMS_TO_TICKS(1500));
     
     sdk_wifi_station_disconnect();
@@ -830,8 +830,17 @@ static void http_task(void *arg) {
             continue;
         }
 
-        const struct timeval timeout = { 1, 200000 };
+        const struct timeval timeout = { 1, 0 };
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+        
+        const int yes = 1;
+        setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes));
+
+        const int interval = 5;
+        setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval));
+
+        const int maxpkt = 4;
+        setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &maxpkt, sizeof(maxpkt));
 
         client_t *client = client_new();
         client->fd = fd;
@@ -1044,15 +1053,15 @@ static void wifi_config_sta_connect_timeout_task() {
             }
         } else if (context->on_wifi_ready) {
             context->check_counter++;
-            if (context->check_counter > 90) {
+            if (context->check_counter > 240) {
                 context->check_counter = 0;
                 wifi_config_smart_connect();
-            } else if (context->check_counter % 12 == 0) {
+            } else if (context->check_counter % 32 == 0) {
                 wifi_config_resend_arp();
             }
         }
         
-        vTaskDelay(pdMS_TO_TICKS(1500));
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
     
     vTaskDelete(NULL);

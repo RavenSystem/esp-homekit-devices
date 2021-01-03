@@ -48,7 +48,7 @@
 #include "types.h"
 
 main_config_t main_config = {
-    .wifi_status = WIFI_STATUS_CONNECTED,
+    .wifi_status = WIFI_STATUS_DISCONNECTED,
     .wifi_ping_max_errors = 255,
     .wifi_ping_is_running = false,
     .wifi_watchdog_is_running = false,
@@ -422,40 +422,43 @@ void wifi_ping_task() {
 
 void wifi_reconnection_task() {
     main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
+    INFO("Wifi reconnection process started");
     esp_timer_stop(WIFI_WATCHDOG_TIMER);
     do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
     
     while (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
         
-        if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
-            INFO("Wifi reconnecting...");
-            sdk_wifi_station_disconnect();
-            wifi_config_smart_connect();
-            main_config.wifi_status = WIFI_STATUS_CONNECTING;
-
-        } else if (wifi_config_got_ip()) {
+        if (wifi_config_got_ip()) {
             if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
                 INFO("Wifi reconnected");
                 main_config.wifi_status = WIFI_STATUS_CONNECTED;
                 
                 homekit_mdns_announce();
-                
+                taskYIELD();
                 esp_timer_start(WIFI_WATCHDOG_TIMER);
                                         
             } else {
                 main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
                 INFO("Wifi preconnected");
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                
                 wifi_config_resend_arp();
+                taskYIELD();
                 homekit_mdns_announce();
                 
                 main_config.wifi_error_count = 0;
                 
                 do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 3);
                 
-                vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECTION_DELAY_MS));
+                vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECTION_FINAL_DELAY_MS));
             }
             
+        } else if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
+            INFO("Wifi reconnecting...");
+            wifi_config_smart_connect();
+            main_config.wifi_status = WIFI_STATUS_CONNECTING;
+
         } else {
             main_config.wifi_error_count++;
             if (main_config.wifi_error_count > WIFI_DISCONNECTED_LONG_TIME) {
@@ -472,6 +475,8 @@ void wifi_reconnection_task() {
         }
     }
 
+    INFO("Wifi reconnection process ended");
+    
     vTaskDelete(NULL);
 }
 
@@ -487,7 +492,7 @@ void wifi_watchdog_task() {
             main_config.wifi_roaming_count++;
             
             if (main_config.wifi_roaming_count > main_config.wifi_roaming_count_max) {
-                esp_timer_change_period(WIFI_WATCHDOG_TIMER, WIFI_WATCHDOG_POLL_PERIOD_MS + 5000);
+                esp_timer_change_period(WIFI_WATCHDOG_TIMER, 6000);
                 main_config.wifi_roaming_count_max = WIFI_ROAMING_PERIOD + (hwrand() % WIFI_ROAMING_MARGIN);
                 main_config.wifi_roaming_count = 0;
                 wifi_config_smart_connect();
@@ -4247,6 +4252,8 @@ homekit_server_config_t config;
 void run_homekit_server(TimerHandle_t xTimer) {
     FREEHEAP();
     
+    main_config.wifi_status = WIFI_STATUS_CONNECTED;
+    
     if (main_config.enable_homekit_server) {
         INFO("Start HK Server");
         homekit_server_init(&config);
@@ -4268,7 +4275,7 @@ void run_homekit_server(TimerHandle_t xTimer) {
 }
 
 void run_homekit_server_delayed() {
-    esp_timer_start(esp_timer_create(200, false, NULL, run_homekit_server));
+    esp_timer_start(esp_timer_create(250, false, NULL, run_homekit_server));
 }
 
 void printf_header() {
