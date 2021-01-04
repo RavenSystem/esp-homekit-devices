@@ -60,6 +60,8 @@
 
 #define BEST_RSSI_MARGIN                (1)
 
+#define MS_TO_TICKS(x)                  ((x) / portTICK_PERIOD_MS)
+
 #define INFO(message, ...)              printf(message "\n", ##__VA_ARGS__);
 #define ERROR(message, ...)             printf("! " message "\n", ##__VA_ARGS__);
 
@@ -317,7 +319,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
 
 static void wifi_scan_sc_task(void* arg) {
     INFO("Start Wifi smart connect scan");
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    vTaskDelay(MS_TO_TICKS(2000));
     sdk_wifi_station_scan(NULL, wifi_scan_sc_done);
     vTaskDelete(NULL);
 }
@@ -476,7 +478,7 @@ static void wifi_config_server_on_settings(client_t *client) {
     // Wifi Networks
     char buffer[120];
     char bssid[13];
-    if (xSemaphoreTake(context->wifi_networks_mutex, pdMS_TO_TICKS(5000))) {
+    if (xSemaphoreTake(context->wifi_networks_mutex, MS_TO_TICKS(5000))) {
         wifi_network_info_t* net = context->wifi_networks;
         while (net) {
             snprintf(bssid, 13, "%02x%02x%02x%02x%02x%02x", net->bssid[0], net->bssid[1], net->bssid[2], net->bssid[3], net->bssid[4], net->bssid[5]);
@@ -553,7 +555,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     
     INFO("Update settings");
 
-    vTaskDelay(pdMS_TO_TICKS(100));
+    vTaskDelay(MS_TO_TICKS(100));
 
     form_param_t *form = form_params_parse((char *) client->body);
     free(client->body);
@@ -697,11 +699,11 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     
     INFO("\nRebooting...\n\n");
     
-    vTaskDelay(pdMS_TO_TICKS(1500));
+    vTaskDelay(MS_TO_TICKS(1500));
     
     sdk_wifi_station_disconnect();
     
-    vTaskDelay(pdMS_TO_TICKS(500));
+    vTaskDelay(MS_TO_TICKS(500));
     
     sdk_system_restart();
 }
@@ -826,7 +828,7 @@ static void http_task(void *arg) {
 
         int fd = accept(listenfd, (struct sockaddr *)NULL, (socklen_t *)NULL);
         if (fd < 0) {
-            vTaskDelay(pdMS_TO_TICKS(200));
+            vTaskDelay(MS_TO_TICKS(200));
             continue;
         }
 
@@ -1061,7 +1063,7 @@ static void wifi_config_sta_connect_timeout_task() {
             }
         }
         
-        vTaskDelay(pdMS_TO_TICKS(500));
+        vTaskDelay(MS_TO_TICKS(500));
     }
     
     vTaskDelete(NULL);
@@ -1080,11 +1082,11 @@ static void auto_reboot_run() {
         vTaskDelete(context->sta_connect_timeout);
     }
     
-    vTaskDelay(pdMS_TO_TICKS(150));
+    vTaskDelay(MS_TO_TICKS(150));
     
     sdk_wifi_station_disconnect();
     
-    vTaskDelay(pdMS_TO_TICKS(150));
+    vTaskDelay(MS_TO_TICKS(150));
     
     sdk_system_restart();
 }
