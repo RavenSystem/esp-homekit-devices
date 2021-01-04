@@ -997,23 +997,19 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
     HOMEKIT_DEBUG_LOG("Pair Setup");
     DEBUG_HEAP();
 
-#ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
-    sdk_system_overclock();
-#endif
-
-    homekit_server->is_pairing = true;
-    
     tlv_values_t *message = tlv_new();
     if (tlv_parse(data, size, message)) {
         CLIENT_ERROR(context, "Failed to parse TLV payload");
         tlv_free(message);
         send_tlv_error_response(context, 2, TLVError_Unknown);
-        homekit_server->is_pairing = false;
-#ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
-        sdk_system_restoreclock();
-#endif
         return;
     }
+    
+    homekit_server->is_pairing = true;
+    
+#ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
+    sdk_system_overclock();
+#endif
 
     TLV_DEBUG(message);
 
@@ -3201,7 +3197,9 @@ client_context_t *homekit_server_accept_client() {
     if (getpeername(s, (struct sockaddr *)&addr, &addr_len) == 0) {
         inet_ntop(AF_INET, &addr.sin_addr, address_buffer, sizeof(address_buffer));
     } else {
-        strcpy(address_buffer, "?.?.?.?");
+        HOMEKIT_ERROR("[%d] New ?.?.?.?:%d. Closing", s, addr.sin_port);
+        close(s);
+        return NULL;
     }
     
     HOMEKIT_INFO("[%d] New %s:%d", s, address_buffer, addr.sin_port);

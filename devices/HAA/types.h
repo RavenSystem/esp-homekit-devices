@@ -273,8 +273,8 @@ typedef struct _main_config {
     int8_t setup_mode_toggle_counter;
     int8_t setup_mode_toggle_counter_max;
     uint8_t ir_tx_freq: 6;
-    bool wifi_watchdog_is_running: 1;
     bool ir_tx_inv: 1;
+    bool ping_is_running: 1;
     
     uint8_t wifi_ping_max_errors;
     uint8_t wifi_error_count;
@@ -282,16 +282,15 @@ typedef struct _main_config {
     
     uint8_t wifi_mode: 3;
     bool enable_homekit_server: 1;
-    bool ping_is_running: 1;
     bool used_gpio_0: 1;
     bool used_gpio_1: 1;
     bool used_gpio_2: 1;
+    bool used_gpio_3: 1;
     
     uint16_t setup_mode_time;
     uint16_t wifi_roaming_count;
     
     uint16_t wifi_roaming_count_max;
-    bool used_gpio_3: 1;
     bool used_gpio_4: 1;
     bool used_gpio_5: 1;
     bool used_gpio_9: 1;

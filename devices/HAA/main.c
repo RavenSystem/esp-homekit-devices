@@ -51,7 +51,6 @@ main_config_t main_config = {
     .wifi_status = WIFI_STATUS_DISCONNECTED,
     .wifi_ping_max_errors = 255,
     .wifi_ping_is_running = false,
-    .wifi_watchdog_is_running = false,
     .wifi_error_count = 0,
     .wifi_arp_count = 0,
     .wifi_roaming_count = 0,
@@ -387,10 +386,10 @@ void reboot_haa() {
     sdk_wifi_station_disconnect();
 }
 
-void wifi_ping_task() {
+void wifi_ping_gw_task() {
     main_config.wifi_ping_is_running = true;
     
-    vTaskDelay(pdMS_TO_TICKS(50));
+    vTaskDelay(MS_TO_TICKS(10));
     
     struct ip_info info;
     bool ping_result = true;
@@ -400,7 +399,7 @@ void wifi_ping_task() {
         snprintf(gw_host, 16, IPSTR, IP2STR(&info.gw));
         
         while (main_config.ping_is_running) {
-            vTaskDelay(pdMS_TO_TICKS(100));
+            vTaskDelay(MS_TO_TICKS(100));
         }
         
         ping_result = ping_host(gw_host);
@@ -421,12 +420,16 @@ void wifi_ping_task() {
 }
 
 void wifi_reconnection_task() {
+    if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
+        vTaskDelete(NULL);
+    }
+    
     main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
     INFO("Wifi reconnection process started");
     do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
     
     while (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
-        vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
+        vTaskDelay(MS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
         
         if (wifi_config_got_ip()) {
             if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
@@ -440,17 +443,15 @@ void wifi_reconnection_task() {
             } else {
                 main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
                 INFO("Wifi preconnected");
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                
-                wifi_config_resend_arp();
-                taskYIELD();
+                vTaskDelay(MS_TO_TICKS(1000));
+
                 homekit_mdns_announce();
                 
                 main_config.wifi_error_count = 0;
                 
                 do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 3);
                 
-                vTaskDelay(pdMS_TO_TICKS(WIFI_RECONNECTION_FINAL_DELAY_MS));
+                vTaskDelay(MS_TO_TICKS(WIFI_RECONNECTION_FINAL_DELAY_MS));
             }
             
         } else if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
@@ -490,7 +491,7 @@ void wifi_watchdog() {
                 main_config.wifi_roaming_count++;
                 
                 if (main_config.wifi_roaming_count > main_config.wifi_roaming_count_max) {
-                    esp_timer_change_period(WIFI_WATCHDOG_TIMER, 6000);
+                    esp_timer_change_period(WIFI_WATCHDOG_TIMER, 8000);
                     main_config.wifi_roaming_count_max = WIFI_ROAMING_PERIOD + (hwrand() % WIFI_ROAMING_MARGIN);
                     main_config.wifi_roaming_count = 0;
                     wifi_config_smart_connect();
@@ -504,8 +505,8 @@ void wifi_watchdog() {
             }
             
             if (main_config.wifi_ping_max_errors != 255 && !main_config.wifi_ping_is_running && !homekit_is_pairing()) {
-                if (xTaskCreate(wifi_ping_task, "wifi_ping", WIFI_PING_TASK_SIZE, NULL, WIFI_PING_TASK_PRIORITY, NULL) != pdPASS) {
-                    ERROR("Creating wifi_ping_task");
+                if (xTaskCreate(wifi_ping_gw_task, "wifi_ping_gw", WIFI_PING_GW_TASK_SIZE, NULL, WIFI_PING_GW_TASK_PRIORITY, NULL) != pdPASS) {
+                    ERROR("Creating wifi_ping_gw_task");
                     FREEHEAP();
                 }
             }
@@ -533,17 +534,14 @@ ping_input_t* ping_input_find_by_host(char* host) {
 
 void ping_task() {
     main_config.ping_is_running = true;
-    
-    vTaskDelay(pdMS_TO_TICKS(50));
-    
+
     INFO("Ping...");
 
     void ping_input_run_callback_fn(ping_input_callback_fn_t* callbacks) {
         ping_input_callback_fn_t* ping_input_callback_fn = callbacks;
         
         while (ping_input_callback_fn) {
-            if (!ping_input_callback_fn->disable_without_wifi ||
-                (ping_input_callback_fn->disable_without_wifi && main_config.wifi_status >= WIFI_STATUS_PRECONNECTED)) {
+            if (!ping_input_callback_fn->disable_without_wifi || main_config.wifi_status >= WIFI_STATUS_PRECONNECTED) {
                 ping_input_callback_fn->callback(0, ping_input_callback_fn->ch_group, ping_input_callback_fn->param);
             }
             ping_input_callback_fn = ping_input_callback_fn->next;
@@ -558,7 +556,7 @@ void ping_task() {
         do {
             i++;
             ping_result = ping_host(ping_input->host);
-            vTaskDelay(pdMS_TO_TICKS(80));
+            vTaskDelay(MS_TO_TICKS(50));
         } while (i < PING_RETRIES && !ping_result);
         
         if (ping_result && (!ping_input->last_response || ping_input->ignore_last_response)) {
@@ -1189,7 +1187,7 @@ void set_zones_task(void* args) {
                         do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
                     }
                     
-                    vTaskDelay(pdMS_TO_TICKS(500));
+                    vTaskDelay(MS_TO_TICKS(500));
                 }
 
                 ch_group = ch_group->next;
@@ -1264,7 +1262,7 @@ void set_zones_task(void* args) {
                         break;
                 }
                 
-                vTaskDelay(pdMS_TO_TICKS(500));
+                vTaskDelay(MS_TO_TICKS(500));
             }
 
             ch_group = ch_group->next;
@@ -1763,7 +1761,7 @@ void temperature_task(void* args) {
         
         if (iairzoning > 0) {
             if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning == - (int8_t) TH_IAIRZONING_CONTROLLER) {
-                vTaskDelay(pdMS_TO_TICKS(1000));
+                vTaskDelay(MS_TO_TICKS(1000));
             }
 
             ch_group = ch_group->next;
@@ -2166,10 +2164,10 @@ void autodimmer_task(void* args) {
         }
         hkc_rgbw_setter(ch_group->ch1, ch_group->ch1->value);
         
-        vTaskDelay(pdMS_TO_TICKS(lightbulb_group->autodimmer_task_delay));
+        vTaskDelay(MS_TO_TICKS(lightbulb_group->autodimmer_task_delay));
         
         if (ch_group->ch1->value.int_value == 100) {    // Double wait when brightness is 100%
-            vTaskDelay(pdMS_TO_TICKS(lightbulb_group->autodimmer_task_delay));
+            vTaskDelay(MS_TO_TICKS(lightbulb_group->autodimmer_task_delay));
         }
     }
     
@@ -3152,13 +3150,12 @@ void hkc_autooff_setter_task(TimerHandle_t xTimer) {
 void net_action_task(void* pvParameters) {
     action_task_t* action_task = pvParameters;
     action_network_t* action_network = action_task->ch_group->action_network;
-    main_config.wifi_watchdog_is_running = true;
     
     while (action_network) {
         if (action_network->action == action_task->action && !action_network->is_running) {
             action_network->is_running = true;
             
-            vTaskDelay(pdMS_TO_TICKS(10));
+            vTaskDelay(MS_TO_TICKS(10));
 
             INFO("<%i> Network Action %s:%i", action_task->ch_group->accessory, action_network->host, action_network->port_n);
             
@@ -3447,7 +3444,7 @@ void net_action_task(void* pvParameters) {
                             for (uint8_t udp_sent = 0; udp_sent < wol_attemps; udp_sent++) {
                                 result = lwip_sendto(s, wol ? wol : action_network->raw, wol ? 102 : action_network->len, 0, res->ai_addr, res->ai_addrlen);
                                 if (wol) {
-                                    vTaskDelay(pdMS_TO_TICKS(10));
+                                    vTaskDelay(MS_TO_TICKS(10));
                                 }
                             }
                         }
@@ -3486,9 +3483,7 @@ void net_action_task(void* pvParameters) {
         
         action_network = action_network->next;
     }
-    
-    main_config.wifi_watchdog_is_running = false;
-    
+
     free(pvParameters);
     
     vTaskDelete(NULL);
@@ -3496,7 +3491,7 @@ void net_action_task(void* pvParameters) {
 
 // --- IR Send task
 void ir_tx_task(void* pvParameters) {
-    vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(MS_TO_TICKS(10));
     
     action_task_t* action_task = pvParameters;
     action_ir_tx_t* action_ir_tx = action_task->ch_group->action_ir_tx;
@@ -3823,7 +3818,7 @@ void ir_tx_task(void* pvParameters) {
                 
                 INFO("<%i> IR %i sent", action_task->ch_group->accessory, r);
                 
-                vTaskDelay(pdMS_TO_TICKS(action_ir_tx->pause));
+                vTaskDelay(MS_TO_TICKS(action_ir_tx->pause));
             }
             
             if (ir_code) {
@@ -3840,7 +3835,7 @@ void ir_tx_task(void* pvParameters) {
 
 // --- UART action task
 void uart_action_task(void* pvParameters) {
-    vTaskDelay(pdMS_TO_TICKS(10));
+    vTaskDelay(MS_TO_TICKS(10));
     
     action_task_t* action_task = pvParameters;
     action_uart_t* action_uart = action_task->ch_group->action_uart;
@@ -3861,7 +3856,7 @@ void uart_action_task(void* pvParameters) {
         }
         
         if (action_uart->pause > 0) {
-            vTaskDelay(pdMS_TO_TICKS(action_uart->pause));
+            vTaskDelay(MS_TO_TICKS(action_uart->pause));
         }
         
         action_uart = action_uart->next;
@@ -4171,7 +4166,7 @@ void identify(homekit_value_t _value) {
 // ---------
 
 void delayed_sensor_starter_task() {
-    vTaskDelay(pdMS_TO_TICKS(3000));
+    vTaskDelay(MS_TO_TICKS(3000));
     
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
@@ -4184,7 +4179,7 @@ void delayed_sensor_starter_task() {
             temperature_timer_worker(ch_group->timer);
             esp_timer_start(ch_group->timer);
             
-            vTaskDelay(pdMS_TO_TICKS(3000));
+            vTaskDelay(MS_TO_TICKS(3000));
         }
 
         ch_group = ch_group->next;
@@ -4201,7 +4196,7 @@ void delayed_sensor_starter_task() {
             temperature_timer_worker(ch_group->timer);
             esp_timer_start(ch_group->timer);
             
-            vTaskDelay(pdMS_TO_TICKS(4000));
+            vTaskDelay(MS_TO_TICKS(4000));
         }
 
         ch_group = ch_group->next;
@@ -4217,7 +4212,7 @@ void delayed_sensor_starter_task() {
             temperature_timer_worker(ch_group->timer);
             esp_timer_start(ch_group->timer);
             
-            vTaskDelay(pdMS_TO_TICKS(9500));
+            vTaskDelay(MS_TO_TICKS(9500));
         }
 
         ch_group = ch_group->next;
@@ -4294,7 +4289,7 @@ void normal_mode_init() {
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);
         
         INFO("Rebooting...\n\n");
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(MS_TO_TICKS(200));
         sdk_system_restart();
         
         vTaskDelete(NULL);
@@ -7512,7 +7507,7 @@ void normal_mode_init() {
     
     // Initial delay
     if (cJSON_GetObjectItemCaseSensitive(json_config, ACC_CREATION_DELAY) != NULL) {
-        vTaskDelay(pdMS_TO_TICKS(cJSON_GetObjectItemCaseSensitive(json_config, ACC_CREATION_DELAY)->valuedouble * 1000));
+        vTaskDelay(MS_TO_TICKS(cJSON_GetObjectItemCaseSensitive(json_config, ACC_CREATION_DELAY)->valuedouble * 1000));
     }
     
     // Bridge
@@ -7606,7 +7601,7 @@ void normal_mode_init() {
         
         // Accessory creation delay
         if (cJSON_GetObjectItemCaseSensitive(json_accessory, ACC_CREATION_DELAY) != NULL) {
-            vTaskDelay(pdMS_TO_TICKS(cJSON_GetObjectItemCaseSensitive(json_accessory, ACC_CREATION_DELAY)->valuedouble * 1000));
+            vTaskDelay(MS_TO_TICKS(cJSON_GetObjectItemCaseSensitive(json_accessory, ACC_CREATION_DELAY)->valuedouble * 1000));
         }
         
         taskYIELD();
@@ -7626,7 +7621,7 @@ void normal_mode_init() {
         
         lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
         while (lightbulb_group) {
-            vTaskDelay(pdMS_TO_TICKS(50));
+            vTaskDelay(MS_TO_TICKS(50));
             
             ch_group_t* ch_group = ch_group_find(lightbulb_group->ch0);
             bool kill_switch = false;
@@ -7750,7 +7745,7 @@ void normal_mode_init() {
     
     do_actions(root_device_ch_group, 1);
 
-    //vTaskDelay(pdMS_TO_TICKS(8000)); sdk_wifi_station_disconnect(); sdk_wifi_station_connect();      // Emulates a Wifi disconnection. Keep comment for releases
+    //vTaskDelay(MS_TO_TICKS(8000)); sdk_wifi_station_disconnect(); sdk_wifi_station_connect();      // Emulates a Wifi disconnection. Keep comment for releases
     
     vTaskDelete(NULL);
 }

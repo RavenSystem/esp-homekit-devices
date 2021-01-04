@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.4.8"
+#define FIRMWARE_VERSION                    "4.4.9"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -58,7 +58,7 @@
 #define LIGHTBULB_TASK_SIZE                 GLOBAL_TASK_SIZE
 #define POWER_MONITOR_TASK_SIZE             GLOBAL_TASK_SIZE
 #define LIGHT_SENSOR_TASK_SIZE              GLOBAL_TASK_SIZE
-#define WIFI_PING_TASK_SIZE                 (384)
+#define WIFI_PING_GW_TASK_SIZE              (384)
 #define WIFI_RECONNECTION_TASK_SIZE         GLOBAL_TASK_SIZE
 #define IR_CAPTURE_TASK_SIZE                (768)
 
@@ -76,7 +76,7 @@
 #define LIGHTBULB_TASK_PRIORITY             (tskIDLE_PRIORITY + 1)
 #define POWER_MONITOR_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
 #define LIGHT_SENSOR_TASK_PRIORITY          (tskIDLE_PRIORITY + 1)
-#define WIFI_PING_TASK_PRIORITY             (tskIDLE_PRIORITY + 1)
+#define WIFI_PING_GW_TASK_PRIORITY          (tskIDLE_PRIORITY + 1)
 #define WIFI_RECONNECTION_TASK_PRIORITY     (tskIDLE_PRIORITY + 2)
 #define IR_CAPTURE_TASK_PRIORITY            (tskIDLE_PRIORITY + 8)
 
@@ -533,6 +533,8 @@
 #define MAX(x, y)                           (((x) > (y)) ? (x) : (y))
 
 #define KELVIN_TO_CELSIUS(x)                ((x) - 273.15)
+
+#define MS_TO_TICKS(x)                      ((x) / portTICK_PERIOD_MS)
 
 #define DEBUG(message, ...)                 printf("%s: " message "\n", __func__, ##__VA_ARGS__)
 #define INFO(message, ...)                  printf(message "\n", ##__VA_ARGS__)
