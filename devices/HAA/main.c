@@ -54,7 +54,7 @@ main_config_t main_config = {
     .wifi_error_count = 0,
     .wifi_arp_count = 0,
     .wifi_roaming_count = 0,
-    .wifi_roaming_count_max = WIFI_ROAMING_PERIOD,
+    .wifi_roaming_count_max = WIFI_WATCHDOG_ROAMING_PERIOD,
     
     .setup_mode_toggle_counter = INT8_MIN,
     .setup_mode_toggle_counter_max = SETUP_MODE_DEFAULT_ACTIVATE_COUNT,
@@ -335,7 +335,7 @@ lightbulb_group_t* lightbulb_group_find(homekit_characteristic_t* ch) {
 }
 
 bool ping_host(char* host) {
-    if (main_config.wifi_status < WIFI_STATUS_PRECONNECTED) {
+    if (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
         return false;
     }
     
@@ -419,7 +419,7 @@ void wifi_ping_gw_task() {
     vTaskDelete(NULL);
 }
 
-void wifi_reconnection_task() {
+void wifi_reconnection_task(void* args) {
     if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
         vTaskDelete(NULL);
     }
@@ -428,6 +428,12 @@ void wifi_reconnection_task() {
     INFO("Wifi reconnection process started");
     do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
     
+    if ((uint32_t) args == 1) {
+        sdk_wifi_station_disconnect();
+    } else {
+        vTaskDelay(MS_TO_TICKS(WIFI_RECONNECTION_INITIAL_DELAY_MS));
+    }
+
     while (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
         vTaskDelay(MS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
         
@@ -469,14 +475,12 @@ void wifi_reconnection_task() {
                 led_blink(6);
                 
                 do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 5);
-            } else if (main_config.wifi_error_count % WIFI_ARP_RESEND_PERIOD == 0) {
+            } else if (main_config.wifi_error_count % WIFI_RECONNECTION_ARP_RESEND_PERIOD == 0) {
                 wifi_config_resend_arp();
             }
         }
     }
 
-    INFO("Wifi reconnection process ended");
-    
     vTaskDelete(NULL);
 }
 
@@ -492,20 +496,20 @@ void wifi_watchdog() {
                 
                 if (main_config.wifi_roaming_count > main_config.wifi_roaming_count_max) {
                     esp_timer_change_period(WIFI_WATCHDOG_TIMER, 8000);
-                    main_config.wifi_roaming_count_max = WIFI_ROAMING_PERIOD + (hwrand() % WIFI_ROAMING_MARGIN);
+                    main_config.wifi_roaming_count_max = WIFI_WATCHDOG_ROAMING_PERIOD + (hwrand() % WIFI_WATCHDOG_ROAMING_MARGIN);
                     main_config.wifi_roaming_count = 0;
                     wifi_config_smart_connect();
                 }
             }
             
             main_config.wifi_arp_count++;
-            if (main_config.wifi_arp_count > WIFI_ARP_RESEND_PERIOD) {
-                main_config.wifi_arp_count = hwrand() % WIFI_ARP_RESEND_MARGIN;
+            if (main_config.wifi_arp_count > WIFI_WATCHDOG_ARP_RESEND_PERIOD) {
+                main_config.wifi_arp_count = hwrand() % WIFI_WATCHDOG_ARP_RESEND_MARGIN;
                 wifi_config_resend_arp();
             }
             
             if (main_config.wifi_ping_max_errors != 255 && !main_config.wifi_ping_is_running && !homekit_is_pairing()) {
-                if (xTaskCreate(wifi_ping_gw_task, "wifi_ping_gw", WIFI_PING_GW_TASK_SIZE, NULL, WIFI_PING_GW_TASK_PRIORITY, NULL) != pdPASS) {
+                if (xTaskCreate(wifi_ping_gw_task, "wifi_ping_gw", WIFI_PING_GW_TASK_SIZE, (void*) 0, WIFI_PING_GW_TASK_PRIORITY, NULL) != pdPASS) {
                     ERROR("Creating wifi_ping_gw_task");
                     FREEHEAP();
                 }
@@ -514,7 +518,7 @@ void wifi_watchdog() {
         } else {
             ERROR("Wifi error");
             main_config.wifi_error_count = 0;
-            if (xTaskCreate(wifi_reconnection_task, "reconnect", WIFI_RECONNECTION_TASK_SIZE, NULL, WIFI_RECONNECTION_TASK_PRIORITY, NULL) != pdPASS) {
+            if (xTaskCreate(wifi_reconnection_task, "reconnect", WIFI_RECONNECTION_TASK_SIZE, (void*) 1, WIFI_RECONNECTION_TASK_PRIORITY, NULL) != pdPASS) {
                 ERROR("Creating wifi_reconnection_task");
                 FREEHEAP();
             }
