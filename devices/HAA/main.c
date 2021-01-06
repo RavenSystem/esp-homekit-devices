@@ -6646,6 +6646,7 @@ void normal_mode_init() {
         
         lightbulb_group_t* lightbulb_group = malloc(sizeof(lightbulb_group_t));
         memset(lightbulb_group, 0, sizeof(*lightbulb_group));
+        lightbulb_group->ch0 = ch_group->ch0;
         lightbulb_group->pwm_r = GPIO_OVERFLOW;
         lightbulb_group->pwm_g = GPIO_OVERFLOW;
         lightbulb_group->pwm_b = GPIO_OVERFLOW;
