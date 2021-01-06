@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.4.10"
+#define FIRMWARE_VERSION                    "4.5.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -163,6 +163,8 @@
 #define VALVE_SYSTEM_TYPE_DEFAULT           (0)
 #define VALVE_MAX_DURATION                  "d"
 #define VALVE_MAX_DURATION_DEFAULT          (3600)
+
+#define DOORBELL_LAST_STATE                 ch_group->num_00
 
 #define THERMOSTAT_TYPE                     "w"
 #define TH_TYPE                             ch_group->num_05
@@ -507,8 +509,8 @@
 
 #define WIFI_ARP_RESEND_PERIOD              (20)
 
-#define WIFI_RECONNECTION_INITIAL_DELAY_MS  (5000)
-#define WIFI_RECONNECTION_FINAL_DELAY_MS    (5000)
+#define WIFI_RECONNECTION_INITIAL_DELAY_MS  (4000)
+#define WIFI_RECONNECTION_FINAL_DELAY_MS    (2000)
 
 #define WIFI_RECONNECTION_POLL_PERIOD_MS    (3000)
 #define _WIFI_RECONNECTION_FACTOR           (1000.000f / WIFI_RECONNECTION_POLL_PERIOD_MS)

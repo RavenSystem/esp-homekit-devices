@@ -28,7 +28,7 @@
 
 /** ping receive timeout - in milliseconds */
 #ifndef PING_RCV_TIMEO
-#define PING_RCV_TIMEO 500
+#define PING_RCV_TIMEO 350
 #endif
 
 /** ping identifier - must fit on a u16_t */
@@ -165,9 +165,7 @@ bool ping(ip_addr_t ping_target) {
 #if LWIP_SO_SNDRCVTIMEO_NONSTANDARD
 	int timeout = PING_RCV_TIMEO;
 #else
-    struct timeval timeout;
-    timeout.tv_sec = PING_RCV_TIMEO / 1000;
-    timeout.tv_usec = (PING_RCV_TIMEO % 1000) * 1000;
+    const struct timeval timeout = { PING_RCV_TIMEO / 1000, (PING_RCV_TIMEO % 1000) * 1000 };
 #endif
 
 #if LWIP_IPV6
