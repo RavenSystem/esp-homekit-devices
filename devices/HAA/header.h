@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.5.1"
+#define FIRMWARE_VERSION                    "4.6.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -147,8 +147,9 @@
 #define PING_DISABLE_WITHOUT_WIFI           "d"
 #define PING_RETRIES                        (4)
 #define PING_POLL_PERIOD                    "pt"
-#define PING_POLL_PERIOD_DEFAULT            (4.9)
+#define PING_POLL_PERIOD_DEFAULT            (5.f)
 #define BUTTON_PRESS_TYPE                   "t"
+#define BUTTON_MODE                         "m"
 #define PULLUP_RESISTOR                     "p"
 #define VALUE                               "v"
 #define MANAGE_OTHERS_ACC_ARRAY             "m"
@@ -508,16 +509,13 @@
 #define WIFI_PING_ERRORS                    "w"
 
 #define WIFI_ARP_RESEND_PERIOD              (20)
-
-#define WIFI_RECONNECTION_INITIAL_DELAY_MS  (4000)
 #define WIFI_RECONNECTION_FINAL_DELAY_MS    (2000)
-
 #define WIFI_RECONNECTION_POLL_PERIOD_MS    (3000)
 #define _WIFI_RECONNECTION_FACTOR           (1000.000f / WIFI_RECONNECTION_POLL_PERIOD_MS)
 #define WIFI_DISCONNECTED_LONG_TIME         ((int) (60      * _WIFI_RECONNECTION_FACTOR))
 #define WIFI_RECONNECTION_ARP_RESEND_PERIOD ((int) (WIFI_ARP_RESEND_PERIOD * _WIFI_RECONNECTION_FACTOR))
 
-#define WIFI_WATCHDOG_POLL_PERIOD_MS        (2400)
+#define WIFI_WATCHDOG_POLL_PERIOD_MS        (1100)
 #define _WIFI_WATCHDOG_FACTOR               (1000.000f / WIFI_WATCHDOG_POLL_PERIOD_MS)
 #define WIFI_WATCHDOG_ARP_RESEND_PERIOD     ((int) (WIFI_ARP_RESEND_PERIOD * _WIFI_WATCHDOG_FACTOR))
 #define WIFI_WATCHDOG_ARP_RESEND_MARGIN     ((int) (15      * _WIFI_WATCHDOG_FACTOR))

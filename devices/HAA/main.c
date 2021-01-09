@@ -335,7 +335,7 @@ lightbulb_group_t* lightbulb_group_find(homekit_characteristic_t* ch) {
 }
 
 bool ping_host(char* host) {
-    if (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
+    if (main_config.wifi_status < WIFI_STATUS_PRECONNECTED) {
         return false;
     }
     
@@ -427,9 +427,7 @@ void wifi_reconnection_task(void* args) {
     main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
     INFO("Wifi reconnection process started");
     do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
-    
-    vTaskDelay(MS_TO_TICKS(WIFI_RECONNECTION_INITIAL_DELAY_MS));
-    
+
     if ((uint32_t) args == 1) {
         sdk_wifi_station_disconnect();
     }
@@ -437,7 +435,7 @@ void wifi_reconnection_task(void* args) {
     while (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
         vTaskDelay(MS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
         
-        if (wifi_config_got_ip()) {
+        if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
             if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
                 INFO("Wifi reconnected");
                 main_config.wifi_status = WIFI_STATUS_CONNECTED;
@@ -486,7 +484,7 @@ void wifi_reconnection_task(void* args) {
 
 void wifi_watchdog() {
     if (main_config.wifi_status == WIFI_STATUS_CONNECTED) {
-        if (wifi_config_got_ip() && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
+        if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
             if (main_config.wifi_mode == 3) {
                 if (main_config.wifi_roaming_count == 0) {
                     esp_timer_change_period(WIFI_WATCHDOG_TIMER, WIFI_WATCHDOG_POLL_PERIOD_MS);
@@ -552,7 +550,7 @@ void ping_task() {
         ping_input_callback_fn_t* ping_input_callback_fn = callbacks;
         
         while (ping_input_callback_fn) {
-            if (!ping_input_callback_fn->disable_without_wifi || main_config.wifi_status == WIFI_STATUS_CONNECTED) {
+            if (!ping_input_callback_fn->disable_without_wifi || main_config.wifi_status >= WIFI_STATUS_PRECONNECTED) {
                 ping_input_callback_fn->callback(0, ping_input_callback_fn->ch_group, ping_input_callback_fn->param);
             }
             ping_input_callback_fn = ping_input_callback_fn->next;
@@ -668,13 +666,13 @@ inline void save_states_callback() {
 }
 
 void homekit_characteristic_notify_safe(homekit_characteristic_t *ch, const homekit_value_t value) {
-    if (main_config.wifi_status == WIFI_STATUS_CONNECTED) {
+    if (main_config.wifi_status >= WIFI_STATUS_PRECONNECTED) {
         homekit_characteristic_notify(ch, value);
     }
 }
 
 void hkc_group_notify(ch_group_t* ch_group) {
-    if (!ch_group->homekit_enabled || main_config.wifi_status != WIFI_STATUS_CONNECTED) {
+    if (!ch_group->homekit_enabled || main_config.wifi_status < WIFI_STATUS_PRECONNECTED) {
         return;
     }
     
@@ -854,6 +852,7 @@ void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
         do_actions(ch_group, event_type);
         
         if (ch_group->ch1 && event_type == 0) {
+            INFO("<%i> Ding-dong", ch_group->accessory);
             if ((uint8_t) DOORBELL_LAST_STATE == 1) {
                 DOORBELL_LAST_STATE = 0;
             } else {
@@ -4125,7 +4124,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     }
     
     // Network actions
-    if (ch_group->action_network && main_config.wifi_status == WIFI_STATUS_CONNECTED) {
+    if (ch_group->action_network && main_config.wifi_status >= WIFI_STATUS_PRECONNECTED) {
         action_task_t* action_task = new_action_task();
         action_task->action = action;
         action_task->ch_group = ch_group;
@@ -4457,6 +4456,11 @@ void normal_mode_init() {
                 button_filter = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_FILTER)->valuedouble;
             }
             
+            uint8_t button_mode = 0;
+            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_MODE) != NULL) {
+                button_mode = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_MODE)->valuedouble;
+            }
+            
             uint8_t button_type = 1;
             if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE) != NULL) {
                 button_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE)->valuedouble;
@@ -4464,17 +4468,20 @@ void normal_mode_init() {
             
             if (!get_used_gpio(gpio)) {
                 change_uart_gpio(gpio);
-                adv_button_create(gpio, pullup_resistor, inverted);
+                adv_button_create(gpio, pullup_resistor, inverted, button_mode);
                 
                 if (button_filter > 0) {
                     adv_button_set_gpio_probes(gpio, button_filter);
                 }
                 
                 set_used_gpio(gpio);
+                
+                INFO("New Input GPIO %i: inv %i, filter %i, mode %i", gpio, inverted, button_filter, button_mode);
             }
+            
             adv_button_register_callback_fn(gpio, callback, button_type, (void*) ch_group, param);
             
-            INFO("New Digital Input: gpio %i, type %i, inv %i, filter %i", gpio, button_type, inverted, button_filter);
+            INFO("New Input type: gpio %i, type %i", gpio, button_type);
 
             if ((gpio_read(gpio) ^ inverted) == button_type) {
                 run_at_launch = true;

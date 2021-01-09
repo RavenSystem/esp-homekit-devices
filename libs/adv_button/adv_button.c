@@ -27,7 +27,7 @@
 #define BUTTON_EVAL_DELAY_MIN       (10)
 #define BUTTON_EVAL_DELAY_DEFAULT   (10)
 
-#define DISABLE_PRESS_COUNT         (31)
+#define DISABLE_PRESS_COUNT         (15)
 
 #define DISABLE_TIME                (ADV_BUTTON_DEFAULT_EVAL * 10)
 #define MIN(x, y)                   (((x) < (y)) ? (x) : (y))
@@ -48,16 +48,16 @@ typedef struct _adv_button {
     uint8_t max_eval;
     volatile uint8_t value;
     
-    uint8_t press_count: 5;
-    
+    uint8_t press_count: 4;
+    uint8_t mode: 1;
     bool inverted: 1;
     bool state: 1;
     bool old_state: 1;
-    
+
     TimerHandle_t press_timer;
     TimerHandle_t hold_timer;
     
-    volatile uint32_t last_event_time;
+    uint32_t last_event_time;
     
     adv_button_callback_fn_t* singlepress0_callback_fn;
     adv_button_callback_fn_t* singlepress_callback_fn;
@@ -75,7 +75,7 @@ typedef struct _adv_button_main_config {
     uint16_t button_evaluate_sleep_time;
     uint8_t button_evaluate_delay;
     bool button_evaluate_is_working: 1;
-    bool is_gpio16: 1;
+    bool continuos_mode: 1;
     
     TimerHandle_t button_evaluate_timer;
 
@@ -183,12 +183,23 @@ static void adv_button_hold_callback(TimerHandle_t xTimer) {
     adv_button_run_callback_fn(button->holdpress_callback_fn, button->gpio);
 }
 
-IRAM static void adv_button_interrupt(const uint8_t gpio) {
-    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, adv_button_interrupt);
+IRAM static void adv_button_interrupt_pulse(const uint8_t gpio) {
+    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
+
+    adv_button_t *button = button_find_by_gpio(gpio);
+    button->value = MIN(button->value++, button->max_eval);
+    
+    gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_NEG, adv_button_interrupt_pulse);
+}
+
+IRAM static void adv_button_interrupt_normal(const uint8_t gpio) {
+    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
     
     adv_button_t* button = adv_button_main_config->buttons;
     while (button) {
-        gpio_set_interrupt(button->gpio, GPIO_INTTYPE_NONE, adv_button_interrupt);
+        if (button->mode == ADV_BUTTON_NORMAL_MODE) {
+            gpio_set_interrupt(button->gpio, GPIO_INTTYPE_NONE, NULL);
+        }
         button = button->next;
     }
 
@@ -197,7 +208,9 @@ IRAM static void adv_button_interrupt(const uint8_t gpio) {
 
 IRAM static void button_evaluate_fn() {
     if (!adv_button_main_config->button_evaluate_is_working) {
-        if (!adv_button_main_config->is_gpio16) {
+        adv_button_main_config->button_evaluate_is_working = true;
+        
+        if (!adv_button_main_config->continuos_mode) {
             if (adv_button_main_config->button_evaluate_sleep_countdown < adv_button_main_config->button_evaluate_sleep_time) {
                 adv_button_main_config->button_evaluate_sleep_countdown++;
             } else {
@@ -206,25 +219,36 @@ IRAM static void button_evaluate_fn() {
                 
                 adv_button_t* button = adv_button_main_config->buttons;
                 while (button) {
-                    gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt);
+                    gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt_normal);
                     button = button->next;
                 }
             }
         }
         
-        adv_button_main_config->button_evaluate_is_working = true;
         adv_button_t* button = adv_button_main_config->buttons;
         
         while (button) {
-            if (gpio_read(button->gpio)) {
-                button->value = MIN(button->value++, button->max_eval);
-                if (button->value == button->max_eval) {
-                    button->state = true;
+            if (button->mode == ADV_BUTTON_NORMAL_MODE) {
+                if (gpio_read(button->gpio)) {
+                    button->value = MIN(button->value++, button->max_eval);
+                    if (button->value == button->max_eval) {
+                        button->state = true;
+                    }
+                } else {
+                    button->value = MAX(button->value--, 0);
+                    if (button->value == 0) {
+                        button->state = false;
+                    }
                 }
-            } else {
-                button->value = MAX(button->value--, 0);
-                if (button->value == 0) {
-                    button->state = false;
+            } else {    // button->mode == ADV_BUTTON_PULSE_MODE
+                if (button->value == button->max_eval) {
+                    button->value = button->value >> 1;
+                    button->state = true;
+                } else {
+                    button->value = MAX(button->value--, 0);
+                    if (button->value == 0) {
+                        button->state = false;
+                    }
                 }
             }
 
@@ -292,7 +316,7 @@ void adv_button_set_disable_time() {
     }
 }
 
-int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool inverted) {
+int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool inverted, const uint8_t mode) {
     adv_button_init();
     
     adv_button_t* button = button_find_by_gpio(gpio);
@@ -303,6 +327,7 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
         button->gpio = gpio;
         button->max_eval = ADV_BUTTON_DEFAULT_EVAL;
         button->inverted = inverted;
+        button->mode = mode;
         
         button->next = adv_button_main_config->buttons;
         adv_button_main_config->buttons = button;
@@ -313,31 +338,43 @@ int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool
         
         gpio_set_pullup(gpio, pullup_resistor, pullup_resistor);
         
-        vTaskDelay(pdMS_TO_TICKS(100));
-        
-        button->state = gpio_read(gpio);
-        
-        button->old_state = button->state;
-        
-        if (button->state) {
-            button->value = button->max_eval;
-        } else {
-            button->value = 0;
-        }
-
         button->hold_timer = esp_timer_create(HOLDPRESS_TIME, false, (void*) button, adv_button_hold_callback);
         button->press_timer = esp_timer_create(DOUBLEPRESS_TIME, false, (void*) button, adv_button_single_callback);
         
-        if (gpio != 16) {
-            gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt);
+        vTaskDelay(pdMS_TO_TICKS(100));
+        
+        if (mode == ADV_BUTTON_NORMAL_MODE) {
+            button->state = gpio_read(gpio);
             
-        } else if (!adv_button_main_config->is_gpio16) {
-            adv_button_main_config->is_gpio16 = true;
+            button->old_state = button->state;
+            
+            if (button->state) {
+                button->value = button->max_eval;
+            } else {
+                button->value = 0;
+            }
+
+            if (gpio != 16 && adv_button_main_config->continuos_mode == false) {
+                gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt_normal);
+            } else {
+                adv_button_main_config->continuos_mode = true;
+            }
+        } else {    // mode == ADV_BUTTON_PULSE_MODE
+            adv_button_main_config->continuos_mode = true;
+            
+            button->value = 0;
+            
+            gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_NEG, adv_button_interrupt_pulse);
+        }
+        
+        if (adv_button_main_config->continuos_mode) {
             esp_timer_start(adv_button_main_config->button_evaluate_timer);
             
             adv_button_t *button = adv_button_main_config->buttons;
             while (button) {
-                gpio_set_interrupt(button->gpio, GPIO_INTTYPE_NONE, NULL);
+                if (button->mode == ADV_BUTTON_NORMAL_MODE) {
+                    gpio_set_interrupt(button->gpio, GPIO_INTTYPE_NONE, NULL);
+                }
                 button = button->next;
             }
         }
@@ -443,12 +480,14 @@ int adv_button_destroy(const uint8_t gpio) {
         } else if (gpio == 16) {
             adv_button_t *button = adv_button_main_config->buttons;
             while (button) {
-                gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt);
+                if (button->mode == ADV_BUTTON_NORMAL_MODE) {
+                    gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt_normal);
+                }
                 button = button->next;
             }
             
             esp_timer_stop(adv_button_main_config->button_evaluate_timer);
-            adv_button_main_config->is_gpio16 = false;
+            adv_button_main_config->continuos_mode = false;
         }
         
         return 0;

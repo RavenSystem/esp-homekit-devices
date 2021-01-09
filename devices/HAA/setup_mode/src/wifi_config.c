@@ -246,7 +246,7 @@ static void wifi_smart_connect_task(void* arg) {
 static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
     if (status != SCAN_OK) {
         ERROR("Wifi smart connect scan failed");
-        if (!wifi_config_got_ip()) {
+        if (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
             sdk_wifi_station_connect();
         }
     }
@@ -298,7 +298,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
         if (wifi_bssid && memcmp(best_bssid, wifi_bssid, 6) == 0) {
             INFO("Best BSSID is the same");
             free(wifi_bssid);
-            if (!wifi_config_got_ip()) {
+            if (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
                 sdk_wifi_station_connect();
             }
             return;
@@ -331,7 +331,7 @@ void wifi_config_smart_connect() {
     sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
     
     if (wifi_mode < 2 || xTaskCreate(wifi_scan_sc_task, "wifi_scan_smart", 384, NULL, (tskIDLE_PRIORITY + 2), NULL) != pdPASS) {
-        if (!wifi_config_got_ip()) {
+        if (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
             sdk_wifi_station_connect();
         }
     }
@@ -1047,7 +1047,7 @@ static void wifi_config_sta_connect_timeout_task() {
                 UNLOCK_TCPIP_CORE();
                 context->hostname_ready = true;
             }
-        } else if (wifi_config_got_ip()) {
+        } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
             wifi_config_softap_stop();
             
             if (context->on_wifi_ready) {
