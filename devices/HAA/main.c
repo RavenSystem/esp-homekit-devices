@@ -53,7 +53,7 @@ main_config_t main_config = {
     .wifi_ping_is_running = false,
     .wifi_error_count = 0,
     .wifi_arp_count = 0,
-    .wifi_roaming_count = 0,
+    .wifi_roaming_count = 1,
     .wifi_roaming_count_max = WIFI_WATCHDOG_ROAMING_PERIOD,
     
     .setup_mode_toggle_counter = INT8_MIN,
@@ -420,29 +420,31 @@ void wifi_ping_gw_task() {
 }
 
 void wifi_reconnection_task(void* args) {
-    if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
-        vTaskDelete(NULL);
-    }
-    
     main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
+    esp_timer_stop(WIFI_WATCHDOG_TIMER);
+    
     INFO("Wifi reconnection process started");
+    
     do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
 
     if ((uint32_t) args == 1) {
         sdk_wifi_station_disconnect();
     }
 
-    while (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
+    for (;;) {
         vTaskDelay(MS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
         
         if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
             if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
-                INFO("Wifi reconnected");
                 main_config.wifi_status = WIFI_STATUS_CONNECTED;
                 
                 homekit_mdns_announce();
-                taskYIELD();
+
                 esp_timer_start(WIFI_WATCHDOG_TIMER);
+                
+                INFO("Wifi reconnection OK");
+                
+                break;
                                         
             } else {
                 main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
@@ -454,8 +456,6 @@ void wifi_reconnection_task(void* args) {
                 main_config.wifi_error_count = 0;
                 
                 do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 3);
-                
-                vTaskDelay(MS_TO_TICKS(WIFI_RECONNECTION_FINAL_DELAY_MS));
             }
             
         } else if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
@@ -483,50 +483,49 @@ void wifi_reconnection_task(void* args) {
 }
 
 void wifi_watchdog() {
-    if (main_config.wifi_status == WIFI_STATUS_CONNECTED) {
-        if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
-            if (main_config.wifi_mode == 3) {
-                if (main_config.wifi_roaming_count == 0) {
-                    esp_timer_change_period(WIFI_WATCHDOG_TIMER, WIFI_WATCHDOG_POLL_PERIOD_MS);
-                }
-                
-                main_config.wifi_roaming_count++;
-                
-                if (main_config.wifi_roaming_count > main_config.wifi_roaming_count_max) {
-                    esp_timer_change_period(WIFI_WATCHDOG_TIMER, 8000);
-                    main_config.wifi_roaming_count_max = WIFI_WATCHDOG_ROAMING_PERIOD + (hwrand() % WIFI_WATCHDOG_ROAMING_MARGIN);
-                    main_config.wifi_roaming_count = 0;
-                    wifi_config_smart_connect();
-                }
+    //INFO("Wifi status = %i", main_config.wifi_status);
+    if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
+        if (main_config.wifi_mode == 3) {
+            if (main_config.wifi_roaming_count == 0) {
+                esp_timer_change_period(WIFI_WATCHDOG_TIMER, WIFI_WATCHDOG_POLL_PERIOD_MS);
             }
             
-            main_config.wifi_arp_count++;
-            if (main_config.wifi_arp_count > WIFI_WATCHDOG_ARP_RESEND_PERIOD) {
-                main_config.wifi_arp_count = hwrand() % WIFI_WATCHDOG_ARP_RESEND_MARGIN;
-                wifi_config_resend_arp();
+            main_config.wifi_roaming_count++;
+            
+            if (main_config.wifi_roaming_count > main_config.wifi_roaming_count_max) {
+                esp_timer_change_period(WIFI_WATCHDOG_TIMER, 8000);
+                main_config.wifi_roaming_count_max = WIFI_WATCHDOG_ROAMING_PERIOD + (hwrand() % WIFI_WATCHDOG_ROAMING_MARGIN);
+                main_config.wifi_roaming_count = 0;
+                wifi_config_smart_connect();
             }
-            
-            if (main_config.wifi_ping_max_errors != 255 && !main_config.wifi_ping_is_running && !homekit_is_pairing()) {
-                if (xTaskCreate(wifi_ping_gw_task, "wifi_ping_gw", WIFI_PING_GW_TASK_SIZE, NULL, WIFI_PING_GW_TASK_PRIORITY, NULL) != pdPASS) {
-                    ERROR("Creating wifi_ping_gw_task");
-                    FREEHEAP();
-                }
-            }
-            
-        } else {
-            ERROR("Wifi error");
-            
-            uint32_t force_disconnect = 0;
-            if (main_config.wifi_error_count > main_config.wifi_ping_max_errors) {
-                force_disconnect = 1;
-            }
-            
-            main_config.wifi_error_count = 0;
-            
-            if (xTaskCreate(wifi_reconnection_task, "reconnect", WIFI_RECONNECTION_TASK_SIZE, (void*) force_disconnect, WIFI_RECONNECTION_TASK_PRIORITY, NULL) != pdPASS) {
-                ERROR("Creating wifi_reconnection_task");
+        }
+        
+        main_config.wifi_arp_count++;
+        if (main_config.wifi_arp_count > WIFI_WATCHDOG_ARP_RESEND_PERIOD) {
+            main_config.wifi_arp_count = hwrand() % WIFI_WATCHDOG_ARP_RESEND_MARGIN;
+            wifi_config_resend_arp();
+        }
+        
+        if (main_config.wifi_ping_max_errors != 255 && !main_config.wifi_ping_is_running && !homekit_is_pairing()) {
+            if (xTaskCreate(wifi_ping_gw_task, "wifi_ping_gw", WIFI_PING_GW_TASK_SIZE, NULL, WIFI_PING_GW_TASK_PRIORITY, NULL) != pdPASS) {
+                ERROR("Creating wifi_ping_gw_task");
                 FREEHEAP();
             }
+        }
+        
+    } else {
+        ERROR("Wifi error");
+        
+        uint32_t force_disconnect = 0;
+        if (main_config.wifi_error_count > main_config.wifi_ping_max_errors) {
+            force_disconnect = 1;
+        }
+        
+        main_config.wifi_error_count = 0;
+        
+        if (xTaskCreate(wifi_reconnection_task, "reconnect", WIFI_RECONNECTION_TASK_SIZE, (void*) force_disconnect, WIFI_RECONNECTION_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("Creating wifi_reconnection_task");
+            FREEHEAP();
         }
     }
 }
@@ -550,7 +549,8 @@ void ping_task() {
         ping_input_callback_fn_t* ping_input_callback_fn = callbacks;
         
         while (ping_input_callback_fn) {
-            if (!ping_input_callback_fn->disable_without_wifi || main_config.wifi_status >= WIFI_STATUS_PRECONNECTED) {
+            if (!ping_input_callback_fn->disable_without_wifi ||
+                (ping_input_callback_fn->disable_without_wifi && main_config.wifi_status >= WIFI_STATUS_PRECONNECTED)) {
                 ping_input_callback_fn->callback(0, ping_input_callback_fn->ch_group, ping_input_callback_fn->param);
             }
             ping_input_callback_fn = ping_input_callback_fn->next;
@@ -565,7 +565,7 @@ void ping_task() {
         do {
             i++;
             ping_result = ping_host(ping_input->host);
-            vTaskDelay(MS_TO_TICKS(50));
+            vTaskDelay(MS_TO_TICKS(10));
         } while (i < PING_RETRIES && !ping_result);
         
         if (ping_result && (!ping_input->last_response || ping_input->ignore_last_response)) {
