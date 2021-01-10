@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.6.1"
+#define FIRMWARE_VERSION                    "4.6.2"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -514,7 +514,7 @@
 #define WIFI_DISCONNECTED_LONG_TIME         ((int) (60      * _WIFI_RECONNECTION_FACTOR))
 #define WIFI_RECONNECTION_ARP_RESEND_PERIOD ((int) (WIFI_ARP_RESEND_PERIOD * _WIFI_RECONNECTION_FACTOR))
 
-#define WIFI_WATCHDOG_POLL_PERIOD_MS        (1000)
+#define WIFI_WATCHDOG_POLL_PERIOD_MS        (2000)
 #define _WIFI_WATCHDOG_FACTOR               (1000.000f / WIFI_WATCHDOG_POLL_PERIOD_MS)
 #define WIFI_WATCHDOG_ARP_RESEND_PERIOD     ((int) (WIFI_ARP_RESEND_PERIOD * _WIFI_WATCHDOG_FACTOR))
 #define WIFI_WATCHDOG_ARP_RESEND_MARGIN     ((int) (15      * _WIFI_WATCHDOG_FACTOR))

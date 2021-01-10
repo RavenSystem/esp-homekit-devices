@@ -335,7 +335,7 @@ lightbulb_group_t* lightbulb_group_find(homekit_characteristic_t* ch) {
 }
 
 bool ping_host(char* host) {
-    if (main_config.wifi_status < WIFI_STATUS_PRECONNECTED) {
+    if (main_config.wifi_status < WIFI_STATUS_PRECONNECTED || !wifi_config_got_ip()) {
         return false;
     }
     
@@ -543,14 +543,12 @@ ping_input_t* ping_input_find_by_host(char* host) {
 void ping_task() {
     main_config.ping_is_running = true;
 
-    INFO("Ping...");
-
     void ping_input_run_callback_fn(ping_input_callback_fn_t* callbacks) {
         ping_input_callback_fn_t* ping_input_callback_fn = callbacks;
         
         while (ping_input_callback_fn) {
             if (!ping_input_callback_fn->disable_without_wifi ||
-                (ping_input_callback_fn->disable_without_wifi && main_config.wifi_status >= WIFI_STATUS_PRECONNECTED)) {
+                (ping_input_callback_fn->disable_without_wifi && main_config.wifi_status >= WIFI_STATUS_PRECONNECTED && wifi_config_got_ip())) {
                 ping_input_callback_fn->callback(0, ping_input_callback_fn->ch_group, ping_input_callback_fn->param);
             }
             ping_input_callback_fn = ping_input_callback_fn->next;
@@ -570,12 +568,12 @@ void ping_task() {
         
         if (ping_result && (!ping_input->last_response || ping_input->ignore_last_response)) {
             ping_input->last_response = true;
-            INFO("Ping %s", ping_input->host);
+            INFO("Ping %s OK", ping_input->host);
             ping_input_run_callback_fn(ping_input->callback_1);
 
         } else if (!ping_result && (ping_input->last_response || ping_input->ignore_last_response)) {
             ping_input->last_response = false;
-            ERROR("Ping %s", ping_input->host);
+            INFO("Ping %s FAIL", ping_input->host);
             ping_input_run_callback_fn(ping_input->callback_0);
         }
         
@@ -4124,7 +4122,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     }
     
     // Network actions
-    if (ch_group->action_network && main_config.wifi_status >= WIFI_STATUS_PRECONNECTED) {
+    if (ch_group->action_network && main_config.wifi_status >= WIFI_STATUS_PRECONNECTED && wifi_config_got_ip()) {
         action_task_t* action_task = new_action_task();
         action_task->action = action;
         action_task->ch_group = ch_group;
