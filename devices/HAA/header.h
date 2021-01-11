@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.6.4"
+#define FIRMWARE_VERSION                    "4.6.5"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -43,14 +43,14 @@
 #define TYPE_DOUBLE_LOCK                    (10)
 
 // Task Stack Sizes
-#define GLOBAL_TASK_SIZE                    (512)
+#define GLOBAL_TASK_SIZE                    (536)
 
 #define INITIAL_SETUP_TASK_SIZE             (1024)
 #define PING_TASK_SIZE                      GLOBAL_TASK_SIZE
 #define AUTODIMMER_TASK_SIZE                GLOBAL_TASK_SIZE
-#define IR_TX_TASK_SIZE                     (384)
+#define IR_TX_TASK_SIZE                     (448)
 #define UART_ACTION_TASK_SIZE               (384)
-#define NETWORK_ACTION_TASK_SIZE            (480)
+#define NETWORK_ACTION_TASK_SIZE            (512)
 #define DELAYED_SENSOR_START_TASK_SIZE      GLOBAL_TASK_SIZE
 #define TEMPERATURE_TASK_SIZE               GLOBAL_TASK_SIZE
 #define PROCESS_TH_TASK_SIZE                GLOBAL_TASK_SIZE
@@ -64,7 +64,7 @@
 
 // Task Priorities
 #define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
-#define PING_TASK_PRIORITY                  (tskIDLE_PRIORITY + 1)
+#define PING_TASK_PRIORITY                  (tskIDLE_PRIORITY + 2)
 #define AUTODIMMER_TASK_PRIORITY            (tskIDLE_PRIORITY + 1)
 #define IR_TX_TASK_PRIORITY                 (tskIDLE_PRIORITY + 1)
 #define UART_ACTION_TASK_PRIORITY           (tskIDLE_PRIORITY + 1)
