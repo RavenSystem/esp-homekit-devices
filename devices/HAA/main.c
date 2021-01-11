@@ -335,7 +335,7 @@ lightbulb_group_t* lightbulb_group_find(homekit_characteristic_t* ch) {
 }
 
 bool ping_host(char* host) {
-    if (main_config.wifi_status != WIFI_STATUS_CONNECTED || !wifi_config_got_ip()) {
+    if (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
         return false;
     }
     
@@ -537,7 +537,7 @@ void ping_task() {
         
         while (ping_input_callback_fn) {
             if (!ping_input_callback_fn->disable_without_wifi ||
-                (ping_input_callback_fn->disable_without_wifi && main_config.wifi_status == WIFI_STATUS_CONNECTED && wifi_config_got_ip())) {
+                (ping_input_callback_fn->disable_without_wifi && main_config.wifi_status == WIFI_STATUS_CONNECTED)) {
                 ping_input_callback_fn->callback(0, ping_input_callback_fn->ch_group, ping_input_callback_fn->param);
             }
             ping_input_callback_fn = ping_input_callback_fn->next;
@@ -4111,7 +4111,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     }
     
     // Network actions
-    if (ch_group->action_network && main_config.wifi_status == WIFI_STATUS_CONNECTED && wifi_config_got_ip()) {
+    if (ch_group->action_network && main_config.wifi_status == WIFI_STATUS_CONNECTED) {
         action_task_t* action_task = new_action_task();
         action_task->action = action;
         action_task->ch_group = ch_group;
