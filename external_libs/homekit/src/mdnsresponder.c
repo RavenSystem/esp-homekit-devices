@@ -136,6 +136,8 @@ static mdns_rsrc*      gDictP = NULL;       // RR database, linked list
 static u8_t* mdns_response = NULL;
 static u8_t* mdns_payload = NULL;
 static uint16_t mdns_payload_len = 0;
+static bool mdns_ready = false;
+static uint32_t mdns_ttl = 4500;
 
 //---------------------- Debug/logging utilities -------------------------
 
@@ -579,7 +581,13 @@ void mdns_add_AAAA(const char* rKey, u32_t ttl, const ip6_addr_t *addr)
 }
 #endif
 
-static void internal_mdns_announce() {
+#define TTL_MULTIPLIER_MS   1000                        // Set to 1000 to use standard time
+#define TTL_SAFE_MARGIN     5
+
+void mdns_announce() {
+    mdns_ready = false;
+    esp_timer_change_period(mdns_announce_timer, TTL_SAFE_MARGIN * TTL_MULTIPLIER_MS);
+    
     if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         printf("mDNS announced\n");
         struct netif *netif = sdk_system_get_netif(STATION_IF);
@@ -592,13 +600,6 @@ static void internal_mdns_announce() {
     }
 }
 
-void mdns_announce() {
-    esp_timer_start(mdns_announce_timer);
-    internal_mdns_announce();
-}
-
-#define TTL_MULTIPLIER_MS   1000                        // Set to 1000 to use standard time
-
 void mdns_add_facility_work(const char* instanceName,   // Friendly name, need not be unique
                             const char* serviceName,    // Must be "_name", e.g. "_hap" or "_http"
                             const char* addText,        // Must be <key>=<value>
@@ -610,6 +611,8 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
     if (mdns_buffer_init() != 0) {
         return;
     }
+    
+    mdns_ttl = ttl;
     
     size_t key_len = strlen(serviceName) + 12;
     char *key = malloc(key_len + 1);
@@ -655,11 +658,7 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
     free(fullName);
     free(devName);
 
-    esp_timer_stop(mdns_announce_timer);
-    
-    internal_mdns_announce();
-    
-    esp_timer_change_period(mdns_announce_timer, (ttl - 1) * TTL_MULTIPLIER_MS);
+    mdns_announce();
 }
 
 void mdns_add_facility(const char* instanceName,   // Friendly name, need not be unique
@@ -679,6 +678,10 @@ void mdns_add_facility(const char* instanceName,   // Friendly name, need not be
     if (ttl < 1000 && strstr(addText, "sf=1") != NULL) {
         printf("mDNS changes TTL to 4500 for pairing\n");
         ttl = 4500;
+    }
+    
+    if (ttl < 60) {
+        ttl = 60;
     }
 
     mdns_add_facility_work(instanceName, serviceName, addText, flags, onPort, ttl);
@@ -736,7 +739,7 @@ static int mdns_add_to_answer(mdns_rsrc* rsrcP, u8_t* resp, int respLen)
 
 //---------------------------------------------------------------------------
 
-// Send UDP to multicast address
+// Send UDP to multicast or unicast address
 static void mdns_send_mcast(const ip_addr_t *addr, u8_t* msgP, int nBytes, const u8_t unicast)
 {
     struct pbuf* p;
@@ -829,6 +832,11 @@ static void mdns_reply(const ip_addr_t *addr, struct mdns_hdr* hdrP)
             if (qClass == DNS_RRCLASS_IN || qClass == DNS_RRCLASS_ANY) {
                 rsrcP = mdns_match(qStr, qType);
                 if (rsrcP) {
+                    if (!mdns_ready) {
+                        esp_timer_change_period(mdns_announce_timer, (mdns_ttl - TTL_SAFE_MARGIN) * TTL_MULTIPLIER_MS);
+                        mdns_ready = true;
+                        printf("mDNS is working with TTL %i\n", mdns_ttl);
+                    }
 #if LWIP_IPV6
                     if (rsrcP->rType == DNS_RRTYPE_AAAA) {
                         // Emit an answer for each ipv6 address.
@@ -1095,7 +1103,7 @@ void mdns_init()
         return;
     }
 
-    mdns_announce_timer = esp_timer_create(60000, true, NULL, internal_mdns_announce);
+    mdns_announce_timer = esp_timer_create(60000, true, NULL, mdns_announce);
     
     udp_bind_netif(gMDNS_pcb, netif);
 

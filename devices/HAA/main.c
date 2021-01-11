@@ -335,7 +335,7 @@ lightbulb_group_t* lightbulb_group_find(homekit_characteristic_t* ch) {
 }
 
 bool ping_host(char* host) {
-    if (main_config.wifi_status < WIFI_STATUS_PRECONNECTED || !wifi_config_got_ip()) {
+    if (main_config.wifi_status != WIFI_STATUS_CONNECTED || !wifi_config_got_ip()) {
         return false;
     }
     
@@ -435,28 +435,17 @@ void wifi_reconnection_task(void* args) {
         vTaskDelay(MS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
         
         if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
-            if (main_config.wifi_status == WIFI_STATUS_PRECONNECTED) {
-                main_config.wifi_status = WIFI_STATUS_CONNECTED;
-                
-                homekit_mdns_announce();
+            main_config.wifi_status = WIFI_STATUS_CONNECTED;
+            main_config.wifi_error_count = 0;
+            homekit_mdns_announce();
 
-                esp_timer_start(WIFI_WATCHDOG_TIMER);
-                
-                INFO("Wifi reconnection OK");
-                
-                break;
-                                        
-            } else {
-                main_config.wifi_status = WIFI_STATUS_PRECONNECTED;
-                INFO("Wifi preconnected");
-                vTaskDelay(MS_TO_TICKS(500));
+            do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 3);
 
-                homekit_mdns_announce();
-                
-                main_config.wifi_error_count = 0;
-                
-                do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 3);
-            }
+            esp_timer_start(WIFI_WATCHDOG_TIMER);
+            
+            INFO("Wifi reconnection OK");
+            
+            break;
             
         } else if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
             INFO("Wifi reconnecting...");
@@ -466,7 +455,7 @@ void wifi_reconnection_task(void* args) {
         } else {
             main_config.wifi_error_count++;
             if (main_config.wifi_error_count > WIFI_DISCONNECTED_LONG_TIME) {
-                ERROR("Wifi disconnected for a long time");
+                ERROR("Wifi disconnected for a long time. Reconnecting...");
                 main_config.wifi_error_count = 0;
                 main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
                 
@@ -548,7 +537,7 @@ void ping_task() {
         
         while (ping_input_callback_fn) {
             if (!ping_input_callback_fn->disable_without_wifi ||
-                (ping_input_callback_fn->disable_without_wifi && main_config.wifi_status >= WIFI_STATUS_PRECONNECTED && wifi_config_got_ip())) {
+                (ping_input_callback_fn->disable_without_wifi && main_config.wifi_status == WIFI_STATUS_CONNECTED && wifi_config_got_ip())) {
                 ping_input_callback_fn->callback(0, ping_input_callback_fn->ch_group, ping_input_callback_fn->param);
             }
             ping_input_callback_fn = ping_input_callback_fn->next;
@@ -664,13 +653,13 @@ inline void save_states_callback() {
 }
 
 void homekit_characteristic_notify_safe(homekit_characteristic_t *ch, const homekit_value_t value) {
-    if (main_config.wifi_status >= WIFI_STATUS_PRECONNECTED) {
+    if (main_config.wifi_status == WIFI_STATUS_CONNECTED) {
         homekit_characteristic_notify(ch, value);
     }
 }
 
 void hkc_group_notify(ch_group_t* ch_group) {
-    if (!ch_group->homekit_enabled || main_config.wifi_status < WIFI_STATUS_PRECONNECTED) {
+    if (!ch_group->homekit_enabled || main_config.wifi_status != WIFI_STATUS_CONNECTED) {
         return;
     }
     
@@ -4122,7 +4111,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     }
     
     // Network actions
-    if (ch_group->action_network && main_config.wifi_status >= WIFI_STATUS_PRECONNECTED && wifi_config_got_ip()) {
+    if (ch_group->action_network && main_config.wifi_status == WIFI_STATUS_CONNECTED && wifi_config_got_ip()) {
         action_task_t* action_task = new_action_task();
         action_task->action = action;
         action_task->ch_group = ch_group;

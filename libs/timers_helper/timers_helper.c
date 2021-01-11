@@ -9,7 +9,7 @@
 
 #include "timers_helper.h"
 
-#define XTIMER_MAX_TRIES                (5)
+#define XTIMER_MAX_TRIES                (4)
 
 void esp_timer_start(TimerHandle_t xTimer) {
     if (xTimer) {
@@ -17,6 +17,10 @@ void esp_timer_start(TimerHandle_t xTimer) {
         while (!xTimerStart(xTimer, tries) && tries < XTIMER_MAX_TRIES) {
             tries++;
             printf("! Timer Start Failed (%i/%i)\n", tries, XTIMER_MAX_TRIES);
+            
+            if (tries == XTIMER_MAX_TRIES && !xTimerStart(xTimer, portMAX_DELAY)) {
+                printf("! Timer Start Failed portMAX_DELAY\n");
+            }
         }
     }
 }
@@ -38,6 +42,10 @@ void esp_timer_stop(TimerHandle_t xTimer) {
         while (!xTimerStop(xTimer, tries) && tries < XTIMER_MAX_TRIES) {
             tries++;
             printf("! Timer Stop Failed (%i/%i)\n", tries, XTIMER_MAX_TRIES);
+            
+            if (tries == XTIMER_MAX_TRIES && !xTimerStop(xTimer, portMAX_DELAY)) {
+                printf("! Timer Stop Failed portMAX_DELAY\n");
+            }
         }
     }
 }
@@ -59,6 +67,10 @@ void esp_timer_change_period(TimerHandle_t xTimer, const uint32_t new_period_ms)
         while (!xTimerChangePeriod(xTimer, pdMS_TO_TICKS(new_period_ms), tries) && tries < XTIMER_MAX_TRIES) {
             tries++;
             printf("! Timer Change Period Failed (%i/%i)\n", tries, XTIMER_MAX_TRIES);
+            
+            if (tries == XTIMER_MAX_TRIES && !xTimerChangePeriod(xTimer, pdMS_TO_TICKS(new_period_ms), portMAX_DELAY)) {
+                printf("! Timer Change Period Failed portMAX_DELAY\n");
+            }
         }
     }
 }
@@ -89,6 +101,10 @@ void esp_timer_delete(TimerHandle_t xTimer) {
         while (!xTimerDelete(xTimer, tries) && tries < XTIMER_MAX_TRIES) {
             tries++;
             printf("! Timer Delete Failed (%i/%i)\n", tries, XTIMER_MAX_TRIES);
+            
+            if (tries == XTIMER_MAX_TRIES && !xTimerDelete(xTimer, portMAX_DELAY)) {
+                printf("! Timer Delete Failed portMAX_DELAY\n");
+            }
         }
     }
 }
