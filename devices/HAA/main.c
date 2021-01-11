@@ -437,6 +437,8 @@ void wifi_reconnection_task(void* args) {
         if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
             main_config.wifi_status = WIFI_STATUS_CONNECTED;
             main_config.wifi_error_count = 0;
+            main_config.wifi_channel = sdk_wifi_get_channel();
+            
             homekit_mdns_announce();
 
             do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 3);
@@ -474,6 +476,8 @@ void wifi_reconnection_task(void* args) {
 void wifi_watchdog() {
     //INFO("Wifi status = %i", main_config.wifi_status);
     if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
+        uint8_t current_channel = sdk_wifi_get_channel();
+        
         if (main_config.wifi_mode == 3) {
             if (main_config.wifi_roaming_count == 0) {
                 esp_timer_change_period(WIFI_WATCHDOG_TIMER, WIFI_WATCHDOG_POLL_PERIOD_MS);
@@ -487,6 +491,9 @@ void wifi_watchdog() {
                 main_config.wifi_roaming_count = 0;
                 wifi_config_smart_connect();
             }
+        } else if (main_config.wifi_channel != current_channel) {
+            main_config.wifi_channel = current_channel;
+            homekit_mdns_announce();
         }
         
         main_config.wifi_arp_count++;
@@ -4236,6 +4243,8 @@ homekit_characteristic_t hap_version = HOMEKIT_CHARACTERISTIC_(VERSION, "1.1.0")
 homekit_server_config_t config;
 
 void run_homekit_server(TimerHandle_t xTimer) {
+    main_config.wifi_channel = sdk_wifi_get_channel();
+    
     FREEHEAP();
     
     main_config.wifi_status = WIFI_STATUS_CONNECTED;
