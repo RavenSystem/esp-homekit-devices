@@ -184,7 +184,7 @@ static void client_send_redirect(client_t *client, int code, const char *redirec
     client_send(client, buffer, len);
 }
 
-bool wifi_config_got_ip() {
+IRAM bool wifi_config_got_ip() {
     struct ip_info info;
     if (sdk_wifi_get_ip_info(STATION_IF, &info) && ip4_addr1_16(&info.ip) != 0) {
         return true;

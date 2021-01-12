@@ -287,6 +287,7 @@ typedef struct _main_config {
     uint16_t wifi_roaming_count;
     
     uint16_t wifi_roaming_count_max;
+    bool wifi_got_ip: 1;
     bool used_gpio_0: 1;
     bool used_gpio_1: 1;
     bool used_gpio_2: 1;

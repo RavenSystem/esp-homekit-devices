@@ -136,7 +136,7 @@ static mdns_rsrc*      gDictP = NULL;       // RR database, linked list
 static u8_t* mdns_response = NULL;
 static u8_t* mdns_payload = NULL;
 static uint16_t mdns_payload_len = 0;
-static bool mdns_ready = false;
+static bool mdns_ready = true;
 static uint32_t mdns_ttl = 4500;
 
 //---------------------- Debug/logging utilities -------------------------
@@ -585,18 +585,20 @@ void mdns_add_AAAA(const char* rKey, u32_t ttl, const ip6_addr_t *addr)
 #define TTL_SAFE_MARGIN     5
 
 void mdns_announce() {
-    mdns_ready = false;
-    esp_timer_change_period(mdns_announce_timer, TTL_SAFE_MARGIN * TTL_MULTIPLIER_MS);
-    
-    if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
-        printf("mDNS announced\n");
-        struct netif *netif = sdk_system_get_netif(STATION_IF);
-#if LWIP_IPV4
-        mdns_announce_netif(netif, &gMulticastV4Addr);
-#endif
-#if LWIP_IPV6
-        mdns_announce_netif(netif, &gMulticastV6Addr);
-#endif
+    if (mdns_ready) {
+        mdns_ready = false;
+        esp_timer_change_period(mdns_announce_timer, TTL_SAFE_MARGIN * TTL_MULTIPLIER_MS);
+        
+        if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+            printf("mDNS announced\n");
+            struct netif *netif = sdk_system_get_netif(STATION_IF);
+    #if LWIP_IPV4
+            mdns_announce_netif(netif, &gMulticastV4Addr);
+    #endif
+    #if LWIP_IPV6
+            mdns_announce_netif(netif, &gMulticastV6Addr);
+    #endif
+        }
     }
 }
 

@@ -49,6 +49,8 @@
 
 main_config_t main_config = {
     .wifi_status = WIFI_STATUS_DISCONNECTED,
+    .wifi_channel = 0,
+    .wifi_got_ip = true,
     .wifi_ping_max_errors = 255,
     .wifi_ping_is_running = false,
     .wifi_error_count = 0,
@@ -486,14 +488,24 @@ void wifi_watchdog() {
             main_config.wifi_roaming_count++;
             
             if (main_config.wifi_roaming_count > main_config.wifi_roaming_count_max) {
-                esp_timer_change_period(WIFI_WATCHDOG_TIMER, 8000);
+                esp_timer_change_period(WIFI_WATCHDOG_TIMER, 5000);
                 main_config.wifi_roaming_count_max = WIFI_WATCHDOG_ROAMING_PERIOD + (hwrand() % WIFI_WATCHDOG_ROAMING_MARGIN);
                 main_config.wifi_roaming_count = 0;
                 wifi_config_smart_connect();
             }
-        } else if (main_config.wifi_channel != current_channel) {
+        }
+        
+        if (main_config.wifi_channel != current_channel) {
             main_config.wifi_channel = current_channel;
+            INFO("Wifi new Ch: %i", current_channel);
             homekit_mdns_announce();
+        } else {
+            if (!wifi_config_got_ip()) {
+                main_config.wifi_got_ip = false;
+            } else if (main_config.wifi_got_ip == false) {
+                main_config.wifi_got_ip = true;
+                homekit_mdns_announce();
+            }
         }
         
         main_config.wifi_arp_count++;
