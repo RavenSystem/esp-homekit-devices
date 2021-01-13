@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.6.7"
+#define FIRMWARE_VERSION                    "4.7.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -43,7 +43,7 @@
 #define TYPE_DOUBLE_LOCK                    (10)
 
 // Task Stack Sizes
-#define GLOBAL_TASK_SIZE                    (536)
+#define GLOBAL_TASK_SIZE                    (512)
 
 #define INITIAL_SETUP_TASK_SIZE             (1024)
 #define PING_TASK_SIZE                      GLOBAL_TASK_SIZE
@@ -248,6 +248,8 @@
 #define LIGHTBULB_PWM_GPIO_W_SET            "w"                 // Will be removed
 #define LIGHTBULB_PWM_GPIO_CW_SET           "cw"
 #define LIGHTBULB_PWM_GPIO_WW_SET           "ww"
+#define LIGHTBULB_RGB_ARRAY_SET             "rgb"
+#define LIGHTBULB_CMY_ARRAY_SET             "cmy"
 #define LIGHTBULB_FACTOR_R_SET              "fr"                // Will be removed
 #define LIGHTBULB_FACTOR_R                  ch_group->num_02    // Will be removed
 #define LIGHTBULB_FACTOR_G_SET              "fg"                // Will be removed

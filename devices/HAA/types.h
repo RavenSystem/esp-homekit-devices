@@ -196,6 +196,9 @@ typedef struct _lightbulb_group {
     float cw[2];
     float ww[2];
     
+    float rgb[3][2];
+    float cmy[3][2];
+    
     float wp[2];
 
     homekit_characteristic_t* ch0;
@@ -269,8 +272,8 @@ typedef struct _haa_pwm {
 typedef struct _main_config {
     uint8_t wifi_status: 2;
     uint8_t wifi_channel: 4;
-    bool wifi_ping_is_running: 1;
     bool ir_tx_inv: 1;
+    bool wifi_got_ip: 1;
     uint8_t ir_tx_gpio: 5;
     uint8_t wifi_mode: 3;
     int8_t setup_mode_toggle_counter;
@@ -287,7 +290,6 @@ typedef struct _main_config {
     uint16_t wifi_roaming_count;
     
     uint16_t wifi_roaming_count_max;
-    bool wifi_got_ip: 1;
     bool used_gpio_0: 1;
     bool used_gpio_1: 1;
     bool used_gpio_2: 1;

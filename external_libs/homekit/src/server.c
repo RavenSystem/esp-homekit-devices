@@ -45,7 +45,7 @@
 #define PORT 5556
 
 #ifndef HOMEKIT_MAX_CLIENTS
-#define HOMEKIT_MAX_CLIENTS 16
+#define HOMEKIT_MAX_CLIENTS 8
 #endif
 
 struct _client_context_t;
@@ -3184,12 +3184,6 @@ client_context_t *homekit_server_accept_client() {
         return NULL;
     }
 
-    if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS) {
-        HOMEKIT_INFO("Max client connections reached (%d)", HOMEKIT_MAX_CLIENTS);
-        close(s);
-        return NULL;
-    }
-
     char address_buffer[INET_ADDRSTRLEN];
 
     struct sockaddr_in addr;
@@ -3202,6 +3196,19 @@ client_context_t *homekit_server_accept_client() {
         return NULL;
     }
     
+    client_context_t *context;
+    
+    if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS) {
+        context = homekit_server->clients;
+        while (context) {
+            if (!context->next) {
+                context->disconnect = true;
+            }
+
+            context = context->next;
+        }
+    }
+    
     HOMEKIT_INFO("[%d] New %s:%d", s, address_buffer, addr.sin_port);
 
     const struct timeval rcvtimeout = { 10, 0 };
@@ -3210,18 +3217,7 @@ client_context_t *homekit_server_accept_client() {
     const int keepalive = 0;
     setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive));
     
-    /*
-    const int idle = 60;
-    setsockopt(s, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
-
-    const int interval = 15;
-    setsockopt(s, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval));
-
-    const int maxpkt = 4;
-    setsockopt(s, IPPROTO_TCP, TCP_KEEPCNT, &maxpkt, sizeof(maxpkt));
-     */
-    
-    client_context_t *context = client_context_new();
+    context = client_context_new();
 
     context->socket = s;
     context->next = homekit_server->clients;

@@ -205,12 +205,9 @@ static void adv_logger_init_task(void* args) {
         dest_port[0] = 0;
         dest_port += 1;
 
-        while(getaddrinfo(destination, dest_port, &hints, &adv_logger_data->res) != 0) {
+        while (getaddrinfo(destination, dest_port, &hints, &adv_logger_data->res) != 0) {
             vTaskDelay(pdMS_TO_TICKS(200));
         }
-        
-        free(destination);
-        free(dest_port);
         
         while (adv_logger_data->socket < 0) {
             adv_logger_data->socket = socket(adv_logger_data->res->ai_family, adv_logger_data->res->ai_socktype, 0);
@@ -234,10 +231,12 @@ static void adv_logger_init_task(void* args) {
         
         adv_logger_data->is_new_line = true;
         adv_logger_data->ready_to_send = true;
-        
+
     } else {
         adv_logger_remove();
     }
+    
+    free(args);
     
     vTaskDelete(NULL);
 }

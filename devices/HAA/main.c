@@ -52,7 +52,6 @@ main_config_t main_config = {
     .wifi_channel = 0,
     .wifi_got_ip = true,
     .wifi_ping_max_errors = 255,
-    .wifi_ping_is_running = false,
     .wifi_error_count = 0,
     .wifi_arp_count = 0,
     .wifi_roaming_count = 1,
@@ -389,10 +388,6 @@ void reboot_haa() {
 }
 
 void wifi_ping_gw_task() {
-    main_config.wifi_ping_is_running = true;
-    
-    vTaskDelay(MS_TO_TICKS(10));
-    
     struct ip_info info;
     bool ping_result = true;
     
@@ -401,7 +396,7 @@ void wifi_ping_gw_task() {
         snprintf(gw_host, 16, IPSTR, IP2STR(&info.gw));
         
         while (main_config.ping_is_running) {
-            vTaskDelay(MS_TO_TICKS(100));
+            vTaskDelay(MS_TO_TICKS(10));
         }
         
         ping_result = ping_host(gw_host);
@@ -415,8 +410,6 @@ void wifi_ping_gw_task() {
     if (ping_result) {
         main_config.wifi_error_count = 0;
     }
-    
-    main_config.wifi_ping_is_running = false;
     
     vTaskDelete(NULL);
 }
@@ -514,7 +507,7 @@ void wifi_watchdog() {
             wifi_config_resend_arp();
         }
         
-        if (main_config.wifi_ping_max_errors != 255 && !main_config.wifi_ping_is_running && !homekit_is_pairing()) {
+        if (main_config.wifi_ping_max_errors != 255 && !homekit_is_pairing()) {
             if (xTaskCreate(wifi_ping_gw_task, "wifi_ping_gw", WIFI_PING_GW_TASK_SIZE, NULL, WIFI_PING_GW_TASK_PRIORITY, NULL) != pdPASS) {
                 ERROR("Creating wifi_ping_gw_task");
                 FREEHEAP();
@@ -589,7 +582,6 @@ void ping_task() {
     }
     
     main_config.ping_is_running = false;
-    
     vTaskDelete(NULL);
 }
 
@@ -599,6 +591,8 @@ void ping_task_timer_worker() {
             ERROR("Creating ping_task");
             FREEHEAP();
         }
+    } else {
+        ERROR("ping_task already running: %i, HK pairing %i", main_config.ping_is_running, homekit_is_pairing());
     }
 }
 
@@ -1045,6 +1039,8 @@ void power_monitor_timer_worker(TimerHandle_t xTimer) {
             ERROR("Creating power_monitor_task");
             FREEHEAP();
         }
+    } else {
+        ERROR("power_monitor_task. HK pairing");
     }
 }
 
@@ -1804,6 +1800,8 @@ void temperature_timer_worker(TimerHandle_t xTimer) {
             ERROR("Creating temperature_task");
             FREEHEAP();
         }
+    } else {
+        ERROR("temperature_task. HK pairing");
     }
 }
 
@@ -2683,6 +2681,8 @@ void light_sensor_timer_worker(TimerHandle_t xTimer) {
             ERROR("Creating light_sensor_task");
             FREEHEAP();
         }
+    } else {
+        ERROR("light_sensor_task. HK pairing");
     }
 }
 
@@ -3509,7 +3509,6 @@ void net_action_task(void* pvParameters) {
     }
 
     free(pvParameters);
-    
     vTaskDelete(NULL);
 }
 
@@ -4126,6 +4125,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         
         if (xTaskCreate(uart_action_task, "uart_action", UART_ACTION_TASK_SIZE, action_task, UART_ACTION_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("<%i> Creating uart_action_task", ch_group->accessory);
+            free(action_task);
         }
     }
     
@@ -4137,6 +4137,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         
         if (xTaskCreate(net_action_task, "net_action", NETWORK_ACTION_TASK_SIZE, action_task, NETWORK_ACTION_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("<%i> Creating net_action_task", ch_group->accessory);
+            free(action_task);
         }
     }
     
@@ -4148,6 +4149,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         
         if (xTaskCreate(ir_tx_task, "ir_tx", IR_TX_TASK_SIZE, action_task, IR_TX_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("<%i> Creating ir_tx_task", ch_group->accessory);
+            free(action_task);
         }
     }
 }
@@ -6699,6 +6701,18 @@ void normal_mode_init() {
         lightbulb_group->ww[1] = 0.4065;
         lightbulb_group->wp[0] = 0;
         lightbulb_group->wp[1] = 0;
+        lightbulb_group->rgb[0][0] = lightbulb_group->r[0]; // Default to the LED RGB coordinates
+        lightbulb_group->rgb[0][1] = lightbulb_group->r[1];
+        lightbulb_group->rgb[1][0] = lightbulb_group->g[0];
+        lightbulb_group->rgb[1][1] = lightbulb_group->g[1];
+        lightbulb_group->rgb[2][0] = lightbulb_group->b[0];
+        lightbulb_group->rgb[2][1] = lightbulb_group->b[1];
+        lightbulb_group->cmy[0][0] = 0.241393; // These corrrespond to my (Kevin's) preferred CMY. We could make these be hue ints for RAM saving.
+        lightbulb_group->cmy[0][1] = 0.341227;
+        lightbulb_group->cmy[1][0] = 0.455425;
+        lightbulb_group->cmy[1][1] = 0.227088;
+        lightbulb_group->cmy[2][0] = 0.503095;
+        lightbulb_group->cmy[2][1] = 0.449426;
         lightbulb_group->step = RGBW_STEP_DEFAULT;
         lightbulb_group->autodimmer = 0;
         lightbulb_group->armed_autodimmer = false;
@@ -6794,6 +6808,30 @@ void normal_mode_init() {
             }
             
             INFO("Flux array: %g, %g, %g, %g, %g", lightbulb_group->flux[0], lightbulb_group->flux[1], lightbulb_group->flux[2], lightbulb_group->flux[3], lightbulb_group->flux[4]);
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_RGB_ARRAY_SET) != NULL) {
+                cJSON* rgb_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_RGB_ARRAY_SET);
+                for (uint8_t i = 0; i < 6; i++) {
+                    uint8_t j = i / 2;
+                    uint8_t k = i % 2;
+                    lightbulb_group->rgb[j][k] = (float) cJSON_GetArrayItem(rgb_array, i)->valuedouble;
+                }
+            }
+            
+            INFO("Target RGB array: %g, %g, %g, %g, %g, %g", lightbulb_group->rgb[0][0], lightbulb_group->rgb[0][1], lightbulb_group->rgb[1][0], lightbulb_group->rgb[1][1], lightbulb_group->rgb[2][0], lightbulb_group->rgb[2][1]);
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CMY_ARRAY_SET) != NULL) {
+                cJSON* cmy_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CMY_ARRAY_SET);
+                for (uint8_t i = 0; i < 6; i++) {
+                    uint8_t j = i / 2;
+                    uint8_t k = i % 2;
+                    lightbulb_group->cmy[j][k] = (float) cJSON_GetArrayItem(cmy_array, i)->valuedouble;
+                }
+            }
+            
+            INFO("Target CMY array: %g, %g, %g, %g, %g, %g", lightbulb_group->cmy[0][0], lightbulb_group->cmy[0][1], lightbulb_group->cmy[1][0], lightbulb_group->cmy[1][1], lightbulb_group->cmy[2][0], lightbulb_group->cmy[2][1]);
+            
+            INFO("CMY array: [%g, %g, %g], [%g, %g, %g]", lightbulb_group->cmy[0][0], lightbulb_group->cmy[0][1], lightbulb_group->cmy[0][2], lightbulb_group->cmy[1][0], lightbulb_group->cmy[1][1], lightbulb_group->cmy[1][2]);
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY_SET) != NULL) {
                 cJSON* coordinate_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY_SET);

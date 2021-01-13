@@ -1009,9 +1009,13 @@ static void mdns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_a
 
     // Sanity checks on size
     if (plen > MDNS_RESPONDER_REPLY_SIZE) {
-        printf(">>> mdns_recv: pbuf too big\n");
+        char addr_str[IPADDR_STRLEN_MAX];
+        ipaddr_ntoa_r(addr, addr_str, IPADDR_STRLEN_MAX);
+        printf(">>> mdns_recv from %s: pbuf too big\n", addr_str);
     } else if (plen < (SIZEOF_DNS_HDR + SIZEOF_DNS_QUERY + 1 + SIZEOF_DNS_ANSWER + 1)) {
-        printf(">>> mdns_recv: pbuf too small\n");
+        char addr_str[IPADDR_STRLEN_MAX];
+        ipaddr_ntoa_r(addr, addr_str, IPADDR_STRLEN_MAX);
+        printf(">>> mdns_recv from %s pbuf too small\n", addr_str);
     } else if (mdns_response) {
         if (plen > mdns_payload_len) {
             if (mdns_payload) {
