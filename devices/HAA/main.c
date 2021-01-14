@@ -6816,9 +6816,7 @@ void normal_mode_init() {
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_RGB_ARRAY_SET) != NULL) {
                 cJSON* rgb_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_RGB_ARRAY_SET);
                 for (uint8_t i = 0; i < 6; i++) {
-                    uint8_t j = i / 2;
-                    uint8_t k = i % 2;
-                    lightbulb_group->rgb[j][k] = (float) cJSON_GetArrayItem(rgb_array, i)->valuedouble;
+                    lightbulb_group->rgb[i >> 1][i % 2] = (float) cJSON_GetArrayItem(rgb_array, i)->valuedouble;
                 }
             }
             
@@ -6827,9 +6825,7 @@ void normal_mode_init() {
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CMY_ARRAY_SET) != NULL) {
                 cJSON* cmy_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CMY_ARRAY_SET);
                 for (uint8_t i = 0; i < 6; i++) {
-                    uint8_t j = i / 2;
-                    uint8_t k = i % 2;
-                    lightbulb_group->cmy[j][k] = (float) cJSON_GetArrayItem(cmy_array, i)->valuedouble;
+                    lightbulb_group->cmy[i >> 1][i % 2] = (float) cJSON_GetArrayItem(cmy_array, i)->valuedouble;
                 }
             }
             

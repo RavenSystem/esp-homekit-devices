@@ -581,13 +581,14 @@ void mdns_add_AAAA(const char* rKey, u32_t ttl, const ip6_addr_t *addr)
 }
 #endif
 
-#define TTL_MULTIPLIER_MS   1000                        // Set to 1000 to use standard time
-#define TTL_SAFE_MARGIN     5
+#define MDNS_TTL_MIN                (30)
+#define MDNS_TTL_MULTIPLIER_MS      (1000)      // Set to 1000 to use standard time
+#define MDNS_TTL_SAFE_MARGIN        (4)
 
 void mdns_announce() {
     if (mdns_ready) {
         mdns_ready = false;
-        esp_timer_change_period(mdns_announce_timer, TTL_SAFE_MARGIN * TTL_MULTIPLIER_MS);
+        esp_timer_change_period(mdns_announce_timer, MDNS_TTL_SAFE_MARGIN * MDNS_TTL_MULTIPLIER_MS);
         
         if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
             printf("mDNS announced\n");
@@ -682,8 +683,8 @@ void mdns_add_facility(const char* instanceName,   // Friendly name, need not be
         ttl = 4500;
     }
     
-    if (ttl < 60) {
-        ttl = 60;
+    if (ttl < MDNS_TTL_MIN) {
+        ttl = MDNS_TTL_MIN;
     }
 
     mdns_add_facility_work(instanceName, serviceName, addText, flags, onPort, ttl);
@@ -835,7 +836,7 @@ static void mdns_reply(const ip_addr_t *addr, struct mdns_hdr* hdrP)
                 rsrcP = mdns_match(qStr, qType);
                 if (rsrcP) {
                     if (!mdns_ready) {
-                        esp_timer_change_period(mdns_announce_timer, (mdns_ttl - TTL_SAFE_MARGIN) * TTL_MULTIPLIER_MS);
+                        esp_timer_change_period(mdns_announce_timer, (mdns_ttl - MDNS_TTL_SAFE_MARGIN) * MDNS_TTL_MULTIPLIER_MS);
                         mdns_ready = true;
                         printf("mDNS is working with TTL %i\n", mdns_ttl);
                     }
