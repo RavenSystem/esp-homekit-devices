@@ -61,7 +61,7 @@ main_config_t main_config = {
     .setup_mode_toggle_counter_max = SETUP_MODE_DEFAULT_ACTIVATE_COUNT,
     .setup_mode_time = 0,
     
-    .ping_is_running = false,
+    .network_is_busy = false,
     .enable_homekit_server = true,
 
     .ir_tx_freq = 13,
@@ -388,17 +388,15 @@ void reboot_haa() {
 }
 
 void wifi_ping_gw_task() {
+    main_config.network_is_busy = true;
+    
     struct ip_info info;
     bool ping_result = true;
     
     if (sdk_wifi_get_ip_info(STATION_IF, &info)) {
         char gw_host[16];
         snprintf(gw_host, 16, IPSTR, IP2STR(&info.gw));
-        
-        while (main_config.ping_is_running) {
-            vTaskDelay(MS_TO_TICKS(10));
-        }
-        
+
         ping_result = ping_host(gw_host);
 
         if (!ping_result) {
@@ -411,6 +409,7 @@ void wifi_ping_gw_task() {
         main_config.wifi_error_count = 0;
     }
     
+    main_config.network_is_busy = false;
     vTaskDelete(NULL);
 }
 
@@ -507,7 +506,7 @@ void wifi_watchdog() {
             wifi_config_resend_arp();
         }
         
-        if (main_config.wifi_ping_max_errors != 255 && !homekit_is_pairing()) {
+        if (main_config.wifi_ping_max_errors != 255 && !homekit_is_pairing() && !main_config.network_is_busy) {
             if (xTaskCreate(wifi_ping_gw_task, "wifi_ping_gw", WIFI_PING_GW_TASK_SIZE, NULL, WIFI_PING_GW_TASK_PRIORITY, NULL) != pdPASS) {
                 ERROR("Creating wifi_ping_gw_task");
                 FREEHEAP();
@@ -542,7 +541,7 @@ ping_input_t* ping_input_find_by_host(char* host) {
 }
 
 void ping_task() {
-    main_config.ping_is_running = true;
+    main_config.network_is_busy = true;
 
     void ping_input_run_callback_fn(ping_input_callback_fn_t* callbacks) {
         ping_input_callback_fn_t* ping_input_callback_fn = callbacks;
@@ -581,18 +580,18 @@ void ping_task() {
         ping_input = ping_input->next;
     }
     
-    main_config.ping_is_running = false;
+    main_config.network_is_busy = false;
     vTaskDelete(NULL);
 }
 
 void ping_task_timer_worker() {
-    if (!main_config.ping_is_running && !homekit_is_pairing()) {
+    if (!main_config.network_is_busy && !homekit_is_pairing()) {
         if (xTaskCreate(ping_task, "ping_task", PING_TASK_SIZE, NULL, PING_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("Creating ping_task");
             FREEHEAP();
         }
     } else {
-        ERROR("ping_task already running: %i, HK pairing %i", main_config.ping_is_running, homekit_is_pairing());
+        ERROR("ping_task: network busy %i, HK pairing %i", main_config.network_is_busy, homekit_is_pairing());
     }
 }
 
@@ -3179,7 +3178,11 @@ void net_action_task(void* pvParameters) {
         if (action_network->action == action_task->action && !action_network->is_running) {
             action_network->is_running = true;
             
-            vTaskDelay(MS_TO_TICKS(10));
+            while (main_config.network_is_busy) {
+                vTaskDelay(MS_TO_TICKS(50));
+            }
+            
+            main_config.network_is_busy = true;
 
             INFO("<%i> Network Action %s:%i", action_task->ch_group->accessory, action_network->host, action_network->port_n);
             
@@ -3501,8 +3504,11 @@ void net_action_task(void* pvParameters) {
             freeaddrinfo(res);
             
             action_network->is_running = false;
+            main_config.network_is_busy = false;
             
             INFO("<%i> Network Action %s:%i done", action_task->ch_group->accessory, action_network->host, action_network->port_n);
+            
+            vTaskDelay(MS_TO_TICKS(50));
         }
         
         action_network = action_network->next;
@@ -3514,8 +3520,6 @@ void net_action_task(void* pvParameters) {
 
 // --- IR Send task
 void ir_tx_task(void* pvParameters) {
-    vTaskDelay(MS_TO_TICKS(10));
-    
     action_task_t* action_task = pvParameters;
     action_ir_tx_t* action_ir_tx = action_task->ch_group->action_ir_tx;
     

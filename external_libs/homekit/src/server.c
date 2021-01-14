@@ -2032,10 +2032,6 @@ void homekit_server_on_get_accessories(client_context_t *context) {
 void homekit_server_on_get_characteristics(client_context_t *context) {
     CLIENT_INFO(context, "Get Characteristics");
     DEBUG_HEAP();
-
-#ifdef HOMEKIT_OVERCLOCK_GET_CH
-    sdk_system_overclock();
-#endif
     
     query_param_t *qp = context->endpoint_params;
     while (qp) {
@@ -2047,11 +2043,6 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
     if (!id_param) {
         CLIENT_ERROR(context, "Invalid get characteristics request: missing ID parameter");
         send_json_error_response(context, 400, HAPStatus_InvalidValue);
-        
-#ifdef HOMEKIT_OVERCLOCK_GET_CH
-        sdk_system_restoreclock();
-#endif
-        
         return;
     }
 
@@ -2083,11 +2074,6 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
         if (!dot) {
             send_json_error_response(context, 400, HAPStatus_InvalidValue);
             free(id);
-            
-#ifdef HOMEKIT_OVERCLOCK_GET_CH
-            sdk_system_restoreclock();
-#endif
-            
             return;
         }
 
@@ -2165,30 +2151,17 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
     client_send_chunk(NULL, 0, context);
     
     free(id);
-    
-#ifdef HOMEKIT_OVERCLOCK_GET_CH
-    sdk_system_restoreclock();
-#endif
 }
 
 void homekit_server_on_update_characteristics(client_context_t *context, const byte *data, size_t size) {
     CLIENT_INFO(context, "Update Characteristics");
     DEBUG_HEAP();
-
-#ifdef HOMEKIT_OVERCLOCK_UPDATE_CH
-    sdk_system_overclock();
-#endif
     
     cJSON *json = cJSON_Parse((char*) data);
 
     if (!json) {
         CLIENT_ERROR(context, "Failed to parse request JSON");
         send_json_error_response(context, 400, HAPStatus_InvalidValue);
-        
-#ifdef HOMEKIT_OVERCLOCK_UPDATE_CH
-        sdk_system_restoreclock();
-#endif
-        
         return;
     }
 
@@ -2197,11 +2170,6 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
         CLIENT_ERROR(context, "Failed to parse request: no \"characteristics\" field");
         cJSON_Delete(json);
         send_json_error_response(context, 400, HAPStatus_InvalidValue);
-        
-#ifdef HOMEKIT_OVERCLOCK_UPDATE_CH
-        sdk_system_restoreclock();
-#endif
-                
         return;
     }
     
@@ -2209,11 +2177,6 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
         CLIENT_ERROR(context, "Failed to parse request: \"characteristics\" field is not an list");
         cJSON_Delete(json);
         send_json_error_response(context, 400, HAPStatus_InvalidValue);
-        
-#ifdef HOMEKIT_OVERCLOCK_UPDATE_CH
-        sdk_system_restoreclock();
-#endif
-                
         return;
     }
 
@@ -2615,30 +2578,17 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 
     free(statuses);
     cJSON_Delete(json);
-    
-#ifdef HOMEKIT_OVERCLOCK_UPDATE_CH
-    sdk_system_restoreclock();
-#endif
 }
 
 void homekit_server_on_pairings(client_context_t *context, const byte *data, size_t size) {
     HOMEKIT_DEBUG_LOG("HomeKit Pairings");
     DEBUG_HEAP();
 
-#ifdef HOMEKIT_OVERCLOCK_ON_PAIRINGS
-    sdk_system_overclock();
-#endif
-    
     tlv_values_t *message = tlv_new();
     if (tlv_parse(data, size, message)) {
         CLIENT_ERROR(context, "Failed to parse TLV payload");
         tlv_free(message);
         send_tlv_error_response(context, 2, TLVError_Unknown);
-        
-#ifdef HOMEKIT_OVERCLOCK_ON_PAIRINGS
-        sdk_system_restoreclock();
-#endif
-        
         return;
     }
 
@@ -2649,11 +2599,6 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
     if (tlv_get_integer_value(message, TLVType_State, -1) != 1) {
         send_tlv_error_response(context, 2, TLVError_Unknown);
         tlv_free(message);
-        
-#ifdef HOMEKIT_OVERCLOCK_ON_PAIRINGS
-        sdk_system_restoreclock();
-#endif
-        
         return;
     }
 
@@ -2902,10 +2847,6 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
     }
 
     tlv_free(message);
-    
-#ifdef HOMEKIT_OVERCLOCK_ON_PAIRINGS
-    sdk_system_restoreclock();
-#endif
 }
 
 void homekit_server_on_reset(client_context_t *context) {

@@ -280,7 +280,7 @@ typedef struct _main_config {
     int8_t setup_mode_toggle_counter_max;
     
     uint8_t ir_tx_freq: 6;
-    bool ping_is_running: 1;
+    bool network_is_busy: 1;
     bool enable_homekit_server: 1;
     uint8_t wifi_ping_max_errors;
     uint8_t wifi_error_count;
