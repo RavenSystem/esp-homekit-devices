@@ -136,8 +136,16 @@ static mdns_rsrc*      gDictP = NULL;       // RR database, linked list
 static u8_t* mdns_response = NULL;
 static u8_t* mdns_payload = NULL;
 static uint16_t mdns_payload_len = 0;
-static bool mdns_ready = true;
+
+#define MDNS_TTL_MIN                (30)
+#define MDNS_TTL_MULTIPLIER_MS      (1000)  // Set to 1000 to use standard time
+#define MDNS_TTL_SAFE_MARGIN        (4)
 static uint32_t mdns_ttl = 4500;
+
+#define MDNS_STATUS_PROBING         (0)
+#define MDNS_STATUS_PROBE_OK        (1)
+#define MDNS_STATUS_WORKING         (2)
+static u8_t mdns_status = MDNS_STATUS_WORKING;
 
 //---------------------- Debug/logging utilities -------------------------
 
@@ -581,25 +589,26 @@ void mdns_add_AAAA(const char* rKey, u32_t ttl, const ip6_addr_t *addr)
 }
 #endif
 
-#define MDNS_TTL_MIN                (30)
-#define MDNS_TTL_MULTIPLIER_MS      (1000)      // Set to 1000 to use standard time
-#define MDNS_TTL_SAFE_MARGIN        (4)
-
 void mdns_announce() {
-    if (mdns_ready) {
-        mdns_ready = false;
+    if (mdns_status == MDNS_STATUS_WORKING) {
+        mdns_status = MDNS_STATUS_PROBING;
         esp_timer_change_period(mdns_announce_timer, MDNS_TTL_SAFE_MARGIN * MDNS_TTL_MULTIPLIER_MS);
-        
-        if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
-            printf("mDNS announced\n");
-            struct netif *netif = sdk_system_get_netif(STATION_IF);
-    #if LWIP_IPV4
-            mdns_announce_netif(netif, &gMulticastV4Addr);
-    #endif
-    #if LWIP_IPV6
-            mdns_announce_netif(netif, &gMulticastV6Addr);
-    #endif
-        }
+        printf("mDNS is probing\n");
+    } else if (mdns_status == MDNS_STATUS_PROBE_OK) {
+        mdns_status = MDNS_STATUS_WORKING;
+        esp_timer_change_period(mdns_announce_timer, (mdns_ttl - (MDNS_TTL_SAFE_MARGIN + 1)) * MDNS_TTL_MULTIPLIER_MS);
+        printf("mDNS is working with TTL %i\n", mdns_ttl);
+    }
+    
+    if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+        printf("mDNS announced\n");
+        struct netif *netif = sdk_system_get_netif(STATION_IF);
+#if LWIP_IPV4
+        mdns_announce_netif(netif, &gMulticastV4Addr);
+#endif
+#if LWIP_IPV6
+        mdns_announce_netif(netif, &gMulticastV6Addr);
+#endif
     }
 }
 
@@ -835,10 +844,8 @@ static void mdns_reply(const ip_addr_t *addr, struct mdns_hdr* hdrP)
             if (qClass == DNS_RRCLASS_IN || qClass == DNS_RRCLASS_ANY) {
                 rsrcP = mdns_match(qStr, qType);
                 if (rsrcP) {
-                    if (!mdns_ready) {
-                        esp_timer_change_period(mdns_announce_timer, (mdns_ttl - MDNS_TTL_SAFE_MARGIN) * MDNS_TTL_MULTIPLIER_MS);
-                        mdns_ready = true;
-                        printf("mDNS is working with TTL %i\n", mdns_ttl);
+                    if (mdns_status == MDNS_STATUS_PROBING) {
+                        mdns_status = MDNS_STATUS_PROBE_OK;
                     }
 #if LWIP_IPV6
                     if (rsrcP->rType == DNS_RRTYPE_AAAA) {
@@ -1009,14 +1016,11 @@ static void mdns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_a
 #endif
 
     // Sanity checks on size
-    if (plen > MDNS_RESPONDER_REPLY_SIZE) {
+    if (plen > MDNS_RESPONDER_REPLY_SIZE ||
+        plen < (SIZEOF_DNS_HDR + SIZEOF_DNS_QUERY + 1 + SIZEOF_DNS_ANSWER + 1)) {
         char addr_str[IPADDR_STRLEN_MAX];
         ipaddr_ntoa_r(addr, addr_str, IPADDR_STRLEN_MAX);
-        printf(">>> mdns_recv from %s: pbuf too big\n", addr_str);
-    } else if (plen < (SIZEOF_DNS_HDR + SIZEOF_DNS_QUERY + 1 + SIZEOF_DNS_ANSWER + 1)) {
-        char addr_str[IPADDR_STRLEN_MAX];
-        ipaddr_ntoa_r(addr, addr_str, IPADDR_STRLEN_MAX);
-        printf(">>> mdns_recv from %s pbuf too small\n", addr_str);
+        printf(">>> mdns_recv from %s. Warning! wrong size: %i bytes\n", addr_str, plen);
     } else if (mdns_response) {
         if (plen > mdns_payload_len) {
             if (mdns_payload) {
@@ -1110,7 +1114,7 @@ void mdns_init()
         return;
     }
 
-    mdns_announce_timer = esp_timer_create(60000, true, NULL, mdns_announce);
+    mdns_announce_timer = esp_timer_create((MDNS_TTL_SAFE_MARGIN * MDNS_TTL_MULTIPLIER_MS), true, NULL, mdns_announce);
     
     udp_bind_netif(gMDNS_pcb, netif);
 
