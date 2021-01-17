@@ -16,9 +16,9 @@
 
 #include <lwip/ip_addr.h>
 
-/* The default maximum reply size, increase as necessary. */
+/* The default maximum reply size, modify as necessary. */
 #ifndef MDNS_RESPONDER_REPLY_SIZE
-#define MDNS_RESPONDER_REPLY_SIZE       1472
+#define MDNS_RESPONDER_REPLY_SIZE       1500
 #endif
 
 // Starts the mDNS responder task, call first

@@ -548,7 +548,7 @@ void ping_task() {
         
         while (ping_input_callback_fn) {
             if (!ping_input_callback_fn->disable_without_wifi ||
-                (ping_input_callback_fn->disable_without_wifi && main_config.wifi_status == WIFI_STATUS_CONNECTED)) {
+                (ping_input_callback_fn->disable_without_wifi && wifi_config_got_ip())) {
                 ping_input_callback_fn->callback(0, ping_input_callback_fn->ch_group, ping_input_callback_fn->param);
             }
             ping_input_callback_fn = ping_input_callback_fn->next;

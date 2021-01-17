@@ -108,18 +108,16 @@ PACK_STRUCT_END
 #  include "arch/epstruct.h"
 #endif
 
-#define vTaskDelayMs(ms)    vTaskDelay((ms)/portTICK_PERIOD_MS)
-#define UNUSED_ARG(x)       (void)x
 #define kDummyDataSize      8           // arbitrary, dynamically resized
 #define kMaxNameSize        64
 #define kMaxQStr            128         // max incoming question key handled
 
 typedef struct mdns_rsrc {
     struct mdns_rsrc*    rNext;
-    u16_t     rType;
-    u32_t    rTTL;
-    u16_t    rKeySize;
-    u16_t    rDataSize;
+    u16_t   rType;
+    u32_t   rTTL;
+    u16_t   rKeySize;
+    u16_t   rDataSize;
     char    rData[kDummyDataSize];      // Key, as C str with . seperators, followed by data in network-ready form
                                         // at rData[rKeySize]
 } mdns_rsrc;
@@ -134,8 +132,6 @@ static SemaphoreHandle_t gDictMutex = NULL;
 static mdns_rsrc*      gDictP = NULL;       // RR database, linked list
 
 static u8_t* mdns_response = NULL;
-static u8_t* mdns_payload = NULL;
-static uint16_t mdns_payload_len = 0;
 
 #define MDNS_TTL_MIN                (30)
 #define MDNS_TTL_MULTIPLIER_MS      (1000)  // Set to 1000 to use standard time
@@ -458,12 +454,6 @@ void mdns_buffer_deinit() {
         free(mdns_response);
         mdns_response = NULL;
     }
-    
-    if (mdns_payload != NULL) {
-        free(mdns_payload);
-        mdns_payload = NULL;
-        mdns_payload_len = 0;
-    }
 }
 
 void mdns_clear() {
@@ -593,15 +583,15 @@ void mdns_announce() {
     if (mdns_status == MDNS_STATUS_WORKING) {
         mdns_status = MDNS_STATUS_PROBING;
         esp_timer_change_period(mdns_announce_timer, MDNS_TTL_SAFE_MARGIN * MDNS_TTL_MULTIPLIER_MS);
-        printf("mDNS is probing\n");
+        printf(">>> mDNS_announce: probing\n");
     } else if (mdns_status == MDNS_STATUS_PROBE_OK) {
         mdns_status = MDNS_STATUS_WORKING;
         esp_timer_change_period(mdns_announce_timer, (mdns_ttl - (MDNS_TTL_SAFE_MARGIN + 1)) * MDNS_TTL_MULTIPLIER_MS);
-        printf("mDNS is working with TTL %i\n", mdns_ttl);
+        printf(">>> mDNS_announce: working with TTL %i\n", mdns_ttl);
     }
     
     if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
-        printf("mDNS announced\n");
+        printf(">>> mDNS_announce: sent\n");
         struct netif *netif = sdk_system_get_netif(STATION_IF);
 #if LWIP_IPV4
         mdns_announce_netif(netif, &gMulticastV4Addr);
@@ -682,13 +672,13 @@ void mdns_add_facility(const char* instanceName,   // Friendly name, need not be
                       )
 {
     while (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
-        vTaskDelayMs(200);
+        vTaskDelay(200 / portTICK_PERIOD_MS);
     }
     
-    vTaskDelayMs(500);
+    vTaskDelay(400 / portTICK_PERIOD_MS);
 
     if (ttl < 1000 && strstr(addText, "sf=1") != NULL) {
-        printf("mDNS changes TTL to 4500 for pairing\n");
+        printf(">>> mDNS changes TTL to 4500 for pairing\n");
         ttl = 4500;
     }
     
@@ -728,7 +718,7 @@ static int mdns_add_to_answer(mdns_rsrc* rsrcP, u8_t* resp, int respLen)
     }
     if ((len + SIZEOF_DNS_ANSWER + rsrcP->rDataSize) > rem) {
         // Overflow, skip this answer.
-        printf(">>> mdns_add_to_answer: oversize (%d)\n", len + SIZEOF_DNS_ANSWER + rsrcP->rDataSize);
+        printf(">>> mDNS_add_to_answer: oversize (%d)\n", len + SIZEOF_DNS_ANSWER + rsrcP->rDataSize);
         return respLen;
     }
     respLen += len;
@@ -788,13 +778,13 @@ static void mdns_send_mcast(const ip_addr_t *addr, u8_t* msgP, int nBytes, const
 #endif
                 break;
             } else {
-                printf(">>> mdns_send failed %i/6 (errno %d)\n", i + 1, err);
+                printf(">>> mDNS_send: failed %i/4 (errno %d)\n", i + 1, err);
             }
         }
         
         pbuf_free(p);
     } else {
-        printf(">>> mdns_send: alloc failed[%d]\n", nBytes);
+        printf(">>> mDNS_send: alloc failed[%d]\n", nBytes);
     }
 }
     
@@ -813,7 +803,7 @@ static void mdns_reply(const ip_addr_t *addr, struct mdns_hdr* hdrP)
     memset(mdns_response, 0, MDNS_RESPONDER_REPLY_SIZE);
 
 #ifdef qDebugLog
-    printf(">>> mdns_reply\n");
+    printf("mDNS_reply\n");
 #endif
     
     // Build response header
@@ -1003,55 +993,30 @@ static void mdns_announce_netif(struct netif *netif, const ip_addr_t *addr)
 // Callback from udp_recv
 static void mdns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr, u16_t port)
 {
-    UNUSED_ARG(pcb);
-    UNUSED_ARG(port);
-
-    int plen;
-
-    plen = p->tot_len;
 #ifdef qLogIncoming
     char addr_str[IPADDR_STRLEN_MAX];
     ipaddr_ntoa_r(addr, addr_str, IPADDR_STRLEN_MAX);
-    printf("\n\nmDNS IPv%d got %d bytes from %s\n", IP_IS_V6(addr) ? 6 : 4, plen, addr_str);
+    printf("\n\nmDNS IPv%d got %d bytes from %s\n", IP_IS_V6(addr) ? 6 : 4, p->tot_len, addr_str);
 #endif
 
     // Sanity checks on size
-    if (plen > MDNS_RESPONDER_REPLY_SIZE ||
-        plen < (SIZEOF_DNS_HDR + SIZEOF_DNS_QUERY + 1 + SIZEOF_DNS_ANSWER + 1)) {
+    if (p->tot_len > (MDNS_RESPONDER_REPLY_SIZE) ||
+        p->tot_len < (SIZEOF_DNS_HDR + SIZEOF_DNS_QUERY + 1)) {
         char addr_str[IPADDR_STRLEN_MAX];
         ipaddr_ntoa_r(addr, addr_str, IPADDR_STRLEN_MAX);
-        printf(">>> mdns_recv from %s. Warning! wrong size: %i bytes\n", addr_str, plen);
+        printf(">>> mDNS_recv: wrong size %i from %s\n", p->tot_len, addr_str);
     } else if (mdns_response) {
-        if (plen > mdns_payload_len) {
-            if (mdns_payload) {
-                free(mdns_payload);
-                mdns_payload = NULL;
-                mdns_payload_len = 0;
-            }
-            
-            mdns_payload = malloc(plen);
-            if (mdns_payload) {
-                mdns_payload_len = plen;
-            }
-        }
-
-        if (mdns_payload) {
-            memset(mdns_payload, 0, mdns_payload_len);
-
-            if (pbuf_copy_partial(p, mdns_payload, plen, 0) == plen) {
-                struct mdns_hdr* hdrP = (struct mdns_hdr*) mdns_payload;
+        struct mdns_hdr* hdrP = (struct mdns_hdr*) p->payload;
 #ifdef qLogAllTraffic
-                printf(">>> mdns_recv: payload size %i / %i\n", plen, mdns_payload_len);
-                mdns_print_msg(mdns_payload, plen);
+        printf(">>> mDNS_recv: payload size %i\n", p->tot_len);
+        mdns_print_msg(p->payload, p->tot_len);
 #endif
-                if ( (hdrP->flags1 & (DNS_FLAG1_RESP + DNS_FLAG1_OPMASK + DNS_FLAG1_TRUNC) ) == 0
-                     && hdrP->numquestions > 0 )
-                    mdns_reply(addr, hdrP);
-            }
-        } else {
-            printf(">>> mdns_recv: no enough memory\n");
+        if ((hdrP->flags1 & (DNS_FLAG1_RESP + DNS_FLAG1_OPMASK + DNS_FLAG1_TRUNC)) == 0 &&
+            hdrP->numquestions > 0) {
+            mdns_reply(addr, hdrP);
         }
     }
+    
     pbuf_free(p);
 }
 
@@ -1073,7 +1038,7 @@ void mdns_init()
         netif->flags |= NETIF_FLAG_IGMP;
         err = igmp_start(netif);
         if (err != ERR_OK) {
-            printf(">>> mDNS_init: igmp_start on %c%c failed %d\n", netif->name[0], netif->name[1],err);
+            printf(">>> mDNS_init: igmp_start on %c%c failed %d\n", netif->name[0], netif->name[1], err);
             UNLOCK_TCPIP_CORE();
             return;
         }
@@ -1095,21 +1060,21 @@ void mdns_init()
     }
 
     if ((err = igmp_joingroup_netif(netif, ip_2_ip4(&gMulticastV4Addr))) != ERR_OK) {
-        printf(">>> mDNS_init: igmp_join failed %d\n",err);
+        printf(">>> mDNS_init: igmp_join failed %d\n", err);
         UNLOCK_TCPIP_CORE();
         return;
     }
 
 #if LWIP_IPV6
     if ((err = mld6_joingroup_netif(netif, ip_2_ip6(&gMulticastV6Addr))) != ERR_OK) {
-        printf(">>> mDNS_init: igmp_join failed %d\n",err);
+        printf(">>> mDNS_init: igmp_join failed %d\n", err);
         UNLOCK_TCPIP_CORE();
         return;
     }
 #endif
 
     if ((err = udp_bind(gMDNS_pcb, IP_ANY_TYPE, LWIP_IANA_PORT_MDNS)) != ERR_OK) {
-        printf(">>> mDNS_init: udp_bind failed %d\n",err);
+        printf(">>> mDNS_init: udp_bind failed %d\n", err);
         UNLOCK_TCPIP_CORE();
         return;
     }
