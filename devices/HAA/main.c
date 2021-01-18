@@ -445,8 +445,8 @@ void wifi_reconnection_task(void* args) {
             
         } else if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
             INFO("Wifi reconnecting...");
-            wifi_config_smart_connect();
             main_config.wifi_status = WIFI_STATUS_CONNECTING;
+            wifi_config_smart_connect();
 
         } else {
             main_config.wifi_error_count++;
@@ -454,12 +454,11 @@ void wifi_reconnection_task(void* args) {
                 ERROR("Wifi disconnected for a long time. Reconnecting...");
                 main_config.wifi_error_count = 0;
                 main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
+                sdk_wifi_station_disconnect();
                 
                 led_blink(6);
                 
                 do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 5);
-            } else if (main_config.wifi_error_count % WIFI_RECONNECTION_ARP_RESEND_PERIOD == 0) {
-                wifi_config_resend_arp();
             }
         }
     }

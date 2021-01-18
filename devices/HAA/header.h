@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.7.4"
+#define FIRMWARE_VERSION                    "4.7.5"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -510,8 +510,7 @@
 #define WIFI_PING_ERRORS                    "w"
 
 #define WIFI_RECONNECTION_POLL_PERIOD_MS    (5000)
-#define WIFI_DISCONNECTED_LONG_TIME         (12)    // * WIFI_RECONNECTION_POLL_PERIOD_MS
-#define WIFI_RECONNECTION_ARP_RESEND_PERIOD (4)     // * WIFI_RECONNECTION_POLL_PERIOD_MS
+#define WIFI_DISCONNECTED_LONG_TIME         (6)    // * WIFI_RECONNECTION_POLL_PERIOD_MS
 
 #define WIFI_WATCHDOG_POLL_PERIOD_MS        (1500)
 #define WIFI_WATCHDOG_ARP_RESEND_PERIOD     (13)    // * WIFI_WATCHDOG_POLL_PERIOD_MS
