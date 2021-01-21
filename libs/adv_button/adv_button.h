@@ -23,12 +23,12 @@
 #define ADV_BUTTON_NORMAL_MODE      (0)
 #define ADV_BUTTON_PULSE_MODE       (1)
 
-typedef void (*button_callback_fn)(uint8_t gpio, void *args, uint8_t param);
+typedef void (*button_callback_fn)(uint16_t gpio, void *args, uint8_t param);
 
 void adv_button_set_evaluate_delay(const uint8_t new_delay);
-void adv_button_set_gpio_probes(const uint8_t gpio, const uint8_t max_eval);
-int adv_button_create(const uint8_t gpio, const bool pullup_resistor, const bool inverted, const uint8_t mode);
-int adv_button_destroy(const uint8_t gpio);
+void adv_button_set_gpio_probes(const uint16_t gpio, const uint8_t max_eval);
+int adv_button_create(const uint16_t gpio, const uint8_t pullup_resistor, const bool inverted, const uint8_t mode);
+int adv_button_destroy(const uint16_t gpio);
 void adv_button_set_disable_time();
 
 /*
@@ -40,6 +40,6 @@ void adv_button_set_disable_time();
  * 4 Very long press
  * 5 Hold press
  */
-int adv_button_register_callback_fn(const uint8_t gpio, const button_callback_fn callback, const uint8_t button_callback_type, void *args, const uint8_t param);
+int adv_button_register_callback_fn(const uint16_t gpio, const button_callback_fn callback, const uint8_t button_callback_type, void *args, const uint8_t param);
 
 #endif // __ADVANCED_BUTTON__

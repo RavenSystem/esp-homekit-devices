@@ -97,8 +97,7 @@ typedef struct {
     wifi_network_info_t* wifi_networks;
     SemaphoreHandle_t wifi_networks_mutex;
 
-    uint8_t check_counter: 7;
-    bool hostname_ready: 1;
+    uint8_t check_counter;
 } wifi_config_context_t;
 
 static wifi_config_context_t* context;
@@ -337,8 +336,11 @@ void wifi_config_smart_connect() {
     }
 }
 
-uint8_t wifi_config_connect();
+uint8_t wifi_config_connect(const uint8_t mode);
 void wifi_config_reset() {
+    INFO("Wifi reset");
+    sdk_wifi_station_disconnect();
+    
     struct sdk_station_config sta_config;
     memset(&sta_config, 0, sizeof(sta_config));
 
@@ -1035,19 +1037,19 @@ static void wifi_config_softap_stop() {
 }
 
 static void wifi_config_sta_connect_timeout_task() {
+    if (context->custom_hostname) {
+        struct netif *netif = sdk_system_get_netif(STATION_IF);
+        while (!netif) {
+            vTaskDelay(MS_TO_TICKS(100));
+            netif = sdk_system_get_netif(STATION_IF);
+        }
+        
+        netif->hostname = context->custom_hostname;
+        INFO("Hostname: %s", context->custom_hostname);
+    }
+
     for (;;) {
-        if (!context->hostname_ready && context->custom_hostname) {
-            struct netif *netif = sdk_system_get_netif(STATION_IF);
-            if (netif && !netif->hostname) {
-                LOCK_TCPIP_CORE();
-                dhcp_release_and_stop(netif);
-                netif->hostname = context->custom_hostname;
-                INFO("Hostname: %s", context->custom_hostname);
-                dhcp_start(netif);
-                UNLOCK_TCPIP_CORE();
-                context->hostname_ready = true;
-            }
-        } else if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+        if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
             wifi_config_softap_stop();
             
             if (context->on_wifi_ready) {
@@ -1057,17 +1059,21 @@ static void wifi_config_sta_connect_timeout_task() {
                 wifi_config_context_free(context);
                 break;
             }
+
         } else if (context->on_wifi_ready) {
             context->check_counter++;
-            if (context->check_counter > 240) {
+            if (context->check_counter > 120) {
                 context->check_counter = 0;
-                wifi_config_smart_connect();
-            } else if (context->check_counter % 32 == 0) {
+                wifi_config_reset();
+                vTaskDelay(MS_TO_TICKS(4000));
+                wifi_config_connect(0);
+                
+            } else if (context->check_counter % 16 == 0) {
                 wifi_config_resend_arp();
             }
         }
         
-        vTaskDelay(MS_TO_TICKS(500));
+        vTaskDelay(MS_TO_TICKS(1000));
     }
     
     vTaskDelete(NULL);
@@ -1095,11 +1101,13 @@ static void auto_reboot_run() {
     sdk_system_restart();
 }
 
-uint8_t wifi_config_connect() {
+uint8_t wifi_config_connect(const uint8_t mode) {
     char *wifi_ssid = NULL;
     sysparam_get_string(WIFI_SSID_SYSPARAM, &wifi_ssid);
     
     if (wifi_ssid) {
+        sdk_wifi_station_disconnect();
+        
         struct sdk_station_config sta_config;
                
         memset(&sta_config, 0, sizeof(sta_config));
@@ -1125,8 +1133,8 @@ uint8_t wifi_config_connect() {
             INFO("Saved BSSID: none");
         }
         
-        if (wifi_mode < 2) {
-            if (wifi_mode == 1 && wifi_bssid) {
+        if (wifi_mode < 2 || (wifi_mode == 4 && mode == 1)) {
+            if ((wifi_mode == 1 || (wifi_mode == 4 && mode == 1)) && wifi_bssid) {
                 sta_config.bssid_set = 1;
                 memcpy(sta_config.bssid, wifi_bssid, 6);
                 INFO("Wifi Mode: Forced BSSID");
@@ -1177,7 +1185,7 @@ uint8_t wifi_config_connect() {
 }
 
 static void wifi_config_station_connect() {
-    if (wifi_config_connect() == 1) {
+    if (wifi_config_connect(0) == 1) {
         xTaskCreate(wifi_config_sta_connect_timeout_task, "sta_connect", 512, NULL, (tskIDLE_PRIORITY + 1), &context->sta_connect_timeout);
         
         if (!context->on_wifi_ready) {
@@ -1221,9 +1229,6 @@ void wifi_config_init(const char* ssid_prefix, const char* password, void (*on_w
     
     if (custom_hostname) {
         context->custom_hostname = strdup(custom_hostname);
-        context->hostname_ready = false;
-    } else {
-        context->hostname_ready = true;
     }
 
     context->on_wifi_ready = on_wifi_ready;

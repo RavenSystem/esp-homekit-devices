@@ -206,7 +206,7 @@ typedef struct _lightbulb_group {
     struct _lightbulb_group* next;
 } lightbulb_group_t;
 
-typedef void (*ping_callback_fn)(uint8_t gpio, void* args, uint8_t param);
+typedef void (*ping_callback_fn)(uint16_t gpio, void* args, uint8_t param);
 
 typedef struct _ping_input_callback_fn {
     uint8_t param;

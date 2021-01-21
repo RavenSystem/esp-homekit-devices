@@ -127,17 +127,21 @@ void extended_gpio_enable(const uint16_t extended_gpio, const gpio_direction_t d
     }
 }
 
+mcp23017_t* mcp_find_by_index(const uint8_t index) {
+    mcp23017_t* mcp23017 = main_config.mcp23017s;
+    while (mcp23017 && mcp23017->index != index) {
+        mcp23017 = mcp23017->next;
+    }
+    
+    return mcp23017;
+}
 void extended_gpio_write(const uint16_t extended_gpio, bool value) {
     if (extended_gpio < 17) {
         gpio_write(extended_gpio, value);
         
     } else {    // MCP23017
         const uint8_t gpio_type = extended_gpio / 100;
-        mcp23017_t* mcp23017 = main_config.mcp23017s;
-        while (mcp23017 &&
-               mcp23017->index != gpio_type) {
-            mcp23017 = mcp23017->next;
-        }
+        mcp23017_t* mcp23017 = mcp_find_by_index(gpio_type);
         
         if (mcp23017) {
             uint8_t gpio = extended_gpio % 100;
@@ -422,7 +426,8 @@ void wifi_reconnection_task(void* args) {
     do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
 
     if ((uint32_t) args == 1) {
-        sdk_wifi_station_disconnect();
+        vTaskDelay(MS_TO_TICKS(500));
+        wifi_config_reset();
     }
 
     for (;;) {
@@ -431,6 +436,7 @@ void wifi_reconnection_task(void* args) {
         if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
             main_config.wifi_status = WIFI_STATUS_CONNECTED;
             main_config.wifi_error_count = 0;
+            main_config.wifi_arp_count = 0;
             main_config.wifi_channel = sdk_wifi_get_channel();
             
             homekit_mdns_announce();
@@ -446,19 +452,20 @@ void wifi_reconnection_task(void* args) {
         } else if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
             INFO("Wifi reconnecting...");
             main_config.wifi_status = WIFI_STATUS_CONNECTING;
-            wifi_config_smart_connect();
+            wifi_config_connect(1);
 
         } else {
             main_config.wifi_error_count++;
             if (main_config.wifi_error_count > WIFI_DISCONNECTED_LONG_TIME) {
-                ERROR("Wifi disconnected for a long time. Reconnecting...");
+                ERROR("Wifi disconnected for a long time");
                 main_config.wifi_error_count = 0;
                 main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
-                sdk_wifi_station_disconnect();
                 
                 led_blink(6);
                 
                 do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 5);
+                
+                wifi_config_reset();
             }
         }
     }
@@ -490,11 +497,14 @@ void wifi_watchdog() {
             main_config.wifi_channel = current_channel;
             INFO("Wifi new Ch: %i", current_channel);
             homekit_mdns_announce();
+            
         } else {
             if (!wifi_config_got_ip()) {
                 main_config.wifi_got_ip = false;
+                
             } else if (main_config.wifi_got_ip == false) {
                 main_config.wifi_got_ip = true;
+                main_config.wifi_arp_count = 0;
                 homekit_mdns_announce();
             }
         }
@@ -865,7 +875,7 @@ void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
 }
 
 // --- SENSORS
-void sensor_1(const uint8_t gpio, void* args, const uint8_t type) {
+void sensor_1(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
     INFO("<%i> DigI Sensor GPIO %i", ch_group->accessory, gpio);
@@ -898,7 +908,7 @@ void sensor_1(const uint8_t gpio, void* args, const uint8_t type) {
     hkc_group_notify(ch_group);
 }
 
-void sensor_status_1(const uint8_t gpio, void* args, const uint8_t type) {
+void sensor_status_1(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
     INFO("<%i> DigI Sensor Status GPIO %i", ch_group->accessory, gpio);
@@ -920,7 +930,7 @@ void sensor_status_1(const uint8_t gpio, void* args, const uint8_t type) {
     }
 }
 
-void sensor_0(const uint8_t gpio, void* args, const uint8_t type) {
+void sensor_0(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
     INFO("<%i> DigI Sensor GPIO %i", ch_group->accessory, gpio);
@@ -946,7 +956,7 @@ void sensor_0(const uint8_t gpio, void* args, const uint8_t type) {
     hkc_group_notify(ch_group);
 }
 
-void sensor_status_0(const uint8_t gpio, void* args, const uint8_t type) {
+void sensor_status_0(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
     INFO("<%i> DigI Sensor Status GPIO %i", ch_group->accessory, gpio);
@@ -1525,7 +1535,7 @@ void hkc_th_target_setter(homekit_characteristic_t* ch, const homekit_value_t va
     update_th(ch, value);
 }
 
-void th_input(const uint8_t gpio, void* args, const uint8_t type) {
+void th_input(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
 
     if (ch_group->child_enabled) {
@@ -1577,7 +1587,7 @@ void th_input(const uint8_t gpio, void* args, const uint8_t type) {
     }
 }
 
-void th_input_temp(const uint8_t gpio, void* args, const uint8_t type) {
+void th_input_temp(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
 
     if (ch_group->child_enabled) {
@@ -2141,7 +2151,7 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
     }
 }
 
-void rgbw_brightness(const uint8_t gpio, void* args, const uint8_t type) {
+void rgbw_brightness(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
 
     if (ch_group->child_enabled) {
@@ -2226,7 +2236,7 @@ void autodimmer_call(homekit_characteristic_t* ch0, const homekit_value_t value)
 }
 
 // --- GARAGE DOOR
-void garage_door_stop(const uint8_t gpio, void* args, const uint8_t type) {
+void garage_door_stop(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
     if (ch_group->ch0->value.int_value == GARAGE_DOOR_OPENING || ch_group->ch0->value.int_value == GARAGE_DOOR_CLOSING) {
@@ -2243,7 +2253,7 @@ void garage_door_stop(const uint8_t gpio, void* args, const uint8_t type) {
     }
 }
 
-void garage_door_obstruction(const uint8_t gpio, void* args, const uint8_t type) {
+void garage_door_obstruction(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
     led_blink(1);
@@ -2256,7 +2266,7 @@ void garage_door_obstruction(const uint8_t gpio, void* args, const uint8_t type)
     do_actions(ch_group, type + 8);
 }
 
-void garage_door_sensor(const uint8_t gpio, void* args, const uint8_t type) {
+void garage_door_sensor(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
     led_blink(1);
@@ -2421,7 +2431,7 @@ void window_cover_stop(ch_group_t* ch_group) {
     save_states_callback();
 }
 
-void window_cover_obstruction(const uint8_t gpio, void* args, const uint8_t type) {
+void window_cover_obstruction(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
     led_blink(1);
@@ -2811,7 +2821,7 @@ void hkc_tv_input_configured_name(homekit_characteristic_t* ch, const homekit_va
 }
 
 // --- DIGITAL INPUTS
-void window_cover_diginput(const uint8_t gpio, void* args, const uint8_t type) {
+void window_cover_diginput(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
     INFO("<%i> WC DigI GPIO %i", ch_group->accessory, gpio);
@@ -2853,7 +2863,7 @@ void window_cover_diginput(const uint8_t gpio, void* args, const uint8_t type) {
     }
 }
 
-void diginput(const uint8_t gpio, void* args, const uint8_t type) {
+void diginput(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
     INFO("<%i> DigI GPIO %i", ch_group->accessory, gpio);
@@ -2927,7 +2937,7 @@ void diginput(const uint8_t gpio, void* args, const uint8_t type) {
     }
 }
 
-void diginput_1(const uint8_t gpio, void* args, const uint8_t type) {
+void diginput_1(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
     INFO("<%i> DigI 1 GPIO %i", ch_group->accessory, gpio);
@@ -2985,7 +2995,7 @@ void diginput_1(const uint8_t gpio, void* args, const uint8_t type) {
     }
 }
 
-void digstate_1(const uint8_t gpio, void* args, const uint8_t type) {
+void digstate_1(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
     INFO("<%i> DigI S1 GPIO %i", ch_group->accessory, gpio);
@@ -3031,7 +3041,7 @@ void digstate_1(const uint8_t gpio, void* args, const uint8_t type) {
     }
 }
 
-void diginput_0(const uint8_t gpio, void* args, const uint8_t type) {
+void diginput_0(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
     INFO("<%i> DigI 0 GPIO %i", ch_group->accessory, gpio);
@@ -3089,7 +3099,7 @@ void diginput_0(const uint8_t gpio, void* args, const uint8_t type) {
     }
 }
 
-void digstate_0(const uint8_t gpio, void* args, const uint8_t type) {
+void digstate_0(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
     INFO("<%i> DigI S0 GPIO %i", ch_group->accessory, gpio);
@@ -4451,7 +4461,7 @@ void normal_mode_init() {
         bool run_at_launch = false;
         
         for (uint8_t j = 0; j < cJSON_GetArraySize(json_buttons); j++) {
-            const uint8_t gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PIN_GPIO)->valuedouble;
+            const uint16_t gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PIN_GPIO)->valuedouble;
             bool pullup_resistor = true;
             if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR) != NULL &&
                 cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR)->valuedouble == 0) {
@@ -4480,18 +4490,22 @@ void normal_mode_init() {
             }
             
             if (!get_used_gpio(gpio)) {
-                change_uart_gpio(gpio);
-                adv_button_create(gpio, pullup_resistor, inverted, button_mode);
+                if (gpio < GPIO_OVERFLOW) {
+                    change_uart_gpio(gpio);
+                    adv_button_create(gpio, pullup_resistor, inverted, button_mode);
+                    set_used_gpio(gpio);
+                    INFO("New Input GPIO %i: inv %i, filter %i, mode %i", gpio, inverted, button_filter, button_mode);
+                } else {
+                    mcp23017_t* mcp = mcp_find_by_index(gpio / 100);
+                    adv_button_create(gpio, mcp->bus, inverted, mcp->addr);
+                    INFO("New Input MCP GPIO %i: inv %i, filter %i, bus %i, addr %i", gpio, inverted, button_filter, mcp->bus, mcp->addr);
+                }
                 
                 if (button_filter > 0) {
                     adv_button_set_gpio_probes(gpio, button_filter);
                 }
-                
-                set_used_gpio(gpio);
-                
-                INFO("New Input GPIO %i: inv %i, filter %i, mode %i", gpio, inverted, button_filter, button_mode);
             }
-            
+
             adv_button_register_callback_fn(gpio, callback, button_type, (void*) ch_group, param);
             
             INFO("New Input type: gpio %i, type %i", gpio, button_type);
@@ -5327,19 +5341,79 @@ void normal_mode_init() {
             mcp23017->bus = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_mcp23017, I2C_BUS)->valuedouble;
             mcp23017->addr = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_mcp23017, I2C_ADDR)->valuedouble;
             
-            uint8_t channel = 0;
-            if (cJSON_GetObjectItemCaseSensitive(json_mcp23017, MCP23017_INITIAL_CHANNEL_A) != NULL) {
-                mcp23017->a_outs = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_mcp23017, MCP23017_INITIAL_CHANNEL_A)->valuedouble;
-            }
-            i2c_slave_write(mcp23017->bus, mcp23017->addr, &channel, &mcp23017->a_outs, 1);
+            INFO("MCP23017 %i: bus: %i, addr: %i", mcp23017->index, mcp23017->bus, mcp23017->addr);
             
-            channel = 1;
-            if (cJSON_GetObjectItemCaseSensitive(json_mcp23017, MCP23017_INITIAL_CHANNEL_B) != NULL) {
-                mcp23017->b_outs = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_mcp23017, MCP23017_INITIAL_CHANNEL_B)->valuedouble;
+            for (uint8_t channel = 0; channel < 2; channel++) {
+                uint16_t mcp_mode = 0;
+                if (channel == 0) {
+                    if (cJSON_GetObjectItemCaseSensitive(json_mcp23017, MCP23017_INITIAL_CHANNEL_A) != NULL) {
+                        mcp_mode = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_mcp23017, MCP23017_INITIAL_CHANNEL_A)->valuedouble;
+                    }
+                    
+                    INFO("MCP23017 %i ChA: %i", mcp23017->index, mcp_mode);
+                } else {
+                    if (cJSON_GetObjectItemCaseSensitive(json_mcp23017, MCP23017_INITIAL_CHANNEL_B) != NULL) {
+                        mcp_mode = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_mcp23017, MCP23017_INITIAL_CHANNEL_B)->valuedouble;
+                    }
+                    
+                    INFO("MCP23017 %i ChB: %i", mcp23017->index, mcp_mode);
+                }
+ 
+                const uint8_t byte_zeros = 0x00;
+                if (mcp_mode > 255) {   // Mode INPUT
+                    const uint8_t byte_ones = 0xFF;
+                    i2c_slave_write(mcp23017->bus, mcp23017->addr, &channel, &byte_ones, 1);
+                    
+                    uint8_t reg = channel;
+                    switch (mcp_mode) {
+                        case 257:
+                            // Pull-up HIGH
+                            reg = channel + 0x0C;
+                            i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, &byte_ones, 1);
+                            // Polarity INVERTED
+                            reg = channel + 0x02;
+                            i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, &byte_ones, 1);
+                            break;
+                            
+                        case 258:
+                            // Pull-up LOW
+                            reg = channel + 0x0C;
+                            i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, &byte_zeros, 1);
+                            // Polarity NORMAL
+                            reg = channel + 0x02;
+                            i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, &byte_zeros, 1);
+                            break;
+                            
+                        case 259:
+                            // Pull-up LOW
+                            reg = channel + 0x0C;
+                            i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, &byte_zeros, 1);
+                            // Polarity INVERTED
+                            channel = channel + 0x02;
+                            i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, &byte_ones, 1);
+                            break;
+                            
+                        default:    // 256
+                            // Pull-up HIGH
+                            reg = channel + 0x0C;
+                            i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, &byte_ones, 1);
+                            // Polarity NORMAL
+                            reg = channel + 0x02;
+                            i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, &byte_zeros, 1);
+                            break;
+                    }
+                } else {    // Mode OUTPUT
+                    i2c_slave_write(mcp23017->bus, mcp23017->addr, &channel, &byte_zeros, 1);
+                    
+                    if (channel == 0) {
+                        mcp23017->a_outs = mcp_mode;
+                        i2c_slave_write(mcp23017->bus, mcp23017->addr, &channel, &mcp23017->a_outs, 1);
+                    } else {
+                        mcp23017->b_outs = mcp_mode;
+                        i2c_slave_write(mcp23017->bus, mcp23017->addr, &channel, &mcp23017->b_outs, 1);
+                    }
+                }
             }
-            i2c_slave_write(mcp23017->bus, mcp23017->addr, &channel, &mcp23017->b_outs, 1);
-            
-            INFO("MCP23017 %i: bus: %i, addr: %i, chA: %i, chB: %i", i, mcp23017->bus, mcp23017->addr, mcp23017->a_outs, mcp23017->b_outs);
         }
     }
     
@@ -7865,7 +7939,7 @@ void user_init(void) {
         uart_set_baud(0, 115200);
         printf_header();
         INFO("SETUP MODE");
-        wifi_config_init("HAA", NULL, NULL, name.value.string_value);
+        wifi_config_init("HAA", NULL, NULL, main_config.name_value);
         
     } else {
 #ifdef HAA_DEBUG

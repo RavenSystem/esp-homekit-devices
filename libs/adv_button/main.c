@@ -21,27 +21,27 @@
 #define TOGGLE_GPIO     2
 #endif
 
-void singlepress_callback(const uint8_t gpio, void *args, const uint8_t param) {
+void singlepress_callback(const uint16_t gpio, void *args, const uint8_t param) {
     printf(">>>>> Example button: Single Press function called using GPIO->%i\n", gpio);
 }
 
-void doublepress_callback(const uint8_t gpio, void *args, const uint8_t param) {
+void doublepress_callback(const uint16_t gpio, void *args, const uint8_t param) {
     printf(">>>>> Example button: Double Press function called using GPIO->%i\n", gpio);
 }
 
-void longpress_callback(const uint8_t gpio, void *args, const uint8_t param) {
+void longpress_callback(const uint16_t gpio, void *args, const uint8_t param) {
     printf(">>>>> Example button: Long Press function called using GPIO->%i\n", gpio);
 }
 
-void verylongpress_callback(const uint8_t gpio, void *args, const uint8_t param) {
+void verylongpress_callback(const uint16_t gpio, void *args, const uint8_t param) {
     printf(">>>>> Example button: Very Long Press function called using GPIO->%i\n", gpio);
 }
 
-void holdpress_callback(const uint8_t gpio, void *args, const uint8_t param) {
+void holdpress_callback(const uint16_t gpio, void *args, const uint8_t param) {
     printf(">>>>> Example button: Hold Press function called using GPIO->%i\n", gpio);
 }
 
-void toggle_callback(const uint8_t gpio, void *args, const uint8_t param) {
+void toggle_callback(const uint16_t gpio, void *args, const uint8_t param) {
     printf(">>>>> Example button: Toggle function called using GPIO->%i\n", gpio);
 }
 
