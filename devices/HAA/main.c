@@ -5368,7 +5368,7 @@ void normal_mode_init() {
                     switch (mcp_mode) {
                         case 257:
                             // Pull-up HIGH
-                            reg = channel + 0x0C;
+                            reg += 0x0C;
                             i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, &byte_ones, 1);
                             // Polarity INVERTED
                             reg = channel + 0x02;
@@ -5377,7 +5377,7 @@ void normal_mode_init() {
                             
                         case 258:
                             // Pull-up LOW
-                            reg = channel + 0x0C;
+                            reg += 0x0C;
                             i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, &byte_zeros, 1);
                             // Polarity NORMAL
                             reg = channel + 0x02;
@@ -5386,22 +5386,23 @@ void normal_mode_init() {
                             
                         case 259:
                             // Pull-up LOW
-                            reg = channel + 0x0C;
+                            reg += 0x0C;
                             i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, &byte_zeros, 1);
                             // Polarity INVERTED
-                            channel = channel + 0x02;
+                            reg = channel + 0x02;
                             i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, &byte_ones, 1);
                             break;
                             
                         default:    // 256
                             // Pull-up HIGH
-                            reg = channel + 0x0C;
+                            reg += 0x0C;
                             i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, &byte_ones, 1);
                             // Polarity NORMAL
                             reg = channel + 0x02;
                             i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, &byte_zeros, 1);
                             break;
                     }
+                    
                 } else {    // Mode OUTPUT
                     i2c_slave_write(mcp23017->bus, mcp23017->addr, &channel, &byte_zeros, 1);
                     
@@ -7825,7 +7826,7 @@ void normal_mode_init() {
     }
     main_config.wifi_mode = (uint8_t) wifi_mode;
     
-    wifi_config_init("HAA", NULL, run_homekit_server_delayed, custom_hostname);
+    wifi_config_init("HAA", NULL, run_homekit_server_delayed, custom_hostname, 0);
     
     led_blink(3);
     
@@ -7918,9 +7919,19 @@ void user_init(void) {
     
     int8_t haa_setup = 1;
     
+    char *wifi_ssid = NULL;
+    sysparam_get_string(WIFI_SSID_SYSPARAM, &wifi_ssid);
+    
     //sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);    // Force to enter always in setup mode. Only for tests. Keep comment for releases
     
     //sysparam_set_string("ota_repo", "1");             // Simulates Installation with OTA. Only for tests. Keep comment for releases
+    
+    void enter_setup(const int param) {
+        uart_set_baud(0, 115200);
+        printf_header();
+        INFO("SETUP MODE");
+        wifi_config_init("HAA", NULL, NULL, main_config.name_value, param);
+    }
     
     sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &haa_setup);
     if (haa_setup > 99) {
@@ -7935,28 +7946,35 @@ void user_init(void) {
             FREEHEAP();
         }
         
-    } else if (haa_setup > 0) {
-        uart_set_baud(0, 115200);
-        printf_header();
-        INFO("SETUP MODE");
-        wifi_config_init("HAA", NULL, NULL, main_config.name_value);
+    } else if (haa_setup > 0 || !wifi_ssid) {
+        enter_setup(0);
         
     } else {
-#ifdef HAA_DEBUG
-        free_heap_watchdog();
-        esp_timer_start(esp_timer_create(1000, true, NULL, free_heap_watchdog));
-#endif // HAA_DEBUG
-        
         // Arming emergency Setup Mode
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
-        esp_timer_start(esp_timer_create(EXIT_EMERGENCY_SETUP_MODE_TIME, false, NULL, disable_emergency_setup));
-        
-        name.value = HOMEKIT_STRING(main_config.name_value);
-        
-        if (xTaskCreate(normal_mode_init, "normal_init", INITIAL_SETUP_TASK_SIZE, NULL, INITIAL_SETUP_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating normal_mode_init");
-            FREEHEAP();
+        sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &haa_setup);
+
+        if (haa_setup == 1) {
+#ifdef HAA_DEBUG
+            free_heap_watchdog();
+            esp_timer_start(esp_timer_create(1000, true, NULL, free_heap_watchdog));
+#endif // HAA_DEBUG
+            
+            esp_timer_start(esp_timer_create(EXIT_EMERGENCY_SETUP_MODE_TIME, false, NULL, disable_emergency_setup));
+            
+            name.value = HOMEKIT_STRING(main_config.name_value);
+            
+            if (xTaskCreate(normal_mode_init, "normal_init", INITIAL_SETUP_TASK_SIZE, NULL, INITIAL_SETUP_TASK_PRIORITY, NULL) != pdPASS) {
+                ERROR("Creating normal_mode_init");
+                FREEHEAP();
+            }
+        } else {
+            enter_setup(1);
         }
+    }
+    
+    if (wifi_ssid) {
+        free(wifi_ssid);
     }
 }
 

@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "4.8.0"
+#define FIRMWARE_VERSION                    "4.9.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -18,6 +18,7 @@
 
 #define TOTAL_ACC_SYSPARAM                  "total_ac"
 #define HAA_JSON_SYSPARAM                   "haa_conf"
+#define WIFI_SSID_SYSPARAM                  "wifi_ssid"
 #define HAA_SETUP_MODE_SYSPARAM             "setup"
 #define LAST_CONFIG_NUMBER                  "hkcf"
 #define WIFI_MODE_SYSPARAM                  "wifi_mode"

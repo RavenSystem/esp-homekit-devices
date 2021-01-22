@@ -148,7 +148,8 @@ IRAM static void push_down(const uint8_t used_gpio) {
         adv_button_t *button = button_find_by_gpio(used_gpio);
         if (button->singlepress0_callback_fn) {
             adv_button_run_callback_fn(button->singlepress0_callback_fn, button->gpio);
-        } else {
+        }
+        if (button->holdpress_callback_fn) {
             esp_timer_start(button->hold_timer);
         }
         button->last_event_time = now;
@@ -166,7 +167,9 @@ IRAM static void push_up(const uint8_t used_gpio) {
             return;
         }
         
-        esp_timer_stop(button->hold_timer);
+        if (button->holdpress_callback_fn) {
+            esp_timer_stop(button->hold_timer);
+        }
 
         if (now - button->last_event_time > VERYLONGPRESS_TIME / portTICK_PERIOD_MS) {
             // Very Long button pressed
@@ -406,9 +409,6 @@ int adv_button_create(const uint16_t gpio, const uint8_t pullup_resistor, const 
         
         gpio_set_pullup(gpio, pullup_resistor, pullup_resistor);
         
-        button->hold_timer = esp_timer_create(HOLDPRESS_TIME, false, (void*) button, adv_button_hold_callback);
-        button->press_timer = esp_timer_create(DOUBLEPRESS_TIME, false, (void*) button, adv_button_single_callback);
-        
         vTaskDelay(pdMS_TO_TICKS(100));
         
         if (mode == ADV_BUTTON_NORMAL_MODE) {
@@ -524,6 +524,9 @@ int adv_button_register_callback_fn(const uint16_t gpio, const button_callback_f
                 break;
                 
             case DOUBLEPRESS_TYPE:
+                if (!button->press_timer) {
+                    button->press_timer = esp_timer_create(DOUBLEPRESS_TIME, false, (void*) button, adv_button_single_callback);
+                }
                 adv_button_callback_fn->next = button->doublepress_callback_fn;
                 button->doublepress_callback_fn = adv_button_callback_fn;
                 break;
@@ -539,6 +542,9 @@ int adv_button_register_callback_fn(const uint16_t gpio, const button_callback_f
                 break;
                 
             case HOLDPRESS_TYPE:
+                if (!button->hold_timer) {
+                    button->hold_timer = esp_timer_create(HOLDPRESS_TIME, false, (void*) button, adv_button_hold_callback);
+                }
                 adv_button_callback_fn->next = button->holdpress_callback_fn;
                 button->holdpress_callback_fn = adv_button_callback_fn;
                 break;

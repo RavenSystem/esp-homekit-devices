@@ -52,9 +52,10 @@
 #define SYSPARAMSIZE                    (8)
 #define SECTORSIZE                      (4096)
 
-#define WIFI_CONFIG_SERVER_PORT         (80)
+#define WIFI_CONFIG_SERVER_PORT         (4567)
 
 #define AUTO_REBOOT_TIMEOUT             (90000)
+#define AUTO_REBOOT_LONG_TIMEOUT        (900000)
 
 #define MAX_BODY_LEN                    (16000)
 
@@ -70,6 +71,7 @@ typedef enum {
     ENDPOINT_INDEX,
     ENDPOINT_SETTINGS,
     ENDPOINT_SETTINGS_UPDATE,
+    ENDPOINT_VERSION
 } endpoint_t;
 
 typedef struct _wifi_network_info {
@@ -86,12 +88,12 @@ typedef struct {
     char* ssid_prefix;
     char* password;
     char* custom_hostname;
+    int param;
     void (*on_wifi_ready)();
 
     TimerHandle_t auto_reboot_timer;
     
     TaskHandle_t http_task_handle;
-    TaskHandle_t dns_task_handle;
     TaskHandle_t sta_connect_timeout;
     
     wifi_network_info_t* wifi_networks;
@@ -414,7 +416,7 @@ static void wifi_scan_task(void *arg) {
 #include "index.html.h"
 
 static void wifi_config_server_on_settings(client_t *client) {
-    esp_timer_delete(context->auto_reboot_timer);
+    esp_timer_change_period(context->auto_reboot_timer, AUTO_REBOOT_LONG_TIMEOUT);
     
     xTaskCreate(wifi_scan_task, "wifi_scan", 384, NULL, (tskIDLE_PRIORITY + 2), NULL);
     
@@ -438,6 +440,11 @@ static void wifi_config_server_on_settings(client_t *client) {
         text = NULL;
     }
     client_send_chunk(client, html_settings_middle);
+    
+    if (context->param == 1) {
+        client_send_chunk(client, "<div style=\"color:red\">FLASH corrupted! Reset settings recommended</div>");
+    }
+    client_send_chunk(client, html_settings_flash_error);
     
     status = sysparam_get_string(OTA_VERSION_SYSPARAM, &text);
     if (text) {
@@ -721,6 +728,8 @@ static int wifi_config_server_on_url(http_parser *parser, const char *data, size
     if (parser->method == HTTP_GET) {
         if (!strncmp(data, "/settings", length)) {
             client->endpoint = ENDPOINT_SETTINGS;
+        } else if (!strncmp(data, "/version", length)) {
+            client->endpoint = ENDPOINT_VERSION;
         } else if (!strncmp(data, "/", length)) {
             client->endpoint = ENDPOINT_INDEX;
         }
@@ -757,12 +766,14 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
             client_send_redirect(client, 301, "/settings");
             break;
         }
+            
         case ENDPOINT_SETTINGS: {
             wifi_config_server_on_settings(client);
             break;
         }
+            
         case ENDPOINT_SETTINGS_UPDATE: {
-            esp_timer_delete(context->auto_reboot_timer);
+            esp_timer_change_period(context->auto_reboot_timer, AUTO_REBOOT_LONG_TIMEOUT);
             if (context->sta_connect_timeout) {
                 vTaskDelete(context->sta_connect_timeout);
             } else {
@@ -773,9 +784,16 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
             return 0;
             break;
         }
+            
+        case ENDPOINT_VERSION: {
+            static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n4.9.0";
+            client_send(client, payload, sizeof(payload) - 1);
+            break;
+        }
+            
         case ENDPOINT_UNKNOWN: {
             INFO("Unknown");
-            client_send_redirect(client, 302, "http://192.168.4.1/settings");
+            client_send_redirect(client, 302, "http://192.168.4.1:4567/settings");
             break;
         }
     }
@@ -891,95 +909,6 @@ static void http_task(void *arg) {
     vTaskDelete(NULL);
 }
 
-static void dns_task(void *arg) {
-    INFO("Start DNS server");
-
-    ip4_addr_t server_addr;
-    IP4_ADDR(&server_addr, 192, 168, 4, 1);
-
-    struct sockaddr_in serv_addr;
-    int fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-
-    memset(&serv_addr, '0', sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serv_addr.sin_port = htons(53);
-    bind(fd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
-
-    const struct timeval timeout = { 1, 200000 }; /* 1.2 second timeout */
-    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-
-    const struct ifreq ifreq1 = { "en1" };
-    setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, &ifreq1, sizeof(ifreq1));
-
-    for (;;) {
-        char buffer[96];
-        struct sockaddr src_addr;
-        socklen_t src_addr_len = sizeof(src_addr);
-        size_t count = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr*)&src_addr, &src_addr_len);
-
-        /* Drop messages that are too large to send a response in the buffer */
-        if (count > 0 && count <= sizeof(buffer) - 16 && src_addr.sa_family == AF_INET) {
-            size_t qname_len = strlen(buffer + 12) + 1;
-            uint32_t reply_len = 2 + 10 + qname_len + 16 + 4;
-
-            char *head = buffer + 2;
-            *head++ = 0x80; // Flags
-            *head++ = 0x00;
-            *head++ = 0x00; // Q count
-            *head++ = 0x01;
-            *head++ = 0x00; // A count
-            *head++ = 0x01;
-            *head++ = 0x00; // Auth count
-            *head++ = 0x00;
-            *head++ = 0x00; // Add count
-            *head++ = 0x00;
-            head += qname_len;
-            *head++ = 0x00; // Q type
-            *head++ = 0x01;
-            *head++ = 0x00; // Q class
-            *head++ = 0x01;
-            *head++ = 0xC0; // LBL offs
-            *head++ = 0x0C;
-            *head++ = 0x00; // Type
-            *head++ = 0x01;
-            *head++ = 0x00; // Class
-            *head++ = 0x01;
-            *head++ = 0x00; // TTL
-            *head++ = 0x00;
-            *head++ = 0x00;
-            *head++ = 0x78;
-            *head++ = 0x00; // RD len
-            *head++ = 0x04;
-            *head++ = ip4_addr1(&server_addr);
-            *head++ = ip4_addr2(&server_addr);
-            *head++ = ip4_addr3(&server_addr);
-            *head++ = ip4_addr4(&server_addr);
-
-            sendto(fd, buffer, reply_len, 0, &src_addr, src_addr_len);
-        }
-
-        uint32_t task_value = 0;
-        if (xTaskNotifyWait(0, 1, &task_value, 0) == pdTRUE) {
-            if (task_value)
-                break;
-        }
-    }
-
-    INFO("Stop DNS server");
-
-    lwip_close(fd);
-
-    vTaskDelete(NULL);
-}
-
-static void dns_stop() {
-    if (!context->dns_task_handle)
-        return;
-
-    xTaskNotify(context->dns_task_handle, 1, eSetValueWithOverwrite);
-}
-
 static void wifi_config_softap_start() {
     sdk_wifi_set_opmode(STATIONAP_MODE);
 
@@ -1024,14 +953,12 @@ static void wifi_config_softap_start() {
     dhcpserver_set_router(&ap_ip.ip);
     dhcpserver_set_dns(&ap_ip.ip);
 
-    xTaskCreate(dns_task, "dns_task", 384, NULL, (tskIDLE_PRIORITY + 1), &context->dns_task_handle);
-    xTaskCreate(http_task, "http_task", 512, NULL, (tskIDLE_PRIORITY + 1), &context->http_task_handle);
+    xTaskCreate(http_task, "http", 512, NULL, (tskIDLE_PRIORITY + 1), &context->http_task_handle);
 }
 
 static void wifi_config_softap_stop() {
     LOCK_TCPIP_CORE();
     dhcpserver_stop();
-    dns_stop();
     sdk_wifi_set_opmode(STATION_MODE);
     UNLOCK_TCPIP_CORE();
 }
@@ -1212,7 +1139,7 @@ static void wifi_config_station_connect() {
     vTaskDelete(NULL);
 }
 
-void wifi_config_init(const char* ssid_prefix, const char* password, void (*on_wifi_ready)(), const char* custom_hostname) {
+void wifi_config_init(const char* ssid_prefix, const char* password, void (*on_wifi_ready)(), const char* custom_hostname, const int param) {
     INFO("Wifi config init");
     if (password && strlen(password) < 8) {
         ERROR("Password must be at least 8 characters");
@@ -1232,6 +1159,7 @@ void wifi_config_init(const char* ssid_prefix, const char* password, void (*on_w
     }
 
     context->on_wifi_ready = on_wifi_ready;
+    context->param = param;
 
     xTaskCreate(wifi_config_station_connect, "wifi_config", 512, NULL, (tskIDLE_PRIORITY + 1), NULL);
 }

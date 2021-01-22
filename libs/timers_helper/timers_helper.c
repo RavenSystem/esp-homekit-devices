@@ -27,12 +27,8 @@ void esp_timer_start(TimerHandle_t xTimer) {
 
 void esp_timer_start_from_ISR(TimerHandle_t xTimer) {
     if (xTimer) {
-        uint8_t tries = 0;
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        while (!xTimerStartFromISR(xTimer, &xHigherPriorityTaskWoken) && tries < XTIMER_MAX_TRIES) {
-            tries++;
-            printf("! Timer Start from ISR Failed (%i/%i)\n", tries, XTIMER_MAX_TRIES);
-        }
+        xTimerStartFromISR(xTimer, &xHigherPriorityTaskWoken);
     }
 }
 
@@ -52,12 +48,8 @@ void esp_timer_stop(TimerHandle_t xTimer) {
 
 void esp_timer_stop_from_ISR(TimerHandle_t xTimer) {
     if (xTimer) {
-        uint8_t tries = 0;
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        while (!xTimerStopFromISR(xTimer, &xHigherPriorityTaskWoken) && tries < XTIMER_MAX_TRIES) {
-            tries++;
-            printf("! Timer Stop from ISR Failed (%i/%i)\n", tries, XTIMER_MAX_TRIES);
-        }
+        xTimerStopFromISR(xTimer, &xHigherPriorityTaskWoken);
     }
 }
 
