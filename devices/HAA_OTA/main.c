@@ -218,7 +218,7 @@ void user_init(void) {
     
     uart_set_baud(0, 115200);
     
-    adv_logger_init(ADV_LOGGER_UART0_UDP_BUFFERED);
+    adv_logger_init(ADV_LOGGER_UART0_UDP_BUFFERED, NULL);
     
     printf("\n\n\n");
     

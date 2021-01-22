@@ -19,6 +19,7 @@
 #include <espressif/esp_common.h>
 #include <lwip/sockets.h>
 #include <lwip/dhcp.h>
+#include <lwip/etharp.h>
 #include <spiflash.h>
 
 #include <semphr.h>
@@ -34,13 +35,16 @@
 
 #include "header.h"
 
-#define WIFI_CONFIG_SERVER_PORT         (80)
+#define WIFI_CONFIG_SERVER_PORT         (4567)
 
 #define AUTO_REBOOT_TIMEOUT             (90000)
+#define AUTO_REBOOT_LONG_TIMEOUT        (900000)
 
 #define MAX_BODY_LEN                    (16000)
 
 #define BEST_RSSI_MARGIN                (1)
+
+#define MS_TO_TICKS(x)                  ((x) / portTICK_PERIOD_MS)
 
 #define INFO(message, ...)              printf(message "\n", ##__VA_ARGS__);
 #define ERROR(message, ...)             printf("! " message "\n", ##__VA_ARGS__);
@@ -51,6 +55,7 @@ typedef enum {
     ENDPOINT_INDEX,
     ENDPOINT_SETTINGS,
     ENDPOINT_SETTINGS_UPDATE,
+    ENDPOINT_VERSION
 } endpoint_t;
 
 typedef struct _wifi_network_info {
@@ -68,11 +73,10 @@ typedef struct {
     char* password;
     void (*on_wifi_ready)();
 
-    TimerHandle_t sta_connect_timeout;
     TimerHandle_t auto_reboot_timer;
     
     TaskHandle_t http_task_handle;
-    TaskHandle_t dns_task_handle;
+    TaskHandle_t sta_connect_timeout;
     
     wifi_network_info_t* wifi_networks;
     SemaphoreHandle_t wifi_networks_mutex;
@@ -164,6 +168,15 @@ static void client_send_redirect(client_t *client, int code, const char *redirec
     client_send(client, buffer, len);
 }
 
+static void wifi_config_resend_arp() {
+    struct netif *netif = sdk_system_get_netif(STATION_IF);
+    if (netif && netif->flags & NETIF_FLAG_LINK_UP && netif->flags & NETIF_FLAG_UP) {
+        LOCK_TCPIP_CORE();
+        etharp_gratuitous(netif);
+        UNLOCK_TCPIP_CORE();
+    }
+}
+
 static void wifi_smart_connect_task(void* arg) {
     uint8_t *best_bssid = arg;
     
@@ -208,7 +221,9 @@ static void wifi_smart_connect_task(void* arg) {
 static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
     if (status != SCAN_OK) {
         ERROR("Wifi smart connect scan failed");
-        sdk_wifi_station_connect();
+        if (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
+            sdk_wifi_station_connect();
+        }
     }
 
     char* wifi_ssid = NULL;
@@ -297,6 +312,9 @@ static void wifi_config_smart_connect() {
 
 static uint8_t wifi_config_connect();
 static void wifi_config_reset() {
+    INFO("Wifi reset");
+    sdk_wifi_station_disconnect();
+    
     struct sdk_station_config sta_config;
     memset(&sta_config, 0, sizeof(sta_config));
 
@@ -370,9 +388,7 @@ static void wifi_scan_task(void *arg) {
 #include "index.html.h"
 
 static void wifi_config_server_on_settings(client_t *client) {
-    if (context->auto_reboot_timer) {
-        esp_timer_delete(context->auto_reboot_timer);
-    }
+    esp_timer_change_period(context->auto_reboot_timer, AUTO_REBOOT_LONG_TIMEOUT);
     
     xTaskCreate(wifi_scan_task, "wifi_scan", 384, NULL, (tskIDLE_PRIORITY + 0), NULL);
     
@@ -503,9 +519,12 @@ static void wifi_config_context_free(wifi_config_context_t *context) {
 }
 
 static void wifi_config_server_on_settings_update_task(void* args) {
-    INFO("Update settings");
-    
     client_t* client = args;
+    
+    static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<center>OK</center>";
+    client_send(client, payload, sizeof(payload) - 1);
+    
+    INFO("Update settings");
 
     vTaskDelay(pdMS_TO_TICKS(100));
 
@@ -635,9 +654,6 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     
     INFO("\nRebooting...\n\n");
     
-    static const char payload[] = "HTTP/1.1 204 \r\nContent-Type: text/html\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-    client_send(client, payload, sizeof(payload) - 1);
-    
     vTaskDelay(pdMS_TO_TICKS(1500));
     
     sdk_wifi_station_disconnect();
@@ -654,6 +670,8 @@ static int wifi_config_server_on_url(http_parser *parser, const char *data, size
     if (parser->method == HTTP_GET) {
         if (!strncmp(data, "/settings", length)) {
             client->endpoint = ENDPOINT_SETTINGS;
+        } else if (!strncmp(data, "/version", length)) {
+            client->endpoint = ENDPOINT_VERSION;
         } else if (!strncmp(data, "/", length)) {
             client->endpoint = ENDPOINT_INDEX;
         }
@@ -697,11 +715,9 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
         }
             
         case ENDPOINT_SETTINGS_UPDATE: {
-            if (context->auto_reboot_timer) {
-                esp_timer_delete(context->auto_reboot_timer);
-            }
+            esp_timer_change_period(context->auto_reboot_timer, AUTO_REBOOT_LONG_TIMEOUT);
             if (context->sta_connect_timeout) {
-                esp_timer_delete(context->sta_connect_timeout);
+                vTaskDelete(context->sta_connect_timeout);
             }
             wifi_config_context_free(context);
             xTaskCreate(wifi_config_server_on_settings_update_task, "settings_update", 512, client, (tskIDLE_PRIORITY + 0), NULL);
@@ -709,9 +725,15 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
             break;
         }
             
+        case ENDPOINT_VERSION: {
+            static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\nInstaller setup";
+            client_send(client, payload, sizeof(payload) - 1);
+            break;
+        }
+            
         case ENDPOINT_UNKNOWN: {
             INFO("Unknown");
-            client_send_redirect(client, 302, "http://192.168.4.1/settings");
+            client_send_redirect(client, 302, "http://192.168.4.1:4567/settings");
             break;
         }
     }
@@ -774,8 +796,17 @@ static void http_task(void *arg) {
             continue;
         }
 
-        const struct timeval timeout = { 1, 200000 };
+        const struct timeval timeout = { 1, 0 };
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+        
+        const int yes = 1;
+        setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes));
+
+        const int interval = 5;
+        setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval));
+
+        const int maxpkt = 4;
+        setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &maxpkt, sizeof(maxpkt));
 
         client_t *client = client_new();
         client->fd = fd;
@@ -816,95 +847,6 @@ static void http_task(void *arg) {
 
     lwip_close(listenfd);
     vTaskDelete(NULL);
-}
-
-static void dns_task(void *arg) {
-    INFO("Start DNS server");
-
-    ip4_addr_t server_addr;
-    IP4_ADDR(&server_addr, 192, 168, 4, 1);
-
-    struct sockaddr_in serv_addr;
-    int fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-
-    memset(&serv_addr, '0', sizeof(serv_addr));
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    serv_addr.sin_port = htons(53);
-    bind(fd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
-
-    const struct timeval timeout = { 1, 200000 }; /* 1.2 second timeout */
-    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-
-    const struct ifreq ifreq1 = { "en1" };
-    setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, &ifreq1, sizeof(ifreq1));
-
-    for (;;) {
-        char buffer[96];
-        struct sockaddr src_addr;
-        socklen_t src_addr_len = sizeof(src_addr);
-        size_t count = recvfrom(fd, buffer, sizeof(buffer), 0, (struct sockaddr*)&src_addr, &src_addr_len);
-
-        /* Drop messages that are too large to send a response in the buffer */
-        if (count > 0 && count <= sizeof(buffer) - 16 && src_addr.sa_family == AF_INET) {
-            size_t qname_len = strlen(buffer + 12) + 1;
-            uint32_t reply_len = 2 + 10 + qname_len + 16 + 4;
-
-            char *head = buffer + 2;
-            *head++ = 0x80; // Flags
-            *head++ = 0x00;
-            *head++ = 0x00; // Q count
-            *head++ = 0x01;
-            *head++ = 0x00; // A count
-            *head++ = 0x01;
-            *head++ = 0x00; // Auth count
-            *head++ = 0x00;
-            *head++ = 0x00; // Add count
-            *head++ = 0x00;
-            head += qname_len;
-            *head++ = 0x00; // Q type
-            *head++ = 0x01;
-            *head++ = 0x00; // Q class
-            *head++ = 0x01;
-            *head++ = 0xC0; // LBL offs
-            *head++ = 0x0C;
-            *head++ = 0x00; // Type
-            *head++ = 0x01;
-            *head++ = 0x00; // Class
-            *head++ = 0x01;
-            *head++ = 0x00; // TTL
-            *head++ = 0x00;
-            *head++ = 0x00;
-            *head++ = 0x78;
-            *head++ = 0x00; // RD len
-            *head++ = 0x04;
-            *head++ = ip4_addr1(&server_addr);
-            *head++ = ip4_addr2(&server_addr);
-            *head++ = ip4_addr3(&server_addr);
-            *head++ = ip4_addr4(&server_addr);
-
-            sendto(fd, buffer, reply_len, 0, &src_addr, src_addr_len);
-        }
-
-        uint32_t task_value = 0;
-        if (xTaskNotifyWait(0, 1, &task_value, 0) == pdTRUE) {
-            if (task_value)
-                break;
-        }
-    }
-
-    INFO("Stop DNS server");
-
-    lwip_close(fd);
-
-    vTaskDelete(NULL);
-}
-
-static void dns_stop() {
-    if (!context->dns_task_handle)
-        return;
-
-    xTaskNotify(context->dns_task_handle, 1, eSetValueWithOverwrite);
 }
 
 static void wifi_config_softap_start() {
@@ -951,14 +893,12 @@ static void wifi_config_softap_start() {
     dhcpserver_set_router(&ap_ip.ip);
     dhcpserver_set_dns(&ap_ip.ip);
 
-    xTaskCreate(dns_task, "dns_task", 384, NULL, (tskIDLE_PRIORITY + 1), &context->dns_task_handle);
-    xTaskCreate(http_task, "http_task", 512, NULL, (tskIDLE_PRIORITY + 1), &context->http_task_handle);
+    xTaskCreate(http_task, "http", 512, NULL, (tskIDLE_PRIORITY + 1), &context->http_task_handle);
 }
 
 static void wifi_config_softap_stop() {
     LOCK_TCPIP_CORE();
     dhcpserver_stop();
-    dns_stop();
     sdk_wifi_set_opmode(STATION_MODE);
     UNLOCK_TCPIP_CORE();
 }
@@ -973,24 +913,38 @@ static void auto_reboot_run() {
     sdk_system_restart();
 }
 
-static void wifi_config_sta_connect_timeout_callback(TimerHandle_t xTimer) {
-    if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
-        // Connected to station, all is dandy
-        esp_timer_delete(xTimer);
-        
-        wifi_config_softap_stop();
-        http_stop();
-        context->on_wifi_ready();
-        
-        wifi_config_context_free(context);
-        context = NULL;
-        
-    } else {
-        context->check_counter++;
-        if (context->check_counter == 255) {
-            auto_reboot_run();
+static void wifi_config_sta_connect_timeout_task() {
+    for (;;) {
+        if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+            wifi_config_softap_stop();
+            
+            if (context->on_wifi_ready) {
+                http_stop();
+                context->on_wifi_ready();
+                
+                wifi_config_context_free(context);
+                break;
+            }
+
+        } else {
+            if (context->check_counter > 120) {
+                context->check_counter = 0;
+                wifi_config_reset();
+                vTaskDelay(MS_TO_TICKS(4000));
+                wifi_config_connect();
+                
+            } else if (context->check_counter > 240) {
+                auto_reboot_run();
+                
+            } else if (context->check_counter % 16 == 0) {
+                wifi_config_resend_arp();
+            }
         }
+        
+        vTaskDelay(MS_TO_TICKS(1000));
     }
+    
+    vTaskDelete(NULL);
 }
 
 static uint8_t wifi_config_connect() {
@@ -1000,6 +954,8 @@ static uint8_t wifi_config_connect() {
     sysparam_get_string(WIFI_SSID_SYSPARAM, &wifi_ssid);
     
     if (wifi_ssid) {
+        sdk_wifi_station_disconnect();
+        
         struct sdk_station_config sta_config;
                
         memset(&sta_config, 0, sizeof(sta_config));
@@ -1084,8 +1040,7 @@ static void wifi_config_station_connect() {
         INFO("\nHAA OTA - NORMAL MODE\n");
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
 
-        context->sta_connect_timeout = esp_timer_create(1000, true, NULL, wifi_config_sta_connect_timeout_callback);
-        esp_timer_start(context->sta_connect_timeout);
+        xTaskCreate(wifi_config_sta_connect_timeout_task, "sta_connect", 512, NULL, (tskIDLE_PRIORITY + 1), &context->sta_connect_timeout);
         
     } else {
         INFO("\nHAA OTA - SETUP MODE\n");
