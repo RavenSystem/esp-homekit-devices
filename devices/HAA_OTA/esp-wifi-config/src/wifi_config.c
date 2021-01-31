@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect OTA Update
  *
- * Copyright 2020 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2020-2021 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -890,8 +890,8 @@ static void wifi_config_softap_start() {
 
     INFO("Start DHCP server");
     dhcpserver_start(&first_client_ip, 4);
-    dhcpserver_set_router(&ap_ip.ip);
-    dhcpserver_set_dns(&ap_ip.ip);
+    //dhcpserver_set_router(&ap_ip.ip);
+    //dhcpserver_set_dns(&ap_ip.ip);
 
     xTaskCreate(http_task, "http", 512, NULL, (tskIDLE_PRIORITY + 1), &context->http_task_handle);
 }

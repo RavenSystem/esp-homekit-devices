@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect OTA Installer
  *
- * Copyright 2020 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2020-2021 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -219,6 +219,14 @@ void user_init(void) {
     uart_set_baud(0, 115200);
     
     adv_logger_init(ADV_LOGGER_UART0_UDP_BUFFERED, NULL);
+    
+    for (uint8_t i = 0; i < 17; i++) {
+        if (i < 6 || i > 11) {
+            if (!(i == 1 || i == 3)) {
+                gpio_enable(i, GPIO_INPUT);
+            }
+        }
+    }
     
     printf("\n\n\n");
     
