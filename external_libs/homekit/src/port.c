@@ -24,12 +24,9 @@ void homekit_mdns_init() {
     mdns_init();
 }
 
-void homekit_mdns_buffer_init() {
-    mdns_buffer_init();
-}
-
-void homekit_mdns_buffer_deinit() {
+void homekit_mdns_buffer_set(const uint16_t size) {
     mdns_buffer_deinit();
+    mdns_buffer_init(size);
 }
 
 void homekit_mdns_configure_init(const char *instance_name, int port) {

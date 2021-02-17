@@ -126,22 +126,15 @@ IRAM static void adv_hlw_cf1_callback(const uint8_t gpio) {
 
     if ((now - adv_hlw_unit->first_cf1) > PERIOD_TIMEOUT) {
         uint32_t period = 0;
-        bool no_overflood = true;
         
         if (adv_hlw_unit->last_cf1 != adv_hlw_unit->first_cf1) {
-            if (now > adv_hlw_unit->last_cf1) {
-                period = now - adv_hlw_unit->last_cf1;
-            } else {
-                no_overflood = false;
-            }
+            period = now - adv_hlw_unit->last_cf1;
         }
 
-        if (no_overflood) {
-            if (adv_hlw_unit->mode == adv_hlw_unit->current_mode) {
-                adv_hlw_unit->period_cf1_c = period;
-            } else {
-                adv_hlw_unit->period_cf1_v = period;
-            }
+        if (adv_hlw_unit->mode == adv_hlw_unit->current_mode) {
+            adv_hlw_unit->period_cf1_c = period;
+        } else {
+            adv_hlw_unit->period_cf1_v = period;
         }
 
         if (adv_hlw_unit->gpio_sel >= 0) {
@@ -165,9 +158,7 @@ IRAM static void adv_hlw_cf_callback(const uint8_t gpio) {
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
     
     const uint32_t now = sdk_system_get_time();
-    if (now > adv_hlw_unit->last_cf) {
-        adv_hlw_unit->period_cf = now - adv_hlw_unit->last_cf;
-    }
+    adv_hlw_unit->period_cf = now - adv_hlw_unit->last_cf;
     adv_hlw_unit->last_cf = now;
     
     //printf("ADV_HLW_CF: gpio: %i, period_cf: %i\n", gpio, adv_hlw_unit->period_cf);

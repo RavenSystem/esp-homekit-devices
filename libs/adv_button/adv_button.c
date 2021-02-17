@@ -1,7 +1,7 @@
 /*
  * Advanced Button Manager
  *
- * Copyright 2019-2020 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2021 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -149,9 +149,9 @@ IRAM static void push_down(const uint8_t used_gpio) {
         if (button->singlepress0_callback_fn) {
             adv_button_run_callback_fn(button->singlepress0_callback_fn, button->gpio);
         }
-        if (button->holdpress_callback_fn) {
-            esp_timer_start(button->hold_timer);
-        }
+
+        esp_timer_start(button->hold_timer);
+
         button->last_event_time = now;
     }
 }
@@ -167,9 +167,7 @@ IRAM static void push_up(const uint8_t used_gpio) {
             return;
         }
         
-        if (button->holdpress_callback_fn) {
-            esp_timer_stop(button->hold_timer);
-        }
+        esp_timer_stop(button->hold_timer);
 
         if (now - button->last_event_time > VERYLONGPRESS_TIME / portTICK_PERIOD_MS) {
             // Very Long button pressed
@@ -409,17 +407,15 @@ int adv_button_create(const uint16_t gpio, const uint8_t pullup_resistor, const 
         
         gpio_set_pullup(gpio, pullup_resistor, pullup_resistor);
         
-        vTaskDelay(pdMS_TO_TICKS(100));
-        
         if (mode == ADV_BUTTON_NORMAL_MODE) {
+            vTaskDelay(pdMS_TO_TICKS(30));
+            
             button->state = gpio_read(gpio);
             
             button->old_state = button->state;
             
             if (button->state) {
                 button->value = button->max_eval;
-            } else {
-                button->value = 0;
             }
 
             if (gpio != 16 && adv_button_main_config->continuos_mode == false) {
@@ -430,9 +426,7 @@ int adv_button_create(const uint16_t gpio, const uint8_t pullup_resistor, const 
             
         } else if (mode == ADV_BUTTON_PULSE_MODE) {
             adv_button_main_config->continuos_mode = true;
-            
-            button->value = 0;
-            
+
             gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_NEG, adv_button_interrupt_pulse);
             
         } else {    // MCP23017
@@ -482,8 +476,6 @@ int adv_button_create(const uint16_t gpio, const uint8_t pullup_resistor, const 
             
             if (button->state) {
                 button->value = button->max_eval;
-            } else {
-                button->value = 0;
             }
         }
         

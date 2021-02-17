@@ -17,8 +17,8 @@
 #include <lwip/ip_addr.h>
 
 /* The default maximum reply size, modify as necessary. */
-#ifndef MDNS_RESPONDER_REPLY_SIZE
-#define MDNS_RESPONDER_REPLY_SIZE       1500
+#ifndef MDNS_RESPONDER_REPLY_SIZE_DEFAULT
+#define MDNS_RESPONDER_REPLY_SIZE_DEFAULT       1500
 #endif
 
 // Starts the mDNS responder task, call first
@@ -57,7 +57,7 @@ void mdns_add_A  (const char* rKey, u32_t ttl, const ip4_addr_t *addr);
 void mdns_add_AAAA(const char* rKey, u32_t ttl, const ip6_addr_t *addr);
 #endif
 
-int mdns_buffer_init();
+int mdns_buffer_init(uint16_t new_size);
 void mdns_buffer_deinit();
 
 void mdns_TXT_append(char* txt, size_t txt_size, const char* record, size_t record_size);

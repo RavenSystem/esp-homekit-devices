@@ -26,13 +26,12 @@ void homekit_overclock_end();
 #ifdef ESP_IDF
 #define SERVER_TASK_STACK 12288
 #else
-#define SERVER_TASK_STACK 1792
+#define SERVER_TASK_STACK 1664
 #endif
 
 
 void homekit_mdns_init();
-void homekit_mdns_buffer_init();
-void homekit_mdns_buffer_deinit();
+void homekit_mdns_buffer_set(const uint16_t size);
 void homekit_mdns_configure_init(const char *instance_name, int port);
 void homekit_mdns_add_txt(const char *key, const char *format, ...);
 void homekit_mdns_configure_finalize(const uint16_t mdns_ttl);

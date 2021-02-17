@@ -7,36 +7,33 @@
 #include <homekit/tlv.h>
 
 
-typedef enum {
-    homekit_format_bool,
-    homekit_format_uint8,
-    homekit_format_uint16,
-    homekit_format_uint32,
-    homekit_format_uint64,
-    homekit_format_int,
-    homekit_format_float,
-    homekit_format_string,
-    homekit_format_tlv,
-    homekit_format_data
-} homekit_format_t;
+typedef uint8_t homekit_format_t;                       // 4 bits
+#define HOMETKIT_FORMAT_BOOL                            (0)
+#define HOMETKIT_FORMAT_UINT8                           (1)
+#define HOMETKIT_FORMAT_UINT16                          (2)
+#define HOMETKIT_FORMAT_UINT32                          (3)
+#define HOMETKIT_FORMAT_UINT64                          (4)
+#define HOMETKIT_FORMAT_INT                             (5)
+#define HOMETKIT_FORMAT_FLOAT                           (6)
+#define HOMETKIT_FORMAT_STRING                          (7)
+#define HOMETKIT_FORMAT_TLV                             (8)
+#define HOMETKIT_FORMAT_DATA                            (9)
 
-typedef enum {
-    homekit_unit_none,
-    homekit_unit_celsius,
-    homekit_unit_percentage,
-    homekit_unit_arcdegrees,
-    homekit_unit_lux,
-    homekit_unit_seconds
-} homekit_unit_t;
+typedef uint8_t homekit_unit_t;                         // 3 bits
+#define HOMETKIT_UNIT_NONE                              (0)
+#define HOMETKIT_UNIT_CELSIUS                           (1)
+#define HOMETKIT_UNIT_PERCENTAGE                        (2)
+#define HOMETKIT_UNIT_ARCDEGREES                        (3)
+#define HOMETKIT_UNIT_LUX                               (4)
+#define HOMETKIT_UNIT_SECONDS                           (5)
 
-typedef enum {
-    homekit_permissions_paired_read = 1,
-    homekit_permissions_paired_write = 2,
-    homekit_permissions_notify = 4,
-    homekit_permissions_additional_authorization = 8,
-    homekit_permissions_timed_write = 16,
-    homekit_permissions_hidden = 32
-} homekit_permissions_t;
+typedef uint8_t homekit_permissions_t;                  // 6 bits
+#define HOMEKIT_PERMISSIONS_PAIRED_READ                 (1)
+#define HOMEKIT_PERMISSIONS_PAIRED_WRITE                (2)
+#define HOMEKIT_PERMISSIONS_NOTIFY                      (4)
+#define HOMEKIT_PERMISSIONS_ADDITIONAL_AUTHORIZATION    (8)
+#define HOMEKIT_PERMISSIONS_TIMED_WRITE                 (16)
+#define HOMEKIT_PERMISSIONS_HIDDEN                      (32)
 
 typedef enum {
     homekit_accessory_category_other = 1,
@@ -81,9 +78,9 @@ typedef struct _homekit_characteristic homekit_characteristic_t;
 
 
 typedef struct {
-    bool is_null : 1;
-    bool is_static : 1;
-    homekit_format_t format : 6;
+    bool is_null: 1;
+    bool is_static: 1;
+    homekit_format_t format: 4;
     union {
         bool bool_value;
         int int_value;
@@ -102,47 +99,47 @@ void homekit_value_free(homekit_value_t *value);
 
 
 #define HOMEKIT_NULL_(...) \
-    {.format=homekit_format_bool, .is_null=true, ##__VA_ARGS__}
+    {.format=HOMETKIT_FORMAT_BOOL, .is_null=true, ##__VA_ARGS__}
 #define HOMEKIT_NULL(...) (homekit_value_t) HOMEKIT_NULL_( __VA_ARGS__ )
 
 #define HOMEKIT_BOOL_(value, ...) \
-    {.format=homekit_format_bool, .bool_value=(value), ##__VA_ARGS__}
+    {.format=HOMETKIT_FORMAT_BOOL, .bool_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_BOOL(value, ...) (homekit_value_t) HOMEKIT_BOOL_(value, __VA_ARGS__)
 
 #define HOMEKIT_INT_(value, ...) \
-    {.format=homekit_format_int, .int_value=(value), ##__VA_ARGS__}
+    {.format=HOMETKIT_FORMAT_INT, .int_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_INT(value, ...) (homekit_value_t) HOMEKIT_INT_(value, ##__VA_ARGS__)
 
 #define HOMEKIT_UINT8_(value, ...) \
-    {.format=homekit_format_uint8, .int_value=(value), ##__VA_ARGS__}
+    {.format=HOMETKIT_FORMAT_UINT8, .int_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_UINT8(value, ...) (homekit_value_t) HOMEKIT_UINT8_(value, ##__VA_ARGS__)
 
 #define HOMEKIT_UINT16_(value, ...) \
-    {.format=homekit_format_uint16, .int_value=(value), ##__VA_ARGS__}
+    {.format=HOMETKIT_FORMAT_UINT16, .int_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_UINT16(value, ...) (homekit_value_t) HOMEKIT_UINT16_(value, ##__VA_ARGS__)
 
 #define HOMEKIT_UINT32_(value, ...) \
-    {.format=homekit_format_uint32, .int_value=(value), ##__VA_ARGS__}
+    {.format=HOMETKIT_FORMAT_UINT32, .int_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_UINT32(value, ...) (homekit_value_t) HOMEKIT_UINT32_(value, ##__VA_ARGS__)
 
 #define HOMEKIT_UINT64_(value, ...) \
-    {.format=homekit_format_uint64, .int_value=(value), ##__VA_ARGS__}
+    {.format=HOMETKIT_FORMAT_UINT64, .int_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_UINT64(value, ...) (homekit_value_t) HOMEKIT_UINT64_(value, ##__VA_ARGS__)
 
 #define HOMEKIT_FLOAT_(value, ...) \
-    {.format=homekit_format_float, .float_value=(value), ##__VA_ARGS__}
+    {.format=HOMETKIT_FORMAT_FLOAT, .float_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_FLOAT(value, ...) (homekit_value_t) HOMEKIT_FLOAT_(value, ##__VA_ARGS__)
 
 #define HOMEKIT_STRING_(value, ...) \
-    {.format=homekit_format_string, .string_value=(value), ##__VA_ARGS__}
+    {.format=HOMETKIT_FORMAT_STRING, .string_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_STRING(value, ...) (homekit_value_t) HOMEKIT_STRING_(value, ##__VA_ARGS__)
 
 #define HOMEKIT_TLV_(value, ...) \
-    {.format=homekit_format_tlv, .tlv_values=(value), ##__VA_ARGS__}
+    {.format=HOMETKIT_FORMAT_TLV, .tlv_values=(value), ##__VA_ARGS__}
 #define HOMEKIT_TLV(value, ...) (homekit_value_t) HOMEKIT_TLV_(value, ##__VA_ARGS__)
 /*
 #define HOMEKIT_DATA_(value, ...) \
-    {.format=homekit_format_data, .data_value=(value), ##__VA_ARGS__}
+    {.format=HOMETKIT_FORMAT_DATA, .data_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_DATA(value, ...) (homekit_value_t) HOMEKIT_DATA_(value, ##__VA_ARGS__)
 */
 
@@ -179,13 +176,16 @@ typedef struct _homekit_characteristic_change_callback {
 
 struct _homekit_characteristic {
     homekit_service_t *service;
-
-    unsigned int id;
     const char *type;
     const char *description;
-    homekit_format_t format;
-    homekit_unit_t unit;
-    homekit_permissions_t permissions;
+    
+    uint16_t id;
+    
+    homekit_format_t format: 4;
+    homekit_unit_t unit: 3;
+    
+    homekit_permissions_t permissions: 6;
+    
     homekit_value_t value;
 
     float *min_value;
@@ -210,20 +210,21 @@ struct _homekit_characteristic {
 struct _homekit_service {
     homekit_accessory_t *accessory;
 
-    unsigned int id;
+    uint16_t id;
+    bool hidden: 1;
+    bool primary: 1;
+
     const char *type;
-    bool hidden;
-    bool primary;
 
     homekit_service_t **linked;
     homekit_characteristic_t **characteristics;
 };
 
 struct _homekit_accessory {
-    unsigned int id;
+    uint16_t id;
+    uint16_t config_number;
 
     homekit_accessory_category_t category;
-    int config_number;
 
     homekit_service_t **services;
 };
@@ -268,14 +269,14 @@ struct _homekit_accessory {
 //         .type = "00000023-0000-1000-8000-0026BB765291",
 //         .description = "My custom characteristic",
 //         .format = homekit_format_string,
-//         .permissions = homekit_permissions_paired_read
-//                      | homekit_permissions_paired_write,
+//         .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ
+//                      | HOMEKIT_PERMISSIONS_PAIRED_WRITE,
 //         .value = HOMEKIT_STRING_("my value"),
 //     );
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM(...) \
-    .format = homekit_format_uint8, \
-    .unit = homekit_unit_none, \
-    .permissions = homekit_permissions_paired_read, \
+    .format = HOMEKIT_FORMAT_UINT8, \
+    .unit = HOMETKIT_UNIT_NONE, \
+    .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ, \
     ##__VA_ARGS__
 
 
@@ -322,7 +323,7 @@ homekit_characteristic_t *homekit_service_characteristic_by_type(homekit_service
 // Find characteristic by accessory ID and characteristic ID. Returns NULL if not found
 homekit_characteristic_t *homekit_characteristic_by_aid_and_iid(homekit_accessory_t **accessories, int aid, int iid);
 
-void homekit_characteristic_notify(homekit_characteristic_t *ch, const homekit_value_t value);
+void homekit_characteristic_notify(homekit_characteristic_t *ch);
 void homekit_characteristic_add_notify_callback(
     homekit_characteristic_t *ch,
     homekit_characteristic_change_callback_fn callback,

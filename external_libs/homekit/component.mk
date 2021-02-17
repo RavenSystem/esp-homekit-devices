@@ -51,7 +51,8 @@ ifdef component_compile_rules
         -DRSA_LOW_MEM \
         -DGCM_SMALL \
         -DUSE_SLOW_SHA512 \
-        -DWOLFCRYPT_ONLY
+        -DWOLFCRYPT_ONLY \
+        -DTFM_TIMING_RESISTANT
 
     ifeq ($(HOMEKIT_SMALL),1)
     EXTRA_WOLFSSL_CFLAGS += \

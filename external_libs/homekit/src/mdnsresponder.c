@@ -132,6 +132,7 @@ static SemaphoreHandle_t gDictMutex = NULL;
 static mdns_rsrc*      gDictP = NULL;       // RR database, linked list
 
 static u8_t* mdns_response = NULL;
+static u16_t mdns_responder_reply_size = 0;
 
 #define MDNS_TTL_MIN                (30)
 #define MDNS_TTL_MULTIPLIER_MS      (1000)  // Set to 1000 to use standard time
@@ -436,15 +437,21 @@ static void mdns_announce_netif(struct netif *netif, const ip_addr_t *addr);
 
 static TimerHandle_t mdns_announce_timer = NULL;
 
-int mdns_buffer_init() {
+int mdns_buffer_init(uint16_t new_size) {
     if (mdns_response == NULL) {
-        mdns_response = malloc(MDNS_RESPONDER_REPLY_SIZE);
+        if (new_size == 0) {
+            new_size = MDNS_RESPONDER_REPLY_SIZE_DEFAULT;
+        }
+        
+        mdns_response = malloc(new_size);
     }
     
     if (mdns_response == NULL) {
-        printf(">>> mdns_buffer_init: error allocating buffer\n");
+        printf(">>> mdns_buffer_init: error allocating %i\n", mdns_responder_reply_size);
         return -1;
     }
+    
+    mdns_responder_reply_size = new_size;
     
     return 0;
 }
@@ -452,6 +459,7 @@ int mdns_buffer_init() {
 void mdns_buffer_deinit() {
     if (mdns_response != NULL) {
         free(mdns_response);
+        mdns_responder_reply_size = 0;
         mdns_response = NULL;
     }
 }
@@ -610,7 +618,7 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
                             u32_t ttl                   // seconds
                            )
 {
-    if (mdns_buffer_init() != 0) {
+    if (mdns_buffer_init(0) != 0) {
         return;
     }
     
@@ -710,7 +718,7 @@ static mdns_rsrc* mdns_match(const char* qstr, u16_t qType)
 static int mdns_add_to_answer(mdns_rsrc* rsrcP, u8_t* resp, int respLen)
 {
     // Key is stored as C str, convert to labels
-    size_t rem = MDNS_RESPONDER_REPLY_SIZE - respLen;
+    size_t rem = mdns_responder_reply_size - respLen;
     size_t len = mdns_str2labels(rsrcP->rData, &resp[respLen], rem);
     if (len == 0) {
         // Overflow, skip this answer.
@@ -796,11 +804,8 @@ static void mdns_reply(const ip_addr_t *addr, struct mdns_hdr* hdrP)
     mdns_rsrc* extra;
     u8_t* qBase = (u8_t*)hdrP;
     u8_t* qp;
-    
-    if (mdns_response == NULL) {
-        return;
-    }
-    memset(mdns_response, 0, MDNS_RESPONDER_REPLY_SIZE);
+
+    memset(mdns_response, 0, mdns_responder_reply_size);
 
 #ifdef qDebugLog
     printf("mDNS_reply\n");
@@ -929,7 +934,7 @@ static void mdns_announce_netif(struct netif *netif, const ip_addr_t *addr)
     if (mdns_response == NULL) {
         return;
     }
-    memset(mdns_response, 0, MDNS_RESPONDER_REPLY_SIZE);
+    memset(mdns_response, 0, mdns_responder_reply_size);
 
     // Build response header
     struct mdns_hdr *rHdr = (struct mdns_hdr*) mdns_response;
@@ -1000,20 +1005,22 @@ static void mdns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_a
 #endif
 
     // Sanity checks on size
-    if (p->tot_len > (MDNS_RESPONDER_REPLY_SIZE) ||
-        p->tot_len < (SIZEOF_DNS_HDR + SIZEOF_DNS_QUERY + 1)) {
-        char addr_str[IPADDR_STRLEN_MAX];
-        ipaddr_ntoa_r(addr, addr_str, IPADDR_STRLEN_MAX);
-        printf(">>> mDNS_recv: wrong size %i from %s\n", p->tot_len, addr_str);
-    } else if (mdns_response) {
-        struct mdns_hdr* hdrP = (struct mdns_hdr*) p->payload;
-#ifdef qLogAllTraffic
-        printf(">>> mDNS_recv: payload size %i\n", p->tot_len);
-        mdns_print_msg(p->payload, p->tot_len);
-#endif
-        if ((hdrP->flags1 & (DNS_FLAG1_RESP + DNS_FLAG1_OPMASK + DNS_FLAG1_TRUNC)) == 0 &&
-            hdrP->numquestions > 0) {
-            mdns_reply(addr, hdrP);
+    if (mdns_response) {
+        if (p->tot_len > (mdns_responder_reply_size) ||
+            p->tot_len < (SIZEOF_DNS_HDR + SIZEOF_DNS_QUERY + 1)) {
+            char addr_str[IPADDR_STRLEN_MAX];
+            ipaddr_ntoa_r(addr, addr_str, IPADDR_STRLEN_MAX);
+            printf(">>> mDNS_recv: wrong size %i from %s\n", p->tot_len, addr_str);
+        } else {
+            struct mdns_hdr* hdrP = (struct mdns_hdr*) p->payload;
+    #ifdef qLogAllTraffic
+            printf(">>> mDNS_recv: payload size %i\n", p->tot_len);
+            mdns_print_msg(p->payload, p->tot_len);
+    #endif
+            if ((hdrP->flags1 & (DNS_FLAG1_RESP + DNS_FLAG1_OPMASK + DNS_FLAG1_TRUNC)) == 0 &&
+                hdrP->numquestions > 0) {
+                mdns_reply(addr, hdrP);
+            }
         }
     }
     

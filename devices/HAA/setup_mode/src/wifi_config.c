@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * Copyright 2019-2020 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2021 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -216,9 +216,9 @@ static void wifi_smart_connect_task(void* arg) {
     sysparam_get_string(WIFI_SSID_SYSPARAM, &wifi_ssid);
     
     struct sdk_station_config sta_config;
-           
     memset(&sta_config, 0, sizeof(sta_config));
-    strncpy((char *)sta_config.ssid, wifi_ssid, sizeof(sta_config.ssid));
+    
+    strncpy((char*) sta_config.ssid, wifi_ssid, sizeof(sta_config.ssid));
     sta_config.ssid[sizeof(sta_config.ssid) - 1] = 0;
 
     char *wifi_password = NULL;
@@ -247,7 +247,7 @@ static void wifi_smart_connect_task(void* arg) {
 static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
     if (status != SCAN_OK) {
         ERROR("Wifi smart connect scan failed");
-        if (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
+        if (!wifi_config_got_ip()) {
             sdk_wifi_station_connect();
         }
     }
@@ -299,7 +299,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
         if (wifi_bssid && memcmp(best_bssid, wifi_bssid, 6) == 0) {
             INFO("Best BSSID is the same");
             free(wifi_bssid);
-            if (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
+            if (!wifi_config_got_ip()) {
                 sdk_wifi_station_connect();
             }
             return;
@@ -332,7 +332,7 @@ void wifi_config_smart_connect() {
     sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
     
     if (wifi_mode < 2 || xTaskCreate(wifi_scan_sc_task, "wifi_scan_smart", 384, NULL, (tskIDLE_PRIORITY + 2), NULL) != pdPASS) {
-        if (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
+        if (!wifi_config_got_ip()) {
             sdk_wifi_station_connect();
         }
     }
@@ -346,8 +346,9 @@ void wifi_config_reset() {
     struct sdk_station_config sta_config;
     memset(&sta_config, 0, sizeof(sta_config));
 
-    strncpy((char *)sta_config.ssid, "none", sizeof(sta_config.ssid));
+    strncpy((char*) sta_config.ssid, "none", sizeof(sta_config.ssid));
     sta_config.ssid[sizeof(sta_config.ssid) - 1] = 0;
+    
     sdk_wifi_station_set_config(&sta_config);
     sdk_wifi_station_set_auto_connect(false);
     sdk_wifi_station_connect();
@@ -489,7 +490,7 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send_chunk(client, html_wifi_mode_4);
     
     // Wifi Networks
-    char buffer[120];
+    char buffer[125];
     char bssid[13];
     if (xSemaphoreTake(context->wifi_networks_mutex, MS_TO_TICKS(5000))) {
         wifi_network_info_t* net = context->wifi_networks;
@@ -582,14 +583,17 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     }
     
     form_param_t *reset_sys_param = form_params_find(form, "reset_sys");
+    form_param_t *reset_hk_param = form_params_find(form, "reset");
     
     if (reset_sys_param) {
         wifi_config_remove_sys_param();
-        wifi_config_reset();
+        
+        if (reset_hk_param) {
+            homekit_server_reset();
+        }
         
     } else {
         form_param_t *conf_param = form_params_find(form, "conf");
-        form_param_t *reset_param = form_params_find(form, "reset");
         form_param_t *nowifi_param = form_params_find(form, "nowifi");
         form_param_t *ota_param = form_params_find(form, "ota");
         form_param_t *autoota_param = form_params_find(form, "autoota");
@@ -645,12 +649,10 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             last_config_number = 1;
         }
         
-        if (reset_param) {
+        if (reset_hk_param) {
             homekit_server_reset();
             last_config_number = 1;
         }
-        
-        sysparam_set_int32(LAST_CONFIG_NUMBER, last_config_number);
         
         if (reposerver_param && reposerver_param->value) {
             sysparam_set_string(CUSTOM_REPO_SYSPARAM, reposerver_param->value);
@@ -661,6 +663,8 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         if (repoport_param && repoport_param->value) {
             const int32_t port = strtol(repoport_param->value, NULL, 10);
             sysparam_set_int32(PORT_NUMBER_SYSPARAM, port);
+        } else {
+            sysparam_set_int32(PORT_NUMBER_SYSPARAM, 80);
         }
         
         if (repossl_param) {
@@ -696,27 +700,23 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             }
         }
         
-        sysparam_compact();
-        
         if (wifimode_param && wifimode_param->value) {
-            int8_t current_wifi_mode = 0;
             int8_t new_wifi_mode = strtol(wifimode_param->value, NULL, 10);
-            sysparam_get_int8(WIFI_MODE_SYSPARAM, &current_wifi_mode);
             sysparam_set_int8(WIFI_MODE_SYSPARAM, new_wifi_mode);
-            
-            if (current_wifi_mode != new_wifi_mode) {
-                wifi_config_reset();
-            }
         }
+        
+        sysparam_compact();
     }
+    
+    vTaskDelay(MS_TO_TICKS(200));
     
     INFO("\nRebooting...\n\n");
     
-    vTaskDelay(MS_TO_TICKS(1500));
+    vTaskDelay(pdMS_TO_TICKS(200));
     
-    sdk_wifi_station_disconnect();
+    wifi_config_reset();
     
-    vTaskDelay(MS_TO_TICKS(500));
+    vTaskDelay(MS_TO_TICKS(2500));
     
     sdk_system_restart();
 }
@@ -771,7 +771,7 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
             wifi_config_server_on_settings(client);
             break;
         }
-            
+        
         case ENDPOINT_SETTINGS_UPDATE: {
             esp_timer_change_period(context->auto_reboot_timer, AUTO_REBOOT_LONG_TIMEOUT);
             if (context->sta_connect_timeout) {
@@ -784,9 +784,9 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
             return 0;
             break;
         }
-            
+        
         case ENDPOINT_VERSION: {
-            static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n4.9.0";
+            static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n5.0.0";
             client_send(client, payload, sizeof(payload) - 1);
             break;
         }
@@ -950,8 +950,8 @@ static void wifi_config_softap_start() {
 
     INFO("Start DHCP server");
     dhcpserver_start(&first_client_ip, 4);
-    dhcpserver_set_router(&ap_ip.ip);
-    dhcpserver_set_dns(&ap_ip.ip);
+    //dhcpserver_set_router(&ap_ip.ip);
+    //dhcpserver_set_dns(&ap_ip.ip);
 
     xTaskCreate(http_task, "http", 512, NULL, (tskIDLE_PRIORITY + 1), &context->http_task_handle);
 }
@@ -967,7 +967,7 @@ static void wifi_config_sta_connect_timeout_task() {
     if (context->custom_hostname) {
         struct netif *netif = sdk_system_get_netif(STATION_IF);
         while (!netif) {
-            vTaskDelay(MS_TO_TICKS(100));
+            vTaskDelay(MS_TO_TICKS(200));
             netif = sdk_system_get_netif(STATION_IF);
         }
         
@@ -976,7 +976,7 @@ static void wifi_config_sta_connect_timeout_task() {
     }
 
     for (;;) {
-        if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+        if (wifi_config_got_ip()) {
             wifi_config_softap_stop();
             
             if (context->on_wifi_ready) {
@@ -992,8 +992,9 @@ static void wifi_config_sta_connect_timeout_task() {
             if (context->check_counter > 120) {
                 context->check_counter = 0;
                 wifi_config_reset();
-                vTaskDelay(MS_TO_TICKS(4000));
+                vTaskDelay(MS_TO_TICKS(5000));
                 wifi_config_connect(0);
+                vTaskDelay(MS_TO_TICKS(1000));
                 
             } else if (context->check_counter % 16 == 0) {
                 wifi_config_resend_arp();
@@ -1021,7 +1022,7 @@ static void auto_reboot_run() {
     
     vTaskDelay(MS_TO_TICKS(150));
     
-    sdk_wifi_station_disconnect();
+    wifi_config_reset();
     
     vTaskDelay(MS_TO_TICKS(150));
     
@@ -1036,9 +1037,9 @@ uint8_t wifi_config_connect(const uint8_t mode) {
         sdk_wifi_station_disconnect();
         
         struct sdk_station_config sta_config;
-               
         memset(&sta_config, 0, sizeof(sta_config));
-        strncpy((char *)sta_config.ssid, wifi_ssid, sizeof(sta_config.ssid));
+        
+        strncpy((char*) sta_config.ssid, wifi_ssid, sizeof(sta_config.ssid));
         sta_config.ssid[sizeof(sta_config.ssid) - 1] = 0;
 
         char *wifi_password = NULL;

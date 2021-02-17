@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * Copyright 2019-2020 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2021 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -27,15 +27,15 @@ typedef struct _action_copy {
     struct _action_copy* next;
 } action_copy_t;
 
-typedef struct _action_relay {
+typedef struct _action_binary_output {
     uint8_t action;
     bool value: 1;
     uint16_t gpio;
     
     float inching;
     
-    struct _action_relay* next;
-} action_relay_t;
+    struct _action_binary_output* next;
+} action_binary_output_t;
 
 typedef struct _action_acc_manager {
     uint8_t action;
@@ -62,13 +62,19 @@ typedef struct _action_network {
     uint16_t port_n;
     
     uint16_t len;
+    bool wait_response: 1;
     bool is_running: 1;
     
     char* host;
-    char* url;
-    char* header;
-    char* content;
-    uint8_t* raw;
+    
+    union {
+        struct {
+            char* url;
+            char* header;
+            char* content;
+        };
+        uint8_t* raw;
+    };
     
     struct _action_network* next;
 } action_network_t;
@@ -80,10 +86,14 @@ typedef struct _action_ir_tx {
     
     uint16_t pause;
     
-    char* prot;
-    char* prot_code;
-    char* raw_code;
-
+    union {
+        char* raw_code;
+        struct {
+            char* prot;
+            char* prot_code;
+        };
+    };
+    
     struct _action_ir_tx* next;
 } action_ir_tx_t;
 
@@ -115,19 +125,7 @@ typedef struct _ch_group {
     bool child_enabled: 1;
     bool homekit_enabled: 1;
     
-    float num_00;
-    float num_01;
-    float num_02;
-    float num_03;
-    float num_04;
-    float num_05;
-    float num_06;
-    float num_07;
-    float num_08;
-    float num_09;
-    float num_10;
-    float num_11;
-    float num_12;
+    float num[13];
     
     homekit_characteristic_t* ch0;
     homekit_characteristic_t* ch1;
@@ -144,7 +142,7 @@ typedef struct _ch_group {
     char* ir_protocol;
     
     action_copy_t* action_copy;
-    action_relay_t* action_relay;
+    action_binary_output_t* action_binary_output;
     action_acc_manager_t* action_acc_manager;
     action_system_t* action_system;
     action_network_t* action_network;
@@ -153,7 +151,7 @@ typedef struct _ch_group {
     
     wildcard_action_t* wildcard_action;
     
-    float last_wildcard_action[3];
+    float last_wildcard_action[4];
     
     struct _ch_group* next;
 } ch_group_t;
@@ -166,28 +164,17 @@ typedef struct _action_task {
 typedef struct _lightbulb_group {
     uint8_t autodimmer;
     uint8_t autodimmer_task_step;
-    uint8_t pwm_r: 5;
-    uint8_t pwm_g: 5;
-    uint8_t pwm_b: 5;
     bool armed_autodimmer: 1;
-    
-    uint8_t pwm_w: 5;          // Will be removed
-    
-    uint8_t pwm_cw: 5;
-    uint8_t pwm_ww: 5;
-    
-    uint16_t target_r;
-    uint16_t target_g;
-    
-    uint16_t target_b;
-    uint16_t target_w;      // Will be removed
-    
-    uint16_t target_cw;
-    uint16_t target_ww;
-    
+    //bool temp_changed: 1;
+
     uint16_t step;
     uint16_t autodimmer_task_delay;
     
+    uint8_t gpio[5];
+    
+    uint16_t current[5];
+    uint16_t target[5];
+
     float flux[5];
     
     float r[2];
@@ -258,22 +245,23 @@ typedef struct _led {
     TimerHandle_t timer;
 } led_t;
 
-typedef struct _haa_pwm {
-    bool setpwm_bool_semaphore: 1;
-    bool setpwm_is_running: 1;
+typedef struct _timetable_action {
+    uint8_t action;
     
-    uint16_t pwm_freq;
-    uint16_t multipwm_duty[MULTIPWM_MAX_CHANNELS];
+    uint8_t mon: 4;
+    uint8_t mday: 5;
+    uint8_t hour: 5;
+    uint8_t min: 6;
+    uint8_t wday: 3;
     
-    TimerHandle_t pwm_timer;
-    pwm_info_t* pwm_info;
-} haa_pwm_t;
+    struct _timetable_action* next;
+} timetable_action_t;
 
 typedef struct _main_config {
     uint8_t wifi_status: 2;
     uint8_t wifi_channel: 4;
     bool ir_tx_inv: 1;
-    bool wifi_got_ip: 1;
+    bool setpwm_bool_semaphore: 1;
     uint8_t ir_tx_gpio: 5;
     uint8_t wifi_mode: 3;
     int8_t setup_mode_toggle_counter;
@@ -290,6 +278,7 @@ typedef struct _main_config {
     uint16_t wifi_roaming_count;
     
     uint16_t wifi_roaming_count_max;
+    bool setpwm_is_running: 1;
     bool used_gpio_0: 1;
     bool used_gpio_1: 1;
     bool used_gpio_2: 1;
@@ -298,7 +287,6 @@ typedef struct _main_config {
     bool used_gpio_5: 1;
     bool used_gpio_9: 1;
     bool used_gpio_10: 1;
-    bool used_gpio_11: 1;
     bool used_gpio_12: 1;
     bool used_gpio_13: 1;
     bool used_gpio_14: 1;
@@ -312,6 +300,7 @@ typedef struct _main_config {
     float ping_poll_period;
     
     TimerHandle_t setup_mode_toggle_timer;
+    TimerHandle_t set_lightbulb_timer;
     
     ch_group_t* ch_groups;
     ping_input_t* ping_inputs;
@@ -320,8 +309,10 @@ typedef struct _main_config {
     
     mcp23017_t* mcp23017s;
     
+    char* ntp_host;
+    timetable_action_t* timetable_actions;
+    
     led_t* status_led;
-    haa_pwm_t* haa_pwm;
 } main_config_t;
 
 #endif // __HAA_TYPES_H__

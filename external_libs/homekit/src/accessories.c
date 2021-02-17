@@ -10,19 +10,19 @@ bool homekit_value_equal(homekit_value_t *a, homekit_value_t *b) {
         return false;
 
     switch (a->format) {
-        case homekit_format_bool:
+        case HOMETKIT_FORMAT_BOOL:
             return a->bool_value == b->bool_value;
-        case homekit_format_uint8:
-        case homekit_format_uint16:
-        case homekit_format_uint32:
-        case homekit_format_uint64:
-        case homekit_format_int:
+        case HOMETKIT_FORMAT_UINT8:
+        case HOMETKIT_FORMAT_UINT16:
+        case HOMETKIT_FORMAT_UINT32:
+        case HOMETKIT_FORMAT_UINT64:
+        case HOMETKIT_FORMAT_INT:
             return a->int_value == b->int_value;
-        case homekit_format_float:
+        case HOMETKIT_FORMAT_FLOAT:
             return a->float_value == b->float_value;
-        case homekit_format_string:
+        case HOMETKIT_FORMAT_STRING:
             return !strcmp(a->string_value, b->string_value);
-        case homekit_format_tlv: {
+        case HOMETKIT_FORMAT_TLV: {
             if (!a->tlv_values && !b->tlv_values)
                 return true;
             if (!a->tlv_values || !b->tlv_values)
@@ -39,7 +39,7 @@ bool homekit_value_equal(homekit_value_t *a, homekit_value_t *b) {
 
             return (!ta && !tb);
         }
-        case homekit_format_data:
+        case HOMETKIT_FORMAT_DATA:
             // TODO: implement comparison
             return false;
     }
@@ -55,20 +55,20 @@ void homekit_value_copy(homekit_value_t *dst, homekit_value_t *src) {
 
     if (!src->is_null) {
         switch (src->format) {
-            case homekit_format_bool:
+            case HOMETKIT_FORMAT_BOOL:
                 dst->bool_value = src->bool_value;
                 break;
-            case homekit_format_uint8:
-            case homekit_format_uint16:
-            case homekit_format_uint32:
-            case homekit_format_uint64:
-            case homekit_format_int:
+            case HOMETKIT_FORMAT_UINT8:
+            case HOMETKIT_FORMAT_UINT16:
+            case HOMETKIT_FORMAT_UINT32:
+            case HOMETKIT_FORMAT_UINT64:
+            case HOMETKIT_FORMAT_INT:
                 dst->int_value = src->int_value;
                 break;
-            case homekit_format_float:
+            case HOMETKIT_FORMAT_FLOAT:
                 dst->float_value = src->float_value;
                 break;
-            case homekit_format_string:
+            case HOMETKIT_FORMAT_STRING:
                 if (src->is_static) {
                     dst->string_value = src->string_value;
                     dst->is_static = true;
@@ -76,7 +76,7 @@ void homekit_value_copy(homekit_value_t *dst, homekit_value_t *src) {
                     dst->string_value = strdup(src->string_value);
                 }
                 break;
-            case homekit_format_tlv: {
+            case HOMETKIT_FORMAT_TLV: {
                 if (src->is_static) {
                     dst->tlv_values = src->tlv_values;
                     dst->is_static = true;
@@ -88,7 +88,7 @@ void homekit_value_copy(homekit_value_t *dst, homekit_value_t *src) {
                 }
                 break;
             }
-            case homekit_format_data:
+            case HOMETKIT_FORMAT_DATA:
                 // TODO:
                 break;
             default:
@@ -108,15 +108,15 @@ homekit_value_t *homekit_value_clone(homekit_value_t *value) {
 void homekit_value_destruct(homekit_value_t *value) {
     if (!value->is_null) {
         switch (value->format) {
-            case homekit_format_string:
+            case HOMETKIT_FORMAT_STRING:
                 if (!value->is_static && value->string_value)
                     free(value->string_value);
                 break;
-            case homekit_format_tlv:
+            case HOMETKIT_FORMAT_TLV:
                 if (!value->is_static && value->tlv_values)
                     tlv_free(value->tlv_values);
                 break;
-            case homekit_format_data:
+            case HOMETKIT_FORMAT_DATA:
                 // TODO:
                 break;
             default:
@@ -477,10 +477,10 @@ homekit_characteristic_t *homekit_characteristic_find_by_type(homekit_accessory_
 }
 
 
-void homekit_characteristic_notify(homekit_characteristic_t *ch, homekit_value_t value) {
+void homekit_characteristic_notify(homekit_characteristic_t *ch) {
     homekit_characteristic_change_callback_t *callback = ch->callback;
     while (callback) {
-        callback->function(ch, value, callback->context);
+        callback->function(ch, ch->value, callback->context);
         callback = callback->next;
     }
 }

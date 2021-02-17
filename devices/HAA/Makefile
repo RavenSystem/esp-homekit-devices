@@ -5,19 +5,20 @@ EXTRA_COMPONENTS = \
 	$(abspath setup_mode) \
     extras/onewire \
     extras/ds18b20 \
-    extras/multipwm \
-	extras/http-parser \
 	extras/dhcpserver \
 	extras/rboot-ota \
 	extras/i2c \
+	$(abspath ../../external_libs/http-parser) \
     $(abspath ../../external_libs/wolfssl) \
     $(abspath ../../external_libs/cJSON) \
     $(abspath ../../external_libs/homekit) \
     $(abspath ../../libs/adv_button) \
     $(abspath ../../libs/adv_hlw) \
+	$(abspath ../../libs/adv_pwm) \
 	$(abspath ../../libs/new_dht) \
+	$(abspath ../../libs/raven_ntp) \
 	$(abspath ../../libs/ping) \
-	$(abspath ../../libs/adv_logger) \
+	$(abspath ../../libs/adv_logger_ntp) \
 	$(abspath ../../libs/timers_helper)
 
 FLASH_SIZE = 8
@@ -30,7 +31,18 @@ HOMEKIT_SPI_FLASH_BASE_ADDR = 0xf2000
 HOMEKIT_MAX_CLIENTS = 8
 HOMEKIT_SMALL = 0
 
-#EXTRA_CFLAGS += -Os
+EXTRA_CFLAGS += -O2 \
+	-fpredictive-commoning \
+	-ftree-slp-vectorize \
+	-fgcse-after-reload \
+	-floop-interchange \
+	-fvect-cost-model \
+	-ftree-partial-pre \
+	-ftree-loop-distribution \
+	-fipa-cp-clone \
+	-funswitch-loops \
+	-fpeel-loops \
+
 EXTRA_CFLAGS += -I../.. -DHOMEKIT_SHORT_APPLE_UUIDS
 
 EXTRA_CFLAGS += -DHOMEKIT_OVERCLOCK_PAIR_VERIFY
@@ -49,6 +61,9 @@ EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=640
 
 ## HAA DEBUG
 #EXTRA_CFLAGS += -DHAA_DEBUG -DconfigUSE_TRACE_FACILITY
+
+## HAA LIGHTBULB DEBUG
+#EXTRA_CFLAGS += -DLIGHT_DEBUG
 
 ## HOMEKIT DEBUG
 #EXTRA_CFLAGS += -DHOMEKIT_DEBUG=1
