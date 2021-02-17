@@ -1,7 +1,7 @@
 /*
  * Advanced ESP Logger
  *
- * Copyright 2020 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2020-2021 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 

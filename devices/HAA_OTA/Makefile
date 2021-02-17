@@ -3,11 +3,11 @@
 
 EXTRA_COMPONENTS = \
 	extras/sntp \
-	extras/http-parser \
 	extras/dhcpserver \
     extras/rboot-ota \
 	$(abspath esp-wifi-config) \
 	$(abspath esp-wolfssl) \
+	$(abspath ../../external_libs/http-parser) \
 	$(abspath ../../libs/adv_logger) \
 	$(abspath ../../libs/timers_helper)
 

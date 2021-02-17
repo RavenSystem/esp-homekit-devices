@@ -32,11 +32,11 @@
 #define REQUESTHEAD             "GET /"
 #define REQUESTTAIL             " HTTP/1.1\r\nHost: "
 #define CRLFCRLF                "\r\n\r\n"
-#define RECV_BUF_LEN            1025        // Current length of amazon URL 724
+#define RECV_BUF_LEN            1371
+#define HEADER_BUFFER_LEN       8000
 #define HOST_LEN                256
 #define RANGE                   "\r\nRange: bytes="
 
-#define SNTP_SERVERS            "0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org", "3.pool.ntp.org"
 #define MAX_302_JUMPS           6
 
 #define HASHSIZE                48          //SHA-384
