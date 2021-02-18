@@ -2409,7 +2409,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
             L_DEBUG("mat2 = { {%g, %g}, {%g, %g} }", mat2[0][0], mat2[0][1], mat2[1][0], mat2[1][1]);
             
         }
-        L_DEBUG("New chromaticity: [%g, %g]", p[0], p[1]);
+        INFO("New chromaticity: [%g, %g]", p[0], p[1]);
     }
   
     float targetRGB[3];
