@@ -6065,7 +6065,8 @@ void normal_mode_init() {
     // Status LED
     if (cJSON_GetObjectItemCaseSensitive(json_config, STATUS_LED_GPIO) != NULL) {
         const uint8_t led_gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, STATUS_LED_GPIO)->valuedouble;
-
+        set_used_gpio(led_gpio);
+        
         bool led_inverted = true;
         if (cJSON_GetObjectItemCaseSensitive(json_config, INVERTED) != NULL) {
             led_inverted = (bool) cJSON_GetObjectItemCaseSensitive(json_config, INVERTED)->valuedouble;
