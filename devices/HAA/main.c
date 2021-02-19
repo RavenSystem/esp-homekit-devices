@@ -6259,7 +6259,7 @@ void normal_mode_init() {
         if (acc_count == 0) {
             services -= 3;
             accessories[accessory]->services[services] = calloc(1, sizeof(homekit_service_t));
-            accessories[accessory]->services[services]->id = 25;
+            accessories[accessory]->services[services]->id = 1000;
             accessories[accessory]->services[services]->hidden = true;
             accessories[accessory]->services[services]->type = HOMEKIT_SERVICE_HAP_INFORMATION;
             accessories[accessory]->services[services]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
@@ -6267,7 +6267,7 @@ void normal_mode_init() {
             
             services++;
             accessories[accessory]->services[services] = calloc(1, sizeof(homekit_service_t));
-            accessories[accessory]->services[services]->id = 35;
+            accessories[accessory]->services[services]->id = 1010;
             accessories[accessory]->services[services]->hidden = true;
             accessories[accessory]->services[services]->type = HOMEKIT_SERVICE_CUSTOM_SETUP;
             accessories[accessory]->services[services]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
@@ -8126,7 +8126,7 @@ void normal_mode_init() {
         ch_group->ch1 = NEW_HOMEKIT_CHARACTERISTIC(CONFIGURED_NAME, "HAA TV", .setter_ex=hkc_tv_configured_name);
         ch_group->ch2 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE_IDENTIFIER, 1, .setter_ex=hkc_tv_active_identifier);
         ch_group->ch3 = NEW_HOMEKIT_CHARACTERISTIC(REMOTE_KEY, .setter_ex=hkc_tv_key);
-        ch_group->ch4 = NEW_HOMEKIT_CHARACTERISTIC(POWER_MODE_SELECTION, 0, .setter_ex=hkc_tv_power_mode);
+        ch_group->ch4 = NEW_HOMEKIT_CHARACTERISTIC(POWER_MODE_SELECTION, .setter_ex=hkc_tv_power_mode);
         
         ch_group->ch5 = NEW_HOMEKIT_CHARACTERISTIC(MUTE, false, .setter_ex=hkc_tv_mute);
         ch_group->ch6 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, true);
