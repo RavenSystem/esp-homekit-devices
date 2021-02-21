@@ -181,11 +181,13 @@ homekit_characteristic_t* homekit_characteristic_clone(homekit_characteristic_t*
     p[type_len - 1] = 0;
     p += type_len;
 
-    clone->description = (char*) p;
-    strncpy((char*) p, ch->description, description_len);
-    p[description_len - 1] = 0;
-    p += description_len;
-
+    if (ch->description) {
+        clone->description = (char*) p;
+        strncpy((char*) p, ch->description, description_len);
+        p[description_len - 1] = 0;
+        p += description_len;
+    }
+    
     p = align_pointer(p);
 
     clone->format = ch->format;
@@ -226,8 +228,7 @@ homekit_characteristic_t* homekit_characteristic_clone(homekit_characteristic_t*
     if (ch->valid_values.count) {
         clone->valid_values.count = ch->valid_values.count;
         clone->valid_values.values = (uint8_t*) p;
-        memcpy(clone->valid_values.values, ch->valid_values.values,
-               sizeof(uint8_t) * ch->valid_values.count);
+        memcpy(clone->valid_values.values, ch->valid_values.values, sizeof(uint8_t) * ch->valid_values.count);
 
         p += align_size(sizeof(uint8_t) * ch->valid_values.count);
     }
@@ -236,9 +237,7 @@ homekit_characteristic_t* homekit_characteristic_clone(homekit_characteristic_t*
         int c = ch->valid_values_ranges.count;
         clone->valid_values_ranges.count = c;
         clone->valid_values_ranges.ranges = (homekit_valid_values_range_t*) p;
-        memcpy(clone->valid_values_ranges.ranges,
-               ch->valid_values_ranges.ranges,
-               sizeof(homekit_valid_values_range_t*) * c);
+        memcpy(clone->valid_values_ranges.ranges, ch->valid_values_ranges.ranges, sizeof(homekit_valid_values_range_t*) * c);
 
         p += align_size(sizeof(homekit_valid_values_range_t*) * c);
     }
@@ -478,9 +477,10 @@ homekit_characteristic_t *homekit_characteristic_find_by_type(homekit_accessory_
 
 
 void homekit_characteristic_notify(homekit_characteristic_t *ch) {
+    const homekit_value_t value = ch->value;
     homekit_characteristic_change_callback_t *callback = ch->callback;
     while (callback) {
-        callback->function(ch, ch->value, callback->context);
+        callback->function(ch, value, callback->context);
         callback = callback->next;
     }
 }

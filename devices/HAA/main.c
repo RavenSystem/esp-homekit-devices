@@ -1025,6 +1025,13 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
     }
     
     //hkc_group_notify(ch_group);
+    
+    if (ch == ch_group->ch1) {
+        homekit_characteristic_notify_safe(ch_group->ch0);
+    } else {
+        homekit_characteristic_notify_safe(ch_group->ch2);
+    }
+    
     homekit_characteristic_notify_safe(ch);
 }
 
@@ -2909,6 +2916,7 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
             if ((value.int_value == GARAGE_DOOR_OPENED && GARAGE_DOOR_HAS_F4 == 0) ||
                        ch_group->ch0->value.int_value == GARAGE_DOOR_CLOSING) {
                 garage_door_sensor(0, ch_group, GARAGE_DOOR_OPENING);
+                
             } else if ((value.int_value == GARAGE_DOOR_CLOSED && GARAGE_DOOR_HAS_F5 == 0) ||
                        ch_group->ch0->value.int_value == GARAGE_DOOR_OPENING) {
                 garage_door_sensor(0, ch_group, GARAGE_DOOR_CLOSING);
@@ -3249,18 +3257,18 @@ void hkc_fan_status_setter(homekit_characteristic_t* ch0, const homekit_value_t 
 // --- LIGHT SENSOR
 void light_sensor_task(void* args) {
     ch_group_t* ch_group = (ch_group_t*) args;
-
+    
     float luxes = 0.0001f;
     
     if (LIGHT_SENSOR_TYPE < 2) {
         // https://www.allaboutcircuits.com/projects/design-a-luxmeter-using-a-light-dependent-resistor/
-        const float ldr_voltage = (1023.1 / (float) sdk_system_adc_read()) - 1;
+        const float adc_raw_read = sdk_system_adc_read();
 
         float ldr_resistor;
         if (LIGHT_SENSOR_TYPE == 0) {
-            ldr_resistor = LIGHT_SENSOR_RESISTOR * ldr_voltage;
+            ldr_resistor = LIGHT_SENSOR_RESISTOR * ((1023.1 - adc_raw_read) / adc_raw_read);
         } else {
-            ldr_resistor = LIGHT_SENSOR_RESISTOR / ldr_voltage;
+            ldr_resistor = (LIGHT_SENSOR_RESISTOR  * adc_raw_read) / (1023.1 - adc_raw_read);
         }
         
         luxes = 1 / fast_precise_pow(ldr_resistor, LIGHT_SENSOR_POW);
@@ -4665,12 +4673,15 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             if ((uint8_t) action_acc_manager->value > 1) {
                                 if ((uint8_t) action_acc_manager->value < 103) {            // BRI
                                     hkc_rgbw_setter(ch_group->ch1, HOMEKIT_UINT8(((uint8_t) action_acc_manager->value) - 2));
+                                    
                                 } else if ((uint8_t) action_acc_manager->value >= 3000) {   // TEMP
-                                    hkc_rgbw_setter(ch_group->ch2, HOMEKIT_UINT32(((uint32_t) action_acc_manager->value) % 3000));
+                                    hkc_rgbw_setter(ch_group->ch2, HOMEKIT_UINT32(((uint32_t) action_acc_manager->value) - 3000));
+                                    
                                 } else if ((uint8_t) action_acc_manager->value >= 2000) {   // SAT
-                                    hkc_rgbw_setter(ch_group->ch3, HOMEKIT_FLOAT(((uint16_t) action_acc_manager->value) % 2000));
+                                    hkc_rgbw_setter(ch_group->ch3, HOMEKIT_FLOAT(action_acc_manager->value - 2000.f));
+                                    
                                 } else if ((uint8_t) action_acc_manager->value >= 1000) {   // HUE
-                                    hkc_rgbw_setter(ch_group->ch2, HOMEKIT_FLOAT(((uint16_t) action_acc_manager->value) % 1000));
+                                    hkc_rgbw_setter(ch_group->ch2, HOMEKIT_FLOAT(action_acc_manager->value - 1000.f));
                                 }
                             } else {
                                 hkc_rgbw_setter(ch_group->ch0, HOMEKIT_BOOL((bool) action_acc_manager->value));

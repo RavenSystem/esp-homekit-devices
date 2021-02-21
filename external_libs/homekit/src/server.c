@@ -411,11 +411,12 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
 
     if ((format & characteristic_format_events) && (ch->permissions & HOMEKIT_PERMISSIONS_NOTIFY)) {
         bool events = homekit_characteristic_has_notify_callback(ch, client_notify_characteristic, client);
-        json_string(json, "ev"); json_boolean(json, events);
+        json_string(json, "ev");
+        json_boolean(json, events);
     }
 
     if (format & characteristic_format_meta) {
-        if (ch->description && ch->description[0] != 0) {
+        if (ch->description) {
             json_string(json, "description"); json_string(json, ch->description);
         }
 
@@ -2485,7 +2486,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     return HAPStatus_InvalidValue;
                 }
             }
-
+/*
             if (!h_value.is_null) {
                 context->current_characteristic = ch;
                 context->current_value = &h_value;
@@ -2495,6 +2496,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                 context->current_characteristic = NULL;
                 context->current_value = NULL;
             }
+ */
         }
 
         cJSON *j_events = cJSON_GetObjectItem(j_ch, "ev");
