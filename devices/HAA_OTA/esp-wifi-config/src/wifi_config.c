@@ -935,10 +935,12 @@ static void wifi_config_sta_connect_timeout_task() {
             }
 
         } else {
-            if (context->check_counter > 120) {
+            context->check_counter++;
+            if (context->check_counter == 120) {
                 wifi_config_reset();
-                vTaskDelay(MS_TO_TICKS(4000));
+                vTaskDelay(MS_TO_TICKS(5000));
                 wifi_config_connect();
+                vTaskDelay(MS_TO_TICKS(1000));
                 
             } else if (context->check_counter > 240) {
                 auto_reboot_run();

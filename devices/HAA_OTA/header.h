@@ -8,7 +8,7 @@
 #ifndef __HAA_OTA_HEADER_H__
 #define __HAA_OTA_HEADER_H__
 
-#define OTAVERSION              "4.7.0"
+#define OTAVERSION              "4.7.1"
 
 #define CUSTOM_REPO_SYSPARAM    "ota_sever"
 #define PORT_NUMBER_SYSPARAM    "ota_port"
