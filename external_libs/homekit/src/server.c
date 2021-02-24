@@ -2527,7 +2527,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 
 #ifdef HOMEKIT_DEBUG
         char *s = cJSON_Print(j_ch);
-        CLIENT_DEBUG(context, "Processing element %s", s);
+        CLIENT_INFO(context, "Processing Ch: %s", s);
         free(s);
 #endif
         
@@ -3467,6 +3467,10 @@ void homekit_server_reset() {
 
 void homekit_mdns_announce() {
     homekit_port_mdns_announce();
+}
+
+void homekit_mdns_announce_pause() {
+    homekit_port_mdns_announce_pause();
 }
 
 bool homekit_is_paired() {

@@ -13,7 +13,7 @@
 #define HOMEKIT_CHARACTERISTIC_MIAU_VOLT HOMEKIT_MIAU_UUID("E863F10A")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_MIAU_VOLT(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_MIAU_VOLT, \
-    .description = "Voltage", \
+    .description = "Voltage V", \
     .format = HOMETKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_NOTIFY, \
@@ -25,7 +25,7 @@
 #define HOMEKIT_CHARACTERISTIC_MIAU_AMPERE HOMEKIT_MIAU_UUID("E863F126")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_MIAU_AMPERE(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_MIAU_AMPERE, \
-    .description = "Current", \
+    .description = "Current A", \
     .format = HOMETKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_NOTIFY, \
@@ -37,7 +37,7 @@
 #define HOMEKIT_CHARACTERISTIC_MIAU_WATT HOMEKIT_MIAU_UUID("E863F10D")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_MIAU_WATT(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_MIAU_WATT, \
-    .description = "Power", \
+    .description = "Power W", \
     .format = HOMETKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_NOTIFY, \
@@ -76,7 +76,7 @@
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_CONSUMP HOMEKIT_CUSTOM_UUID("F0000901")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_CONSUMP(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_CONSUMP, \
-    .description = "Consumption", \
+    .description = "Consumption KWh", \
     .format = HOMETKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_NOTIFY \
@@ -99,7 +99,7 @@
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_CONSUMP_BEFORE_RESET HOMEKIT_CUSTOM_UUID("F0000903")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_CONSUMP_BEFORE_RESET(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_CONSUMP_BEFORE_RESET, \
-    .description = "Last Consumption", \
+    .description = "Last Consumption KWh", \
     .format = HOMETKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_NOTIFY \

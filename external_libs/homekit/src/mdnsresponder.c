@@ -597,17 +597,22 @@ void mdns_announce() {
         esp_timer_change_period(mdns_announce_timer, (mdns_ttl - (MDNS_TTL_SAFE_MARGIN + 1)) * MDNS_TTL_MULTIPLIER_MS);
         printf(">>> mDNS_announce: working with TTL %i\n", mdns_ttl);
     }
+
+    printf(">>> mDNS_announce: sent\n");
+    struct netif *netif = sdk_system_get_netif(STATION_IF);
     
-    if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
-        printf(">>> mDNS_announce: sent\n");
-        struct netif *netif = sdk_system_get_netif(STATION_IF);
 #if LWIP_IPV4
-        mdns_announce_netif(netif, &gMulticastV4Addr);
+    mdns_announce_netif(netif, &gMulticastV4Addr);
 #endif
 #if LWIP_IPV6
-        mdns_announce_netif(netif, &gMulticastV6Addr);
+    mdns_announce_netif(netif, &gMulticastV6Addr);
 #endif
-    }
+    
+}
+
+void mdns_announce_pause() {
+    esp_timer_stop(mdns_announce_timer);
+    mdns_status = MDNS_STATUS_WORKING;
 }
 
 void mdns_add_facility_work(const char* instanceName,   // Friendly name, need not be unique

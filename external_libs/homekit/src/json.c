@@ -234,7 +234,8 @@ void json_float(json_stream *json, float x) {
         return;
 
     void _do_write() {
-        json_write(json, "%1.15g", x);
+        //json_write(json, "%1.15g", x);
+        json_write(json, "%1.7g", x);
     }
 
     switch (json->state) {

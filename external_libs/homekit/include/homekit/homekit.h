@@ -48,6 +48,7 @@ void homekit_server_init(homekit_server_config_t *config);
 void homekit_server_reset();
 
 void homekit_mdns_announce();
+void homekit_mdns_announce_pause();
 
 int  homekit_get_accessory_id(char *buffer, size_t size);
 bool homekit_is_pairing();

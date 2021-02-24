@@ -587,11 +587,14 @@ void wifi_ping_gw_task() {
 void wifi_reconnection_task(void* args) {
     main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
     esp_timer_stop(WIFI_WATCHDOG_TIMER);
+    homekit_mdns_announce_pause();
     
     INFO("Wifi reconnection process started");
     
     do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 4);
 
+    led_blink(3);
+    
     if ((uint32_t) args == 1) {
         vTaskDelay(MS_TO_TICKS(500));
         wifi_config_reset();
@@ -601,6 +604,8 @@ void wifi_reconnection_task(void* args) {
         vTaskDelay(MS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
         
         if (wifi_config_got_ip()) {
+            vTaskDelay(MS_TO_TICKS(2000));
+            
             main_config.wifi_status = WIFI_STATUS_CONNECTED;
             main_config.wifi_error_count = 0;
             main_config.wifi_arp_count = 0;
@@ -628,7 +633,9 @@ void wifi_reconnection_task(void* args) {
                 main_config.wifi_error_count = 0;
                 main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
                 
-                led_blink(6);
+                led_blink(3);
+                
+                vTaskDelay(MS_TO_TICKS(600));
                 
                 do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 5);
                 
@@ -636,7 +643,7 @@ void wifi_reconnection_task(void* args) {
             }
         }
     }
-
+    
     vTaskDelete(NULL);
 }
 
@@ -664,7 +671,6 @@ void wifi_watchdog() {
             main_config.wifi_channel = current_channel;
             INFO("Wifi new Ch: %i", current_channel);
             homekit_mdns_announce();
-            
         }
         
         main_config.wifi_arp_count++;
@@ -958,7 +964,6 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
         }
     }
     
-    //hkc_group_notify(ch_group);
     homekit_characteristic_notify_safe(ch);
 }
 
@@ -969,7 +974,6 @@ void hkc_on_status_setter(homekit_characteristic_t* ch0, const homekit_value_t v
         INFO("<%i> Setter Status ON %i", ch_group->accessory, value.bool_value);
         ch0->value = value;
         
-        //hkc_group_notify(ch_group);
         homekit_characteristic_notify_safe(ch0);
     }
 }
@@ -1024,8 +1028,6 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
         }
     }
     
-    //hkc_group_notify(ch_group);
-    
     if (ch == ch_group->ch1) {
         homekit_characteristic_notify_safe(ch_group->ch0);
     } else {
@@ -1046,11 +1048,12 @@ void hkc_lock_status_setter(homekit_characteristic_t* ch, const homekit_value_t 
         
         if (ch == ch_group->ch1) {
             ch_group->ch0->value = value;
+            homekit_characteristic_notify_safe(ch_group->ch0);
         } else {
             ch_group->ch2->value = value;
+            homekit_characteristic_notify_safe(ch_group->ch2);
         }
-        
-        //hkc_group_notify(ch_group);
+
         homekit_characteristic_notify_safe(ch);
     }
 }
@@ -1060,7 +1063,7 @@ void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
     ch_group_t* ch_group = args;
     
     if (ch_group->child_enabled) {
-        led_blink(event_type + 1);
+        led_blink(1);
         INFO("<%i> Setter EVENT %i", ch_group->accessory, event_type);
         
         ch_group->ch0->value = HOMEKIT_UINT8(event_type);
@@ -1114,7 +1117,6 @@ void sensor_1(const uint16_t gpio, void* args, const uint8_t type) {
         }
     }
     
-    //hkc_group_notify(ch_group);
     homekit_characteristic_notify_safe(ch_group->ch0);
 }
 
@@ -1135,8 +1137,7 @@ void sensor_status_1(const uint16_t gpio, void* args, const uint8_t type) {
         } else {
             ch_group->ch0->value = HOMEKIT_BOOL(true);
         }
-
-        //hkc_group_notify(ch_group);
+        
         homekit_characteristic_notify_safe(ch_group->ch0);
     }
 }
@@ -1164,7 +1165,6 @@ void sensor_0(const uint16_t gpio, void* args, const uint8_t type) {
         }
     }
     
-    //hkc_group_notify(ch_group);
     homekit_characteristic_notify_safe(ch_group->ch0);
 }
 
@@ -1186,7 +1186,6 @@ void sensor_status_0(const uint16_t gpio, void* args, const uint8_t type) {
             ch_group->ch0->value = HOMEKIT_BOOL(false);
         }
         
-        //hkc_group_notify(ch_group);
         homekit_characteristic_notify_safe(ch_group->ch0);
     }
 }
@@ -1268,7 +1267,7 @@ void power_monitor_timer_worker(TimerHandle_t xTimer) {
             FREEHEAP();
         }
     } else {
-        ERROR("power_monitor_task. HK pairing");
+        ERROR("Power_monitor_task. HK pairing");
     }
 }
 
@@ -1285,11 +1284,13 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
             
             do_actions(ch_group, (uint8_t) ch->value.int_value);
             
+            homekit_characteristic_notify_safe(ch_group->ch1);
+            
             if (ch->value.int_value == 1 && ch_group->num[0] > 0) {
-                    autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                    autooff_setter_params->ch = ch;
-                    autooff_setter_params->type = TYPE_VALVE;
-                    esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
+                autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
+                autooff_setter_params->ch = ch;
+                autooff_setter_params->type = TYPE_VALVE;
+                esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
             }
             
             setup_mode_toggle_upcount();
@@ -1303,11 +1304,12 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
                     ch_group->ch3->value = ch_group->ch2->value;
                     esp_timer_start(ch_group->timer);
                 }
+                
+                homekit_characteristic_notify_safe(ch_group->ch3);
             }
         }
     }
     
-    //hkc_group_notify(ch_group);
     homekit_characteristic_notify_safe(ch);
 }
 
@@ -1321,7 +1323,7 @@ void hkc_valve_status_setter(homekit_characteristic_t* ch, const homekit_value_t
         
         INFO("<%i> Setter Status VALVE", ch_group->accessory);
         
-        //hkc_group_notify(ch_group);
+        homekit_characteristic_notify_safe(ch_group->ch1);
         homekit_characteristic_notify_safe(ch);
     }
 }
@@ -3852,7 +3854,7 @@ void net_action_task(void* pvParameters) {
                                 do {
                                     content_search = strstr(content_search, NETWORK_ACTION_WILDCARD_VALUE);
                                     if (content_search) {
-                                        char buffer[10];
+                                        char buffer[15];
                                         buffer[2] = 0;
                                         
                                         buffer[0] = content_search[5];
@@ -3907,7 +3909,7 @@ void net_action_task(void* pvParameters) {
                                         
                                         switch (value->format) {
                                             case HOMETKIT_FORMAT_BOOL:
-                                                snprintf(buffer, 10, "%s", value->bool_value ? "true" : "false");
+                                                snprintf(buffer, 15, "%s", value->bool_value ? "true" : "false");
                                                 break;
                                                 
                                             case HOMETKIT_FORMAT_UINT8:
@@ -3915,11 +3917,11 @@ void net_action_task(void* pvParameters) {
                                             case HOMETKIT_FORMAT_UINT32:
                                             case HOMETKIT_FORMAT_UINT64:
                                             case HOMETKIT_FORMAT_INT:
-                                                snprintf(buffer, 10, "%i", value->int_value);
+                                                snprintf(buffer, 15, "%i", value->int_value);
                                                 break;
 
                                             case HOMETKIT_FORMAT_FLOAT:
-                                                snprintf(buffer, 10, "%.3f", value->float_value);
+                                                snprintf(buffer, 15, "%1.7g", value->float_value);
                                                 break;
                                                 
                                             default:
@@ -4940,10 +4942,9 @@ homekit_server_config_t config;
 
 void run_homekit_server(TimerHandle_t xTimer) {
     main_config.wifi_channel = sdk_wifi_get_channel();
+    main_config.wifi_status = WIFI_STATUS_CONNECTED;
     
     FREEHEAP();
-    
-    main_config.wifi_status = WIFI_STATUS_CONNECTED;
     
     if (main_config.enable_homekit_server) {
         INFO("Start HK Server");
@@ -4967,13 +4968,13 @@ void run_homekit_server(TimerHandle_t xTimer) {
     ntp_timer_worker();
     esp_timer_start(esp_timer_create(NTP_POLL_PERIOD_MS, true, NULL, ntp_timer_worker));
     
-    led_blink(6);
+    led_blink(4);
     
     esp_timer_delete(xTimer);
 }
 
 void run_homekit_server_delayed() {
-    esp_timer_start(esp_timer_create(1000, false, NULL, run_homekit_server));
+    esp_timer_start(esp_timer_create(500, false, NULL, run_homekit_server));
 }
 
 void printf_header() {
@@ -8494,7 +8495,7 @@ void normal_mode_init() {
     
     wifi_config_init("HAA", NULL, run_homekit_server_delayed, custom_hostname, 0);
     
-    led_blink(3);
+    led_blink(2);
     
     do_actions(root_device_ch_group, 1);
 

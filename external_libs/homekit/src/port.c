@@ -65,6 +65,10 @@ void homekit_port_mdns_announce() {
     mdns_announce();
 }
 
+void homekit_port_mdns_announce_pause() {
+    mdns_announce_pause();
+}
+
 #endif
 
 #ifdef ESP_IDF
