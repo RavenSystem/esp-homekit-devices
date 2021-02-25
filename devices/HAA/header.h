@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "5.0.6"
+#define FIRMWARE_VERSION                    "5.0.7"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -248,7 +248,7 @@
 #define TH_SENSOR_POLL_PERIOD_MIN           (0.1f)
 #define TEMPERATURE_OFFSET                  "z"
 #define TH_SENSOR_TEMP_OFFSET               ch_group->num[3]
-#define HUMIDITY_OFFSET                     "h"
+#define HUMIDITY_OFFSET                     "k"
 #define TH_SENSOR_HUM_OFFSET                ch_group->num[4]
 #define SENSOR_TEMPERATURE_FLOAT            ch_group->ch0->value.float_value
 #define TH_SENSOR_ERROR_COUNT               ch_group->num[9]

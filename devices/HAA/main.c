@@ -801,7 +801,7 @@ void save_states() {
     INFO("Saving states");
     last_state_t* last_state = main_config.last_states;
     sysparam_status_t status;
-    
+
     while (last_state) {
         switch (last_state->ch_type) {
             case CH_TYPE_INT8:
@@ -813,7 +813,7 @@ void save_states() {
                 break;
                 
             case CH_TYPE_FLOAT:
-                status = sysparam_set_int32(last_state->id, last_state->ch->value.float_value * 1000000);
+                status = sysparam_set_int32(last_state->id, (int) (last_state->ch->value.float_value * 1000000));
                 break;
                 
             case CH_TYPE_STRING:
@@ -826,7 +826,7 @@ void save_states() {
         }
         
         if (status != SYSPARAM_OK) {
-            ERROR("Flash saving states");
+            ERROR("Flash saving for Ch%s", last_state->id);
         }
         
         last_state = last_state->next;
@@ -1238,7 +1238,7 @@ void power_monitor_task(void* args) {
     
     if (voltage < 750.f) {
         const float consumption = ch_group->ch4->value.float_value + ((power * PM_POLL_PERIOD) / 3600000.f);
-        INFO("<%i> PM: KWh = %.3f", ch_group->accessory, consumption);
+        INFO("<%i> PM: KWh = %1.7g", ch_group->accessory, consumption);
         do_wildcard_actions(ch_group, 0, voltage);
         do_wildcard_actions(ch_group, 1, current);
         do_wildcard_actions(ch_group, 2, power);
@@ -1963,7 +1963,10 @@ void temperature_task(void* args) {
                         temperature_value = 200;
                     }
                     
-                    INFO("<%i> TEMP %g", ch_group->accessory, temperature_value);
+                    temperature_value *= 10.f;
+                    temperature_value = ((int) temperature_value) / 10.0f;
+                    
+                    INFO("<%i> TEMP %gC", ch_group->accessory, temperature_value);
                     
                     if (temperature_value != ch_group->ch0->value.float_value) {
                         ch_group->ch0->value = HOMEKIT_FLOAT(temperature_value);
@@ -1984,12 +1987,12 @@ void temperature_task(void* args) {
                         humidity_value = 100;
                     }
 
-                    INFO("<%i> HUM %g", ch_group->accessory, humidity_value);
+                    INFO("<%i> HUM %i\045", ch_group->accessory, (uint8_t) humidity_value);
                     
-                    if (humidity_value != ch_group->ch1->value.float_value) {
-                        ch_group->ch1->value = HOMEKIT_FLOAT(humidity_value);
+                    if ((uint8_t) humidity_value != (uint8_t) ch_group->ch1->value.float_value) {
+                        ch_group->ch1->value = HOMEKIT_FLOAT((uint8_t) humidity_value);
                         
-                        do_wildcard_actions(ch_group, 1, humidity_value);
+                        do_wildcard_actions(ch_group, 1, (uint8_t) humidity_value);
                     }
                 }
                 
@@ -4818,7 +4821,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
 }
 
 void do_wildcard_actions(ch_group_t* ch_group, uint8_t index, const float action_value) {
-    INFO("<%i> Wildcard %i %.2f", ch_group->accessory, index, action_value);
+    INFO("<%i> Wildcard %i %1.7g", ch_group->accessory, index, action_value);
     float last_value, last_diff = 1000000;
     wildcard_action_t* wildcard_action = ch_group->wildcard_action;
     wildcard_action_t* last_wildcard_action = NULL;
@@ -6767,7 +6770,7 @@ void normal_mode_init() {
             ch_group->ch3 = NEW_HOMEKIT_CHARACTERISTIC(MIAU_WATT, 0);
             ch_group->ch4 = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_CONSUMP, 0);
             ch_group->ch5 = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_CONSUMP_BEFORE_RESET, 0);
-            ch_group->ch6 = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_CONSUMP_RESET_DATE, "");
+            ch_group->ch6 = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_CONSUMP_RESET_DATE, "-");
             ch_group->ch7 = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_CONSUMP_RESET, 0, .setter_ex=hkc_custom_consumption_reset_setter);
             
             if (ch_group->homekit_enabled) {
@@ -6857,8 +6860,8 @@ void normal_mode_init() {
                 adv_hlw_unit_create(gpio_cf, gpio_cf1, gpio_sel, (uint8_t) PM_SENSOR_TYPE);
             }
 
-            const float poll_period = sensor_poll_period(json_context, PM_POLL_PERIOD_DEFAULT);
-            esp_timer_start(esp_timer_create(poll_period * 1000, true, (void*) ch_group, power_monitor_timer_worker));
+            PM_POLL_PERIOD = sensor_poll_period(json_context, PM_POLL_PERIOD_DEFAULT);
+            esp_timer_start(esp_timer_create(PM_POLL_PERIOD * 1000, true, (void*) ch_group, power_monitor_timer_worker));
         }
 
         const bool exec_actions_on_boot = get_exec_actions_on_boot(json_context);
