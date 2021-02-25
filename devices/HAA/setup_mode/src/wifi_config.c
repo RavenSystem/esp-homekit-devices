@@ -786,7 +786,7 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
         }
         
         case ENDPOINT_VERSION: {
-            static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n5.0.5";
+            static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n5.0.6";
             client_send(client, payload, sizeof(payload) - 1);
             break;
         }
@@ -1019,12 +1019,8 @@ static void auto_reboot_run() {
     if (context->sta_connect_timeout) {
         vTaskDelete(context->sta_connect_timeout);
     }
-    
-    vTaskDelay(MS_TO_TICKS(150));
-    
-    wifi_config_reset();
-    
-    vTaskDelay(MS_TO_TICKS(150));
+
+    vTaskDelay(MS_TO_TICKS(500));
     
     sdk_system_restart();
 }

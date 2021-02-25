@@ -497,21 +497,21 @@ bool ping_host(char* host) {
     return ping_result;
 }
 
-void reboot_callback() {
+void reboot_task() {
+    led_blink(5);
+    
+    INFO("\nRebooting...\n");
+    esp_timer_stop(WIFI_WATCHDOG_TIMER);
+    
+    vTaskDelay(MS_TO_TICKS(2000));
+
     sdk_system_restart();
 }
 
 void reboot_haa() {
-    led_blink(5);
-    INFO("\nRebooting...\n");
-    esp_timer_start(esp_timer_create(2900, false, NULL, reboot_callback));
-    esp_timer_delete(SAVE_STATES_TIMER);
-    esp_timer_delete(WIFI_WATCHDOG_TIMER);
-    esp_timer_delete(main_config.setup_mode_toggle_timer);
-    
-    vTaskDelay(MS_TO_TICKS(250));
-    
-    wifi_config_reset();
+    if (xTaskCreate(reboot_task, "reboot", REBOOT_TASK_SIZE, NULL, REBOOT_TASK_PRIORITY, NULL) != pdPASS) {
+        ERROR("Creating reboot_task");
+    }
 }
 
 void ntp_task() {
@@ -769,21 +769,6 @@ void ping_task_timer_worker() {
 }
 
 // -----
-void hkc_custom_ota_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
-    if (value.bool_value) {
-        INFO("<0> OTA update");
-        rboot_set_temp_rom(1);
-        reboot_haa();
-    }
-}
-
-void hkc_custom_setup_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
-    if (value.bool_value) {
-        INFO("<0> Setup mode");
-        sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
-        reboot_haa();
-    }
-}
 
 void setup_mode_call(const uint8_t gpio, void* args, const uint8_t param) {
     INFO("Setup mode call");
@@ -888,6 +873,26 @@ void hkc_group_notify(ch_group_t* ch_group) {
                 }
             }
         }
+    }
+}
+
+void hkc_custom_ota_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
+    if (value.bool_value) {
+        INFO("<0> OTA update");
+        ch->value = value;
+        rboot_set_temp_rom(1);
+        homekit_characteristic_notify_safe(ch);
+        reboot_haa();
+    }
+}
+
+void hkc_custom_setup_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
+    if (value.bool_value) {
+        INFO("<0> Setup mode");
+        ch->value = value;
+        sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
+        homekit_characteristic_notify_safe(ch);
+        reboot_haa();
     }
 }
 
