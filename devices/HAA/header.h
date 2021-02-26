@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "5.0.7"
+#define FIRMWARE_VERSION                    "5.0.8"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -449,6 +449,7 @@
 #define SYSTEM_ACTION_SETUP_MODE            (1)
 #define SYSTEM_ACTION_OTA_UPDATE            (2)
 #define SYSTEM_ACTION_WIFI_RECONNECTION     (3)
+#define SYSTEM_ACTION_WIFI_RECONNECTION_2   (4)
 #define UART_ACTIONS_ARRAY                  "u"
 #define UART_ACTION_UART                    "n"
 #define UART_ACTION_PAUSE                   "d"

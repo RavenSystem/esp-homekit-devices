@@ -614,7 +614,7 @@ void wifi_reconnection_task(void* args) {
             homekit_mdns_announce();
 
             do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 3);
-
+            
             esp_timer_start(WIFI_WATCHDOG_TIMER);
             
             INFO("Wifi reconnection OK");
@@ -1987,7 +1987,7 @@ void temperature_task(void* args) {
                         humidity_value = 100;
                     }
 
-                    INFO("<%i> HUM %i\045", ch_group->accessory, (uint8_t) humidity_value);
+                    INFO("<%i> HUM %i", ch_group->accessory, (uint8_t) humidity_value);
                     
                     if ((uint8_t) humidity_value != (uint8_t) ch_group->ch1->value.float_value) {
                         ch_group->ch1->value = HOMEKIT_FLOAT((uint8_t) humidity_value);
@@ -2650,15 +2650,15 @@ void lightbulb_task(void* args) {
                 target_color = PWM_SCALE * (((0.09 + sqrt(0.18 + (0.1352 * (ch_group->ch2->value.int_value - COLOR_TEMP_MIN - 1)))) / 0.0676) - 1) / 100;
             }
             
-            const uint32_t r = lightbulb_group->flux[0] * target_color * ch_group->ch1->value.int_value / 100;
-            const uint32_t g = lightbulb_group->flux[1] * (PWM_SCALE - target_color) * ch_group->ch1->value.int_value / 100;
-            lightbulb_group->target[0] = MIN(LIGHTBULB_MAX_POWER * r, PWM_SCALE);
-            lightbulb_group->target[1] = MIN(LIGHTBULB_MAX_POWER * g, PWM_SCALE);
+            const uint32_t cw = lightbulb_group->flux[0] * target_color * ch_group->ch1->value.int_value / 100;
+            const uint32_t ww = lightbulb_group->flux[1] * (PWM_SCALE - target_color) * ch_group->ch1->value.int_value / 100;
+            lightbulb_group->target[0] = MIN(LIGHTBULB_MAX_POWER * cw, PWM_SCALE);
+            lightbulb_group->target[1] = MIN(LIGHTBULB_MAX_POWER * ww, PWM_SCALE);
             
         } else {
             // Channels 1
-            const uint32_t r = PWM_SCALE * ch_group->ch1->value.int_value / 100;
-            lightbulb_group->target[0] = MIN(LIGHTBULB_MAX_POWER * r, PWM_SCALE);
+            const uint32_t w = PWM_SCALE * ch_group->ch1->value.int_value / 100;
+            lightbulb_group->target[0] = MIN(LIGHTBULB_MAX_POWER * w, PWM_SCALE);
         }
     } else {
         // Turn OFF
@@ -2901,6 +2901,7 @@ void garage_door_sensor(const uint16_t gpio, void* args, const uint8_t type) {
     
     //hkc_group_notify(ch_group);
     homekit_characteristic_notify_safe(ch_group->ch0);
+    homekit_characteristic_notify_safe(ch_group->ch1);
     
     do_actions(ch_group, type + 4);
 }
@@ -4771,6 +4772,10 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                     break;
                     
                 case SYSTEM_ACTION_WIFI_RECONNECTION:
+                    sdk_wifi_station_disconnect();
+                    break;
+                    
+                case SYSTEM_ACTION_WIFI_RECONNECTION_2:
                     wifi_config_reset();
                     break;
                     
