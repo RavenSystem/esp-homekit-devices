@@ -554,6 +554,8 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     
     if (reset_sys_param) {
         wifi_config_remove_sys_param();
+        vTaskDelay(pdMS_TO_TICKS(3000));
+        wifi_config_reset();
         
     } else {
         form_param_t *conf_param = form_params_find(form, "conf");
@@ -650,23 +652,24 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             }
         }
         
-        if (wifimode_param && wifimode_param->value) {
-            int8_t new_wifi_mode = strtol(wifimode_param->value, NULL, 10);
-            sysparam_set_int8(WIFI_MODE_SYSPARAM, new_wifi_mode);
-        }
-        
         sysparam_compact();
+        
+        if (wifimode_param && wifimode_param->value) {
+            int8_t current_wifi_mode = 0;
+            int8_t new_wifi_mode = strtol(wifimode_param->value, NULL, 10);
+            sysparam_get_int8(WIFI_MODE_SYSPARAM, &current_wifi_mode);
+            sysparam_set_int8(WIFI_MODE_SYSPARAM, new_wifi_mode);
+            
+            if (current_wifi_mode != new_wifi_mode) {
+                vTaskDelay(pdMS_TO_TICKS(3000));
+                wifi_config_reset();
+            }
+        }
     }
     
-    vTaskDelay(pdMS_TO_TICKS(200));
-    
     INFO("\nRebooting...\n\n");
-    
-    vTaskDelay(pdMS_TO_TICKS(200));
-    
-    wifi_config_reset();
-    
-    vTaskDelay(pdMS_TO_TICKS(2500));
+
+    vTaskDelay(pdMS_TO_TICKS(3000));
     
     sdk_system_restart();
 }
@@ -913,17 +916,17 @@ static void wifi_config_softap_stop() {
 
 static void auto_reboot_run() {
     INFO("\nAuto Rebooting...\n\n");
-    
-    wifi_config_reset();
-    
-    vTaskDelay(pdMS_TO_TICKS(150));
+
+    vTaskDelay(pdMS_TO_TICKS(500));
     
     sdk_system_restart();
 }
 
 static void wifi_config_sta_connect_timeout_task() {
     for (;;) {
-        if (wifi_config_got_ip()) {
+        vTaskDelay(MS_TO_TICKS(1000));
+        
+        if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
             wifi_config_softap_stop();
             
             if (context->on_wifi_ready) {
@@ -949,8 +952,6 @@ static void wifi_config_sta_connect_timeout_task() {
                 wifi_config_resend_arp();
             }
         }
-        
-        vTaskDelay(MS_TO_TICKS(1000));
     }
     
     vTaskDelete(NULL);
