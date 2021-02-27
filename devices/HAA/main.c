@@ -503,7 +503,7 @@ void reboot_task() {
     INFO("\nRebooting...\n");
     esp_timer_stop(WIFI_WATCHDOG_TIMER);
     
-    vTaskDelay(MS_TO_TICKS(2000));
+    vTaskDelay(MS_TO_TICKS((hwrand() % RANDOM_DELAY_MS) + 2000));
 
     sdk_system_restart();
 }
@@ -8512,6 +8512,8 @@ void normal_mode_init() {
         wifi_mode = 1;
     }
     main_config.wifi_mode = (uint8_t) wifi_mode;
+    
+    vTaskDelay(MS_TO_TICKS((hwrand() % RANDOM_DELAY_MS) + 10));
     
     wifi_config_init("HAA", NULL, run_homekit_server_delayed, custom_hostname, 0);
     

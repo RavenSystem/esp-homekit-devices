@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "5.0.9"
+#define FIRMWARE_VERSION                    "5.0.10"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -523,6 +523,7 @@
 #define STATUS_LED_DURATION_OFF             (120)
 
 #define SAVE_STATES_DELAY_MS                (5000)
+#define RANDOM_DELAY_MS                     (5000)
 
 #define GPIO_OVERFLOW                       (18)    // GPIO 17 is ADC PIN
 
