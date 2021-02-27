@@ -1236,6 +1236,8 @@ void power_monitor_task(void* args) {
         }
     }
     
+    PM_LAST_SAVED_CONSUPTION += PM_POLL_PERIOD;
+    
     if (voltage < 750.f) {
         const float consumption = ch_group->ch4->value.float_value + ((power * PM_POLL_PERIOD) / 3600000.f);
         INFO("<%i> PM: KWh = %1.7g", ch_group->accessory, consumption);
@@ -1249,14 +1251,17 @@ void power_monitor_task(void* args) {
             power != ch_group->ch3->value.float_value ||
             consumption != ch_group->ch4->value.float_value) {
             
-            save_states();
-            
             ch_group->ch1->value = HOMEKIT_FLOAT(voltage);
             ch_group->ch2->value = HOMEKIT_FLOAT(current);
             ch_group->ch3->value = HOMEKIT_FLOAT(power);
             ch_group->ch4->value = HOMEKIT_FLOAT(consumption);
             
             hkc_group_notify(ch_group);
+        }
+        
+        if (PM_LAST_SAVED_CONSUPTION > 3600) {
+            PM_LAST_SAVED_CONSUPTION = 0;
+            save_states_callback();
         }
     } else {
         ERROR("<%i> PM Read", ch_group->accessory);
@@ -6764,6 +6769,8 @@ void normal_mode_init() {
         }
 
         if (is_power_meter) {
+            PM_LAST_SAVED_CONSUPTION = 0;
+            
             register_wildcard_actions(ch_group, json_context);
             ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
             ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;

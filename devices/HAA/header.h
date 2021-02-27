@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "5.0.8"
+#define FIRMWARE_VERSION                    "5.0.9"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -352,6 +352,7 @@
 #define PM_SENSOR_TYPE_SET                  "n"
 #define PM_SENSOR_TYPE_DEFAULT              (0)
 #define PM_SENSOR_TYPE                      ch_group->num[1]
+#define PM_LAST_SAVED_CONSUPTION            ch_group->num[11]
 #define PM_SENSOR_HLW_GPIO_CF_SET           "c0"
 #define PM_SENSOR_HLW_GPIO_CF1_SET          "c1"
 #define PM_SENSOR_HLW_GPIO_SEL_SET          "sl"
