@@ -55,22 +55,22 @@
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_OTA_UPDATE(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_OTA_UPDATE, \
     .description = "Update", \
-    .format = HOMETKIT_FORMAT_BOOL, \
+    .format = HOMETKIT_FORMAT_STRING, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_PAIRED_WRITE \
                 | HOMEKIT_PERMISSIONS_HIDDEN, \
-    .value = HOMEKIT_BOOL_(_value), \
+    .value = HOMEKIT_STRING_(_value), \
     ##__VA_ARGS__
 
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_ENABLE_SETUP HOMEKIT_CUSTOM_UUID("F0000102")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_ENABLE_SETUP(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_ENABLE_SETUP, \
     .description = "Setup", \
-    .format = HOMETKIT_FORMAT_BOOL, \
+    .format = HOMETKIT_FORMAT_STRING, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_PAIRED_WRITE \
                 | HOMEKIT_PERMISSIONS_HIDDEN, \
-    .value = HOMEKIT_BOOL_(_value), \
+    .value = HOMEKIT_STRING_(_value), \
     ##__VA_ARGS__
 
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_CONSUMP HOMEKIT_CUSTOM_UUID("F0000901")
@@ -112,11 +112,11 @@
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_CONSUMP_RESET(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_CONSUMP_RESET, \
     .description = "Reset Consumption", \
-    .format = HOMETKIT_FORMAT_BOOL, \
+    .format = HOMETKIT_FORMAT_STRING, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_PAIRED_WRITE \
                 | HOMEKIT_PERMISSIONS_HIDDEN, \
-    .value = HOMEKIT_BOOL_(_value), \
+    .value = HOMEKIT_STRING_(_value), \
     ##__VA_ARGS__
 
 #endif  // __HAA_EXTRA_CHARACTERISTICS__

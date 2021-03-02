@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "5.0.10"
+#define FIRMWARE_VERSION                    "5.0.11"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -502,6 +502,7 @@
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
+#define CUSTOM_TRIGGER_COMMAND              "#HAA@trcmd"
 
 #define SAVE_STATES_TIMER                   ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE)->timer
 #define WIFI_WATCHDOG_TIMER                 ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE)->timer2

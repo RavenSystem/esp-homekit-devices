@@ -73,6 +73,8 @@ main_config_t main_config = {
     .setpwm_bool_semaphore = false,
     .setpwm_is_running = false,
     
+    .timetable_ready = false,
+    
     .used_gpio_0 = false,
     .used_gpio_1 = false,
     .used_gpio_2 = false,
@@ -877,9 +879,8 @@ void hkc_group_notify(ch_group_t* ch_group) {
 }
 
 void hkc_custom_ota_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
-    if (value.bool_value) {
+    if (!strcmp(value.string_value, CUSTOM_TRIGGER_COMMAND)) {
         INFO("<0> OTA update");
-        ch->value = value;
         rboot_set_temp_rom(1);
         homekit_characteristic_notify_safe(ch);
         reboot_haa();
@@ -887,9 +888,8 @@ void hkc_custom_ota_setter(homekit_characteristic_t* ch, const homekit_value_t v
 }
 
 void hkc_custom_setup_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
-    if (value.bool_value) {
+    if (!strcmp(value.string_value, CUSTOM_TRIGGER_COMMAND)) {
         INFO("<0> Setup mode");
-        ch->value = value;
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
         homekit_characteristic_notify_safe(ch);
         reboot_haa();
@@ -4859,10 +4859,19 @@ void do_wildcard_actions(ch_group_t* ch_group, uint8_t index, const float action
     }
 }
 
-void timetable_actions_timer_worker() {
+void timetable_actions_timer_worker(TimerHandle_t xTimer) {
     struct tm* timeinfo;
     time_t time = raven_ntp_get_time_t();
     timeinfo = localtime(&time);
+    
+    if (!main_config.timetable_ready) {
+        if (timeinfo->tm_sec == 0) {
+            esp_timer_change_period(xTimer, 60000);
+            main_config.timetable_ready = true;
+        } else {
+            return;
+        }
+    }
     
     if (timeinfo->tm_year > 120) {
         timetable_action_t* timetable_action = main_config.timetable_actions;
@@ -4953,8 +4962,8 @@ homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "RavenSystem HAA
 homekit_characteristic_t identify_function = HOMEKIT_CHARACTERISTIC_(IDENTIFY, identify);
 homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, FIRMWARE_VERSION);
 homekit_characteristic_t hap_version = HOMEKIT_CHARACTERISTIC_(VERSION, "1.1.0");
-homekit_characteristic_t haa_ota_update = HOMEKIT_CHARACTERISTIC_(CUSTOM_OTA_UPDATE, false, .setter_ex=hkc_custom_ota_setter);
-homekit_characteristic_t haa_enable_setup = HOMEKIT_CHARACTERISTIC_(CUSTOM_ENABLE_SETUP, false, .setter_ex=hkc_custom_setup_setter);
+homekit_characteristic_t haa_ota_update = HOMEKIT_CHARACTERISTIC_(CUSTOM_OTA_UPDATE, "", .setter_ex=hkc_custom_ota_setter);
+homekit_characteristic_t haa_enable_setup = HOMEKIT_CHARACTERISTIC_(CUSTOM_ENABLE_SETUP, "", .setter_ex=hkc_custom_setup_setter);
 
 homekit_server_config_t config;
 
@@ -4980,7 +4989,7 @@ void run_homekit_server(TimerHandle_t xTimer) {
     }
     
     if (main_config.timetable_actions) {
-        esp_timer_start(esp_timer_create(60000, true, NULL, timetable_actions_timer_worker));
+        esp_timer_start(esp_timer_create(1000, true, NULL, timetable_actions_timer_worker));
     }
     
     ntp_timer_worker();
@@ -6783,7 +6792,7 @@ void normal_mode_init() {
             ch_group->ch4 = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_CONSUMP, 0);
             ch_group->ch5 = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_CONSUMP_BEFORE_RESET, 0);
             ch_group->ch6 = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_CONSUMP_RESET_DATE, "-");
-            ch_group->ch7 = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_CONSUMP_RESET, 0, .setter_ex=hkc_custom_consumption_reset_setter);
+            ch_group->ch7 = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_CONSUMP_RESET, "", .setter_ex=hkc_custom_consumption_reset_setter);
             
             if (ch_group->homekit_enabled) {
                 accessories[accessory]->services[1]->characteristics[1] = ch_group->ch1;
