@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "5.0.11"
+#define FIRMWARE_VERSION                    "5.0.12"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -44,7 +44,7 @@
 #define TYPE_DOUBLE_LOCK                    (10)
 
 // Task Stack Sizes
-#define GLOBAL_TASK_SIZE                    (512)
+#define GLOBAL_TASK_SIZE                    (544)
 
 #define INITIAL_SETUP_TASK_SIZE             (1280)
 #define NTP_TASK_SIZE                       (512)

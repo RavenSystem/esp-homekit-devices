@@ -523,24 +523,14 @@ void ntp_task() {
         while (result != 0 && tries < 3) {
             tries++;
             
-            vTaskDelay(MS_TO_TICKS(6000));
+            vTaskDelay(MS_TO_TICKS(15000));
             
             if (main_config.network_is_busy) {
                 vTaskDelay(MS_TO_TICKS(234));
             }
             main_config.network_is_busy = true;
             
-            if (main_config.ntp_host) {
-                result = raven_ntp_update(main_config.ntp_host);
-            } else {
-                struct ip_info info;
-                if (sdk_wifi_get_ip_info(STATION_IF, &info)) {
-                    char gw_host[16];
-                    snprintf(gw_host, 16, IPSTR, IP2STR(&info.gw));
-                    
-                    result = raven_ntp_update(gw_host);
-                }
-            }
+            result = raven_ntp_update(main_config.ntp_host);
             
             main_config.network_is_busy = false;
             
@@ -4624,7 +4614,6 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 char* new_reset_date = malloc(16);
                                 raven_ntp_get_log_time(new_reset_date, 16);
                                 ch_group->ch6->value = HOMEKIT_STRING(new_reset_date);
-                                //hkc_group_notify(ch_group);
                                 homekit_characteristic_notify_safe(ch_group->ch4);
                                 homekit_characteristic_notify_safe(ch_group->ch5);
                                 homekit_characteristic_notify_safe(ch_group->ch6);
@@ -4641,7 +4630,15 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             } else if (action_acc_manager->value == 0.f) {
                                 sensor_0(0, ch_group, TYPE_SENSOR_BOOL);
                             } else if (action_acc_manager->value == -1.f) {
+                                ch_group->ch5->value.float_value = ch_group->ch4->value.float_value;
                                 ch_group->ch4->value = HOMEKIT_FLOAT(0);
+                                homekit_value_destruct(&ch_group->ch6->value);
+                                char* new_reset_date = malloc(16);
+                                raven_ntp_get_log_time(new_reset_date, 16);
+                                ch_group->ch6->value = HOMEKIT_STRING(new_reset_date);
+                                homekit_characteristic_notify_safe(ch_group->ch4);
+                                homekit_characteristic_notify_safe(ch_group->ch5);
+                                homekit_characteristic_notify_safe(ch_group->ch6);
                             }
                             break;
                             
@@ -4741,10 +4738,12 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             break;
                             
                         default:    // ON Type ch
-                            if ((int8_t) action_acc_manager->value == -1) {
-                                if (ch_group->ch2) {
-                                    ch_group->ch2->value = ch_group->ch1->value;
-                                }
+                            if ((int8_t) action_acc_manager->value == -1 && ch_group->ch2) {
+                                ch_group->ch2->value = ch_group->ch1->value;
+                            } else if ((int8_t) action_acc_manager->value == 4) {
+                                hkc_on_setter(ch_group->ch0, HOMEKIT_BOOL(!ch_group->ch0->value.bool_value));
+                            } else if ((int8_t) action_acc_manager->value == 5) {
+                                hkc_on_status_setter(ch_group->ch0, HOMEKIT_BOOL(!ch_group->ch0->value.bool_value));
                             } else if ((int8_t) action_acc_manager->value > 1) {
                                 hkc_on_status_setter(ch_group->ch0, HOMEKIT_BOOL((bool) (action_acc_manager->value - 2)));
                             } else {
@@ -4967,9 +4966,34 @@ homekit_characteristic_t haa_enable_setup = HOMEKIT_CHARACTERISTIC_(CUSTOM_ENABL
 
 homekit_server_config_t config;
 
-void run_homekit_server(TimerHandle_t xTimer) {
+void run_homekit_server() {
     main_config.wifi_channel = sdk_wifi_get_channel();
     main_config.wifi_status = WIFI_STATUS_CONNECTED;
+    
+    WIFI_WATCHDOG_TIMER = esp_timer_create(WIFI_WATCHDOG_POLL_PERIOD_MS, true, NULL, wifi_watchdog);
+    esp_timer_start(WIFI_WATCHDOG_TIMER);
+
+    if (main_config.ping_inputs) {
+        esp_timer_start(esp_timer_create(main_config.ping_poll_period * 1000.00f, true, NULL, ping_task_timer_worker));
+    }
+    
+    if (!main_config.ntp_host) {
+        struct ip_info info;
+        if (sdk_wifi_get_ip_info(STATION_IF, &info)) {
+            char gw_host[16];
+            snprintf(gw_host, 16, IPSTR, IP2STR(&info.gw));
+            main_config.ntp_host = strdup(gw_host);
+        }
+    }
+    
+    if (main_config.ntp_host) {
+        ntp_timer_worker();
+        esp_timer_start(esp_timer_create(NTP_POLL_PERIOD_MS, true, NULL, ntp_timer_worker));
+        
+        if (main_config.timetable_actions) {
+            esp_timer_start(esp_timer_create(1000, true, NULL, timetable_actions_timer_worker));
+        }
+    }
     
     FREEHEAP();
     
@@ -4979,29 +5003,9 @@ void run_homekit_server(TimerHandle_t xTimer) {
         FREEHEAP();
     }
     
-    WIFI_WATCHDOG_TIMER = esp_timer_create(WIFI_WATCHDOG_POLL_PERIOD_MS, true, NULL, wifi_watchdog);
-    esp_timer_start(WIFI_WATCHDOG_TIMER);
-    
     do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 2);
-
-    if (main_config.ping_inputs) {
-        esp_timer_start(esp_timer_create(main_config.ping_poll_period * 1000.00f, true, NULL, ping_task_timer_worker));
-    }
-    
-    if (main_config.timetable_actions) {
-        esp_timer_start(esp_timer_create(1000, true, NULL, timetable_actions_timer_worker));
-    }
-    
-    ntp_timer_worker();
-    esp_timer_start(esp_timer_create(NTP_POLL_PERIOD_MS, true, NULL, ntp_timer_worker));
     
     led_blink(4);
-    
-    esp_timer_delete(xTimer);
-}
-
-void run_homekit_server_delayed() {
-    esp_timer_start(esp_timer_create(500, false, NULL, run_homekit_server));
 }
 
 void printf_header() {
@@ -8524,7 +8528,7 @@ void normal_mode_init() {
     
     vTaskDelay(MS_TO_TICKS((hwrand() % RANDOM_DELAY_MS) + 10));
     
-    wifi_config_init("HAA", NULL, run_homekit_server_delayed, custom_hostname, 0);
+    wifi_config_init("HAA", NULL, run_homekit_server, custom_hostname, 0);
     
     led_blink(2);
     

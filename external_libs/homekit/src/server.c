@@ -3144,7 +3144,10 @@ client_context_t *homekit_server_accept_client() {
     }
     
     HOMEKIT_INFO("[%d] New %s:%d", s, address_buffer, addr.sin_port);
-
+    
+    const struct timeval sndtimeout = { 5, 0 };
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
+    
     const struct timeval rcvtimeout = { 10, 0 };
     setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
     
@@ -3299,7 +3302,7 @@ static void homekit_run_server() {
         homekit_server_process_notifications();
     }
 
-    server_free();
+    //server_free();
 }
 
 
@@ -3446,7 +3449,7 @@ void homekit_server_task(void *args) {
 
     homekit_run_server();
 
-    vTaskDelete(NULL);
+    //vTaskDelete(NULL);
 }
 
 #define ISDIGIT(x) isdigit((unsigned char)(x))
