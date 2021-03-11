@@ -139,6 +139,9 @@ int raven_ntp_update(char* ntp_server) {
                 memset(ntp_payload, 0, 49);
                 ntp_payload[0] = 0x1b;
                 
+                const struct timeval sndtimeout = { 3, 0 };
+                setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
+                
                 int result = lwip_sendto(s, ntp_payload, 48, 0, res->ai_addr, res->ai_addrlen);
                 
                 if (result > 0) {

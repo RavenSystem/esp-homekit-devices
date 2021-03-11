@@ -121,8 +121,8 @@ typedef struct _wildcard_action {
 typedef struct _ch_group {
     uint8_t accessory: 6;
     bool main_enabled: 1;
-    uint8_t acc_type: 7;
     bool child_enabled: 1;
+    uint8_t acc_type: 7;
     bool homekit_enabled: 1;
     
     float num[13];
@@ -277,7 +277,6 @@ typedef struct _main_config {
     uint16_t setup_mode_time;
     uint16_t wifi_roaming_count;
     
-    uint16_t wifi_roaming_count_max;
     bool setpwm_is_running: 1;
     bool timetable_ready: 1;
     bool used_gpio_0: 1;

@@ -3087,12 +3087,12 @@ IRAM static void homekit_client_process(client_context_t *context) {
 
 
 IRAM void homekit_server_close_client(client_context_t *context) {
-    CLIENT_INFO(context, "Closed");
-
     FD_CLR(context->socket, &homekit_server->fds);
     homekit_server->client_count--;
 
     close(context->socket);
+    
+    CLIENT_INFO(context, "Closed (%i/%i)", homekit_server->client_count, HOMEKIT_MAX_CLIENTS);
 
     if (homekit_server->pairing_context && homekit_server->pairing_context->client == context) {
         pairing_context_free(homekit_server->pairing_context);
@@ -3133,19 +3133,18 @@ client_context_t *homekit_server_accept_client() {
     
     if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS) {
         context = homekit_server->clients;
-        while (context) {
+        for (;;) {
             if (!context->next) {
                 CLIENT_INFO(context, "Closing oldest");
                 context->disconnect = true;
+                break;
             }
 
             context = context->next;
         }
     }
     
-    HOMEKIT_INFO("[%d] New %s:%d", s, address_buffer, addr.sin_port);
-    
-    const struct timeval sndtimeout = { 5, 0 };
+    const struct timeval sndtimeout = { 4, 0 };
     setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
     
     const struct timeval rcvtimeout = { 10, 0 };
@@ -3166,6 +3165,8 @@ client_context_t *homekit_server_accept_client() {
     if (s > homekit_server->max_fd) {
         homekit_server->max_fd = s;
     }
+    
+    HOMEKIT_INFO("[%d] New %s:%d (%i/%i)", s, address_buffer, addr.sin_port, homekit_server->client_count, HOMEKIT_MAX_CLIENTS);
 
     HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_CLIENT_CONNECTED);
 
@@ -3260,7 +3261,7 @@ IRAM void homekit_server_close_clients() {
 
 static void homekit_run_server() {
     HOMEKIT_DEBUG_LOG("Staring HTTP server");
-
+    
     struct sockaddr_in serv_addr;
     homekit_server->listen_fd = socket(AF_INET, SOCK_STREAM, 0);
     memset(&serv_addr, '0', sizeof(serv_addr));
@@ -3269,16 +3270,16 @@ static void homekit_run_server() {
     serv_addr.sin_port = htons(PORT);
     bind(homekit_server->listen_fd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
     listen(homekit_server->listen_fd, 10);
-
+    
     FD_SET(homekit_server->listen_fd, &homekit_server->fds);
     homekit_server->max_fd = homekit_server->listen_fd;
     homekit_server->client_count = 0;
-
+    
     for (;;) {
         fd_set read_fds;
         memcpy(&read_fds, &homekit_server->fds, sizeof(read_fds));
-
-        struct timeval timeout = { 0, 200000 }; /* 0.2 seconds timeout (orig: 1s) */
+        
+        struct timeval timeout = { 0, 150000 }; /* 0.15 seconds timeout (orig: 1s) */
         int triggered_nfds = select(homekit_server->max_fd + 1, &read_fds, NULL, NULL, &timeout);
         if (triggered_nfds > 0) {
             if (FD_ISSET(homekit_server->listen_fd, &read_fds)) {

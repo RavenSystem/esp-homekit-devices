@@ -55,7 +55,6 @@ main_config_t main_config = {
     .wifi_error_count = 0,
     .wifi_arp_count = 0,
     .wifi_roaming_count = 1,
-    .wifi_roaming_count_max = WIFI_WATCHDOG_ROAMING_PERIOD,
     
     .setup_mode_toggle_counter = INT8_MIN,
     .setup_mode_toggle_counter_max = SETUP_MODE_DEFAULT_ACTIVATE_COUNT,
@@ -520,7 +519,7 @@ void ntp_task() {
     if (main_config.wifi_status == WIFI_STATUS_CONNECTED) {
         int result = -10;
         uint8_t tries = 0;
-        while (result != 0 && tries < 3) {
+        while (result != 0 && tries < 4) {
             tries++;
             
             vTaskDelay(MS_TO_TICKS(15000));
@@ -651,9 +650,8 @@ void wifi_watchdog() {
             
             main_config.wifi_roaming_count++;
             
-            if (main_config.wifi_roaming_count > main_config.wifi_roaming_count_max) {
+            if (main_config.wifi_roaming_count >= WIFI_WATCHDOG_ROAMING_PERIOD) {
                 esp_timer_change_period(WIFI_WATCHDOG_TIMER, 5000);
-                main_config.wifi_roaming_count_max = WIFI_WATCHDOG_ROAMING_PERIOD + (hwrand() % WIFI_WATCHDOG_ROAMING_MARGIN);
                 main_config.wifi_roaming_count = 0;
                 wifi_config_smart_connect();
             }
@@ -666,8 +664,8 @@ void wifi_watchdog() {
         }
         
         main_config.wifi_arp_count++;
-        if (main_config.wifi_arp_count > WIFI_WATCHDOG_ARP_RESEND_PERIOD) {
-            main_config.wifi_arp_count = hwrand() % WIFI_WATCHDOG_ARP_RESEND_MARGIN;
+        if (main_config.wifi_arp_count >= WIFI_WATCHDOG_ARP_RESEND_PERIOD) {
+            main_config.wifi_arp_count = 0;
             wifi_config_resend_arp();
         }
         
@@ -6373,7 +6371,7 @@ void normal_mode_init() {
             accessories[accessory]->services[1]->primary = true;
         }
         
-        uint8_t ch_calloc = 3;
+        uint8_t ch_calloc = 2;
         if (max_duration > 0) {
             ch_calloc += 2;
         }
@@ -6407,8 +6405,8 @@ void normal_mode_init() {
             ch_group->ch2 = NEW_HOMEKIT_CHARACTERISTIC(REMAINING_DURATION, 0, .max_value=(float[]) {max_duration});
             
             if (ch_group->homekit_enabled) {
-                accessories[accessory]->services[1]->characteristics[ch_calloc - 4] = ch_group->ch1;
-                accessories[accessory]->services[1]->characteristics[ch_calloc - 3] = ch_group->ch2;
+                accessories[accessory]->services[1]->characteristics[ch_calloc - 3] = ch_group->ch1;
+                accessories[accessory]->services[1]->characteristics[ch_calloc - 2] = ch_group->ch2;
             }
             
             const uint32_t initial_time = (uint32_t) set_initial_state(ch_group->accessory, 1, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch1, CH_TYPE_INT32, max_duration);
@@ -6472,7 +6470,6 @@ void normal_mode_init() {
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[1]->characteristics[0] = ch_group->ch0;
-            accessories[accessory]->services[1]->characteristics[ch_calloc - 2] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "");
             
             return accessory + 1;
         }
@@ -6505,9 +6502,8 @@ void normal_mode_init() {
             accessories[accessory]->services[1]->id = 8;
             accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_STATELESS_PROGRAMMABLE_SWITCH;
             accessories[accessory]->services[1]->primary = true;
-            accessories[accessory]->services[1]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[1]->characteristics[0] = ch_group->ch0;
-            accessories[accessory]->services[1]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "");
             
             if (acc_type == ACC_TYPE_DOORBELL) {
                 accessories[accessory]->services[2] = calloc(1, sizeof(homekit_service_t));
@@ -6564,20 +6560,18 @@ void normal_mode_init() {
             accessories[accessory]->services[1]->id = 8;
             accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_LOCK_MECHANISM;
             accessories[accessory]->services[1]->primary = true;
-            accessories[accessory]->services[1]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[1]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[1]->characteristics[0] = ch_group->ch0;
             accessories[accessory]->services[1]->characteristics[1] = ch_group->ch1;
-            accessories[accessory]->services[1]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "");
             
             if (acc_type == ACC_TYPE_DOUBLE_LOCK) {
                 accessories[accessory]->services[2] = calloc(1, sizeof(homekit_service_t));
                 accessories[accessory]->services[2]->id = 12;
                 accessories[accessory]->services[2]->type = HOMEKIT_SERVICE_LOCK_MECHANISM;
                 accessories[accessory]->services[2]->primary = false;
-                accessories[accessory]->services[2]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
+                accessories[accessory]->services[2]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
                 accessories[accessory]->services[2]->characteristics[0] = ch_group->ch2;
                 accessories[accessory]->services[2]->characteristics[1] = ch_group->ch3;
-                accessories[accessory]->services[2]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "");
             }
         }
         
@@ -6770,7 +6764,7 @@ void normal_mode_init() {
         set_accessory_ir_protocol(ch_group, json_context);
         ch_group->num[0] = autoswitch_time(json_context);
         
-        uint8_t calloc_count = 3;
+        uint8_t calloc_count = 2;
         if (is_power_meter) {
             calloc_count += 7;
         }
@@ -6778,7 +6772,6 @@ void normal_mode_init() {
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[1]->characteristics = calloc(calloc_count, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[1]->characteristics[0] = ch_group->ch0;
-            accessories[accessory]->services[1]->characteristics[calloc_count - 2] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "");
         }
 
         if (is_power_meter) {
@@ -6990,7 +6983,7 @@ void normal_mode_init() {
             accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_VALVE;
         }
 
-        uint8_t calloc_count = 5;
+        uint8_t calloc_count = 4;
         if (valve_max_duration == 0) {
             accessories[accessory]->services[1]->characteristics = calloc(calloc_count, sizeof(homekit_characteristic_t*));
         } else {
@@ -7018,7 +7011,6 @@ void normal_mode_init() {
             accessories[accessory]->services[1]->characteristics[0] = ch_group->ch0;
             accessories[accessory]->services[1]->characteristics[1] = ch_group->ch1;
             accessories[accessory]->services[1]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(VALVE_TYPE, valve_type);
-            accessories[accessory]->services[1]->characteristics[calloc_count - 2] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "");
         }
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, TYPE_VALVE);
@@ -7144,7 +7136,7 @@ void normal_mode_init() {
         ch_group->ch7 = NEW_HOMEKIT_CHARACTERISTIC(COOLING_THRESHOLD_TEMPERATURE, default_target_temp +1, .min_value=(float[]) {TH_MIN_TEMP}, .max_value=(float[]) {TH_MAX_TEMP}, .setter_ex=update_th);
         
         if (ch_group->homekit_enabled) {
-            uint8_t calloc_count = 8;
+            uint8_t calloc_count = 7;
             if (TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
                 calloc_count += 1;
             }
@@ -7158,7 +7150,6 @@ void normal_mode_init() {
             accessories[accessory]->services[1]->characteristics[1] = ch_group->ch0;
             accessories[accessory]->services[1]->characteristics[2] = ch_group->ch3;
             accessories[accessory]->services[1]->characteristics[3] = ch_group->ch4;
-            accessories[accessory]->services[1]->characteristics[calloc_count - 2] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "");
         }
         
         const float initial_h_target_temp = set_initial_state(ch_group->accessory, 6, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch6, CH_TYPE_FLOAT, default_target_temp -1);
@@ -7214,9 +7205,8 @@ void normal_mode_init() {
                 accessories[accessory]->services[2]->id = 30;
                 accessories[accessory]->services[2]->primary = false;
                 accessories[accessory]->services[2]->type = HOMEKIT_SERVICE_HUMIDITY_SENSOR;
-                accessories[accessory]->services[2]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+                accessories[accessory]->services[2]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
                 accessories[accessory]->services[2]->characteristics[0] = ch_group->ch1;
-                accessories[accessory]->services[2]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "");
             }
         }
         
@@ -7330,9 +7320,8 @@ void normal_mode_init() {
             accessories[accessory]->services[1]->id = 8;
             accessories[accessory]->services[1]->primary = true;
             accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_TEMPERATURE_SENSOR;
-            accessories[accessory]->services[1]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[1]->characteristics[0] = ch_group->ch0;
-            accessories[accessory]->services[1]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "");
         }
             
         if (TH_SENSOR_GPIO != -1) {
@@ -7371,9 +7360,8 @@ void normal_mode_init() {
             accessories[accessory]->services[1]->id = 8;
             accessories[accessory]->services[1]->primary = true;
             accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_HUMIDITY_SENSOR;
-            accessories[accessory]->services[1]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[1]->characteristics[0] = ch_group->ch1;
-            accessories[accessory]->services[1]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "");
         }
         
         if (TH_SENSOR_GPIO != -1) {
@@ -7411,17 +7399,15 @@ void normal_mode_init() {
             accessories[accessory]->services[1]->id = 8;
             accessories[accessory]->services[1]->primary = true;
             accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_TEMPERATURE_SENSOR;
-            accessories[accessory]->services[1]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[1]->characteristics[0] = ch_group->ch0;
-            accessories[accessory]->services[1]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "");
             
             accessories[accessory]->services[2] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[2]->id = 30;
             accessories[accessory]->services[2]->primary = false;
             accessories[accessory]->services[2]->type = HOMEKIT_SERVICE_HUMIDITY_SENSOR;
-            accessories[accessory]->services[2]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[2]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[2]->characteristics[0] = ch_group->ch1;
-            accessories[accessory]->services[2]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "");
         }
         
         if (TH_SENSOR_GPIO != -1) {
@@ -7643,7 +7629,7 @@ void normal_mode_init() {
             accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_LIGHTBULB;
         }
         
-        uint8_t calloc_count = 4;
+        uint8_t calloc_count = 3;
 
         if ((uint8_t) LIGHTBULB_CHANNELS >= 3) {
             // Channels 3+
@@ -7703,10 +7689,6 @@ void normal_mode_init() {
                 accessories[accessory]->services[1]->characteristics[0] = ch_group->ch0;
                 accessories[accessory]->services[1]->characteristics[1] = ch_group->ch1;
             }
-        }
-        
-        if (ch_group->homekit_enabled) {
-            accessories[accessory]->services[1]->characteristics[calloc_count - 2] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "");
         }
 
         if (is_custom_initial)  {
@@ -7778,11 +7760,10 @@ void normal_mode_init() {
             accessories[accessory]->services[1]->id = 8;
             accessories[accessory]->services[1]->primary = true;
             accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_GARAGE_DOOR_OPENER;
-            accessories[accessory]->services[1]->characteristics = calloc(5, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[1]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[1]->characteristics[0] = ch_group->ch0;
             accessories[accessory]->services[1]->characteristics[1] = ch_group->ch1;
             accessories[accessory]->services[1]->characteristics[2] = ch_group->ch2;
-            accessories[accessory]->services[1]->characteristics[3] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "");
         }
 
         ch_group->acc_type = ACC_TYPE_GARAGE_DOOR;
@@ -7921,12 +7902,11 @@ void normal_mode_init() {
                     break;
             }
 
-            accessories[accessory]->services[1]->characteristics = calloc(6, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[1]->characteristics = calloc(5, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[1]->characteristics[0] = WINDOW_COVER_CH_CURRENT_POSITION;
             accessories[accessory]->services[1]->characteristics[1] = WINDOW_COVER_CH_TARGET_POSITION;
             accessories[accessory]->services[1]->characteristics[2] = WINDOW_COVER_CH_STATE;
             accessories[accessory]->services[1]->characteristics[3] = WINDOW_COVER_CH_OBSTRUCTION;
-            accessories[accessory]->services[1]->characteristics[4] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "");
         }
         
         ch_group->acc_type = ACC_TYPE_WINDOW_COVER;
@@ -8024,10 +8004,9 @@ void normal_mode_init() {
             accessories[accessory]->services[1]->id = 8;
             accessories[accessory]->services[1]->primary = true;
             accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_FAN;
-            accessories[accessory]->services[1]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[1]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[1]->characteristics[0] = ch_group->ch0;
             accessories[accessory]->services[1]->characteristics[1] = ch_group->ch1;
-            accessories[accessory]->services[1]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "");
         }
         
         float saved_max_speed = set_initial_state(ch_group->accessory, 1, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch1, CH_TYPE_FLOAT, max_speed);
@@ -8113,9 +8092,8 @@ void normal_mode_init() {
             accessories[accessory]->services[1]->id = 8;
             accessories[accessory]->services[1]->primary = true;
             accessories[accessory]->services[1]->type = HOMEKIT_SERVICE_LIGHT_SENSOR;
-            accessories[accessory]->services[1]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[1]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[1]->characteristics[0] = ch_group->ch0;
-            accessories[accessory]->services[1]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(NAME, "");
         }
         
         LIGHT_SENSOR_TYPE = LIGHT_SENSOR_TYPE_DEFAULT;

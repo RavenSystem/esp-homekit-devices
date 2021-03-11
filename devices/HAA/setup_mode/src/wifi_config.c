@@ -122,14 +122,14 @@ int wifi_config_remove_sys_param() {
     blank[0] = 0;
     for (uint16_t i = 0; i < (SECTORSIZE * SYSPARAMSIZE); i++) {
         if (!spiflash_write(SYSPARAMSECTOR + i, blank, 1)) {
-            ERROR("Failed to format sysparam sectors");
+            ERROR("Format sysparam");
             return -1;
         }
     }
     
     for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
         if (!spiflash_erase_sector(SYSPARAMSECTOR + (SECTORSIZE * i))) {
-            ERROR("Failed to erase sysparam sectors");
+            ERROR("Erase sysparam");
             return -2;
         }
     }
@@ -196,10 +196,13 @@ IRAM bool wifi_config_got_ip() {
 
 void wifi_config_resend_arp() {
     struct netif *netif = sdk_system_get_netif(STATION_IF);
-    if (netif && netif->flags & NETIF_FLAG_LINK_UP && netif->flags & NETIF_FLAG_UP) {
+    if (netif && (netif->flags & NETIF_FLAG_LINK_UP) && (netif->flags & NETIF_FLAG_UP)) {
         LOCK_TCPIP_CORE();
-        etharp_gratuitous(netif);
+        int res = etharp_gratuitous(netif);
         UNLOCK_TCPIP_CORE();
+        if (res != 0) {
+            ERROR("ARP Gratuitous %i", res);
+        }
     }
 }
 
@@ -246,7 +249,7 @@ static void wifi_smart_connect_task(void* arg) {
 
 static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
     if (status != SCAN_OK) {
-        ERROR("Wifi smart connect scan failed");
+        ERROR("Wifi smart connect scan");
         if (!wifi_config_got_ip()) {
             sdk_wifi_station_connect();
         }
@@ -366,7 +369,7 @@ static void wifi_networks_free() {
 
 static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
     if (status != SCAN_OK || !context) {
-        ERROR("Wifi scan failed");
+        ERROR("Wifi scan");
         return;
     }
     
@@ -575,7 +578,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     free(client->body);
     
     if (!form) {
-        ERROR("No enough memory");
+        ERROR("No memory");
         body_malloc(client);
         client->body_length = 0;
         client_send_redirect(client, 302, "/settings");
@@ -789,7 +792,7 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
         }
         
         case ENDPOINT_VERSION: {
-            static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n5.0.12";
+            static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n5.0.14";
             client_send(client, payload, sizeof(payload) - 1);
             break;
         }
@@ -827,13 +830,13 @@ static void http_task(void *arg) {
     serv_addr.sin_port = htons(WIFI_CONFIG_SERVER_PORT);
     int flags;
     if ((flags = lwip_fcntl(listenfd, F_GETFL, 0)) < 0) {
-        ERROR("Get HTTP socket flags");
+        ERROR("Get HTTP flags");
         lwip_close(listenfd);
         vTaskDelete(NULL);
         return;
     };
     if (lwip_fcntl(listenfd, F_SETFL, flags | O_NONBLOCK) < 0) {
-        ERROR("Set HTTP socket flags");
+        ERROR("Set HTTP flags");
         lwip_close(listenfd);
         vTaskDelete(NULL);
         return;
@@ -1142,7 +1145,7 @@ static void wifi_config_station_connect() {
 void wifi_config_init(const char* ssid_prefix, const char* password, void (*on_wifi_ready)(), const char* custom_hostname, const int param) {
     INFO("Wifi config init");
     if (password && strlen(password) < 8) {
-        ERROR("Password must be at least 8 characters");
+        ERROR("Password");
         return;
     }
 
