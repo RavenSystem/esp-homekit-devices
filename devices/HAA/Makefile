@@ -15,6 +15,7 @@ EXTRA_COMPONENTS = \
     $(abspath ../../libs/adv_button) \
     $(abspath ../../libs/adv_hlw) \
 	$(abspath ../../libs/adv_pwm) \
+	$(abspath ../../libs/my92xx) \
 	$(abspath ../../libs/new_dht) \
 	$(abspath ../../libs/raven_ntp) \
 	$(abspath ../../libs/ping) \

@@ -24,13 +24,10 @@
 #ifndef LIGHTBULB_MY92XX_DRIVER_H
 #define LIGHTBULB_MY92XX_DRIVER_H
 
-#include "haa_lightbulb_driver.h"
-
-
-typedef enum my92xx_model {
-        MY92XX_MODEL_MY9291 = 0X00,
-        MY92XX_MODEL_MY9231 = 0X01,
-} my92xx_model_t;
+typedef enum my92xx_model_num_channels {
+        MY92XX_MODEL_MY9291_NUMCHANNELS = 0X04,
+        MY92XX_MODEL_MY9231_NUMCHANNELS = 0X03,
+} my92xx_model_num_channels_t;
 
 typedef enum my92xx_cmd_one_shot_t {
         MY92XX_CMD_ONE_SHOT_DISABLE = 0X00,
@@ -70,16 +67,6 @@ typedef struct {
         unsigned char resv:1;
 } __attribute__ ((aligned(1), packed)) my92xx_cmd_t;
 
-typedef struct 
-{
-    uint8_t model;
-    uint8_t numChannels ;
-    uint8_t di_pin;
-    uint8_t dcki_pin;
-    uint8_t bit_width;
-    uint8_t numChips;
-    uint8_t numChannelsPerChip;
-} my92xx_driver_info_t;
 
 
 #define MY92XX_COMMAND_DEFAULT { \
@@ -91,7 +78,13 @@ typedef struct
     .resv = 0 \
 }
 
-void haa_my92xx_init(driver_interface_t** interface, my92xx_model_t model, const cJSON * const object, const my92xx_cmd_t* command, lightbulb_channels_t* channels);
-void haa_my92xx_send(const void* driver_info, const uint16_t* multipwm_duty);
+void my92xx_configure(uint8_t di_pin, uint8_t dcki_pin, uint8_t numChips);
+
+void my92xx_start();
+void my92xx_stop();
+void my92xx_set_freq(const uint16_t freq);
+void my92xx_set_duty(const uint8_t gpio, const uint16_t duty, uint16_t dithering);
+uint16_t my92xx_get_duty(const uint8_t gpio);
+void my92xx_new_channel(const uint8_t gpio, const bool inverted);
 
 #endif

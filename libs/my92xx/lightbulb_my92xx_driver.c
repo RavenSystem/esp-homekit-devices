@@ -21,127 +21,155 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
+#include <stdint.h>
+#include <stdbool.h>
 #include <stdlib.h>
-#include <cJSON.h>
 #include "lightbulb_my92xx_driver.h"
-#include <string.h>
 #include <FreeRTOS.h>
 #include <espressif/esp_common.h>
-#include "header.h"
 
-void haa_my92xx_send_pulses(uint8_t pin, unsigned int times);
-void haa_my92xx_set_cmd(const my92xx_driver_info_t* descriptor, const my92xx_cmd_t* command);
-void haa_my92xx_write(const my92xx_driver_info_t* descriptor, unsigned int data, unsigned char bit_length);
 
-void haa_my92xx_init(driver_interface_t** interface, my92xx_model_t model, const cJSON * const object, const my92xx_cmd_t* command, lightbulb_channels_t* channels)
+ #define MY92XX_DEFAULT_FREQUENCY  (2000)
+
+typedef struct _my92xx_channel {
+    uint16_t duty;
+    uint8_t channel;
+    struct _my92xx_channel* next;
+} my92xx_channel_t;
+
+typedef struct _my92xx_driver_info{
+    uint8_t di_pin;
+    uint8_t dcki_pin;
+    uint8_t numChips;
+    my92xx_channel_t* channels;
+} my92xx_driver_info_t;
+
+void my92xx_send_pulses(uint8_t pin, unsigned int times);
+void my92xx_write(unsigned int data, unsigned char bit_length);
+void my92xx_send();
+
+static my92xx_cmd_t config = {
+    .bit_width = MY92XX_CMD_BIT_WIDTH_16,
+    .scatter = MY92XX_CMD_SCATTER_APDM,
+    .frequency = MY92XX_CMD_FREQUENCY_DIVIDE_1,
+    .reaction = MY92XX_CMD_REACTION_FAST,
+    .one_shot = MY92XX_CMD_ONE_SHOT_DISABLE,
+    .resv = 0
+};
+static my92xx_driver_info_t info;
+
+
+void my92xx_configure(uint8_t di_pin, uint8_t dcki_pin, uint8_t numChips)
+{
+    info.di_pin = di_pin;
+    info.dcki_pin = dcki_pin;
+    info.numChips = numChips;
+}
+
+void my92xx_start()
+{
+    // Init GPIO
+    gpio_enable(info.di_pin, GPIO_OUTPUT);
+    gpio_enable(info.dcki_pin, GPIO_OUTPUT);
+    gpio_write(info.di_pin, false);
+    gpio_write(info.dcki_pin, false);
+
+    // Clear all duty register
+    my92xx_send_pulses(info.dcki_pin, 32 * info.numChips);
+
+    // Send init command
+    // TStop > 12us.
+	sdk_os_delay_us(12);
+
+    // Send 12 DI pulse, after 6 pulse's falling edge store duty data, and 12
+	// pulse's rising edge convert to command mode.
+	my92xx_send_pulses(info.di_pin, 12);
+
+    // Delay >12us, begin send CMD data
+	sdk_os_delay_us(12);
+
+    // Send CMD data
+    unsigned char command_data = *(unsigned char *) (&config);
+    for (unsigned char i=0; i < info.numChips; i++)
+    {
+        my92xx_write(command_data, 16 - (1 << MY92XX_CMD_BIT_WIDTH_8));
+    }
+
+	// TStart > 12us. Delay 12 us.
+	sdk_os_delay_us(12);
+
+    // Send 16 DI pulse，at 14 pulse's falling edge store CMD data, and
+	// at 16 pulse's falling edge convert to duty mode.
+	my92xx_send_pulses(info.di_pin, 16);
+
+    // TStop > 12us.
+	sdk_os_delay_us(12);
+}
+void my92xx_stop()
 {
 
-    if ((cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_DRIVER_GPIO_DI) != NULL) && 
-        (cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_DRIVER_GPIO_DCKI) != NULL))
+}
+void my92xx_set_freq(const uint16_t freq)
+{
+    uint16_t min_ind = 0;
+    uint16_t min_diff = UINT16_MAX;
+    for(uint16_t i = MY92XX_CMD_FREQUENCY_DIVIDE_1; i <= MY92XX_CMD_FREQUENCY_DIVIDE_64; i++)
     {
-        *interface = malloc( sizeof(driver_interface_t));
-        if(interface != NULL)
+        uint16_t diff = abs((0x01<<(2*i)) * freq - MY92XX_DEFAULT_FREQUENCY); 
+        if(diff < min_diff)
         {
-            my92xx_driver_info_t* descriptor = malloc( sizeof(my92xx_driver_info_t));
-            if(descriptor != NULL)
-            {
-                (*interface)->driver_info = (void*) descriptor; 
-                (*interface)->family = DRIVER_MY92XX;
-                descriptor->model = model;
-                descriptor->di_pin = (uint8_t) cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_DRIVER_GPIO_DI)->valuedouble;
-                descriptor->dcki_pin = (uint8_t) cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_DRIVER_GPIO_DCKI)->valuedouble;
-                (*interface)->updater = haa_my92xx_send;
-                
-                descriptor->numChips = 1;
-                if (cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_DRIVER_NUM_CHIPS) != NULL)
-                {
-                    descriptor->numChips = (uint8_t) cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_DRIVER_NUM_CHIPS)->valuedouble;
-                }
-                (*interface)->numChips = descriptor->numChips;
-
-                switch (command->bit_width) 
-                {
-                    case MY92XX_CMD_BIT_WIDTH_16:
-                        descriptor->bit_width = 16;
-                        break;
-                    case MY92XX_CMD_BIT_WIDTH_14:
-                        descriptor->bit_width = 14;
-                        break;
-                    case MY92XX_CMD_BIT_WIDTH_12:
-                        descriptor->bit_width = 12;
-                        break;
-                    case MY92XX_CMD_BIT_WIDTH_8:
-                        descriptor->bit_width = 8;
-                        break;
-                    default:
-                        descriptor->bit_width = 8;
-                        break;
-                }
-                uint8_t numChannels = 0;  
-                if(descriptor->model == MY92XX_MODEL_MY9291) 
-                {
-                    numChannels = 4;
-                } else if (descriptor->model == MY92XX_MODEL_MY9231) 
-                {
-                    numChannels = 3;
-                }
-                descriptor->numChannelsPerChip = numChannels;
-                (*interface)->numChannelsPerChip = descriptor->numChannelsPerChip;
-                if ((numChannels > 0) && (cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_PWM_GPIO_R) != NULL)) 
-                {
-                    channels->r = (uint8_t) cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_PWM_GPIO_R)->valuedouble;
-                    numChannels--;
-                }
-                
-                if ((numChannels > 0) && (cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_PWM_GPIO_G) != NULL)) 
-                {
-                    channels->g = (uint8_t) cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_PWM_GPIO_G)->valuedouble;
-                    numChannels--;
-                }
-                
-                if ((numChannels > 0) && (cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_PWM_GPIO_B) != NULL))
-                {
-                    channels->b = (uint8_t) cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_PWM_GPIO_B)->valuedouble;
-                    numChannels--;
-                }
-                
-                if ((numChannels > 0) && (cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_PWM_GPIO_W) != NULL))
-                {
-                    channels->w = (uint8_t) cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_PWM_GPIO_W)->valuedouble;
-                    numChannels--;
-                }
-                
-                if ((numChannels > 0) &&  (cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_PWM_GPIO_CW) != NULL))
-                {
-                    channels->cw = (uint8_t) cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_PWM_GPIO_CW)->valuedouble;
-                    numChannels--;
-                }
-                
-                if ((numChannels > 0) && (cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_PWM_GPIO_WW) != NULL))
-                {
-                    channels->ww = (uint8_t) cJSON_GetObjectItemCaseSensitive(object, LIGHTBULB_PWM_GPIO_WW)->valuedouble;
-                    numChannels--;
-                }
-
-                
-                // Init GPIO
-                gpio_enable(descriptor->di_pin, GPIO_OUTPUT);
-                gpio_enable(descriptor->dcki_pin, GPIO_OUTPUT);
-                gpio_write(descriptor->di_pin, false);
-                gpio_write(descriptor->dcki_pin, false);
-
-                // Clear all duty register
-                haa_my92xx_send_pulses(descriptor->dcki_pin, 32 * descriptor->numChips);
-
-                // Send init command
-                haa_my92xx_set_cmd(descriptor, command);
-            }
+            min_diff = diff;
+            min_ind = i;    
         }
+    }
+    config.frequency = min_ind;
+}
+
+my92xx_channel_t* my92xx_channel_find_by_channel(const uint8_t channel) 
+{
+    my92xx_channel_t* my92xx_channel = info.channels;
+    
+    while (my92xx_channel && my92xx_channel->channel != channel) 
+    {
+        my92xx_channel = my92xx_channel->next;
+    }
+    return my92xx_channel;
+}
+
+void my92xx_set_duty(const uint8_t channel, const uint16_t duty, uint16_t dithering)
+{
+    my92xx_channel_t* my92xx_channel = my92xx_channel_find_by_channel(channel);
+    if (my92xx_channel) 
+    {
+        my92xx_channel->duty = duty;
+        my92xx_send();
     }
 }
 
-void haa_my92xx_send_pulses(uint8_t pin, unsigned int times)
+uint16_t my92xx_get_duty(const uint8_t channel) 
+{
+    my92xx_channel_t* my92xx_channel = my92xx_channel_find_by_channel(channel);
+    if (my92xx_channel)
+    {
+        return my92xx_channel->duty;
+    }
+    return 0;
+}
+
+void my92xx_new_channel(const uint8_t gpio, const bool inverted) {
+    
+    if (!my92xx_channel_find_by_channel(gpio)) {
+        
+        my92xx_channel_t* my92xx_channel = malloc(sizeof(my92xx_channel_t));
+        memset(my92xx_channel, 0, sizeof(*my92xx_channel));
+        
+        my92xx_channel->channel = gpio;
+        my92xx_channel->next = info.channels;
+        info.channels = my92xx_channel;
+    }
+}
+
+void my92xx_send_pulses(uint8_t pin, unsigned int times)
 {
 	for (unsigned int i = 0; i < times; i++)
     {
@@ -150,82 +178,46 @@ void haa_my92xx_send_pulses(uint8_t pin, unsigned int times)
 	}
 }
 
-
-void haa_my92xx_set_cmd(const my92xx_driver_info_t* descriptor, const my92xx_cmd_t* command)
-{
-    // TStop > 12us.
-	sdk_os_delay_us(12);
-
-    // Send 12 DI pulse, after 6 pulse's falling edge store duty data, and 12
-	// pulse's rising edge convert to command mode.
-	haa_my92xx_send_pulses(descriptor->di_pin, 12);
-
-    // Delay >12us, begin send CMD data
-	sdk_os_delay_us(12);
-
-    // Send CMD data
-    unsigned char command_data = *(unsigned char *) (command);
-    for (unsigned char i=0; i<descriptor->numChips; i++)
-    {
-        haa_my92xx_write(descriptor, command_data, 8);
-    }
-
-	// TStart > 12us. Delay 12 us.
-	sdk_os_delay_us(12);
-
-    // Send 16 DI pulse，at 14 pulse's falling edge store CMD data, and
-	// at 16 pulse's falling edge convert to duty mode.
-	haa_my92xx_send_pulses(descriptor->di_pin, 16);
-
-    // TStop > 12us.
-	sdk_os_delay_us(12);
-
-}
-
-void haa_my92xx_write(const my92xx_driver_info_t* descriptor, unsigned int data, unsigned char bit_length)
+void my92xx_write(unsigned int data, unsigned char bit_length)
 {
     unsigned int mask = (0x01 << (bit_length - 1));
 
     for (unsigned int i = 0; i < bit_length / 2; i++) 
     {
-        gpio_write(descriptor->dcki_pin, false);
-        gpio_write(descriptor->di_pin, (data & mask));
-        gpio_write(descriptor->dcki_pin, true);
+        gpio_write(info.dcki_pin, false);
+        gpio_write(info.di_pin, (data & mask));
+        gpio_write(info.dcki_pin, true);
         data = data << 1;
-        gpio_write(descriptor->di_pin, (data & mask));
-        gpio_write(descriptor->dcki_pin, false);
-        gpio_write(descriptor->di_pin, false);
+        gpio_write(info.di_pin, (data & mask));
+        gpio_write(info.dcki_pin, false);
+        gpio_write(info.di_pin, false);
         data = data << 1;
     }
 
 }
 
-void haa_my92xx_send(const void* driver_info, const uint16_t* multipwm_duty)
+void my92xx_send()
 {
-    if(driver_info != NULL)
+    // TStop > 12us.
+    sdk_os_delay_us(12);
+
+    // Send color data
+
+    uint8_t channel_ind = 0;
+    my92xx_channel_t* channel = my92xx_channel_find_by_channel(channel_ind);
+    while (channel != NULL)
     {
-        my92xx_driver_info_t* descriptor = (my92xx_driver_info_t*)driver_info;
-        // TStop > 12us.
-        sdk_os_delay_us(12);
-
-        // Send color data
-
-        for(unsigned char chip = 0; chip < descriptor->numChips; chip++)
-        {
-            for (unsigned char channel = 0; channel <descriptor->numChannelsPerChip; channel++) 
-            {
-                haa_my92xx_write(descriptor, multipwm_duty[channel], descriptor->bit_width);
-            }
-        }
-
-        // TStart > 12us. Ready for send DI pulse.
-        sdk_os_delay_us(12);
-
-        // Send 8 DI pulse. After 8 pulse falling edge, store old data.
-        haa_my92xx_send_pulses(descriptor->di_pin, 8);
-
-        // TStop > 12us.
-        sdk_os_delay_us(12);
+        my92xx_write(channel->duty, 16 - (1 << MY92XX_CMD_BIT_WIDTH_16));
+        channel++;
     }
+
+    // TStart > 12us. Ready for send DI pulse.
+    sdk_os_delay_us(12);
+
+    // Send 8 DI pulse. After 8 pulse falling edge, store old data.
+    my92xx_send_pulses(info.di_pin, 8);
+
+    // TStop > 12us.
+    sdk_os_delay_us(12);
 
 }
