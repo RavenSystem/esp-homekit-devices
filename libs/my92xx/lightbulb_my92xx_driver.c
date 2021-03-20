@@ -27,6 +27,7 @@
 #include "lightbulb_my92xx_driver.h"
 #include <FreeRTOS.h>
 #include <espressif/esp_common.h>
+#include <string.h>
 
 
  #define MY92XX_DEFAULT_FREQUENCY  (2000)
