@@ -254,6 +254,7 @@
 #define TH_SENSOR_ERROR_COUNT               ch_group->num[9]
 
 #define LIGHTBULB_TYPE                      ch_group->num[5]
+#define LIGHTBULB_DRIVER_TYPE_SET           "dr"
 #define LIGHTBULB_CHANNELS_SET              "n"
 #define LIGHTBULB_CHANNELS                  ch_group->num[6]
 #define LIGHTBULB_INITITAL_STATE_ARRAY_SET  "it"

@@ -161,6 +161,22 @@ typedef struct _action_task {
     ch_group_t* ch_group;
 } action_task_t;
 
+//typedef void (*startFunc)(); 
+//typedef void (*stopFunc)();
+//typedef void (*set_freqFunc)(const uint16_t);
+//typedef void (*set_dutyFunc)(const uint8_t, const uint16_t, uint16_t);
+//typedef uint16_t (*get_dutyFunc)(const uint8_t);
+//typedef void (*new_channelFunc)(const uint8_t, const bool);
+typedef struct _lightbulb_func_pointers
+{
+    void (*start)();
+    void (*stop)();
+    void (*set_freq)(const uint16_t);
+    void (*set_duty)(const uint8_t, const uint16_t, uint16_t);
+    uint16_t (*get_duty)(const uint8_t);
+    void (*new_channel)(const uint8_t, const bool);
+} lightbulb_func_pointers_t;
+
 typedef struct _lightbulb_group {
     uint8_t autodimmer;
     uint8_t autodimmer_task_step;
@@ -190,6 +206,8 @@ typedef struct _lightbulb_group {
 
     homekit_characteristic_t* ch0;
     
+    lightbulb_func_pointers_t funcs;
+
     struct _lightbulb_group* next;
 } lightbulb_group_t;
 

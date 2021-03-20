@@ -30,6 +30,7 @@
 #include <adv_hlw.h>
 #include <raven_ntp.h>
 #include <adv_pwm.h>
+#include <lightbulb_my92xx_driver.h>
 #include <ping.h>
 #include <adv_logger_ntp.h>
 #include <timers_helper.h>
@@ -2565,11 +2566,11 @@ void rgbw_set_timer_worker() {
                 for (uint8_t i = 0; i < (uint8_t) LIGHTBULB_CHANNELS; i++) {
                     if (abs(lightbulb_group->target[i] - lightbulb_group->current[i]) > abs(LIGHTBULB_STEP_VALUE[i])) {
                         lightbulb_group->current[i] += LIGHTBULB_STEP_VALUE[i];
-                        adv_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i], (uint16_t) LIGHTBULB_PWM_DITHER);
+                        lightbulb_group->funcs.set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i], (uint16_t) LIGHTBULB_PWM_DITHER);
                         all_channels_ready = false;
                     } else if (lightbulb_group->current[i] != lightbulb_group->target[i]) {
                         lightbulb_group->current[i] = lightbulb_group->target[i];
-                        adv_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i], (uint16_t) LIGHTBULB_PWM_DITHER);
+                        lightbulb_group->funcs.set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i], (uint16_t) LIGHTBULB_PWM_DITHER);
                     }
                 }
             }
@@ -7483,6 +7484,12 @@ void normal_mode_init() {
         lightbulb_group->armed_autodimmer = false;
         lightbulb_group->autodimmer_task_delay = AUTODIMMER_TASK_DELAY_DEFAULT;
         lightbulb_group->autodimmer_task_step = AUTODIMMER_TASK_STEP_DEFAULT;
+        lightbulb_group->funcs.start = adv_pwm_start;
+        lightbulb_group->funcs.stop = adv_pwm_stop;
+        lightbulb_group->funcs.set_freq = adv_pwm_set_freq;
+        lightbulb_group->funcs.set_duty = adv_pwm_set_duty;
+        lightbulb_group->funcs.get_duty = adv_pwm_get_duty;
+        lightbulb_group->funcs.new_channel = adv_pwm_new_channel;
         
         lightbulb_group->next = main_config.lightbulb_groups;
         main_config.lightbulb_groups = lightbulb_group;
@@ -7509,19 +7516,66 @@ void normal_mode_init() {
             if (cJSON_GetObjectItemCaseSensitive(json_context, PWM_DITHER_SET) != NULL) {
                 LIGHTBULB_PWM_DITHER = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_context, PWM_DITHER_SET)->valuedouble;
             }
-            
+
+            uint8_t bulb_driver = 0; //adv_pwm 
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_DRIVER_TYPE_SET) != NULL) {
+                bulb_driver = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_DRIVER_TYPE_SET)->valuedouble;
+            }
+            switch(bulb_driver) 
+            {
+                case 1: //my92xx
+                {
+                    lightbulb_group->funcs.start = my92xx_start;
+                    lightbulb_group->funcs.stop = my92xx_stop;
+                    lightbulb_group->funcs.set_freq = my92xx_set_freq;
+                    lightbulb_group->funcs.set_duty = my92xx_set_duty;
+                    lightbulb_group->funcs.get_duty = my92xx_get_duty;
+                    lightbulb_group->funcs.new_channel = my92xx_new_channel;
+                    // we need to set our own freq divider in my92xx controller
+                    if (cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ) != NULL) {
+                        lightbulb_group->funcs.set_freq((uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ)->valuedouble);
+                    }
+                }
+                break;
+
+                case 0: //adv_pwm
+                default:
+                {
+                    //default values set above
+                }
+            }
+
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_GPIO_ARRAY_SET) != NULL) {
                 cJSON* gpio_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_GPIO_ARRAY_SET);
                 LIGHTBULB_CHANNELS = cJSON_GetArraySize(gpio_array);
-                for (uint8_t i = 0; i < (uint8_t) LIGHTBULB_CHANNELS; i++) {
+                uint8_t startIndex = 0; 
+                uint8_t EndIndex = LIGHTBULB_CHANNELS; 
+                switch(bulb_driver)
+                {
+                    case 1:
+                    {
+                        //first two are supposed to be di and dcki pins
+                        startIndex = 2;
+                        LIGHTBULB_CHANNELS = LIGHTBULB_CHANNELS - 2;
+                        uint8_t di_pin = ((uint8_t) cJSON_GetArrayItem(gpio_array, 0)->valuedouble) % 100;
+                        uint8_t dcki_pin = ((uint8_t) cJSON_GetArrayItem(gpio_array, 1)->valuedouble) % 100;
+                        my92xx_configure(di_pin, dcki_pin, 1);
+                    }
+                    break;
+                    default:
+                    {
+                        //do nothing
+                    }
+                }
+                for (uint8_t i = startIndex; i < EndIndex; i++) {
                     uint8_t gpio = (uint8_t) cJSON_GetArrayItem(gpio_array, i)->valuedouble;
                     set_used_gpio(gpio % 100);
                     
                     lightbulb_group->gpio[i] = gpio % 100;
-                    adv_pwm_new_channel(lightbulb_group->gpio[i], gpio / 100);
+                    lightbulb_group->funcs.new_channel(lightbulb_group->gpio[i], gpio / 100);
                 }
                 
-                adv_pwm_start();
+                lightbulb_group->funcs.start();
             }
         }
         
