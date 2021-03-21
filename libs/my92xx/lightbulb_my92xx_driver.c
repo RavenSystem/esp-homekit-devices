@@ -42,6 +42,7 @@ typedef struct _my92xx_driver_info{
     uint8_t di_pin;
     uint8_t dcki_pin;
     uint8_t numChips;
+    uint8_t numChannels;
     my92xx_channel_t* channels;
 } my92xx_driver_info_t;
 
@@ -57,7 +58,13 @@ static my92xx_cmd_t config = {
     .one_shot = MY92XX_CMD_ONE_SHOT_DISABLE,
     .resv = 0
 };
-static my92xx_driver_info_t info;
+static my92xx_driver_info_t info = {
+    .di_pin = 13,
+    .dcki_pin = 15,
+    .numChips = 1,
+    .numChannels = 0,
+    .channels = NULL
+};
 
 
 void my92xx_configure(uint8_t di_pin, uint8_t dcki_pin, uint8_t numChips)
@@ -167,6 +174,7 @@ void my92xx_new_channel(const uint8_t gpio, const bool inverted) {
         my92xx_channel->channel = gpio;
         my92xx_channel->next = info.channels;
         info.channels = my92xx_channel;
+        info.numChannels = info.numChannels + 1;
     }
 }
 
@@ -203,13 +211,13 @@ void my92xx_send()
     sdk_os_delay_us(12);
 
     // Send color data
-
-    uint8_t channel_ind = 0;
-    my92xx_channel_t* channel = my92xx_channel_find_by_channel(channel_ind);
-    while (channel != NULL)
+    for(uint8_t ind = 0; ind < info.numChannels; ind++)
     {
-        my92xx_write(channel->duty, 16 - (1 << MY92XX_CMD_BIT_WIDTH_16));
-        channel++;
+        my92xx_channel_t* channel = my92xx_channel_find_by_channel(ind);
+        if(channel)
+        {
+            my92xx_write(channel->duty, 16);
+        }
     }
 
     // TStart > 12us. Ready for send DI pulse.

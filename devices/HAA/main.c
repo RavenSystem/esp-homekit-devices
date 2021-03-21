@@ -7521,6 +7521,7 @@ void normal_mode_init() {
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_DRIVER_TYPE_SET) != NULL) {
                 bulb_driver = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_DRIVER_TYPE_SET)->valuedouble;
             }
+            INFO("DRIVER: %i", (uint8_t) bulb_driver);
             switch(bulb_driver) 
             {
                 case 1: //my92xx
@@ -7550,6 +7551,7 @@ void normal_mode_init() {
                 LIGHTBULB_CHANNELS = cJSON_GetArraySize(gpio_array);
                 uint8_t startIndex = 0; 
                 uint8_t EndIndex = LIGHTBULB_CHANNELS; 
+                bool realGPIOs = true;
                 switch(bulb_driver)
                 {
                     case 1:
@@ -7559,7 +7561,12 @@ void normal_mode_init() {
                         LIGHTBULB_CHANNELS = LIGHTBULB_CHANNELS - 2;
                         uint8_t di_pin = ((uint8_t) cJSON_GetArrayItem(gpio_array, 0)->valuedouble) % 100;
                         uint8_t dcki_pin = ((uint8_t) cJSON_GetArrayItem(gpio_array, 1)->valuedouble) % 100;
+                        INFO("DI: %i", (uint8_t) di_pin);
+                        INFO("DCKI: %i", (uint8_t) dcki_pin);
                         my92xx_configure(di_pin, dcki_pin, 1);
+                        set_used_gpio(di_pin);
+                        set_used_gpio(dcki_pin);
+                        realGPIOs = false;
                     }
                     break;
                     default:
@@ -7569,10 +7576,12 @@ void normal_mode_init() {
                 }
                 for (uint8_t i = startIndex; i < EndIndex; i++) {
                     uint8_t gpio = (uint8_t) cJSON_GetArrayItem(gpio_array, i)->valuedouble;
-                    set_used_gpio(gpio % 100);
-                    
-                    lightbulb_group->gpio[i] = gpio % 100;
-                    lightbulb_group->funcs.new_channel(lightbulb_group->gpio[i], gpio / 100);
+                    if(realGPIOs)
+                    {
+                        set_used_gpio(gpio % 100);
+                    }
+                    lightbulb_group->gpio[i - startIndex] = gpio % 100;
+                    lightbulb_group->funcs.new_channel(lightbulb_group->gpio[i - startIndex], gpio / 100);
                 }
                 
                 lightbulb_group->funcs.start();
