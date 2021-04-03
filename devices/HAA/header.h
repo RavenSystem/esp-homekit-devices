@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "5.0.14"
+#define FIRMWARE_VERSION                    "5.0.15"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -198,6 +198,9 @@
 #define TH_DEADBAND_FORCE_IDLE              ch_group->num[10]
 #define THERMOSTAT_DEADBAND_SOFT_ON         "ds"
 #define TH_DEADBAND_SOFT_ON                 ch_group->num[11]
+#define THERMOSTAT_UPDATE_DELAY             "dl"
+#define THERMOSTAT_UPDATE_DELAY_MIN         (0.15f)
+#define THERMOSTAT_UPDATE_DELAY_DEFAULT     (3.0f)
 #define THERMOSTAT_IAIRZONING_CONTROLLER    "ia"
 #define TH_IAIRZONING_CONTROLLER            ch_group->num[2]
 #define TH_IAIRZONING_GATE_CURRENT_STATE    ch_group->num[12]
@@ -231,7 +234,6 @@
 #define TH_SENSOR_MAX_ALLOWED_ERRORS        (3)
 #define TH_HEATER_TARGET_TEMP_FLOAT         ch_group->ch6->value.float_value
 #define TH_COOLER_TARGET_TEMP_FLOAT         ch_group->ch7->value.float_value
-#define TH_UPDATE_DELAY_MS                  (5500)
 
 #define IAIRZONING_LAST_ACTION              iairzoning_group->num[0]
 #define IAIRZONING_MAIN_MODE                iairzoning_group->num[1]

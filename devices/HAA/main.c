@@ -544,8 +544,15 @@ void ntp_task() {
 }
 
 void ntp_timer_worker() {
-    if (xTaskCreate(ntp_task, "ntp", NTP_TASK_SIZE, NULL, NTP_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("Creating ntp_task");
+    if (!homekit_is_pairing()) {
+        if (xTaskCreate(ntp_task, "ntp", NTP_TASK_SIZE, NULL, NTP_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("Creating ntp_task");
+            FREEHEAP();
+            raven_ntp_get_time_t();
+        }
+    } else {
+        ERROR("ntp_task: HK pairing");
+        raven_ntp_get_time_t();
     }
 }
 
@@ -774,6 +781,7 @@ void setup_mode_call(const uint8_t gpio, void* args, const uint8_t param) {
 void setup_mode_toggle_upcount() {
     if (main_config.setup_mode_toggle_counter_max > 0) {
         main_config.setup_mode_toggle_counter++;
+        INFO("Setup mode trigger %i/%i", main_config.setup_mode_toggle_counter, main_config.setup_mode_toggle_counter_max);
         esp_timer_start(main_config.setup_mode_toggle_timer);
     }
 }
@@ -1265,7 +1273,7 @@ void power_monitor_timer_worker(TimerHandle_t xTimer) {
             FREEHEAP();
         }
     } else {
-        ERROR("Power_monitor_task. HK pairing");
+        ERROR("Power_monitor_task: HK pairing");
     }
 }
 
@@ -2035,7 +2043,7 @@ void temperature_timer_worker(TimerHandle_t xTimer) {
             FREEHEAP();
         }
     } else {
-        ERROR("temperature_task. HK pairing");
+        ERROR("temperature_task: HK pairing");
     }
 }
 
@@ -3304,7 +3312,7 @@ void light_sensor_timer_worker(TimerHandle_t xTimer) {
             FREEHEAP();
         }
     } else {
-        ERROR("light_sensor_task. HK pairing");
+        ERROR("light_sensor_task: HK pairing");
     }
 }
 
@@ -4693,6 +4701,18 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                     
                                 } else if ((uint8_t) action_acc_manager->value >= 1000) {   // HUE
                                     hkc_rgbw_setter(ch_group->ch2, HOMEKIT_FLOAT(action_acc_manager->value - 1000.f));
+                                } else if ((uint8_t) action_acc_manager->value >= 600) {    // BRI+
+                                    int16_t new_bri = ch_group->ch1->value.int_value + (((uint8_t) action_acc_manager->value) - 600);
+                                    if (new_bri > 100) {
+                                        new_bri = 100;
+                                    }
+                                    hkc_rgbw_setter(ch_group->ch1, HOMEKIT_UINT8((uint8_t) new_bri));
+                                } else if ((uint8_t) action_acc_manager->value >= 300) {    // BRI-
+                                    int16_t new_bri = ch_group->ch1->value.int_value - (((uint8_t) action_acc_manager->value) - 300);
+                                    if (new_bri < 1) {
+                                        new_bri = 1;
+                                    }
+                                    hkc_rgbw_setter(ch_group->ch1, HOMEKIT_UINT8((uint8_t) new_bri));
                                 }
                             } else {
                                 hkc_rgbw_setter(ch_group->ch0, HOMEKIT_BOOL((bool) action_acc_manager->value));
@@ -5761,6 +5781,17 @@ void normal_mode_init() {
         }
         
         return poll_period;
+    }
+    
+    float th_update_delay(cJSON* json_accessory) {
+        if (cJSON_GetObjectItemCaseSensitive(json_accessory, THERMOSTAT_UPDATE_DELAY) != NULL) {
+            float th_delay = (float) cJSON_GetObjectItemCaseSensitive(json_accessory, THERMOSTAT_UPDATE_DELAY)->valuedouble;
+            if (th_delay < THERMOSTAT_UPDATE_DELAY_MIN) {
+                return THERMOSTAT_UPDATE_DELAY_MIN;
+            }
+            return th_delay;
+        }
+        return THERMOSTAT_UPDATE_DELAY_DEFAULT;
     }
     
     void th_sensor(ch_group_t* ch_group, cJSON* json_accessory) {
@@ -7223,7 +7254,7 @@ void normal_mode_init() {
             TH_IAIRZONING_CONTROLLER = -((float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER)->valuedouble);
         }
         
-        ch_group->timer2 = esp_timer_create(TH_UPDATE_DELAY_MS, false, (void*) ch_group, process_th_timer);
+        ch_group->timer2 = esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, process_th_timer);
         
         if (TH_SENSOR_GPIO != -1) {
             set_used_gpio((uint8_t) TH_SENSOR_GPIO);
@@ -7290,7 +7321,7 @@ void normal_mode_init() {
         ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
         ch_group->last_wildcard_action[2] = NO_LAST_WILDCARD_ACTION;
         
-        ch_group->timer2 = esp_timer_create(TH_UPDATE_DELAY_MS, false, (void*) ch_group, set_zones_timer_worker);
+        ch_group->timer2 = esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, set_zones_timer_worker);
         
         TH_SENSOR_POLL_PERIOD = sensor_poll_period(json_context, TH_SENSOR_POLL_PERIOD_DEFAULT);
         th_sensor_starter(ch_group);
