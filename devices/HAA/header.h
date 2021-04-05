@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "5.0.15"
+#define FIRMWARE_VERSION                    "5.0.16"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -313,6 +313,10 @@
 #define GARAGE_DOOR_HAS_F3                  ch_group->num[5]
 #define GARAGE_DOOR_HAS_F4                  ch_group->num[6]
 #define GARAGE_DOOR_HAS_F5                  ch_group->num[7]
+#define GARAGE_DOOR_VIRTUAL_STOP            ch_group->num[8]
+
+#define VIRTUAL_STOP_SET                    "vs"
+#define VIRTUAL_STOP_DEFAULT                (0)
 
 #define WINDOW_COVER_CLOSING                (0)
 #define WINDOW_COVER_OPENING                (1)
@@ -322,7 +326,7 @@
 #define WINDOW_COVER_STOP_FROM_CLOSING      (5)
 #define WINDOW_COVER_STOP_FROM_OPENING      (6)
 #define WINDOW_COVER_OBSTRUCTION            (7)
-#define WINDOW_COVER_TYPE                   "w"
+#define WINDOW_COVER_TYPE_SET               "w"
 #define WINDOW_COVER_TYPE_DEFAULT           (0)
 #define WINDOW_COVER_TIME_OPEN_SET          "o"
 #define WINDOW_COVER_TIME_CLOSE_SET         "c"
@@ -341,6 +345,7 @@
 #define WINDOW_COVER_LAST_TIME              ch_group->num[6]
 #define WINDOW_COVER_STOP_ENABLE            ch_group->num[7]
 #define WINDOW_COVER_STOP_ENABLE_DELAY_MS   (80)
+#define WINDOW_COVER_VIRTUAL_STOP           ch_group->num[8]
 #define WINDOW_COVER_CH_CURRENT_POSITION    ch_group->ch0
 #define WINDOW_COVER_CH_TARGET_POSITION     ch_group->ch1
 #define WINDOW_COVER_CH_STATE               ch_group->ch2

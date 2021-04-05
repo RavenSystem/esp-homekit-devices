@@ -792,11 +792,11 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
         }
         
         case ENDPOINT_VERSION: {
-            static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n5.0.15";
+            static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n5.0.16";
             client_send(client, payload, sizeof(payload) - 1);
             break;
         }
-            
+        
         case ENDPOINT_UNKNOWN: {
             INFO("Unknown");
             client_send_redirect(client, 302, "http://192.168.4.1:4567/settings");

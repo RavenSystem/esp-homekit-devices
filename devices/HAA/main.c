@@ -1926,7 +1926,7 @@ void temperature_task(void* args) {
                 }
                 
             } else {
-                float adc = sdk_system_adc_read();
+                const float adc = sdk_system_adc_read();
                 if (TH_SENSOR_TYPE == 5) {
                     // https://github.com/arendst/Tasmota/blob/7177c7d8e003bb420d8cae39f544c2b8a9af09fe/tasmota/xsns_02_analog.ino#L201
                     temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 + taylor_log(((32000 * adc) / ((1024 * 3.3) - adc)) / 10000))) - 15;
@@ -2678,30 +2678,38 @@ void lightbulb_task(void* args) {
                                                                         lightbulb_group->target[3],
                                                                         lightbulb_group->target[4]);
     
-    if ((uint8_t) LIGHTBULB_TYPE != 0) {
-        uint16_t max_diff = abs(lightbulb_group->current[0] - lightbulb_group->target[0]);
-        for (uint8_t i = 1; i < LIGHTBULB_CHANNELS; i++) {
-            const uint16_t diff = abs(lightbulb_group->current[i] - lightbulb_group->target[i]);
-            if (diff > max_diff) {
-                max_diff = diff;
+    // Turn ON
+    if (lightbulb_group->target[0] != lightbulb_group->current[0] ||
+        lightbulb_group->target[1] != lightbulb_group->current[1] ||
+        lightbulb_group->target[2] != lightbulb_group->current[2] ||
+        lightbulb_group->target[3] != lightbulb_group->current[3] ||
+        lightbulb_group->target[4] != lightbulb_group->current[4]
+        ) {
+        if ((uint8_t) LIGHTBULB_TYPE != 0) {
+            uint16_t max_diff = abs(lightbulb_group->current[0] - lightbulb_group->target[0]);
+            for (uint8_t i = 1; i < LIGHTBULB_CHANNELS; i++) {
+                const uint16_t diff = abs(lightbulb_group->current[i] - lightbulb_group->target[i]);
+                if (diff > max_diff) {
+                    max_diff = diff;
+                }
+            }
+            
+            const uint16_t steps = (max_diff / lightbulb_group->step) + 1;
+            
+            for (uint8_t i = 0; i < LIGHTBULB_CHANNELS; i++) {
+                if (lightbulb_group->target[i] == lightbulb_group->current[i]) {
+                    LIGHTBULB_STEP_VALUE[i] = 0;
+                } else {
+                    LIGHTBULB_STEP_VALUE[i] = ((lightbulb_group->target[i] - lightbulb_group->current[i]) / steps) + (lightbulb_group->target[i] > lightbulb_group->current[i] ? 1 : -1);
+                }
             }
         }
         
-        const uint16_t steps = (max_diff / lightbulb_group->step) + 1;
-        
-        for (uint8_t i = 0; i < LIGHTBULB_CHANNELS; i++) {
-            if (lightbulb_group->target[i] == lightbulb_group->current[i]) {
-                LIGHTBULB_STEP_VALUE[i] = 0;
-            } else {
-                LIGHTBULB_STEP_VALUE[i] = ((lightbulb_group->target[i] - lightbulb_group->current[i]) / steps) + (lightbulb_group->target[i] > lightbulb_group->current[i] ? 1 : -1);
-            }
+        if ((uint8_t) LIGHTBULB_TYPE != 0 && !main_config.setpwm_is_running) {
+            main_config.setpwm_is_running = true;
+            rgbw_set_timer_worker(main_config.set_lightbulb_timer);
+            esp_timer_start(main_config.set_lightbulb_timer);
         }
-    }
-    
-    if ((uint8_t) LIGHTBULB_TYPE != 0 && !main_config.setpwm_is_running) {
-        main_config.setpwm_is_running = true;
-        rgbw_set_timer_worker(main_config.set_lightbulb_timer);
-        esp_timer_start(main_config.set_lightbulb_timer);
     }
     
     do_actions(ch_group, (uint8_t) ch_group->ch0->value.bool_value);
@@ -2855,7 +2863,6 @@ void garage_door_stop(const uint16_t gpio, void* args, const uint8_t type) {
 
         do_actions(ch_group, 10);
         
-        //hkc_group_notify(ch_group);
         homekit_characteristic_notify_safe(ch_group->ch0);
     }
 }
@@ -2868,7 +2875,6 @@ void garage_door_obstruction(const uint16_t gpio, void* args, const uint8_t type
     
     ch_group->ch2->value.bool_value = (bool) type;
     
-    //hkc_group_notify(ch_group);
     homekit_characteristic_notify_safe(ch_group->ch2);
     
     do_actions(ch_group, type + 8);
@@ -2900,7 +2906,6 @@ void garage_door_sensor(const uint16_t gpio, void* args, const uint8_t type) {
         }
     }
     
-    //hkc_group_notify(ch_group);
     homekit_characteristic_notify_safe(ch_group->ch0);
     homekit_characteristic_notify_safe(ch_group->ch1);
     
@@ -2913,11 +2918,16 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
         uint8_t current_door_state = ch_group->ch0->value.int_value;
         if (current_door_state == GARAGE_DOOR_STOPPED) {
             current_door_state = ch_group->ch1->value.int_value;
-        } else if (current_door_state > 1) {
-            current_door_state -= 2;
+            ch_group->ch0->value.int_value = current_door_state + 2;
+        } else if (current_door_state > GARAGE_DOOR_CLOSED) {
+            if (GARAGE_DOOR_VIRTUAL_STOP == 1) {
+                garage_door_stop(0, ch_group, 0);
+            } else {
+                current_door_state -= 2;
+            }
         }
 
-        if (value.int_value != current_door_state) {
+        if (value.int_value != current_door_state && ch_group->ch0->value.int_value != GARAGE_DOOR_STOPPED) {
             led_blink(1);
             INFO("<%i> Setter GD %i", ch_group->accessory, value.int_value);
             
@@ -2936,10 +2946,8 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
             
             setup_mode_toggle_upcount();
         }
-
     }
     
-    //hkc_group_notify(ch_group);
     homekit_characteristic_notify_safe(ch1);
 }
 
@@ -2976,6 +2984,8 @@ void garage_door_timer_worker(TimerHandle_t xTimer) {
             halt_timer();
         }
     }
+    
+    INFO("<%i> GD Pos %g/%g", ch_group->accessory, GARAGE_DOOR_CURRENT_TIME, GARAGE_DOOR_WORKING_TIME);
 }
 
 // --- WINDOW COVER
@@ -3036,7 +3046,10 @@ void window_cover_stop(ch_group_t* ch_group) {
     
     WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_STOP;
     
-    //hkc_group_notify(ch_group);
+    if (WINDOW_COVER_VIRTUAL_STOP == 2) {
+        WINDOW_COVER_VIRTUAL_STOP = 1;
+    }
+    
     homekit_characteristic_notify_safe(WINDOW_COVER_CH_STATE);
     homekit_characteristic_notify_safe(WINDOW_COVER_CH_CURRENT_POSITION);
     homekit_characteristic_notify_safe(WINDOW_COVER_CH_TARGET_POSITION);
@@ -3056,7 +3069,10 @@ void window_cover_obstruction(const uint16_t gpio, void* args, const uint8_t typ
     
     do_actions(ch_group, type + WINDOW_COVER_OBSTRUCTION);
     
-    //hkc_group_notify(ch_group);
+    if (WINDOW_COVER_VIRTUAL_STOP == 2) {
+        WINDOW_COVER_VIRTUAL_STOP = 1;
+    }
+    
     homekit_characteristic_notify_safe(ch_group->ch3);
 }
 
@@ -3074,6 +3090,12 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
         esp_timer_start(ch_group->timer2);
     }
     
+    void start_wc_timer() {
+        if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
+            esp_timer_start(ch_group->timer);
+        }
+    }
+    
     if (ch_group->main_enabled) {
         led_blink(1);
         INFO("<%i> Setter WC: Current: %i, Target: %i", ch_group->accessory, WINDOW_COVER_CH_CURRENT_POSITION->value.int_value, value.int_value);
@@ -3084,49 +3106,71 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
         
         WINDOW_COVER_LAST_TIME = SYSTEM_UPTIME_MS;
         
+        // CLOSE
         if (value.int_value < WINDOW_COVER_CH_CURRENT_POSITION->value.int_value) {
             disable_stop();
             
             if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_OPENING) {
-                do_actions(ch_group, WINDOW_COVER_CLOSING_FROM_MOVING);
+                if (WINDOW_COVER_VIRTUAL_STOP == 1 && value.int_value == 0) {
+                    window_cover_stop(ch_group);
+                    vTaskDelay(5);
+                } else {
+                    do_actions(ch_group, WINDOW_COVER_CLOSING_FROM_MOVING);
+                    
+                    start_wc_timer();
+                    
+                    WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_CLOSING;
+                }
                 setup_mode_toggle_upcount();
+                
             } else {
                 do_actions(ch_group, WINDOW_COVER_CLOSING);
+                
+                start_wc_timer();
+                
+                WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_CLOSING;
             }
-            
-            if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
-                esp_timer_start(ch_group->timer);
-            }
-            
-            WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_CLOSING;
 
+        // OPEN
         } else if (value.int_value > WINDOW_COVER_CH_CURRENT_POSITION->value.int_value) {
             disable_stop();
             
             if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_CLOSING) {
-                do_actions(ch_group, WINDOW_COVER_OPENING_FROM_MOVING);
+                if (WINDOW_COVER_VIRTUAL_STOP == 1 && value.int_value == 100) {
+                    window_cover_stop(ch_group);
+                    vTaskDelay(5);
+                } else {
+                    do_actions(ch_group, WINDOW_COVER_OPENING_FROM_MOVING);
+                    
+                    start_wc_timer();
+                    
+                    WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_OPENING;
+                }
                 setup_mode_toggle_upcount();
+                
             } else {
                 do_actions(ch_group, WINDOW_COVER_OPENING);
+                
+                start_wc_timer();
+                
+                WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_OPENING;
             }
-            
-            if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
-                esp_timer_start(ch_group->timer);
-            }
-            
-            WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_OPENING;
 
+        // STOP
         } else {
             window_cover_stop(ch_group);
         }
         
         do_wildcard_actions(ch_group, 0, value.int_value);
-    
+        
     }
     
-    //hkc_group_notify(ch_group);
-    homekit_characteristic_notify_safe(ch1);
+    if (WINDOW_COVER_VIRTUAL_STOP == 2) {
+        WINDOW_COVER_VIRTUAL_STOP = 1;
+    }
+    
     homekit_characteristic_notify_safe(WINDOW_COVER_CH_STATE);
+    homekit_characteristic_notify_safe(ch1);
 }
 
 void window_cover_timer_worker(TimerHandle_t xTimer) {
@@ -3459,10 +3503,16 @@ void window_cover_diginput(const uint16_t gpio, void* args, const uint8_t type) 
     if (ch_group->child_enabled) {
         switch (type) {
             case WINDOW_COVER_CLOSING:
+                if (WINDOW_COVER_VIRTUAL_STOP > 0) {
+                    WINDOW_COVER_VIRTUAL_STOP = 2;
+                }
                 hkc_window_cover_setter(ch_group->ch1, HOMEKIT_UINT8(0));
                 break;
                 
             case WINDOW_COVER_OPENING:
+                if (WINDOW_COVER_VIRTUAL_STOP > 0) {
+                    WINDOW_COVER_VIRTUAL_STOP = 2;
+                }
                 hkc_window_cover_setter(ch_group->ch1, HOMEKIT_UINT8(100));
                 break;
                 
@@ -3470,6 +3520,9 @@ void window_cover_diginput(const uint16_t gpio, void* args, const uint8_t type) 
                 if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_CLOSING) {
                     hkc_window_cover_setter(ch_group->ch1, WINDOW_COVER_CH_CURRENT_POSITION->value);
                 } else {
+                    if (WINDOW_COVER_VIRTUAL_STOP > 0) {
+                        WINDOW_COVER_VIRTUAL_STOP = 2;
+                    }
                     hkc_window_cover_setter(ch_group->ch1, HOMEKIT_UINT8(0));
                 }
                 break;
@@ -3478,6 +3531,9 @@ void window_cover_diginput(const uint16_t gpio, void* args, const uint8_t type) 
                 if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_OPENING) {
                     hkc_window_cover_setter(ch_group->ch1, WINDOW_COVER_CH_CURRENT_POSITION->value);
                 } else {
+                    if (WINDOW_COVER_VIRTUAL_STOP > 0) {
+                        WINDOW_COVER_VIRTUAL_STOP = 2;
+                    }
                     hkc_window_cover_setter(ch_group->ch1, HOMEKIT_UINT8(100));
                 }
                 break;
@@ -5810,6 +5866,13 @@ void normal_mode_init() {
         ch_group->timer = esp_timer_create(TH_SENSOR_POLL_PERIOD * 1000, true, (void*) ch_group, temperature_timer_worker);
     }
     
+    uint8_t virtual_stop(cJSON* json_accessory) {
+        if (cJSON_GetObjectItemCaseSensitive(json_accessory, VIRTUAL_STOP_SET) != NULL) {
+            return (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, VIRTUAL_STOP_SET)->valuedouble;
+        }
+        return VIRTUAL_STOP_DEFAULT;
+    }
+    
     // ----- CONFIG SECTION
     
     // UART configuration
@@ -7804,6 +7867,7 @@ void normal_mode_init() {
         GARAGE_DOOR_WORKING_TIME = GARAGE_DOOR_TIME_OPEN_DEFAULT;
         GARAGE_DOOR_TIME_MARGIN = GARAGE_DOOR_TIME_MARGIN_DEFAULT;
         GARAGE_DOOR_CLOSE_TIME_FACTOR = 1;
+        GARAGE_DOOR_VIRTUAL_STOP = virtual_stop(json_context);
         
         ch_group->timer = esp_timer_create(1000, true, (void*) ch_group->ch0, garage_door_timer_worker);
         
@@ -7905,8 +7969,8 @@ void normal_mode_init() {
         new_accessory(accessory, 3, ch_group->homekit_enabled, json_context);
         
         uint8_t cover_type = WINDOW_COVER_TYPE_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TYPE) != NULL) {
-            cover_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TYPE)->valuedouble;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TYPE_SET) != NULL) {
+            cover_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TYPE_SET)->valuedouble;
         }
         
         WINDOW_COVER_CH_CURRENT_POSITION = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_POSITION, 0);
@@ -7945,6 +8009,7 @@ void normal_mode_init() {
         WINDOW_COVER_TIME_CLOSE = WINDOW_COVER_TIME_DEFAULT;
         WINDOW_COVER_CORRECTION = WINDOW_COVER_CORRECTION_DEFAULT;
         WINDOW_COVER_MARGIN_SYNC = WINDOW_COVER_MARGIN_SYNC_DEFAULT;
+        WINDOW_COVER_VIRTUAL_STOP = virtual_stop(json_context);
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
