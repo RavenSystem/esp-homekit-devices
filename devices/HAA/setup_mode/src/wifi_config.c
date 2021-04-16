@@ -70,8 +70,7 @@ typedef enum {
     ENDPOINT_UNKNOWN = 0,
     ENDPOINT_INDEX,
     ENDPOINT_SETTINGS,
-    ENDPOINT_SETTINGS_UPDATE,
-    ENDPOINT_VERSION
+    ENDPOINT_SETTINGS_UPDATE
 } endpoint_t;
 
 typedef struct _wifi_network_info {
@@ -529,11 +528,14 @@ static void wifi_config_server_on_settings(client_t *client) {
         char str_port[6];
         itoa(int32_value, str_port, 10);
         client_send_chunk(client, str_port);
+    } else {
+        client_send_chunk(client, "80");
     }
     client_send_chunk(client, html_settings_repoport);
     
-    status = sysparam_get_int8(PORT_SECURE_SYSPARAM, &int8_value);
-    if (status != SYSPARAM_OK || (status == SYSPARAM_OK && int8_value == 1)) {
+    int8_value = 0;
+    sysparam_get_int8(PORT_SECURE_SYSPARAM, &int8_value);
+    if (int8_value == 1) {
         client_send_chunk(client, "checked");
     }
     client_send_chunk(client, html_settings_repossl);
@@ -623,6 +625,8 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         
         if (conf_param && conf_param->value) {
             sysparam_set_string(HAA_JSON_SYSPARAM, conf_param->value);
+        } else {
+            sysparam_set_string(HAA_JSON_SYSPARAM, "");
         }
         
         if (autoota_param) {
@@ -658,6 +662,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             homekit_server_reset();
             last_config_number = 1;
         }
+        sysparam_set_int32(LAST_CONFIG_NUMBER, last_config_number);
         
         if (reposerver_param && reposerver_param->value) {
             sysparam_set_string(CUSTOM_REPO_SYSPARAM, reposerver_param->value);
@@ -734,8 +739,6 @@ static int wifi_config_server_on_url(http_parser *parser, const char *data, size
     if (parser->method == HTTP_GET) {
         if (!strncmp(data, "/settings", length)) {
             client->endpoint = ENDPOINT_SETTINGS;
-        } else if (!strncmp(data, "/version", length)) {
-            client->endpoint = ENDPOINT_VERSION;
         } else if (!strncmp(data, "/", length)) {
             client->endpoint = ENDPOINT_INDEX;
         }
@@ -788,12 +791,6 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
             wifi_config_context_free(context);
             xTaskCreate(wifi_config_server_on_settings_update_task, "settings_update", 512, client, (tskIDLE_PRIORITY + 0), NULL);
             return 0;
-            break;
-        }
-        
-        case ENDPOINT_VERSION: {
-            static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n5.0.16";
-            client_send(client, payload, sizeof(payload) - 1);
             break;
         }
         

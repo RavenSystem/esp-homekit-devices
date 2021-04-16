@@ -2779,7 +2779,7 @@ void rgbw_brightness(const uint16_t gpio, void* args, const uint8_t type) {
             if (ch_group->ch1->value.int_value - 10 > 0) {
                 ch_group->ch1->value.int_value -= 10;
             } else {
-                ch_group->ch1->value.int_value = 0;
+                ch_group->ch1->value.int_value = 1;
             }
         }
         
@@ -4747,10 +4747,10 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                         case ACC_TYPE_LIGHTBULB:
                             if ((uint8_t) action_acc_manager->value > 1) {
                                 if ((uint8_t) action_acc_manager->value < 103) {            // BRI
-                                    hkc_rgbw_setter(ch_group->ch1, HOMEKIT_UINT8(((uint8_t) action_acc_manager->value) - 2));
+                                    hkc_rgbw_setter(ch_group->ch1, HOMEKIT_INT(((uint8_t) action_acc_manager->value) - 2));
                                     
                                 } else if ((uint8_t) action_acc_manager->value >= 3000) {   // TEMP
-                                    hkc_rgbw_setter(ch_group->ch2, HOMEKIT_UINT32(((uint32_t) action_acc_manager->value) - 3000));
+                                    hkc_rgbw_setter(ch_group->ch2, HOMEKIT_UINT32(((uint16_t) action_acc_manager->value) - 3000));
                                     
                                 } else if ((uint8_t) action_acc_manager->value >= 2000) {   // SAT
                                     hkc_rgbw_setter(ch_group->ch3, HOMEKIT_FLOAT(action_acc_manager->value - 2000.f));
@@ -4758,17 +4758,17 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 } else if ((uint8_t) action_acc_manager->value >= 1000) {   // HUE
                                     hkc_rgbw_setter(ch_group->ch2, HOMEKIT_FLOAT(action_acc_manager->value - 1000.f));
                                 } else if ((uint8_t) action_acc_manager->value >= 600) {    // BRI+
-                                    int16_t new_bri = ch_group->ch1->value.int_value + (((uint8_t) action_acc_manager->value) - 600);
+                                    int16_t new_bri = ch_group->ch1->value.int_value + (((uint16_t) action_acc_manager->value) - 600);
                                     if (new_bri > 100) {
                                         new_bri = 100;
                                     }
-                                    hkc_rgbw_setter(ch_group->ch1, HOMEKIT_UINT8((uint8_t) new_bri));
+                                    hkc_rgbw_setter(ch_group->ch1, HOMEKIT_INT((uint8_t) new_bri));
                                 } else if ((uint8_t) action_acc_manager->value >= 300) {    // BRI-
-                                    int16_t new_bri = ch_group->ch1->value.int_value - (((uint8_t) action_acc_manager->value) - 300);
+                                    int16_t new_bri = ch_group->ch1->value.int_value - (((uint16_t) action_acc_manager->value) - 300);
                                     if (new_bri < 1) {
                                         new_bri = 1;
                                     }
-                                    hkc_rgbw_setter(ch_group->ch1, HOMEKIT_UINT8((uint8_t) new_bri));
+                                    hkc_rgbw_setter(ch_group->ch1, HOMEKIT_INT((uint8_t) new_bri));
                                 }
                             } else {
                                 hkc_rgbw_setter(ch_group->ch0, HOMEKIT_BOOL((bool) action_acc_manager->value));
@@ -5687,7 +5687,7 @@ void normal_mode_init() {
                         
                         action_uart->pause = 0;
                         if (cJSON_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_PAUSE) != NULL) {
-                            action_uart->uart = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_PAUSE)->valuedouble;
+                            action_uart->pause = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_PAUSE)->valuedouble;
                         }
                         
                         if (cJSON_GetObjectItemCaseSensitive(json_action_uart, VALUE) != NULL) {
@@ -6314,7 +6314,7 @@ void normal_mode_init() {
         }
     }
     
-    if (total_accessories > ACCESSORIES_WITHOUT_BRIDGE || bridge_needed) {
+    if (hk_total_ac > (ACCESSORIES_WITHOUT_BRIDGE + 1)) {
         // Bridge needed
         bridge_needed = true;
         hk_total_ac += 1;
