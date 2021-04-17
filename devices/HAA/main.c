@@ -7328,7 +7328,7 @@ void normal_mode_init() {
             set_used_gpio((uint8_t) TH_SENSOR_GPIO);
         }
         
-        if ((TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 4) && TH_IAIRZONING_CONTROLLER > 0) {
+        if ((TH_SENSOR_GPIO != -1 || (TH_SENSOR_TYPE > 4 && TH_SENSOR_TYPE < 9)) && TH_IAIRZONING_CONTROLLER > 0) {
             th_sensor_starter(ch_group);
         }
         
@@ -7427,7 +7427,7 @@ void normal_mode_init() {
             set_used_gpio((uint8_t) TH_SENSOR_GPIO);
         }
         
-        if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 4) {
+        if (TH_SENSOR_GPIO != -1 || (TH_SENSOR_TYPE > 4 && TH_SENSOR_TYPE < 9)) {
             th_sensor_starter(ch_group);
         }
         
@@ -7465,6 +7465,9 @@ void normal_mode_init() {
         
         if (TH_SENSOR_GPIO != -1) {
             set_used_gpio((uint8_t) TH_SENSOR_GPIO);
+        }
+
+        if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 8) {
             th_sensor_starter(ch_group);
         }
         
