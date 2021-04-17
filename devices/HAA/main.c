@@ -1937,9 +1937,14 @@ void temperature_task(void* args) {
                 } else if (TH_SENSOR_TYPE == 7) {
                     temperature_value = 1024 - adc;
                     
-                } else {    // TH_SENSOR_TYPE == 8
+                } else if (TH_SENSOR_TYPE == 8) {
                     temperature_value = adc;
+                } else if (TH_SENSOR_TYPE == 9){ 
+                    humidity_value = (1024 - adc) * 100.0 / 1024;
+                } else {//TH_SENSOR_TYPE == 10
+                    humidity_value = adc * 100.0 / 1024;
                 }
+
                 
                 if (TH_SENSOR_HUM_OFFSET != 0.000000f) {
                     temperature_value *= TH_SENSOR_HUM_OFFSET;
