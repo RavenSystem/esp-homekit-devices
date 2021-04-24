@@ -16,9 +16,15 @@
 #include <FreeRTOS.h>
 #include <esplibs/libmain.h>
 #include <espressif/esp_common.h>
+
+#include <lwip/err.h>
 #include <lwip/sockets.h>
+#include <lwip/sys.h>
+#include <lwip/netdb.h>
+#include <lwip/dns.h>
 #include <lwip/dhcp.h>
 #include <lwip/etharp.h>
+
 #include <spiflash.h>
 
 #include <semphr.h>
@@ -45,7 +51,9 @@
 #define TOTAL_ACC_SYSPARAM              "total_ac"
 #define HAA_JSON_SYSPARAM               "haa_conf"
 #define HAA_SETUP_MODE_SYSPARAM         "setup"
-#define LAST_CONFIG_NUMBER              "hkcf"
+#define LAST_CONFIG_NUMBER_SYSPARAM     "hkcf"
+#define SETUP_ANNOUNCER_DESTINATION     "255.255.255.255"
+#define SETUP_ANNOUNCER_PORT            "4567"
 
 // Sysparam
 #define SYSPARAMSECTOR                  (0xF3000)
@@ -89,11 +97,14 @@ typedef struct {
     char* custom_hostname;
     int param;
     void (*on_wifi_ready)();
+    
+    struct addrinfo* res;
 
     TimerHandle_t auto_reboot_timer;
     
     TaskHandle_t http_task_handle;
     TaskHandle_t sta_connect_timeout;
+    TaskHandle_t setup_announcer;
     
     wifi_network_info_t* wifi_networks;
     SemaphoreHandle_t wifi_networks_mutex;
@@ -416,6 +427,32 @@ static void wifi_scan_task(void *arg) {
     vTaskDelete(NULL);
 }
 
+static void setup_announcer_task() {
+    const struct addrinfo hints = {
+        .ai_family = AF_UNSPEC,
+        .ai_socktype = SOCK_DGRAM,
+    };
+    
+    while (getaddrinfo(SETUP_ANNOUNCER_DESTINATION, SETUP_ANNOUNCER_PORT, &hints, &context->res) != 0) {
+        vTaskDelay(MS_TO_TICKS(200));
+    }
+
+    uint8_t macaddr[6];
+    sdk_wifi_get_macaddr(SOFTAP_IF, macaddr);
+    char message[13];
+    snprintf(message, 13, "HAA-%02X%02X%02X\r\n", macaddr[3], macaddr[4], macaddr[5]);
+    
+    for (;;) {
+        int s = socket(context->res->ai_family, context->res->ai_socktype, 0);
+        if (s >= 0) {
+            lwip_sendto(s, message, strlen(message), 0, context->res->ai_addr, context->res->ai_addrlen);
+            lwip_close(s);
+        }
+        
+        vTaskDelay(MS_TO_TICKS(3000));
+    }
+}
+
 #include "index.html.h"
 
 static void wifi_config_server_on_settings(client_t *client) {
@@ -652,7 +689,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         }
         
         int last_config_number = 0;
-        sysparam_get_int32(LAST_CONFIG_NUMBER, &last_config_number);
+        sysparam_get_int32(LAST_CONFIG_NUMBER_SYSPARAM, &last_config_number);
         last_config_number++;
         if (last_config_number > 65535) {
             last_config_number = 1;
@@ -662,7 +699,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             homekit_server_reset();
             last_config_number = 1;
         }
-        sysparam_set_int32(LAST_CONFIG_NUMBER, last_config_number);
+        sysparam_set_int32(LAST_CONFIG_NUMBER_SYSPARAM, last_config_number);
         
         if (reposerver_param && reposerver_param->value) {
             sysparam_set_string(CUSTOM_REPO_SYSPARAM, reposerver_param->value);
@@ -788,6 +825,14 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
             } else {
                 sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
             }
+            
+            if (context->setup_announcer) {
+                vTaskDelete(context->setup_announcer);
+                if (context->res) {
+                    freeaddrinfo(context->res);
+                }
+            }
+            
             wifi_config_context_free(context);
             xTaskCreate(wifi_config_server_on_settings_update_task, "settings_update", 512, client, (tskIDLE_PRIORITY + 0), NULL);
             return 0;
@@ -825,6 +870,8 @@ static void http_task(void *arg) {
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     serv_addr.sin_port = htons(WIFI_CONFIG_SERVER_PORT);
+    
+    /*
     int flags;
     if ((flags = lwip_fcntl(listenfd, F_GETFL, 0)) < 0) {
         ERROR("Get HTTP flags");
@@ -838,6 +885,8 @@ static void http_task(void *arg) {
         vTaskDelete(NULL);
         return;
     }
+    */
+    
     bind(listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
     listen(listenfd, 2);
 
@@ -989,8 +1038,12 @@ static void wifi_config_sta_connect_timeout_task() {
                 context->on_wifi_ready();
                 
                 wifi_config_context_free(context);
-                break;
+                
+            } else {
+                xTaskCreate(setup_announcer_task, "setup_announcer", 512, NULL, (tskIDLE_PRIORITY + 0), &context->setup_announcer);
             }
+            
+            break;
 
         } else if (context->on_wifi_ready) {
             context->check_counter++;
@@ -1007,6 +1060,9 @@ static void wifi_config_sta_connect_timeout_task() {
         }
     }
     
+    if (context) {
+        context->sta_connect_timeout = NULL;
+    }
     vTaskDelete(NULL);
 }
 
@@ -1022,7 +1078,14 @@ static void auto_reboot_run() {
     if (context->sta_connect_timeout) {
         vTaskDelete(context->sta_connect_timeout);
     }
-
+    
+    if (context->setup_announcer) {
+        vTaskDelete(context->setup_announcer);
+        if (context->res) {
+            freeaddrinfo(context->res);
+        }
+    }
+    
     vTaskDelay(MS_TO_TICKS(500));
     
     sdk_system_restart();

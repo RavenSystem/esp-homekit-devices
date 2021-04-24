@@ -4745,30 +4745,30 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             break;
                             
                         case ACC_TYPE_LIGHTBULB:
-                            if ((uint8_t) action_acc_manager->value > 1) {
-                                if ((uint8_t) action_acc_manager->value < 103) {            // BRI
-                                    hkc_rgbw_setter(ch_group->ch1, HOMEKIT_INT(((uint8_t) action_acc_manager->value) - 2));
+                            if (action_acc_manager->value > 1) {
+                                if (action_acc_manager->value < 103) {            // BRI
+                                    hkc_rgbw_setter(ch_group->ch1, HOMEKIT_INT(((int) action_acc_manager->value) - 2));
                                     
-                                } else if ((uint8_t) action_acc_manager->value >= 3000) {   // TEMP
-                                    hkc_rgbw_setter(ch_group->ch2, HOMEKIT_UINT32(((uint16_t) action_acc_manager->value) - 3000));
+                                } else if (action_acc_manager->value >= 3000) {   // TEMP
+                                    hkc_rgbw_setter(ch_group->ch2, HOMEKIT_UINT32(((uint32_t) action_acc_manager->value) - 3000));
                                     
-                                } else if ((uint8_t) action_acc_manager->value >= 2000) {   // SAT
+                                } else if (action_acc_manager->value >= 2000) {   // SAT
                                     hkc_rgbw_setter(ch_group->ch3, HOMEKIT_FLOAT(action_acc_manager->value - 2000.f));
                                     
-                                } else if ((uint8_t) action_acc_manager->value >= 1000) {   // HUE
+                                } else if (action_acc_manager->value >= 1000) {   // HUE
                                     hkc_rgbw_setter(ch_group->ch2, HOMEKIT_FLOAT(action_acc_manager->value - 1000.f));
-                                } else if ((uint8_t) action_acc_manager->value >= 600) {    // BRI+
-                                    int16_t new_bri = ch_group->ch1->value.int_value + (((uint16_t) action_acc_manager->value) - 600);
+                                } else if (action_acc_manager->value >= 600) {    // BRI+
+                                    int new_bri = ch_group->ch1->value.int_value + (action_acc_manager->value - 600.f);
                                     if (new_bri > 100) {
                                         new_bri = 100;
                                     }
-                                    hkc_rgbw_setter(ch_group->ch1, HOMEKIT_INT((uint8_t) new_bri));
-                                } else if ((uint8_t) action_acc_manager->value >= 300) {    // BRI-
-                                    int16_t new_bri = ch_group->ch1->value.int_value - (((uint16_t) action_acc_manager->value) - 300);
+                                    hkc_rgbw_setter(ch_group->ch1, HOMEKIT_INT(new_bri));
+                                } else if (action_acc_manager->value >= 300) {    // BRI-
+                                    int new_bri = ch_group->ch1->value.int_value - (action_acc_manager->value - 300.f);
                                     if (new_bri < 1) {
                                         new_bri = 1;
                                     }
-                                    hkc_rgbw_setter(ch_group->ch1, HOMEKIT_INT((uint8_t) new_bri));
+                                    hkc_rgbw_setter(ch_group->ch1, HOMEKIT_INT(new_bri));
                                 }
                             } else {
                                 hkc_rgbw_setter(ch_group->ch0, HOMEKIT_BOOL((bool) action_acc_manager->value));
