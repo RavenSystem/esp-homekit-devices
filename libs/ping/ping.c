@@ -185,7 +185,12 @@ bool ping(ip_addr_t ping_target) {
         printf("ping error creating socket (%i)\n", s);
         return false;
     }
-
+    
+    const struct timeval sndtimeout = { 3, 0 };
+    ret = lwip_setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
+    LWIP_ASSERT("setting send timeout failed", ret == 0);
+    LWIP_UNUSED_ARG(ret);
+    
     ret = lwip_setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     LWIP_ASSERT("setting receive timeout failed", ret == 0);
     LWIP_UNUSED_ARG(ret);

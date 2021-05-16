@@ -136,7 +136,7 @@ static u16_t mdns_responder_reply_size = 0;
 
 #define MDNS_TTL_MIN                (30)
 #define MDNS_TTL_MULTIPLIER_MS      (1000)  // Set to 1000 to use standard time
-#define MDNS_TTL_SAFE_MARGIN        (4)
+#define MDNS_TTL_SAFE_MARGIN        (5)
 static uint32_t mdns_ttl = 4500;
 
 #define MDNS_STATUS_PROBING         (0)

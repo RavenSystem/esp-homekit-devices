@@ -128,11 +128,19 @@ static void wifi_config_softap_start();
 static void wifi_config_softap_stop();
 
 int wifi_config_remove_sys_param() {
-    unsigned char blank[1];
-    blank[0] = 0;
+    unsigned char blank = 0;
+    
     for (uint16_t i = 0; i < (SECTORSIZE * SYSPARAMSIZE); i++) {
-        if (!spiflash_write(SYSPARAMSECTOR + i, blank, 1)) {
-            ERROR("Format sysparam");
+        if (!spiflash_write(SYSPARAMSECTOR + i, &blank, 1)) {
+            ERROR("Format sysparam (1/2)");
+            return -1;
+        }
+    }
+    
+    blank = 255;
+    for (uint16_t i = 0; i < (SECTORSIZE * SYSPARAMSIZE); i++) {
+        if (!spiflash_write(SYSPARAMSECTOR + i, &blank, 1)) {
+            ERROR("Format sysparam (2/2)");
             return -1;
         }
     }
@@ -871,22 +879,6 @@ static void http_task(void *arg) {
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     serv_addr.sin_port = htons(WIFI_CONFIG_SERVER_PORT);
     
-    /*
-    int flags;
-    if ((flags = lwip_fcntl(listenfd, F_GETFL, 0)) < 0) {
-        ERROR("Get HTTP flags");
-        lwip_close(listenfd);
-        vTaskDelete(NULL);
-        return;
-    };
-    if (lwip_fcntl(listenfd, F_SETFL, flags | O_NONBLOCK) < 0) {
-        ERROR("Set HTTP flags");
-        lwip_close(listenfd);
-        vTaskDelete(NULL);
-        return;
-    }
-    */
-    
     bind(listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
     listen(listenfd, 2);
 
@@ -907,9 +899,9 @@ static void http_task(void *arg) {
             vTaskDelay(MS_TO_TICKS(200));
             continue;
         }
-
-        const struct timeval timeout = { 1, 0 };
-        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+        
+        const struct timeval rcvtimeout = { 1, 0 };
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
         
         const int yes = 1;
         setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes));

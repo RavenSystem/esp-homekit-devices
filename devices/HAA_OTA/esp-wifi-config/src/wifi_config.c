@@ -100,18 +100,26 @@ static void wifi_config_softap_start();
 static void wifi_config_softap_stop();
 
 int wifi_config_remove_sys_param() {
-    unsigned char blank[1];
-    blank[0] = 0;
+    unsigned char blank = 0;
+    
     for (uint16_t i = 0; i < (SECTORSIZE * SYSPARAMSIZE); i++) {
-        if (!spiflash_write(SYSPARAMSECTOR + i, blank, 1)) {
-            ERROR("Failed to format sysparam sectors");
+        if (!spiflash_write(SYSPARAMSECTOR + i, &blank, 1)) {
+            ERROR("Format sysparam (1/2)");
+            return -1;
+        }
+    }
+    
+    blank = 255;
+    for (uint16_t i = 0; i < (SECTORSIZE * SYSPARAMSIZE); i++) {
+        if (!spiflash_write(SYSPARAMSECTOR + i, &blank, 1)) {
+            ERROR("Format sysparam (2/2)");
             return -1;
         }
     }
     
     for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
         if (!spiflash_erase_sector(SYSPARAMSECTOR + (SECTORSIZE * i))) {
-            ERROR("Failed to erase sysparam sectors");
+            ERROR("Erase sysparam");
             return -2;
         }
     }
@@ -793,8 +801,8 @@ static void http_task(void *arg) {
             continue;
         }
 
-        const struct timeval timeout = { 1, 0 };
-        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+        const struct timeval rcvtimeout = { 1, 0 };
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
         
         const int yes = 1;
         setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes));

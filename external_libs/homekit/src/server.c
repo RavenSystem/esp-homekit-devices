@@ -19,6 +19,7 @@
 #include <queue.h>
 #include <espressif/esp_common.h>
 #include <esplibs/libmain.h>
+#include <semphr.h>
 #else
 #error "Unknown target platform"
 #endif
@@ -42,10 +43,14 @@
 #include <homekit/tlv.h>
 
 
-#define PORT 5556
+#define PORT                    (5556)
 
 #ifndef HOMEKIT_MAX_CLIENTS
-#define HOMEKIT_MAX_CLIENTS 8
+#define HOMEKIT_MAX_CLIENTS     (8)
+#endif
+
+#ifndef HOMEKIT_MIN_FREEHEAP
+#define HOMEKIT_MIN_FREEHEAP    (4352)
 #endif
 
 struct _client_context_t;
@@ -107,6 +112,7 @@ typedef struct {
     int8_t client_count;
     bool paired: 1;
     bool is_pairing: 1;
+    bool has_notifications: 1;
     
     byte data[1024 + 18];
     size_t data_size: 16;
@@ -1950,7 +1956,7 @@ void homekit_server_on_get_accessories(client_context_t *context) {
     sdk_system_overclock();
 #endif
     
-    client_send(context, json_200_response_headers, sizeof(json_200_response_headers)-1);
+    client_send(context, json_200_response_headers, sizeof(json_200_response_headers) - 1);
 
     json_stream *json = json_new(1024, client_send_chunk, context);
     json_object_start(json);
@@ -2549,7 +2555,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
         json_object_start(json1);
         json_string(json1, "characteristics"); json_array_start(json1);
 
-        for (int i=0; i < cJSON_GetArraySize(characteristics); i++) {
+        for (int i = 0; i < cJSON_GetArraySize(characteristics); i++) {
             cJSON *j_ch = cJSON_GetArrayItem(characteristics, i);
 
             json_object_start(json1);
@@ -3019,8 +3025,8 @@ static http_parser_settings homekit_http_parser_settings = {
 IRAM static void homekit_client_process(client_context_t *context) {
     int data_len = read(
         context->socket,
-        homekit_server->data+homekit_server->data_available,
-        homekit_server->data_size-homekit_server->data_available
+        homekit_server->data + homekit_server->data_available,
+        homekit_server->data_size - homekit_server->data_available
     );
     if (data_len == 0) {
         CLIENT_INFO(context, "Closing");
@@ -3045,7 +3051,7 @@ IRAM static void homekit_client_process(client_context_t *context) {
 
     if (context->encrypted) {
         CLIENT_DEBUG(context, "Decrypting data");
-
+        
         client_decrypt(context, homekit_server->data, data_len, NULL, &decrypted_size);
 
         decrypted = malloc(decrypted_size);
@@ -3114,6 +3120,7 @@ IRAM void homekit_server_close_client(client_context_t *context) {
 client_context_t *homekit_server_accept_client() {
     int s = accept(homekit_server->listen_fd, (struct sockaddr *)NULL, (socklen_t *)NULL);
     if (s < 0) {
+        HOMEKIT_ERROR("New socket");
         return NULL;
     }
 
@@ -3131,7 +3138,8 @@ client_context_t *homekit_server_accept_client() {
     
     client_context_t *context;
     
-    if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS) {
+    uint32_t free_heap = xPortGetFreeHeapSize();
+    if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS || free_heap <= HOMEKIT_MIN_FREEHEAP) {
         context = homekit_server->clients;
         for (;;) {
             if (!context->next) {
@@ -3144,7 +3152,7 @@ client_context_t *homekit_server_accept_client() {
         }
     }
     
-    const struct timeval sndtimeout = { 4, 0 };
+    const struct timeval sndtimeout = { 3, 0 };
     setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
     
     const struct timeval rcvtimeout = { 10, 0 };
@@ -3166,12 +3174,25 @@ client_context_t *homekit_server_accept_client() {
         homekit_server->max_fd = s;
     }
     
-    HOMEKIT_INFO("[%d] New %s:%d (%i/%i)", s, address_buffer, addr.sin_port, homekit_server->client_count, HOMEKIT_MAX_CLIENTS);
+    HOMEKIT_INFO("[%d] New %s:%d (%i/%i) Free HEAP: %d", s, address_buffer, addr.sin_port, homekit_server->client_count, HOMEKIT_MAX_CLIENTS, free_heap);
 
     HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_CLIENT_CONNECTED);
 
     return context;
 }
+
+
+void homekit_characteristic_notify(homekit_characteristic_t *ch) {
+    const homekit_value_t value = ch->value;
+    homekit_characteristic_change_callback_t *callback = ch->callback;
+    while (callback) {
+        callback->function(ch, value, callback->context);
+        callback = callback->next;
+    }
+    
+    homekit_server->has_notifications = true;
+}
+
 
 IRAM void homekit_server_process_notifications() {
     client_context_t *context = homekit_server->clients;
@@ -3275,34 +3296,38 @@ static void homekit_run_server() {
     homekit_server->max_fd = homekit_server->listen_fd;
     homekit_server->client_count = 0;
     
+    struct timeval timeout = { 0, 150000 }; /* 0.15 seconds timeout (orig: 1s) */
+    
     for (;;) {
         fd_set read_fds;
         memcpy(&read_fds, &homekit_server->fds, sizeof(read_fds));
         
-        struct timeval timeout = { 0, 150000 }; /* 0.15 seconds timeout (orig: 1s) */
         int triggered_nfds = select(homekit_server->max_fd + 1, &read_fds, NULL, NULL, &timeout);
         if (triggered_nfds > 0) {
             if (FD_ISSET(homekit_server->listen_fd, &read_fds)) {
                 homekit_server_accept_client();
                 triggered_nfds--;
             }
-
+            
             client_context_t *context = homekit_server->clients;
             while (context && triggered_nfds) {
                 if (FD_ISSET(context->socket, &read_fds)) {
                     homekit_client_process(context);
                     triggered_nfds--;
                 }
-
+                
                 context = context->next;
             }
-
+            
             homekit_server_close_clients();
         }
-
-        homekit_server_process_notifications();
+        
+        if (homekit_server->has_notifications) {
+            homekit_server->has_notifications = false;
+            homekit_server_process_notifications(homekit_server);
+        }
     }
-
+    
     //server_free();
 }
 
@@ -3409,7 +3434,7 @@ ed25519_key *homekit_accessory_key_generate() {
 }
 
 void homekit_server_task(void *args) {
-    HOMEKIT_INFO("Starting server");
+    HOMEKIT_INFO("Starting HKServer");
 
     int r = homekit_storage_init();
 
@@ -3453,16 +3478,18 @@ void homekit_server_task(void *args) {
     //vTaskDelete(NULL);
 }
 
-#define ISDIGIT(x) isdigit((unsigned char)(x))
-#define ISBASE36(x) (isdigit((unsigned char)(x)) || (x >= 'A' && x <= 'Z'))
+#define ISDIGIT(x)      isdigit((unsigned char)(x))
+#define ISBASE36(x)     (isdigit((unsigned char)(x)) || (x >= 'A' && x <= 'Z'))
 
 void homekit_server_init(homekit_server_config_t *config) {
     homekit_accessories_init(config->accessories);
-
+    
     homekit_server = server_new();
     homekit_server->config = config;
-
-    xTaskCreate(homekit_server_task, "HK_Server", SERVER_TASK_STACK, NULL, 1, NULL);
+    
+    if (xTaskCreate(homekit_server_task, "HKServer", SERVER_TASK_STACK, NULL, (tskIDLE_PRIORITY + 2), NULL) != pdPASS) {
+        ERROR("Creating HKServer");
+    }
 }
 
 void homekit_server_reset() {

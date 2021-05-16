@@ -476,16 +476,6 @@ homekit_characteristic_t *homekit_characteristic_find_by_type(homekit_accessory_
 }
 
 
-void homekit_characteristic_notify(homekit_characteristic_t *ch) {
-    const homekit_value_t value = ch->value;
-    homekit_characteristic_change_callback_t *callback = ch->callback;
-    while (callback) {
-        callback->function(ch, value, callback->context);
-        callback = callback->next;
-    }
-}
-
-
 void homekit_characteristic_add_notify_callback(
     homekit_characteristic_t *ch,
     homekit_characteristic_change_callback_fn function,

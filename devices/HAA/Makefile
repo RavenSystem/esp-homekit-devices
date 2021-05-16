@@ -7,11 +7,11 @@ EXTRA_COMPONENTS = \
     extras/ds18b20 \
 	extras/dhcpserver \
 	extras/rboot-ota \
-	extras/i2c \
 	$(abspath ../../external_libs/http-parser) \
     $(abspath ../../external_libs/wolfssl) \
     $(abspath ../../external_libs/cJSON) \
     $(abspath ../../external_libs/homekit) \
+	$(abspath ../../libs/adv_i2c) \
     $(abspath ../../libs/adv_button) \
     $(abspath ../../libs/adv_hlw) \
 	$(abspath ../../libs/adv_pwm) \
@@ -56,8 +56,9 @@ EXTRA_CFLAGS += -DWIFI_PARAM_SAVE=0
 
 EXTRA_CFLAGS += -DconfigMINIMAL_STACK_SIZE=256
 #EXTRA_CFLAGS += -DconfigTIMER_TASK_PRIORITY=\(configMAX_PRIORITIES-1\)
-EXTRA_CFLAGS += -DconfigTIMER_QUEUE_LENGTH=30
-EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=640
+EXTRA_CFLAGS += -DconfigTIMER_TASK_PRIORITY=\(tskIDLE_PRIORITY+3\)
+EXTRA_CFLAGS += -DconfigTIMER_QUEUE_LENGTH=35
+EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=544
 
 ## HAA DEBUG
 #EXTRA_CFLAGS += -DHAA_DEBUG -DconfigUSE_TRACE_FACILITY

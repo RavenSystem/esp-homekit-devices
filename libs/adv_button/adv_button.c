@@ -14,7 +14,7 @@
 #include <FreeRTOS.h>
 #include <timers_helper.h>
 #include <esplibs/libmain.h>
-#include <i2c/i2c.h>
+#include <adv_i2c.h>
 
 #include "adv_button.h"
 
@@ -263,12 +263,12 @@ IRAM static void button_evaluate_fn() {
         while (mcp) {
             if (mcp->channels == MCP_CHANNEL_A || mcp->channels == MCP_CHANNEL_BOTH) {
                 const uint8_t reg = 0x12;
-                i2c_slave_read(mcp->bus, mcp->addr, &reg, &mcp->value_a, 1);
+                i2c_slave_read(mcp->bus, mcp->addr, &reg, 1, &mcp->value_a, 1);
             }
             
             if (mcp->channels > MCP_CHANNEL_A) {
                 const uint8_t reg = 0x13;
-                i2c_slave_read(mcp->bus, mcp->addr, &reg, &mcp->value_b, 1);
+                i2c_slave_read(mcp->bus, mcp->addr, &reg, 1, &mcp->value_b, 1);
             }
             
             mcp = mcp->next;
@@ -448,21 +448,21 @@ int adv_button_create(const uint16_t gpio, const uint8_t pullup_resistor, const 
                 if (mcp_gpio < 8) {
                     mcp->channels = MCP_CHANNEL_A;
                     const uint8_t reg = 0x12;
-                    i2c_slave_read(mcp->bus, mcp->addr, &reg, &mcp->value_a, 1);
+                    i2c_slave_read(mcp->bus, mcp->addr, &reg, 1, &mcp->value_a, 1);
                 } else {
                     mcp->channels = MCP_CHANNEL_B;
                     const uint8_t reg = 0x13;
-                    i2c_slave_read(mcp->bus, mcp->addr, &reg, &mcp->value_b, 1);
+                    i2c_slave_read(mcp->bus, mcp->addr, &reg, 1, &mcp->value_b, 1);
                 }
             } else if (mcp->channels != MCP_CHANNEL_BOTH) {
                 if (mcp->channels == MCP_CHANNEL_A && mcp_gpio > 7) {
                     mcp->channels = MCP_CHANNEL_BOTH;
                     const uint8_t reg = 0x13;
-                    i2c_slave_read(mcp->bus, mcp->addr, &reg, &mcp->value_b, 1);
+                    i2c_slave_read(mcp->bus, mcp->addr, &reg, 1, &mcp->value_b, 1);
                 } else if (mcp->channels == MCP_CHANNEL_B && mcp_gpio < 8) {
                     mcp->channels = MCP_CHANNEL_BOTH;
                     const uint8_t reg = 0x12;
-                    i2c_slave_read(mcp->bus, mcp->addr, &reg, &mcp->value_a, 1);
+                    i2c_slave_read(mcp->bus, mcp->addr, &reg, 1, &mcp->value_a, 1);
                 }
             }
             

@@ -142,12 +142,12 @@ int raven_ntp_update(char* ntp_server) {
                 const struct timeval sndtimeout = { 3, 0 };
                 setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
                 
+                const struct timeval rcvtimeout = { 2, 0 };
+                setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
+                
                 int result = lwip_sendto(s, ntp_payload, 48, 0, res->ai_addr, res->ai_addrlen);
                 
                 if (result > 0) {
-                    const struct timeval rcvtimeout = { 2, 0 };
-                    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
-
                     memset(ntp_payload, 0, 49);
                     int read_byte = lwip_read(s, ntp_payload, 49);
                     

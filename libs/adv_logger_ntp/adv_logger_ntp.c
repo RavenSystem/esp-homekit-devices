@@ -206,6 +206,8 @@ static void adv_logger_init_task(void* args) {
         vTaskDelay(pdMS_TO_TICKS(200));
     }
     
+    vTaskDelay(pdMS_TO_TICKS(5000));
+    
     if (sdk_wifi_get_ip_info(STATION_IF, &info)) {
         uint8_t macaddr[6];
         sdk_wifi_get_macaddr(STATION_IF, macaddr);

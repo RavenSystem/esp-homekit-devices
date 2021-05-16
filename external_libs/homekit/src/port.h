@@ -26,7 +26,7 @@ void homekit_overclock_end();
 #ifdef ESP_IDF
 #define SERVER_TASK_STACK 12288
 #else
-#define SERVER_TASK_STACK 1664
+#define SERVER_TASK_STACK 1600
 #endif
 
 

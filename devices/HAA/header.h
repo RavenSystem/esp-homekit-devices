@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "5.0.18"
+#define FIRMWARE_VERSION                    "6.0.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -65,6 +65,8 @@
 #define IR_CAPTURE_TASK_SIZE                (768)
 #define REBOOT_TASK_SIZE                    (384)
 
+#define MINIMUM_FREE_HEAP                   (GLOBAL_TASK_SIZE * 4 * 2)
+
 // Task Priorities
 #define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
 #define NTP_TASK_PRIORITY                   (tskIDLE_PRIORITY + 1)
@@ -117,7 +119,8 @@
 #define UART_CONFIG_STOPBITS                "b"
 #define UART_CONFIG_PARITY                  "p"
 #define UART_CONFIG_SPEED                   "s"
-#define ACCESSORIES                         "a"
+#define ACCESSORIES_ARRAY                   "a"
+#define EXTRA_SERVICES_ARRAY                "es"
 #define BUTTONS_ARRAY                       "b"
 #define BUTTONS_ARRAY_1                     "b1"
 #define FIXED_BUTTONS_ARRAY_0               "f0"
@@ -162,7 +165,6 @@
 #define MANAGE_OTHERS_ACC_ARRAY             "m"
 #define ACCESSORY_INDEX                     "g"
 #define AUTOSWITCH_TIME                     "i"
-#define AUTOSWITCH_TIME_1                   "i1"
 #define PIN_GPIO                            "g"
 #define INITIAL_STATE                       "s"
 #define EXEC_ACTIONS_ON_BOOT                "xa"
@@ -360,12 +362,12 @@
 #define PM_SENSOR_TYPE_DEFAULT              (0)
 #define PM_SENSOR_TYPE                      ch_group->num[1]
 #define PM_LAST_SAVED_CONSUPTION            ch_group->num[11]
-#define PM_SENSOR_HLW_GPIO_CF_SET           "c0"
-#define PM_SENSOR_HLW_GPIO_CF1_SET          "c1"
-#define PM_SENSOR_HLW_GPIO_SEL_SET          "sl"
-#define PM_SENSOR_HLW_GPIO_DEFAULT          (-1)
+#define PM_SENSOR_DATA_ARRAY_SET            "dt"
+#define PM_SENSOR_DATA_DEFAULT              (-1)
 #define PM_SENSOR_HLW_GPIO                  ch_group->num[2]
 #define PM_SENSOR_HLW_GPIO_CF               ch_group->num[3]
+#define PM_SENSOR_ADE_BUS                   ch_group->num[2]
+#define PM_SENSOR_ADE_ADDR                  ch_group->num[3]
 #define PM_POLL_PERIOD_DEFAULT              (5.f)
 #define PM_POLL_PERIOD                      ch_group->num[10]
 #define PM_VOLTAGE_FACTOR_SET               "vf"
@@ -472,7 +474,6 @@
 #define ACC_TYPE_OUTLET                     (2)
 #define ACC_TYPE_BUTTON                     (3)
 #define ACC_TYPE_LOCK                       (4)
-#define ACC_TYPE_DOUBLE_LOCK                (44)
 #define ACC_TYPE_CONTACT_SENSOR             (5)
 #define ACC_TYPE_OCCUPANCY_SENSOR           (6)
 #define ACC_TYPE_LEAK_SENSOR                (7)
@@ -494,8 +495,7 @@
 #define ACC_TYPE_LIGHT_SENSOR               (50)
 #define ACC_TYPE_TV                         (60)
 #define ACC_TYPE_FAN                        (65)
-#define ACC_TYPE_POWER_MONITOR_INIT         (75)
-#define ACC_TYPE_POWER_MONITOR_END          (83)
+#define ACC_TYPE_POWER_MONITOR              (75)
 #define ACC_TYPE_IAIRZONING                 (99)
 
 #define SERIAL_STRING                       "sn"
@@ -560,6 +560,6 @@
 #define INFO(message, ...)                  printf(message "\n", ##__VA_ARGS__)
 #define ERROR(message, ...)                 printf("! " message "\n", ##__VA_ARGS__)
 
-#define FREEHEAP()                          printf("Free Heap: %d\n", xPortGetFreeHeapSize())
+#define FREEHEAP()                          printf("Free Heap %d\n", xPortGetFreeHeapSize())
 
 #endif // __HAA_HEADER_H__
