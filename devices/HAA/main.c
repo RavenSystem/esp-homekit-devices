@@ -6348,11 +6348,64 @@ void normal_mode_init() {
     
     // ----- END CONFIG SECTION
     
+    uint8_t get_acc_type(cJSON* json_accessory) {
+        uint8_t acc_type = ACC_TYPE_SWITCH;
+        if (cJSON_GetObjectItemCaseSensitive(json_accessory, ACCESSORY_TYPE) != NULL) {
+            acc_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, ACCESSORY_TYPE)->valuedouble;
+        }
+        
+        return acc_type;
+    }
+    
+    uint8_t get_service_recount(const uint8_t acc_type, cJSON* json_context) {
+        uint8_t service_recount = 1;
+        
+        switch (acc_type) {
+            case ACC_TYPE_DOORBELL:
+            case ACC_TYPE_THERMOSTAT_WITH_HUM:
+            case ACC_TYPE_TH_SENSOR:
+                service_recount = 2;
+                break;
+                
+            case ACC_TYPE_TV:
+                service_recount = 2;
+                cJSON* json_inputs = cJSON_GetObjectItemCaseSensitive(json_context, TV_INPUTS_ARRAY);
+                uint8_t inputs = cJSON_GetArraySize(json_inputs);
+                
+                if (inputs == 0) {
+                    inputs = 1;
+                }
+                
+                service_recount += inputs;
+                break;
+                
+            default:
+                break;
+        }
+        
+        return service_recount;
+    }
+    
+    uint8_t get_total_services(const uint8_t acc_type, cJSON* json_accessory) {
+        uint8_t total_services = 2 + get_service_recount(acc_type, json_accessory);
+        
+        if (cJSON_GetObjectItemCaseSensitive(json_accessory, EXTRA_SERVICES_ARRAY) != NULL) {
+            cJSON* json_extra_services = cJSON_GetObjectItemCaseSensitive(json_accessory, EXTRA_SERVICES_ARRAY);
+            for (uint8_t i = 0; i < cJSON_GetArraySize(json_extra_services); i++) {
+                cJSON* json_extra_service = cJSON_GetArrayItem(json_extra_services, i);
+                total_services += get_service_recount(get_acc_type(json_extra_service), json_extra_service);
+            }
+        }
+        
+        return total_services;
+    }
+    
     uint8_t hk_total_ac = 1;
     bool bridge_needed = false;
 
     for (uint8_t i = 0; i < total_accessories; i++) {
-        if (acc_homekit_enabled(cJSON_GetArrayItem(json_accessories, i))) {
+        cJSON* json_accessory = cJSON_GetArrayItem(json_accessories, i);
+        if (acc_homekit_enabled(json_accessory) && get_acc_type(json_accessory) != ACC_TYPE_IAIRZONING) {
             hk_total_ac += 1;
         }
     }
@@ -8506,61 +8559,10 @@ void normal_mode_init() {
     
     // Bridge
     if (bridge_needed) {
-        INFO("\n* ACCESSORY BRIDGE");
+        INFO("\n** ACCESSORY BRIDGE");
         new_accessory(0, 2, true, NULL);
         acc_count++;
-    }
-    
-    uint8_t get_acc_type(cJSON* json_accessory) {
-        uint8_t acc_type = ACC_TYPE_SWITCH;
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, ACCESSORY_TYPE) != NULL) {
-            acc_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, ACCESSORY_TYPE)->valuedouble;
-        }
-        
-        return acc_type;
-    }
-    
-    uint8_t get_service_recount(const uint8_t acc_type, cJSON* json_context) {
-        uint8_t service_recount = 1;
-        
-        switch (acc_type) {
-            case ACC_TYPE_DOORBELL:
-            case ACC_TYPE_THERMOSTAT_WITH_HUM:
-            case ACC_TYPE_TH_SENSOR:
-                service_recount = 2;
-                break;
-                
-            case ACC_TYPE_TV:
-                service_recount = 2;
-                cJSON* json_inputs = cJSON_GetObjectItemCaseSensitive(json_context, TV_INPUTS_ARRAY);
-                uint8_t inputs = cJSON_GetArraySize(json_inputs);
-                
-                if (inputs == 0) {
-                    inputs = 1;
-                }
-                
-                service_recount += inputs;
-                break;
-                
-            default:
-                break;
-        }
-        
-        return service_recount;
-    }
-    
-    uint8_t get_total_services(const uint8_t acc_type, cJSON* json_accessory) {
-        uint8_t total_services = 2 + get_service_recount(acc_type, json_accessory);
-        
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, EXTRA_SERVICES_ARRAY) != NULL) {
-            cJSON* json_extra_services = cJSON_GetObjectItemCaseSensitive(json_accessory, EXTRA_SERVICES_ARRAY);
-            for (uint8_t i = 0; i < cJSON_GetArraySize(json_extra_services); i++) {
-                cJSON* json_extra_service = cJSON_GetArrayItem(json_extra_services, i);
-                total_services += get_service_recount(get_acc_type(json_extra_service), json_extra_service);
-            }
-        }
-        
-        return total_services;
+        accessory_numerator++;
     }
     
     // Creating HomeKit Accessory
@@ -8653,7 +8655,7 @@ void normal_mode_init() {
         uint8_t total_services = get_total_services(acc_type, json_accessory);
         new_service(acc_count, service, total_services, json_accessory, acc_type);
         
-        if (acc_homekit_enabled(json_accessory)) {
+        if (acc_homekit_enabled(json_accessory) && acc_type != ACC_TYPE_IAIRZONING) {
             if (cJSON_GetObjectItemCaseSensitive(json_accessory, EXTRA_SERVICES_ARRAY) != NULL) {
                 service += get_service_recount(acc_type, json_accessory);
 
@@ -8664,6 +8666,15 @@ void normal_mode_init() {
                     acc_type = get_acc_type(json_extra_service);
                     new_service(acc_count, service, 0, json_extra_service, acc_type);
                     service += get_service_recount(acc_type, json_extra_service);
+                    
+                    main_config.setup_mode_toggle_counter = INT8_MIN;
+                    
+                    // Extra service creation delay
+                    if (cJSON_GetObjectItemCaseSensitive(json_extra_service, ACC_CREATION_DELAY) != NULL) {
+                        vTaskDelay(MS_TO_TICKS(cJSON_GetObjectItemCaseSensitive(json_extra_service, ACC_CREATION_DELAY)->valuedouble * 1000));
+                    }
+                    
+                    taskYIELD();
                 }
             }
             
