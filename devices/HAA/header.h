@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "6.0.1"
+#define FIRMWARE_VERSION                    "6.0.2"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -360,34 +360,34 @@
 
 #define PM_SENSOR_TYPE_SET                  "n"
 #define PM_SENSOR_TYPE_DEFAULT              (0)
-#define PM_SENSOR_TYPE                      ch_group->num[1]
-#define PM_LAST_SAVED_CONSUPTION            ch_group->num[11]
+#define PM_SENSOR_TYPE                      ch_group->num[0]
+#define PM_LAST_SAVED_CONSUPTION            ch_group->num[10]
 #define PM_SENSOR_DATA_ARRAY_SET            "dt"
 #define PM_SENSOR_DATA_DEFAULT              (-1)
-#define PM_SENSOR_HLW_GPIO                  ch_group->num[2]
-#define PM_SENSOR_HLW_GPIO_CF               ch_group->num[3]
-#define PM_SENSOR_ADE_BUS                   ch_group->num[2]
-#define PM_SENSOR_ADE_ADDR                  ch_group->num[3]
+#define PM_SENSOR_HLW_GPIO                  ch_group->num[1]
+#define PM_SENSOR_HLW_GPIO_CF               ch_group->num[2]
+#define PM_SENSOR_ADE_BUS                   ch_group->num[1]
+#define PM_SENSOR_ADE_ADDR                  ch_group->num[2]
 #define PM_POLL_PERIOD_DEFAULT              (5.f)
-#define PM_POLL_PERIOD                      ch_group->num[10]
+#define PM_POLL_PERIOD                      ch_group->num[9]
 #define PM_VOLTAGE_FACTOR_SET               "vf"
 #define PM_VOLTAGE_FACTOR_DEFAULT           (1)
-#define PM_VOLTAGE_FACTOR                   ch_group->num[4]
+#define PM_VOLTAGE_FACTOR                   ch_group->num[3]
 #define PM_VOLTAGE_OFFSET_SET               "vo"
 #define PM_VOLTAGE_OFFSET_DEFAULT           (0)
-#define PM_VOLTAGE_OFFSET                   ch_group->num[5]
+#define PM_VOLTAGE_OFFSET                   ch_group->num[4]
 #define PM_CURRENT_FACTOR_SET               "cf"
 #define PM_CURRENT_FACTOR_DEFAULT           (1)
-#define PM_CURRENT_FACTOR                   ch_group->num[6]
+#define PM_CURRENT_FACTOR                   ch_group->num[5]
 #define PM_CURRENT_OFFSET_SET               "co"
 #define PM_CURRENT_OFFSET_DEFAULT           (0)
-#define PM_CURRENT_OFFSET                   ch_group->num[7]
+#define PM_CURRENT_OFFSET                   ch_group->num[6]
 #define PM_POWER_FACTOR_SET                 "pf"
 #define PM_POWER_FACTOR_DEFAULT             (1)
-#define PM_POWER_FACTOR                     ch_group->num[8]
+#define PM_POWER_FACTOR                     ch_group->num[7]
 #define PM_POWER_OFFSET_SET                 "po"
 #define PM_POWER_OFFSET_DEFAULT             (0)
-#define PM_POWER_OFFSET                     ch_group->num[9]
+#define PM_POWER_OFFSET                     ch_group->num[8]
 
 #define LIGHT_SENSOR_TYPE_SET               "n"
 #define LIGHT_SENSOR_TYPE_DEFAULT           (0)
@@ -409,7 +409,7 @@
 #define MAX_ACTIONS                         (51)    // from 0 to (MAX_ACTIONS - 1)
 #define MAX_WILDCARD_ACTIONS                (4)     // from 0 to (MAX_WILDCARD_ACTIONS - 1)
 #define WILDCARD_ACTIONS_ARRAY_HEADER       "y"
-#define NO_LAST_WILDCARD_ACTION             (-1000)
+#define NO_LAST_WILDCARD_ACTION             (-10000)
 #define WILDCARD_ACTIONS                    "0"
 #define WILDCARD_ACTION_REPEAT              "r"
 #define COPY_ACTIONS                        "a"

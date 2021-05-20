@@ -417,6 +417,10 @@ ch_group_t* new_ch_group() {
     ch_group->main_enabled = true;
     ch_group->child_enabled = true;
     
+    for (uint8_t i = 0; i < MAX_WILDCARD_ACTIONS; i++) {
+        ch_group->last_wildcard_action[i] = NO_LAST_WILDCARD_ACTION;
+    }
+    
     ch_group->next = main_config.ch_groups;
     main_config.ch_groups = ch_group;
     
@@ -1290,24 +1294,32 @@ void power_monitor_task(void* args) {
     if (voltage < 750.f) {
         const float consumption = ch_group->ch3->value.float_value + ((power * PM_POLL_PERIOD) / 3600000.f);
         INFO("<%i> PM: KWh = %1.7g", ch_group->accessory, consumption);
+        
         do_wildcard_actions(ch_group, 0, voltage);
+        
+        if (voltage != ch_group->ch0->value.float_value) {
+            ch_group->ch0->value = HOMEKIT_FLOAT(voltage);
+            homekit_characteristic_notify_safe(ch_group->ch0);
+        }
+        
         do_wildcard_actions(ch_group, 1, current);
+        
+        if (current != ch_group->ch1->value.float_value) {
+            ch_group->ch1->value = HOMEKIT_FLOAT(current);
+            homekit_characteristic_notify_safe(ch_group->ch1);
+        }
+        
         do_wildcard_actions(ch_group, 2, power);
+            
+        if (power != ch_group->ch2->value.float_value) {
+            ch_group->ch2->value = HOMEKIT_FLOAT(power);
+            homekit_characteristic_notify_safe(ch_group->ch2);
+        }
+        
         do_wildcard_actions(ch_group, 3, consumption);
         
-        if (voltage != ch_group->ch0->value.float_value ||
-            current != ch_group->ch1->value.float_value ||
-            power != ch_group->ch2->value.float_value ||
-            consumption != ch_group->ch3->value.float_value) {
-            
-            ch_group->ch0->value = HOMEKIT_FLOAT(voltage);
-            ch_group->ch1->value = HOMEKIT_FLOAT(current);
-            ch_group->ch2->value = HOMEKIT_FLOAT(power);
+        if (consumption != ch_group->ch3->value.float_value) {
             ch_group->ch3->value = HOMEKIT_FLOAT(consumption);
-            
-            homekit_characteristic_notify_safe(ch_group->ch0);
-            homekit_characteristic_notify_safe(ch_group->ch1);
-            homekit_characteristic_notify_safe(ch_group->ch2);
             homekit_characteristic_notify_safe(ch_group->ch3);
         }
         
@@ -7253,9 +7265,6 @@ void normal_mode_init() {
         register_wildcard_actions(ch_group, json_context);
         th_sensor(ch_group, json_context);
         TH_IAIRZONING_GATE_CURRENT_STATE = NO_LAST_WILDCARD_ACTION;
-        ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
-        ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
-        ch_group->last_wildcard_action[2] = NO_LAST_WILDCARD_ACTION;
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER) != NULL) {
             TH_IAIRZONING_CONTROLLER = -((float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER)->valuedouble);
@@ -7318,9 +7327,6 @@ void normal_mode_init() {
         set_accessory_ir_protocol(ch_group, json_context);
         ch_group->num[0] = NO_LAST_WILDCARD_ACTION;
         ch_group->num[1] = NO_LAST_WILDCARD_ACTION;
-        ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
-        ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
-        ch_group->last_wildcard_action[2] = NO_LAST_WILDCARD_ACTION;
         
         ch_group->timer2 = esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, set_zones_timer_worker);
         
@@ -7348,7 +7354,6 @@ void normal_mode_init() {
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
-        ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
@@ -7395,7 +7400,6 @@ void normal_mode_init() {
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
-        ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
@@ -7440,8 +7444,6 @@ void normal_mode_init() {
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
-        ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
-        ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
@@ -7501,7 +7503,6 @@ void normal_mode_init() {
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
-        ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
         
         lightbulb_group_t* lightbulb_group = malloc(sizeof(lightbulb_group_t));
         memset(lightbulb_group, 0, sizeof(*lightbulb_group));
@@ -8002,7 +8003,6 @@ void normal_mode_init() {
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
-        ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
         
         ch_group->timer = esp_timer_create(WINDOW_COVER_POLL_PERIOD_MS, true, (void*) ch_group, window_cover_timer_worker);
         
@@ -8075,7 +8075,6 @@ void normal_mode_init() {
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
-        ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
@@ -8323,7 +8322,6 @@ void normal_mode_init() {
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
-        ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
         ch_group->num[0] = autoswitch_time(json_context);
         
         if (ch_group->homekit_enabled) {
@@ -8416,10 +8414,6 @@ void normal_mode_init() {
         
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
-        ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
-        ch_group->last_wildcard_action[1] = NO_LAST_WILDCARD_ACTION;
-        ch_group->last_wildcard_action[2] = NO_LAST_WILDCARD_ACTION;
-        ch_group->last_wildcard_action[3] = NO_LAST_WILDCARD_ACTION;
         
         PM_LAST_SAVED_CONSUPTION = 0;
         
@@ -8498,6 +8492,10 @@ void normal_mode_init() {
             cJSON* gpio_array = cJSON_GetObjectItemCaseSensitive(json_context, PM_SENSOR_DATA_ARRAY_SET);
             for (uint8_t i = 0; i < cJSON_GetArraySize(gpio_array); i++) {
                 data[i] = (int16_t) cJSON_GetArrayItem(gpio_array, i)->valuedouble;
+                
+                if (PM_SENSOR_TYPE < 2 && data[i] >= 0) {
+                    set_used_gpio(data[i]);
+                }
             }
         }
         
