@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "6.0.3"
+#define FIRMWARE_VERSION                    "6.0.4"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -65,7 +65,7 @@
 #define IR_CAPTURE_TASK_SIZE                (768)
 #define REBOOT_TASK_SIZE                    (384)
 
-#define MINIMUM_FREE_HEAP                   (GLOBAL_TASK_SIZE * 4 * 2)
+#define MINIMUM_FREE_HEAP                   (2560)
 
 // Task Priorities
 #define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)

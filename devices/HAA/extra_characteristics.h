@@ -64,8 +64,7 @@
     .description = "Voltage V", \
     .format = HOMETKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
-                | HOMEKIT_PERMISSIONS_NOTIFY \
-                | HOMEKIT_PERMISSIONS_HIDDEN, \
+                | HOMEKIT_PERMISSIONS_NOTIFY, \
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
 
@@ -75,8 +74,7 @@
     .description = "Current A", \
     .format = HOMETKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
-                | HOMEKIT_PERMISSIONS_NOTIFY \
-                | HOMEKIT_PERMISSIONS_HIDDEN, \
+                | HOMEKIT_PERMISSIONS_NOTIFY, \
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
 
@@ -86,8 +84,7 @@
     .description = "Power W", \
     .format = HOMETKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
-                | HOMEKIT_PERMISSIONS_NOTIFY \
-                | HOMEKIT_PERMISSIONS_HIDDEN, \
+                | HOMEKIT_PERMISSIONS_NOTIFY, \
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
 
@@ -97,8 +94,7 @@
     .description = "Consumption KWh", \
     .format = HOMETKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
-                | HOMEKIT_PERMISSIONS_NOTIFY \
-                | HOMEKIT_PERMISSIONS_HIDDEN, \
+                | HOMEKIT_PERMISSIONS_NOTIFY, \
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
 
@@ -119,8 +115,7 @@
     .description = "Last Consumption KWh", \
     .format = HOMETKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
-                | HOMEKIT_PERMISSIONS_NOTIFY \
-                | HOMEKIT_PERMISSIONS_HIDDEN, \
+                | HOMEKIT_PERMISSIONS_NOTIFY, \
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
 

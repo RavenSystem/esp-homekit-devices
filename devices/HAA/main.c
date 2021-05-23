@@ -4941,8 +4941,8 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         action_task->action = action;
         action_task->ch_group = ch_group;
         
-        if (xTaskCreate(uart_action_task, "uart_action", UART_ACTION_TASK_SIZE, action_task, UART_ACTION_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("<%i> Creating uart_action", ch_group->accessory);
+        if (xTaskCreate(uart_action_task, "uart", UART_ACTION_TASK_SIZE, action_task, UART_ACTION_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("<%i> Creating uart", ch_group->accessory);
             free(action_task);
         }
     }
@@ -4953,8 +4953,8 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         action_task->action = action;
         action_task->ch_group = ch_group;
         
-        if (xTaskCreate(net_action_task, "net_action", NETWORK_ACTION_TASK_SIZE, action_task, NETWORK_ACTION_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("<%i> Creating net_action", ch_group->accessory);
+        if (xTaskCreate(net_action_task, "net", NETWORK_ACTION_TASK_SIZE, action_task, NETWORK_ACTION_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("<%i> Creating net", ch_group->accessory);
             free(action_task);
         }
     }
@@ -4965,8 +4965,8 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         action_task->action = action;
         action_task->ch_group = ch_group;
         
-        if (xTaskCreate(ir_tx_task, "ir_tx", IR_TX_TASK_SIZE, action_task, IR_TX_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("<%i> Creating ir_tx", ch_group->accessory);
+        if (xTaskCreate(ir_tx_task, "ir", IR_TX_TASK_SIZE, action_task, IR_TX_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("<%i> Creating ir", ch_group->accessory);
             free(action_task);
         }
     }
@@ -8440,7 +8440,7 @@ void normal_mode_init() {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
             accessories[accessory]->services[service]->primary = !(service - 1);
-            accessories[accessory]->services[service]->hidden = true;
+            accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
             
             if (homekit_enabled == 2) {
                 accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_CUSTOM_HAA_HIDDEN_POWER_MONITOR;
