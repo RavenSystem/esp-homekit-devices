@@ -982,22 +982,28 @@ void homekit_server_on_identify(client_context_t *context) {
 }
 
 void homekit_server_on_pair_setup(client_context_t *context, const byte *data, size_t size) {
+    homekit_server->is_pairing = true;
+    
     HOMEKIT_DEBUG_LOG("Pair Setup");
     DEBUG_HEAP();
+    
+#ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
+    sdk_system_overclock();
+#endif
 
     tlv_values_t *message = tlv_new();
     if (tlv_parse(data, size, message)) {
         CLIENT_ERROR(context, "Parse TLV payload");
         tlv_free(message);
         send_tlv_error_response(context, 2, TLVError_Unknown);
+        
+#ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
+        sdk_system_restoreclock();
+#endif
+        
+        homekit_server->is_pairing = false;
         return;
     }
-    
-    homekit_server->is_pairing = true;
-    
-#ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
-    sdk_system_overclock();
-#endif
 
     TLV_DEBUG(message);
 
@@ -3139,13 +3145,12 @@ client_context_t *homekit_server_accept_client() {
     client_context_t *context;
     
     uint32_t free_heap = xPortGetFreeHeapSize();
-    if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS || free_heap <= HOMEKIT_MIN_FREEHEAP) {
+    if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS || (free_heap <= HOMEKIT_MIN_FREEHEAP && homekit_server->is_pairing == false)) {
         context = homekit_server->clients;
-        for (;;) {
+        while (context) {
             if (!context->next) {
                 CLIENT_INFO(context, "Closing oldest");
                 context->disconnect = true;
-                break;
             }
 
             context = context->next;
