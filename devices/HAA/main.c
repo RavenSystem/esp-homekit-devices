@@ -1287,10 +1287,10 @@ void power_monitor_task(void* args) {
         do_wildcard_actions(ch_group, 2, power);
             
         if (power != ch_group->ch2->value.float_value) {
-            const int old_power = ch_group->ch2->value.float_value * 1000;
+            const int old_power = ch_group->ch2->value.float_value * 10;
             ch_group->ch2->value.float_value = power;
             
-            if (old_power != (int) (power * 1000)) {
+            if (old_power != (int) (power * 10)) {
                 homekit_characteristic_notify_safe(ch_group->ch2);
             }
         }
