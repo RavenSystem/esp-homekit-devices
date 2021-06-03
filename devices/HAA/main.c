@@ -853,39 +853,6 @@ void homekit_characteristic_notify_safe(homekit_characteristic_t *ch) {
     }
 }
 
-void hkc_group_notify(ch_group_t* ch_group) {
-    if (!ch_group->homekit_enabled || main_config.wifi_status != WIFI_STATUS_CONNECTED) {
-        return;
-    }
-    
-    if (ch_group->ch0) {
-        homekit_characteristic_notify(ch_group->ch0);
-    }
-    
-    if (ch_group->ch1) {
-        homekit_characteristic_notify(ch_group->ch1);
-    }
-    
-    if (ch_group->ch2) {
-        homekit_characteristic_notify(ch_group->ch2);
-        if (ch_group->ch3) {
-            homekit_characteristic_notify(ch_group->ch3);
-            if (ch_group->ch4) {
-                homekit_characteristic_notify(ch_group->ch4);
-                if (ch_group->ch5) {
-                    homekit_characteristic_notify(ch_group->ch5);
-                    if (ch_group->ch6) {
-                        homekit_characteristic_notify(ch_group->ch6);
-                        if (ch_group->ch7) {
-                            homekit_characteristic_notify(ch_group->ch7);
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 void hkc_custom_ota_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     if (!strcmp(value.string_value, CUSTOM_TRIGGER_COMMAND)) {
         INFO("<0> OTA update");
@@ -1298,29 +1265,45 @@ void power_monitor_task(void* args) {
         do_wildcard_actions(ch_group, 0, voltage);
         
         if (voltage != ch_group->ch0->value.float_value) {
+            const int old_voltage = ch_group->ch0->value.float_value * 10;
             ch_group->ch0->value.float_value = voltage;
-            homekit_characteristic_notify_safe(ch_group->ch0);
+            
+            if (old_voltage != (int) (voltage * 10)) {
+                homekit_characteristic_notify_safe(ch_group->ch0);
+            }
         }
         
         do_wildcard_actions(ch_group, 1, current);
         
         if (current != ch_group->ch1->value.float_value) {
+            const int old_current = ch_group->ch1->value.float_value * 1000;
             ch_group->ch1->value.float_value = current;
-            homekit_characteristic_notify_safe(ch_group->ch1);
+            
+            if (old_current != (int) (current * 1000)) {
+                homekit_characteristic_notify_safe(ch_group->ch1);
+            }
         }
         
         do_wildcard_actions(ch_group, 2, power);
             
         if (power != ch_group->ch2->value.float_value) {
+            const int old_power = ch_group->ch2->value.float_value * 1000;
             ch_group->ch2->value.float_value = power;
-            homekit_characteristic_notify_safe(ch_group->ch2);
+            
+            if (old_power != (int) (power * 1000)) {
+                homekit_characteristic_notify_safe(ch_group->ch2);
+            }
         }
         
         do_wildcard_actions(ch_group, 3, consumption);
         
         if (consumption != ch_group->ch3->value.float_value) {
+            const int old_consumption = ch_group->ch3->value.float_value * 1000;
             ch_group->ch3->value.float_value = consumption;
-            homekit_characteristic_notify_safe(ch_group->ch3);
+            
+            if (old_consumption != (int) (consumption * 1000)) {
+                homekit_characteristic_notify_safe(ch_group->ch3);
+            }
         }
         
         if (PM_LAST_SAVED_CONSUPTION > 3600) {
@@ -1757,9 +1740,11 @@ void process_th_task(void* args) {
     if (ch_group->ch2->value.int_value) {
         if (ch_group->ch5->value.int_value == THERMOSTAT_TARGET_MODE_HEATER) {
             heating(TH_DEADBAND, TH_DEADBAND_SOFT_ON, TH_DEADBAND_FORCE_IDLE);
+            homekit_characteristic_notify_safe(ch_group->ch6);
                     
         } else if (ch_group->ch5->value.int_value == THERMOSTAT_TARGET_MODE_COOLER) {
             cooling(TH_DEADBAND, TH_DEADBAND_SOFT_ON, TH_DEADBAND_FORCE_IDLE);
+            homekit_characteristic_notify_safe(ch_group->ch7);
             
         } else {    // THERMOSTAT_TARGET_MODE_AUTO
             const float mid_target_temp = (TH_HEATER_TARGET_TEMP_FLOAT + TH_COOLER_TARGET_TEMP_FLOAT) / 2.000f;
@@ -1787,6 +1772,9 @@ void process_th_task(void* args) {
             } else {
                 cooling(th_deadband, th_deadband_force_idle - th_deadband, th_deadband_force_idle);
             }
+            
+            homekit_characteristic_notify_safe(ch_group->ch6);
+            homekit_characteristic_notify_safe(ch_group->ch7);
         }
         
     } else {
@@ -1799,7 +1787,9 @@ void process_th_task(void* args) {
         }
     }
     
-    hkc_group_notify(ch_group);
+    homekit_characteristic_notify_safe(ch_group->ch2);
+    homekit_characteristic_notify_safe(ch_group->ch4);
+    homekit_characteristic_notify_safe(ch_group->ch5);
     
     if (TH_IAIRZONING_CONTROLLER < 0 && mode_has_changed) {
         esp_timer_start(ch_group_find_by_acc(- ((int8_t) TH_IAIRZONING_CONTROLLER))->timer2);
@@ -1831,7 +1821,6 @@ void update_th(homekit_characteristic_t* ch, const homekit_value_t value) {
         esp_timer_start(ch_group->timer2);
 
     } else {
-        //hkc_group_notify(ch_group);
         homekit_characteristic_notify_safe(ch);
     }
 }
@@ -2056,6 +2045,7 @@ void temperature_task(void* args) {
                     
                     if (temperature_value != ch_group->ch0->value.float_value) {
                         ch_group->ch0->value.float_value = temperature_value;
+                        homekit_characteristic_notify_safe(ch_group->ch0);
                         
                         if (ch_group->ch5) {
                             update_th(ch_group->ch0, ch_group->ch0->value);
@@ -2077,6 +2067,7 @@ void temperature_task(void* args) {
                     
                     if ((uint8_t) humidity_value != (uint8_t) ch_group->ch1->value.float_value) {
                         ch_group->ch1->value.float_value = (uint8_t) humidity_value;
+                        homekit_characteristic_notify_safe(ch_group->ch1);
                         
                         do_wildcard_actions(ch_group, 1, (uint8_t) humidity_value);
                     }
@@ -2093,22 +2084,22 @@ void temperature_task(void* args) {
                     
                     if (ch_group->ch0) {
                         ch_group->ch0->value.float_value = 0;
+                        homekit_characteristic_notify_safe(ch_group->ch0);
                     }
                     if (ch_group->ch1) {
                         ch_group->ch1->value.float_value = 0;
+                        homekit_characteristic_notify_safe(ch_group->ch1);
                     }
 
                     do_actions(ch_group, THERMOSTAT_ACTION_SENSOR_ERROR);
                 }
 
             }
-            
-            hkc_group_notify(ch_group);
         }
         
         if (iairzoning > 0) {
             if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning == - (int8_t) TH_IAIRZONING_CONTROLLER) {
-                vTaskDelay(MS_TO_TICKS(1000));
+                vTaskDelay(MS_TO_TICKS(1300));
             }
 
             ch_group = ch_group->next;
@@ -2759,6 +2750,8 @@ void lightbulb_task(void* args) {
         setup_mode_toggle_upcount();
     }
     
+    homekit_characteristic_notify_safe(ch_group->ch0);
+    
     INFO("<%i> Target Color = %i, %i, %i, %i, %i", ch_group->accessory, lightbulb_group->target[0],
                                                                         lightbulb_group->target[1],
                                                                         lightbulb_group->target[2],
@@ -2797,6 +2790,15 @@ void lightbulb_task(void* args) {
             rgbw_set_timer_worker(main_config.set_lightbulb_timer);
             esp_timer_start(main_config.set_lightbulb_timer);
         }
+        
+        homekit_characteristic_notify_safe(ch_group->ch1);
+        
+        if (ch_group->ch2) {
+            homekit_characteristic_notify_safe(ch_group->ch2);
+            if (ch_group->ch3) {
+                homekit_characteristic_notify_safe(ch_group->ch3);
+            }
+        }
     }
     
     do_actions(ch_group, (uint8_t) ch_group->ch0->value.bool_value);
@@ -2806,8 +2808,6 @@ void lightbulb_task(void* args) {
     } else {
         ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
     }
-    
-    hkc_group_notify(ch_group);
     
     save_states_callback();
     
@@ -2827,7 +2827,6 @@ void lightbulb_task_timer(TimerHandle_t xTimer) {
 void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (!ch_group->main_enabled) {
-        //hkc_group_notify(ch_group);
         homekit_characteristic_notify_safe(ch);
         
     } else if (ch != ch_group->ch0 || value.bool_value != ch_group->ch0->value.bool_value) {
@@ -3374,7 +3373,6 @@ void hkc_fan_setter(homekit_characteristic_t* ch0, const homekit_value_t value) 
         }
     }
     
-    //hkc_group_notify(ch_group);
     homekit_characteristic_notify_safe(ch0);
 }
 
@@ -3395,7 +3393,6 @@ void hkc_fan_speed_setter(homekit_characteristic_t* ch1, const homekit_value_t v
         }
     }
     
-    //hkc_group_notify(ch_group);
     homekit_characteristic_notify_safe(ch1);
 }
 
@@ -3408,7 +3405,6 @@ void hkc_fan_status_setter(homekit_characteristic_t* ch0, const homekit_value_t 
         
         ch0->value = value;
         
-        //hkc_group_notify(ch_group);
         homekit_characteristic_notify_safe(ch0);
         
         save_states_callback();
@@ -3447,7 +3443,6 @@ void light_sensor_task(void* args) {
     if ((uint32_t) ch_group->ch0->value.float_value != (uint32_t) luxes) {
         do_wildcard_actions(ch_group, 0, luxes);
         ch_group->ch0->value.float_value = luxes;
-        //hkc_group_notify(ch_group);
         homekit_characteristic_notify_safe(ch_group->ch0);
     }
     
@@ -3484,7 +3479,6 @@ void hkc_tv_active(homekit_characteristic_t* ch0, const homekit_value_t value) {
         }
     }
     
-    //hkc_group_notify(ch_group);
     homekit_characteristic_notify_safe(ch0);
 }
 
@@ -3497,7 +3491,6 @@ void hkc_tv_status_active(homekit_characteristic_t* ch0, const homekit_value_t v
         
         ch0->value = value;
         
-        //hkc_group_notify(ch_group);
         homekit_characteristic_notify_safe(ch0);
         
         save_states_callback();
@@ -3517,7 +3510,6 @@ void hkc_tv_active_identifier(homekit_characteristic_t* ch, const homekit_value_
         }
     }
     
-    //hkc_group_notify(ch_group);
     homekit_characteristic_notify_safe(ch);
 }
 
@@ -3532,7 +3524,6 @@ void hkc_tv_key(homekit_characteristic_t* ch, const homekit_value_t value) {
         do_actions(ch_group, value.int_value + 2);
     }
     
-    //hkc_group_notify(ch_group);
     homekit_characteristic_notify_safe(ch);
 }
 
@@ -3547,7 +3538,6 @@ void hkc_tv_power_mode(homekit_characteristic_t* ch, const homekit_value_t value
         do_actions(ch_group, value.int_value + 30);
     }
     
-    //hkc_group_notify(ch_group);
     homekit_characteristic_notify_safe(ch);
 }
 
@@ -3562,7 +3552,6 @@ void hkc_tv_mute(homekit_characteristic_t* ch, const homekit_value_t value) {
         do_actions(ch_group, value.int_value + 20);
     }
     
-    //hkc_group_notify(ch_group);
     homekit_characteristic_notify_safe(ch);
 }
 
@@ -3577,7 +3566,6 @@ void hkc_tv_volume(homekit_characteristic_t* ch, const homekit_value_t value) {
         do_actions(ch_group, value.int_value + 22);
     }
     
-    //hkc_group_notify(ch_group);
     homekit_characteristic_notify_safe(ch);
 }
 
@@ -3591,7 +3579,6 @@ void hkc_tv_configured_name(homekit_characteristic_t* ch1, const homekit_value_t
     homekit_value_destruct(&ch1->value);
     ch1->value = HOMEKIT_STRING(new_name);
 
-    //hkc_group_notify(ch_group);
     homekit_characteristic_notify_safe(ch1);
 
     save_states_callback();
@@ -5006,6 +4993,10 @@ void timetable_actions_timer_worker(TimerHandle_t xTimer) {
     time_t time = raven_ntp_get_time_t();
     timeinfo = localtime(&time);
     
+    if (timeinfo->tm_year <= 120) {
+        return;
+    }
+        
     if (!main_config.timetable_ready) {
         if (timeinfo->tm_sec == 0) {
             esp_timer_change_period(xTimer, 60000);
@@ -5015,22 +5006,28 @@ void timetable_actions_timer_worker(TimerHandle_t xTimer) {
         }
     }
     
-    if (timeinfo->tm_year > 120) {
-        timetable_action_t* timetable_action = main_config.timetable_actions;
-        while (timetable_action) {
-            if (
-                (timetable_action->mon  == ALL_MONS  || timetable_action->mon  == timeinfo->tm_mon ) &&
-                (timetable_action->mday == ALL_MDAYS || timetable_action->mday == timeinfo->tm_mday) &&
-                (timetable_action->hour == ALL_HOURS || timetable_action->hour == timeinfo->tm_hour) &&
-                (timetable_action->min  == ALL_MINS  || timetable_action->min  == timeinfo->tm_min ) &&
-                (timetable_action->wday == ALL_WDAYS || timetable_action->wday == timeinfo->tm_wday)
-                ) {
-                
-                do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), timetable_action->action);
-            }
+    timetable_action_t* timetable_action = main_config.timetable_actions;
+    while (timetable_action) {
+        if (
+            (timetable_action->mon  == ALL_MONS  || timetable_action->mon  == timeinfo->tm_mon ) &&
+            (timetable_action->mday == ALL_MDAYS || timetable_action->mday == timeinfo->tm_mday) &&
+            (timetable_action->hour == ALL_HOURS || timetable_action->hour == timeinfo->tm_hour) &&
+            (timetable_action->min  == ALL_MINS  || timetable_action->min  == timeinfo->tm_min ) &&
+            (timetable_action->wday == ALL_WDAYS || timetable_action->wday == timeinfo->tm_wday)
+            ) {
             
-            timetable_action = timetable_action->next;
+            do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), timetable_action->action);
         }
+        
+        timetable_action = timetable_action->next;
+    }
+    
+    if (timeinfo->tm_wday == 0 &&
+        timeinfo->tm_hour == 23 &&
+        timeinfo->tm_min  == 59 &&
+        timeinfo->tm_sec  != 0) {
+        esp_timer_change_period(xTimer, 1000);
+        main_config.timetable_ready = false;
     }
 }
 
@@ -5058,7 +5055,7 @@ void delayed_sensor_task() {
             
             vTaskDelay(MS_TO_TICKS(3000));
         }
-
+        
         ch_group = ch_group->next;
     }
     
