@@ -1,0 +1,24 @@
+
+body {
+	background-color: #404040;
+	font-family: sans-serif;
+}
+
+#main {
+	background-color: #d0d0FF;
+	-moz-border-radius: 5px;
+	-webkit-border-radius: 5px;
+	border-radius: 5px;
+	border: 2px solid #000000;
+	width: 800px;
+	margin: 0 auto;
+	padding: 20px
+}
+
+.icon {
+	background-image: url("icons.png");
+	background-color: transparent;
+	width: 32px;
+	height: 32px;
+	display: inline-block;
+}

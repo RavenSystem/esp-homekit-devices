@@ -1,0 +1,47 @@
+digraph {
+        graph [label="Decoder state machine", labelloc="t"]
+        Start [style="invis", shape="point"]
+        tag_bit
+        yield_literal
+        backref_index_msb
+        backref_index_lsb
+        backref_count_msb
+        backref_count_lsb
+        yield_backref
+        done [peripheries=2]
+
+        tag_bit->tag_bit [label="sink()", color="blue", weight=10]
+        Start->tag_bit
+
+        tag_bit->yield_literal [label="pop 1-bit"]
+        tag_bit->backref_index_msb [label="pop 0-bit", weight=10]
+        tag_bit->backref_index_lsb [label="pop 0-bit, index <8 bits", weight=10]
+
+        yield_literal->yield_literal [label="sink()", color="blue"]
+        yield_literal->yield_literal [label="poll()", color="red"]
+        yield_literal->tag_bit [label="poll(), done", color="red"]
+        
+        backref_index_msb->backref_index_msb [label="sink()", color="blue"]
+        backref_index_msb->backref_index_lsb [label="pop index, upper bits", weight=10]
+        backref_index_msb->done [label="finish()", color="blue"]
+
+        backref_index_lsb->backref_index_lsb [label="sink()", color="blue"]
+        backref_index_lsb->backref_count_msb [label="pop index, lower bits", weight=10]
+        backref_index_lsb->backref_count_lsb [label="pop index, count <=8 bits", weight=10]
+        backref_index_lsb->done [label="finish()", color="blue"]
+
+        backref_count_msb->backref_count_msb [label="sink()", color="blue"]
+        backref_count_msb->backref_count_lsb [label="pop count, upper bits", weight=10]
+        backref_count_msb->done [label="finish()", color="blue"]
+
+        backref_count_lsb->backref_count_lsb [label="sink()", color="blue"]
+        backref_count_lsb->yield_backref [label="pop count, lower bits", weight=10]
+        backref_count_lsb->done [label="finish()", color="blue"]
+
+        yield_backref->yield_backref [label="sink()", color="blue"]
+        yield_backref->yield_backref [label="poll()", color="red"]
+        yield_backref->tag_bit [label="poll(), done",
+            color="red", weight=10]
+
+        tag_bit->done [label="finish()", color="blue"]
+}

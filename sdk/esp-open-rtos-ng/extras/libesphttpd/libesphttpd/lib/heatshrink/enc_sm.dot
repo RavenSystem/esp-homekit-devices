@@ -1,0 +1,46 @@
+digraph {
+        graph [label="Encoder state machine", labelloc="t"]
+        start [style="invis", shape="point"]
+        not_full
+        filled
+        search
+        yield_tag_bit
+        yield_literal
+        yield_br_length
+        yield_br_index
+        save_backlog
+        flush_bits
+        done [peripheries=2]
+
+        start->not_full [label="start"]
+
+        not_full->not_full [label="sink(), not full", color="blue"]
+        not_full->filled [label="sink(), buffer is full", color="blue"]
+        not_full->filled [label="finish(), set is_finished", color="blue"]
+
+        filled->search [label="indexing (if any)"]
+
+        search->yield_tag_bit [label="literal"]
+        search->yield_tag_bit [label="match found"]
+        search->save_backlog [label="input exhausted, not finishing"]
+        search->flush_bits [label="input exhausted, finishing"]
+
+        yield_tag_bit->yield_tag_bit [label="poll(), full buf", color="red"]
+        yield_tag_bit->yield_literal [label="poll(), literal", color="red"]
+        yield_tag_bit->yield_br_index [label="poll(), match", color="red"]
+
+        yield_literal->yield_literal [label="poll(), full buf", color="red"]
+        yield_literal->search [label="done"]
+
+        yield_br_index->yield_br_index [label="poll(), full buf", color="red"]
+        yield_br_index->yield_br_length [label="poll()", color="red"]
+
+        yield_br_length->yield_br_length [label="poll(), full buf", color="red"]
+        yield_br_length->search [label="done"]
+
+        save_backlog->not_full [label="expect more input"]
+
+        flush_bits->flush_bits [label="poll(), full buf", color="red"]
+        flush_bits->done [label="poll(), flushed", color="red"]
+        flush_bits->done [label="no more output"]
+}

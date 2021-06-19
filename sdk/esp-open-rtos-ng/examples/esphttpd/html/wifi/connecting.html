@@ -1,0 +1,43 @@
+<html><head><title>Connecting...</title>
+<link rel="stylesheet" type="text/css" href="style.css">
+<script type="text/javascript" src="140medley.min.js"></script>
+<script type="text/javascript">
+
+var xhr=j();
+
+
+function getStatus() {
+	xhr.open("GET", "connstatus.cgi");
+	xhr.onreadystatechange=function() {
+		if (xhr.readyState==4 && xhr.status>=200 && xhr.status<300) {
+			var data=JSON.parse(xhr.responseText);
+			if (data.status=="idle") {
+				$("#status").innerHTML="Preparing to connect...";
+				window.setTimeout(getStatus, 1000);
+			} else if (data.status=="success") {
+				$("#status").innerHTML="Connected! Got IP "+data.ip+". If you're in the same network, you can access it <a href=\"http://"+data.ip+"/\">here</a>.";
+			} else if (data.status=="working") {
+				$("#status").innerHTML="Trying to connect to selected access point...";
+				window.setTimeout(getStatus, 1000);
+			} else if (data.status=="fail") {
+				$("#status").innerHTML="Connection failed. Check password and selected AP.<br /><a href=\"wifi.tpl\">Go Back</a>";
+			}
+		}
+	}
+	xhr.send();
+}
+
+window.onload=function(e) {
+	getStatus();
+};
+</script>
+</head>
+<body>
+<div id="main">
+<h2>Connecting to AP...</h2>
+<p>Status:<br />
+<div id="status">...</div>
+</p>
+</div>
+</body>
+</html>
