@@ -261,7 +261,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
 
         retc = ota_connect(last_host, port, &socket, &ssl, is_ssl);  //release socket and ssl when ready
         
-        const struct timeval rcvtimeout = { 2, 0 };
+        const struct timeval rcvtimeout = { 1, 200000 };
         setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
         
         if (!retc) {
@@ -634,7 +634,7 @@ int ota_verify_sign(int start_sector, int filesize, byte* signature) {
     int verify = 0;
     wc_ecc_verify_hash(signature, SIGNSIZE, hash, HASHSIZE, &verify, &public_key);
     
-    printf("Sign result: %s (%d)\n", verify == 1 ? "OK" : "ERROR" , verify);
+    printf("Sign result: %s\n", verify == 1 ? "OK" : "ERROR");
 
     return verify - 1;
 }

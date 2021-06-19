@@ -54,7 +54,7 @@ void ota_task(void *arg) {
     
     status = sysparam_get_string(CUSTOM_REPO_SYSPARAM, &user_repo);
     if (status != SYSPARAM_OK || strcmp(user_repo, "") == 0) {
-        user_repo = OTAREPO;
+        user_repo = strdup(OTAREPO);
     } else {
         int8_t value_is_ssl;
         status = sysparam_get_int8(PORT_SECURE_SYSPARAM, &value_is_ssl);
@@ -127,8 +127,9 @@ void ota_task(void *arg) {
                 printf("Data is already migrated\n\n");
             }
 
-            if (ota_get_sign(user_repo, OTAMAINFILE, signature, port, is_ssl) > 0) {
-                file_size = ota_get_file(user_repo, OTAMAINFILE, BOOT1SECTOR, port, is_ssl);
+            static char otamainfile[] = OTAMAINFILE;
+            if (ota_get_sign(user_repo, otamainfile, signature, port, is_ssl) > 0) {
+                file_size = ota_get_file(user_repo, otamainfile, BOOT1SECTOR, port, is_ssl);
                 if (file_size > 0 && ota_verify_sign(BOOT1SECTOR, file_size, signature) == 0) {
                     ota_finalize_file(BOOT1SECTOR);
                     printf("\n*** OTAMAIN installed\n\n");
@@ -150,11 +151,13 @@ void ota_task(void *arg) {
                 free(ota_version);
                 ota_version = NULL;
             }
-            ota_version = ota_get_version(user_repo, OTAVERSIONFILE, port, is_ssl);
+            static char otaversionfile[] = OTAVERSIONFILE;
+            ota_version = ota_get_version(user_repo, otaversionfile, port, is_ssl);
             
             if (ota_version && strcmp(ota_version, OTAVERSION) != 0) {
-                if (ota_get_sign(user_repo, OTABOOTFILE, signature, port, is_ssl) > 0) {
-                    file_size = ota_get_file(user_repo, OTABOOTFILE, BOOT0SECTOR, port, is_ssl);
+                static char otabootfile[] = OTABOOTFILE;
+                if (ota_get_sign(user_repo, otabootfile, signature, port, is_ssl) > 0) {
+                    file_size = ota_get_file(user_repo, otabootfile, BOOT0SECTOR, port, is_ssl);
                     if (file_size > 0 && ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
                         ota_finalize_file(BOOT0SECTOR);
                         printf("\n* HAABOOT new version installed\n\n");
@@ -172,11 +175,13 @@ void ota_task(void *arg) {
                 free(new_version);
                 new_version = NULL;
             }
-            new_version = ota_get_version(user_repo, HAAVERSIONFILE, port, is_ssl);
+            static char haaversionfile[] = HAAVERSIONFILE;
+            new_version = ota_get_version(user_repo, haaversionfile, port, is_ssl);
             
             if (new_version && strcmp(new_version, user_version) != 0) {
-                if (ota_get_sign(user_repo, HAAMAINFILE, signature, port, is_ssl) > 0) {
-                    file_size = ota_get_file(user_repo, HAAMAINFILE, BOOT0SECTOR, port, is_ssl);
+                static char haamainfile[] = HAAMAINFILE;
+                if (ota_get_sign(user_repo, haamainfile, signature, port, is_ssl) > 0) {
+                    file_size = ota_get_file(user_repo, haamainfile, BOOT0SECTOR, port, is_ssl);
                     if (file_size > 0 && ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
                         ota_finalize_file(BOOT0SECTOR);
                         sysparam_set_string(USER_VERSION_SYSPARAM, new_version);

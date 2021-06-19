@@ -73,11 +73,11 @@ EXTRA_CFLAGS += -DDNS_MAX_SERVERS=4
 EXTRA_CFLAGS += -DWIFI_PARAM_SAVE=0
 
 EXTRA_CFLAGS += -DconfigMINIMAL_STACK_SIZE=256
-EXTRA_CFLAGS += -DconfigTIMER_TASK_PRIORITY=\(configMAX_PRIORITIES-1\)
+#EXTRA_CFLAGS += -DconfigTIMER_TASK_PRIORITY=\(configMAX_PRIORITIES-1\)
 EXTRA_CFLAGS += -DconfigTIMER_QUEUE_LENGTH=10
-EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=640
+EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=600
 
-include $(abspath ../../sdk/esp-open-rtos/common.mk)
+include $(abspath ../../sdk/esp-open-rtos-ng/common.mk)
 
 monitor:
 	$(FILTEROUTPUT) --port $(ESPPORT) --baud 115200 --elf $(PROGRAM_OUT)

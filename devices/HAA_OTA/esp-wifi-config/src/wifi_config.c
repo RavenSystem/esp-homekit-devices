@@ -74,13 +74,14 @@ typedef struct {
 
     TimerHandle_t auto_reboot_timer;
     
-    TaskHandle_t http_task_handle;
     TaskHandle_t sta_connect_timeout;
     
     wifi_network_info_t* wifi_networks;
     SemaphoreHandle_t wifi_networks_mutex;
     
     uint8_t check_counter;
+    
+    bool end_setup: 1;
 } wifi_config_context_t;
 
 static wifi_config_context_t* context;
@@ -97,10 +98,9 @@ typedef struct _client {
 
 static void wifi_config_station_connect();
 static void wifi_config_softap_start();
-static void wifi_config_softap_stop();
 
 int wifi_config_remove_sys_param() {
-    unsigned char blank = 0;
+    unsigned char blank = 0xFF;
     
     for (uint16_t i = 0; i < (SECTORSIZE * SYSPARAMSIZE); i++) {
         if (!spiflash_write(SYSPARAMSECTOR + i, &blank, 1)) {
@@ -109,18 +109,11 @@ int wifi_config_remove_sys_param() {
         }
     }
     
-    blank = 255;
+    blank = 0x00;
     for (uint16_t i = 0; i < (SECTORSIZE * SYSPARAMSIZE); i++) {
         if (!spiflash_write(SYSPARAMSECTOR + i, &blank, 1)) {
             ERROR("Format sysparam (2/2)");
             return -1;
-        }
-    }
-    
-    for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
-        if (!spiflash_erase_sector(SYSPARAMSECTOR + (SECTORSIZE * i))) {
-            ERROR("Erase sysparam");
-            return -2;
         }
     }
     
@@ -312,7 +305,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
 
 static void wifi_scan_sc_task(void* arg) {
     INFO("Start Wifi smart connect scan");
-    vTaskDelay(pdMS_TO_TICKS(2000));
+    vTaskDelay(MS_TO_TICKS(2000));
     sdk_wifi_station_scan(NULL, wifi_scan_sc_done);
     vTaskDelete(NULL);
 }
@@ -467,7 +460,7 @@ static void wifi_config_server_on_settings(client_t *client) {
     // Wifi Networks
     char buffer[125];
     char bssid[13];
-    if (xSemaphoreTake(context->wifi_networks_mutex, pdMS_TO_TICKS(5000))) {
+    if (xSemaphoreTake(context->wifi_networks_mutex, MS_TO_TICKS(5000))) {
         wifi_network_info_t* net = context->wifi_networks;
         while (net) {
             snprintf(bssid, 13, "%02x%02x%02x%02x%02x%02x", net->bssid[0], net->bssid[1], net->bssid[2], net->bssid[3], net->bssid[4], net->bssid[5]);
@@ -516,14 +509,6 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send_chunk(client, "");
 }
 
-static void http_stop() {
-    if (!context->http_task_handle) {
-        return;
-    }
-
-    xTaskNotify(context->http_task_handle, 1, eSetValueWithOverwrite);
-}
-
 static void wifi_config_context_free(wifi_config_context_t *context) {
     if (context->ssid_prefix) {
         free(context->ssid_prefix);
@@ -541,14 +526,18 @@ static void wifi_config_context_free(wifi_config_context_t *context) {
 
 static void wifi_config_server_on_settings_update_task(void* args) {
     client_t* client = args;
+    context->end_setup = true;
     
-    static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<center>OK</center>";
-    client_send(client, payload, sizeof(payload) - 1);
+    while (context->end_setup) {
+        vTaskDelay(MS_TO_TICKS(200));
+    }
+    
+    sdk_wifi_station_disconnect();
     
     INFO("Update settings");
-
-    vTaskDelay(pdMS_TO_TICKS(100));
-
+    
+    wifi_config_context_free(context);
+    
     form_param_t *form = form_params_parse((char *) client->body);
     free(client->body);
     
@@ -564,7 +553,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     
     if (reset_sys_param) {
         wifi_config_remove_sys_param();
-        vTaskDelay(pdMS_TO_TICKS(3000));
+        vTaskDelay(MS_TO_TICKS(3000));
         wifi_config_reset();
         
     } else {
@@ -663,7 +652,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             sysparam_set_int8(WIFI_MODE_SYSPARAM, new_wifi_mode);
             
             if (current_wifi_mode != new_wifi_mode) {
-                vTaskDelay(pdMS_TO_TICKS(3000));
+                vTaskDelay(MS_TO_TICKS(3000));
                 wifi_config_reset();
             }
         }
@@ -671,7 +660,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     
     INFO("\nRebooting...\n\n");
 
-    vTaskDelay(pdMS_TO_TICKS(3000));
+    vTaskDelay(MS_TO_TICKS(3000));
     
     sdk_system_restart();
 }
@@ -730,10 +719,9 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
             if (context->sta_connect_timeout) {
                 vTaskDelete(context->sta_connect_timeout);
             }
-            wifi_config_context_free(context);
-            xTaskCreate(wifi_config_server_on_settings_update_task, "settings_update", 512, client, (tskIDLE_PRIORITY + 0), NULL);
+            
+            xTaskCreate(wifi_config_server_on_settings_update_task, "settings_update", 512, client, (tskIDLE_PRIORITY + 1), NULL);
             return 0;
-            break;
         }
             
         case ENDPOINT_UNKNOWN: {
@@ -761,43 +749,24 @@ static http_parser_settings wifi_config_http_parser_settings = {
 static void http_task(void *arg) {
     INFO("Start HTTP server");
 
+    context->end_setup = false;
+    
     struct sockaddr_in serv_addr;
     int listenfd = socket(AF_INET, SOCK_STREAM, 0);
     memset(&serv_addr, '0', sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     serv_addr.sin_port = htons(WIFI_CONFIG_SERVER_PORT);
-    int flags;
-    if ((flags = lwip_fcntl(listenfd, F_GETFL, 0)) < 0) {
-        ERROR("Get HTTP socket flags");
-        lwip_close(listenfd);
-        vTaskDelete(NULL);
-        return;
-    };
-    if (lwip_fcntl(listenfd, F_SETFL, flags | O_NONBLOCK) < 0) {
-        ERROR("Set HTTP socket flags");
-        lwip_close(listenfd);
-        vTaskDelete(NULL);
-        return;
-    }
+    
     bind(listenfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
     listen(listenfd, 2);
 
     char data[128];
-
-    bool running = true;
-    while (running) {
-        uint32_t task_value = 0;
-        if (xTaskNotifyWait(0, 1, &task_value, 0) == pdTRUE) {
-            if (task_value) {
-                running = false;
-                break;
-            }
-        }
-
+    
+    for (;;) {
         int fd = accept(listenfd, (struct sockaddr *)NULL, (socklen_t *)NULL);
         if (fd < 0) {
-            vTaskDelay(pdMS_TO_TICKS(200));
+            vTaskDelay(MS_TO_TICKS(200));
             continue;
         }
 
@@ -825,7 +794,6 @@ static void http_task(void *arg) {
             //INFO("lwip_read %d, %d", data_len, data_total);
 
             if (data_len > 0) {
-                taskYIELD();
                 http_parser_execute(
                     &client->parser, &wifi_config_http_parser_settings,
                     data, data_len
@@ -833,13 +801,13 @@ static void http_task(void *arg) {
             } else {
                 break;
             }
-
-            if (xTaskNotifyWait(0, 1, &task_value, 0) == pdTRUE) {
-                if (task_value) {
-                    running = false;
-                    break;
-                }
-            }
+        }
+        
+        if (context->end_setup) {
+            static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<center>OK</center>";
+            client_send(client, payload, sizeof(payload) - 1);
+            lwip_close(client->fd);
+            break;
         }
 
         INFO("Client disconnected");
@@ -847,10 +815,10 @@ static void http_task(void *arg) {
         lwip_close(client->fd);
         client_free(client);
     }
-
+    
+    context->end_setup = false;
+    
     INFO("Stop HTTP server");
-
-    lwip_close(listenfd);
     vTaskDelete(NULL);
 }
 
@@ -895,23 +863,14 @@ static void wifi_config_softap_start() {
 
     INFO("Start DHCP server");
     dhcpserver_start(&first_client_ip, 4);
-    //dhcpserver_set_router(&ap_ip.ip);
-    //dhcpserver_set_dns(&ap_ip.ip);
-
-    xTaskCreate(http_task, "http", 512, NULL, (tskIDLE_PRIORITY + 1), &context->http_task_handle);
-}
-
-static void wifi_config_softap_stop() {
-    LOCK_TCPIP_CORE();
-    dhcpserver_stop();
-    sdk_wifi_set_opmode(STATION_MODE);
-    UNLOCK_TCPIP_CORE();
+    
+    xTaskCreate(http_task, "http", 512, NULL, (tskIDLE_PRIORITY + 1), NULL);
 }
 
 static void auto_reboot_run() {
     INFO("\nAuto Rebooting...\n\n");
 
-    vTaskDelay(pdMS_TO_TICKS(500));
+    vTaskDelay(MS_TO_TICKS(500));
     
     sdk_system_restart();
 }
@@ -921,15 +880,10 @@ static void wifi_config_sta_connect_timeout_task() {
         vTaskDelay(MS_TO_TICKS(1000));
         
         if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
-            wifi_config_softap_stop();
+            context->on_wifi_ready();
             
-            if (context->on_wifi_ready) {
-                http_stop();
-                context->on_wifi_ready();
-                
-                wifi_config_context_free(context);
-                break;
-            }
+            wifi_config_context_free(context);
+            break;
 
         } else {
             context->check_counter++;
