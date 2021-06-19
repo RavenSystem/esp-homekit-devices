@@ -56,7 +56,7 @@ EXTRA_CFLAGS += -DWIFI_PARAM_SAVE=0
 
 EXTRA_CFLAGS += -DconfigMINIMAL_STACK_SIZE=256
 #EXTRA_CFLAGS += -DconfigTIMER_TASK_PRIORITY=\(configMAX_PRIORITIES-1\)
-EXTRA_CFLAGS += -DconfigTIMER_TASK_PRIORITY=\(tskIDLE_PRIORITY+3\)
+#EXTRA_CFLAGS += -DconfigTIMER_TASK_PRIORITY=\(tskIDLE_PRIORITY+3\)
 EXTRA_CFLAGS += -DconfigTIMER_QUEUE_LENGTH=35
 EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=600
 
@@ -72,7 +72,7 @@ EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=600
 ## mDNS Responder DEBUG
 #EXTRA_CFLAGS += -DqDebugLog -DqLogIncoming -DqLogAllTraffic
 
-include $(abspath ../../sdk/esp-open-rtos/common.mk)
+include $(abspath ../../sdk/esp-open-rtos-ng/common.mk)
 
 LIBS += m
 

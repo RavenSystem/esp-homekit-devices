@@ -50,7 +50,7 @@
 #endif
 
 #ifndef HOMEKIT_MIN_FREEHEAP
-#define HOMEKIT_MIN_FREEHEAP    (4352)
+#define HOMEKIT_MIN_FREEHEAP    (6144)
 #endif
 
 struct _client_context_t;
@@ -174,7 +174,7 @@ homekit_server_t *server_new() {
     return homekit_server;
 }
 
-
+/*
 void server_free() {
     if (homekit_server->accessory_id)
         free(homekit_server->accessory_id);
@@ -197,6 +197,7 @@ void server_free() {
     free(homekit_server);
     homekit_server = NULL;
 }
+ */
 
 #ifdef HOMEKIT_DEBUG
 #define TLV_DEBUG(values) tlv_debug(values)
@@ -325,15 +326,17 @@ void pair_verify_context_free(pair_verify_context_t *context) {
 
 client_context_t *client_context_new() {
     client_context_t *c = malloc(sizeof(client_context_t));
-    memset(c, 0, sizeof(*c));
-    
-    c->pairing_id = -1;
-    
-    c->parser = malloc(sizeof(*c->parser));
-    http_parser_init(c->parser, HTTP_REQUEST);
-    c->parser->data = c;
+    if (c) {
+        memset(c, 0, sizeof(*c));
+        
+        c->pairing_id = -1;
+        
+        c->parser = malloc(sizeof(*c->parser));
+        http_parser_init(c->parser, HTTP_REQUEST);
+        c->parser->data = c;
 
-    c->event_queue = xQueueCreate(20, sizeof(characteristic_event_t*));
+        c->event_queue = xQueueCreate(20, sizeof(characteristic_event_t*));
+    }
 
     return c;
 }
@@ -511,27 +514,33 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
             HOMEKIT_ERROR("Ch value format is different from ch format");
         } else {
             switch(v.format) {
-                case HOMETKIT_FORMAT_BOOL: {
+                case HOMETKIT_FORMAT_BOOL:
                     json_string(json, "value"); json_boolean(json, v.bool_value);
                     break;
-                }
+                
                 case HOMETKIT_FORMAT_UINT8:
                 case HOMETKIT_FORMAT_UINT16:
-                case HOMETKIT_FORMAT_UINT32:
-                case HOMETKIT_FORMAT_UINT64:
-                case HOMETKIT_FORMAT_INT: {
+                case HOMETKIT_FORMAT_INT:
                     json_string(json, "value"); json_integer(json, v.int_value);
                     break;
-                }
-                case HOMETKIT_FORMAT_FLOAT: {
+                    
+                case HOMETKIT_FORMAT_UINT32:
+                    json_string(json, "value"); json_integer(json, v.uint32_value);
+                    break;
+                    
+                case HOMETKIT_FORMAT_UINT64:
+                    json_string(json, "value"); json_integer(json, v.uint64_value);
+                    break;
+                    
+                case HOMETKIT_FORMAT_FLOAT:
                     json_string(json, "value"); json_float(json, v.float_value);
                     break;
-                }
-                case HOMETKIT_FORMAT_STRING: {
+                
+                case HOMETKIT_FORMAT_STRING:
                     json_string(json, "value"); json_string(json, v.string_value);
                     break;
-                }
-                case HOMETKIT_FORMAT_TLV: {
+                
+                case HOMETKIT_FORMAT_TLV:
                     json_string(json, "value");
                     if (!v.tlv_values) {
                         json_string(json, "");
@@ -556,9 +565,26 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
                         }
                     }
                     break;
-                }
+                
                 case HOMETKIT_FORMAT_DATA:
-                    // TODO:
+                    json_string(json, "value");
+                    if (!v.data_value || v.data_size == 0) {
+                        json_string(json, "");
+                    } else {
+                        size_t encoded_data_size = base64_encoded_size(v.data_value, v.data_size);
+                        byte* encoded_data = malloc(encoded_data_size + 1);
+                        if (!encoded_data) {
+                            CLIENT_ERROR(client, "Allocate %d bytes for encoding data", encoded_data_size + 1);
+                            json_string(json, "");
+                            break;
+                        }
+                        base64_encode(v.data_value, v.data_size, encoded_data);
+                        encoded_data[encoded_data_size] = 0;
+
+                        json_string(json, (char*) encoded_data);
+                        
+                        free(encoded_data);
+                    }
                     break;
             }
         }
@@ -826,7 +852,7 @@ void send_tlv_response(client_context_t *context, tlv_values_t *values) {
 
     tlv_free(values);
 
-    static char *http_headers =
+    static char http_headers[] =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: application/pairing+tlv8\r\n"
         "Content-Length: %d\r\n"
@@ -842,12 +868,12 @@ void send_tlv_response(client_context_t *context, tlv_values_t *values) {
         free(payload);
         return;
     }
-    memcpy(response+response_len, payload, payload_size);
+    memcpy(response + response_len, payload, payload_size);
     response_len += payload_size;
 
     free(payload);
 
-    client_send(context, (byte *)response, response_len);
+    client_send(context, (byte*) response, response_len);
 
     free(response);
 }
@@ -871,7 +897,7 @@ void send_json_response(client_context_t *context, int status_code, byte *payloa
     CLIENT_DEBUG(context, "Sending JSON response");
     DEBUG_HEAP();
 
-    static char *http_headers =
+    static char http_headers[] =
         "HTTP/1.1 %d %s\r\n"
         "Content-Type: application/hap+json\r\n"
         "Content-Length: %d\r\n"
@@ -2355,34 +2381,31 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 
                     CLIENT_DEBUG(context, "Updating ch %d.%d with integer %d", aid, iid, value);
 
-                    // Old style
-                    h_value = HOMEKIT_INT(value);
-                    h_value.format = ch->format;
-                    
-                    /*
-                    // New style
                     switch (ch->format) {
                         case HOMETKIT_FORMAT_UINT8:
                             h_value = HOMEKIT_UINT8(value);
                             break;
+                            
                         case HOMETKIT_FORMAT_UINT16:
                             h_value = HOMEKIT_UINT16(value);
                             break;
+                            
                         case HOMETKIT_FORMAT_UINT32:
                             h_value = HOMEKIT_UINT32(value);
                             break;
+                            
                         case HOMETKIT_FORMAT_UINT64:
                             h_value = HOMEKIT_UINT64(value);
                             break;
+                            
                         case HOMETKIT_FORMAT_INT:
                             h_value = HOMEKIT_INT(value);
                             break;
 
                         default:
-                            CLIENT_ERROR(context, "Unexpected format when updating numeric value: %d", ch->format);
+                            CLIENT_ERROR(context, "Updateg num value: %d", ch->format);
                             return HAPStatus_InvalidValue;
                     }
-                    */
                     
                     if (ch->setter_ex) {
                         ch->setter_ex(ch, h_value);
@@ -2490,7 +2513,38 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     break;
                 }
                 case HOMETKIT_FORMAT_DATA: {
-                    // TODO:
+                    if (j_value->type != cJSON_String) {
+                        CLIENT_ERROR(context, "Update %d.%d: not a string", aid, iid);
+                        return HAPStatus_InvalidValue;
+                    }
+
+                    // Default max data len = 2,097,152 but that does not make sense
+                    // for this accessory
+                    int max_len = (ch->max_data_len) ? *ch->max_data_len : 4096;
+
+                    char *value = j_value->valuestring;
+                    size_t value_len = strlen(value);
+                    if (value_len > max_len) {
+                        CLIENT_ERROR(context, "Update %d.%d: too long", aid, iid);
+                        return HAPStatus_InvalidValue;
+                    }
+
+                    size_t data_size = base64_decoded_size((unsigned char*)value, value_len);
+                    byte *data = malloc(data_size);
+                    if (!data) {
+                        CLIENT_ERROR(context, "Update %d.%d: allocating %d bytes", aid, iid, data_size);
+                        return HAPStatus_InvalidValue;
+                    }
+
+                    if (base64_decode((byte*) value, value_len, data) < 0) {
+                        free(data);
+                        CLIENT_ERROR(context, "Update %d.%d: Base64 decoding", aid, iid);
+                        return HAPStatus_InvalidValue;
+                    }
+
+                    CLIENT_DEBUG(context, "Updating ch %d.%d", aid, iid);
+
+                    h_value = HOMEKIT_DATA(data, data_size);
                     break;
                 }
                 default: {
@@ -2498,17 +2552,6 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     return HAPStatus_InvalidValue;
                 }
             }
-/*
-            if (!h_value.is_null) {
-                context->current_characteristic = ch;
-                context->current_value = &h_value;
-
-                //homekit_characteristic_notify(ch, h_value);
-
-                context->current_characteristic = NULL;
-                context->current_value = NULL;
-            }
- */
         }
 
         cJSON *j_events = cJSON_GetObjectItem(j_ch, "ev");
@@ -3123,11 +3166,11 @@ IRAM void homekit_server_close_client(client_context_t *context) {
 }
 
 
-client_context_t *homekit_server_accept_client() {
+void homekit_server_accept_client() {
     int s = accept(homekit_server->listen_fd, (struct sockaddr *)NULL, (socklen_t *)NULL);
     if (s < 0) {
         HOMEKIT_ERROR("New socket");
-        return NULL;
+        return;
     }
 
     char address_buffer[INET_ADDRSTRLEN];
@@ -3139,13 +3182,14 @@ client_context_t *homekit_server_accept_client() {
     } else {
         HOMEKIT_ERROR("[%d] New ?.?.?.?:%d. Closing", s, addr.sin_port);
         close(s);
-        return NULL;
+        return;
     }
     
-    client_context_t *context;
+    client_context_t* context;
+    client_context_t* new_context = client_context_new();
     
     uint32_t free_heap = xPortGetFreeHeapSize();
-    if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS || (free_heap <= HOMEKIT_MIN_FREEHEAP && homekit_server->is_pairing == false)) {
+    if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS || (free_heap <= HOMEKIT_MIN_FREEHEAP && homekit_server->is_pairing == false) || !new_context) {
         context = homekit_server->clients;
         while (context) {
             if (!context->next) {
@@ -3157,33 +3201,34 @@ client_context_t *homekit_server_accept_client() {
         }
     }
     
-    const struct timeval sndtimeout = { 3, 0 };
-    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
-    
-    const struct timeval rcvtimeout = { 10, 0 };
-    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
-    
-    const int keepalive = 0;
-    setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive));
-    
-    context = client_context_new();
+    if (new_context) {
+        const struct timeval sndtimeout = { 3, 0 };
+        setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
+        
+        const struct timeval rcvtimeout = { 10, 0 };
+        setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
+        
+        const int keepalive = 0;
+        setsockopt(s, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive));
 
-    context->socket = s;
-    context->next = homekit_server->clients;
+        new_context->socket = s;
+        new_context->next = homekit_server->clients;
 
-    homekit_server->clients = context;
+        homekit_server->clients = new_context;
 
-    FD_SET(s, &homekit_server->fds);
-    homekit_server->client_count++;
-    if (s > homekit_server->max_fd) {
-        homekit_server->max_fd = s;
+        FD_SET(s, &homekit_server->fds);
+        homekit_server->client_count++;
+        if (s > homekit_server->max_fd) {
+            homekit_server->max_fd = s;
+        }
+        
+        HOMEKIT_INFO("[%d] New %s:%d (%i/%i) Free HEAP: %d", s, address_buffer, addr.sin_port, homekit_server->client_count, HOMEKIT_MAX_CLIENTS, free_heap);
+
+        HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_CLIENT_CONNECTED);
+        
+    } else {
+        HOMEKIT_ERROR("[%d] Not enough memory %s:%d (%i/%i) Free HEAP: %d", s, address_buffer, addr.sin_port, homekit_server->client_count, HOMEKIT_MAX_CLIENTS, free_heap);
     }
-    
-    HOMEKIT_INFO("[%d] New %s:%d (%i/%i) Free HEAP: %d", s, address_buffer, addr.sin_port, homekit_server->client_count, HOMEKIT_MAX_CLIENTS, free_heap);
-
-    HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_CLIENT_CONNECTED);
-
-    return context;
 }
 
 
@@ -3343,24 +3388,31 @@ void homekit_setup_mdns() {
     homekit_accessory_t *accessory = homekit_server->config->accessories[0];
     homekit_service_t *accessory_info =
         homekit_service_by_type(accessory, HOMEKIT_SERVICE_ACCESSORY_INFORMATION);
+    
+    /*
     if (!accessory_info) {
         HOMEKIT_ERROR("Accessory declaration: no Acc Information service");
         return;
     }
+     */
 
     homekit_characteristic_t *name =
         homekit_service_characteristic_by_type(accessory_info, HOMEKIT_CHARACTERISTIC_NAME);
+    /*
     if (!name) {
         HOMEKIT_ERROR("Accessory declaration: no Name ch in AccessoryInfo service");
         return;
     }
+     */
 
     homekit_characteristic_t *model =
         homekit_service_characteristic_by_type(accessory_info, HOMEKIT_CHARACTERISTIC_MODEL);
+    /*
     if (!model) {
         HOMEKIT_ERROR("Accessory declaration: no Model ch in AccessoryInfo service");
         return;
     }
+     */
 
     homekit_mdns_configure_init(name->value.string_value, PORT);
     
@@ -3387,20 +3439,21 @@ void homekit_setup_mdns() {
     homekit_mdns_add_txt("sf", "%d", (homekit_server->paired) ? 0 : 1);
     // accessory category identifier
     homekit_mdns_add_txt("ci", "%d", homekit_server->config->category);
+    
+    homekit_server->config->setup_id = strdup("JOSE");
 
-    homekit_server->config->setupId = "JOSE";
+    HOMEKIT_DEBUG_LOG("Setup ID: %s", homekit_server->config->setup_id);
 
-    HOMEKIT_DEBUG_LOG("Accessory Setup ID = %s", homekit_server->config->setupId);
-
-    size_t data_size = strlen(homekit_server->config->setupId) + strlen(homekit_server->accessory_id) + 1;
+    size_t data_size = strlen(homekit_server->config->setup_id) + strlen(homekit_server->accessory_id) + 1;
     char *data = malloc(data_size);
-    snprintf(data, data_size, "%s%s", homekit_server->config->setupId, homekit_server->accessory_id);
-    data[data_size-1] = 0;
-
+    snprintf(data, data_size, "%s%s", homekit_server->config->setup_id, homekit_server->accessory_id);
+    data[data_size - 1] = 0;
+    
     unsigned char shaHash[SHA512_DIGEST_SIZE];
-    wc_Sha512Hash((const unsigned char *)data, data_size-1, shaHash);
+    wc_Sha512Hash((const unsigned char*) data, data_size - 1, shaHash);
 
     free(data);
+    free(homekit_server->config->setup_id);
 
     unsigned char encodedHash[9];
     memset(encodedHash, 0, sizeof(encodedHash));
@@ -3422,7 +3475,7 @@ char *homekit_accessory_id_generate() {
     snprintf(accessory_id, 18, "%02X:%02X:%02X:%02X:%02X:%02X",
              buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
 
-    HOMEKIT_INFO("Generated new ID: %s", accessory_id);
+    HOMEKIT_INFO("Generated new HomeKit ID: %s", accessory_id);
     return accessory_id;
 }
 
@@ -3454,7 +3507,7 @@ void homekit_server_task(void *args) {
         homekit_server->accessory_key = homekit_accessory_key_generate();
         homekit_storage_save_accessory_key(homekit_server->accessory_key);
     } else {
-        HOMEKIT_INFO("Using existing accessory ID: %s", homekit_server->accessory_id);
+        HOMEKIT_INFO("Using existing HomeKit ID: %s", homekit_server->accessory_id);
     }
 
     pairing_iterator_t *pairing_it = homekit_storage_pairing_iterator();

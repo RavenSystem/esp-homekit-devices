@@ -29,7 +29,7 @@ typedef struct {
 
     // Setup ID in format "XXXX" (where X is digit or latin capital letter)
     // Used for pairing using QR code
-    char *setupId;
+    char* setup_id;
     
     uint16_t mdns_ttl;
     

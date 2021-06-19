@@ -126,10 +126,9 @@ typedef struct _client {
 
 static void wifi_config_station_connect();
 static void wifi_config_softap_start();
-static void wifi_config_softap_stop();
 
 int wifi_config_remove_sys_param() {
-    unsigned char blank = 0;
+    unsigned char blank = 0xFF;
     
     for (uint16_t i = 0; i < (SECTORSIZE * SYSPARAMSIZE); i++) {
         if (!spiflash_write(SYSPARAMSECTOR + i, &blank, 1)) {
@@ -138,18 +137,11 @@ int wifi_config_remove_sys_param() {
         }
     }
     
-    blank = 255;
+    blank = 0x00;
     for (uint16_t i = 0; i < (SECTORSIZE * SYSPARAMSIZE); i++) {
         if (!spiflash_write(SYSPARAMSECTOR + i, &blank, 1)) {
             ERROR("Format sysparam (2/2)");
             return -1;
-        }
-    }
-    
-    for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
-        if (!spiflash_erase_sector(SYSPARAMSECTOR + (SECTORSIZE * i))) {
-            ERROR("Erase sysparam");
-            return -2;
         }
     }
     
@@ -990,13 +982,6 @@ static void wifi_config_softap_start() {
     xTaskCreate(http_task, "http", 640, NULL, (tskIDLE_PRIORITY + 1), NULL);
 }
 
-static void wifi_config_softap_stop() {
-    LOCK_TCPIP_CORE();
-    dhcpserver_stop();
-    sdk_wifi_set_opmode(STATION_MODE);
-    UNLOCK_TCPIP_CORE();
-}
-
 static void wifi_config_sta_connect_timeout_task() {
     if (context->custom_hostname) {
         struct netif *netif = sdk_system_get_netif(STATION_IF);
@@ -1013,14 +998,17 @@ static void wifi_config_sta_connect_timeout_task() {
         vTaskDelay(MS_TO_TICKS(1000));
         
         if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
-            wifi_config_softap_stop();
-            
             if (context->on_wifi_ready) {
                 context->on_wifi_ready();
                 
                 wifi_config_context_free(context);
                 
             } else {
+                LOCK_TCPIP_CORE();
+                dhcpserver_stop();
+                sdk_wifi_set_opmode(STATION_MODE);
+                UNLOCK_TCPIP_CORE();
+                
                 xTaskCreate(setup_announcer_task, "setup_announcer", 512, NULL, (tskIDLE_PRIORITY + 0), &context->setup_announcer);
             }
             

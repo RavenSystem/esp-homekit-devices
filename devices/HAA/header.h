@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "6.0.7"
+#define FIRMWARE_VERSION                    "6.1.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -26,9 +26,11 @@
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
 #define CH_TYPE_INT8                        (1)
-#define CH_TYPE_INT32                       (2)
-#define CH_TYPE_FLOAT                       (3)
-#define CH_TYPE_STRING                      (4)
+#define CH_TYPE_INT                         (2)
+#define CH_TYPE_UINT32                      (3)
+#define CH_TYPE_UINT64                      (4)
+#define CH_TYPE_FLOAT                       (5)
+#define CH_TYPE_STRING                      (6)
 
 // Auto-off types (type)
 #define TYPE_ON                             (0)
@@ -46,7 +48,7 @@
 // Task Stack Sizes
 #define GLOBAL_TASK_SIZE                    (544)
 
-#define INITIAL_SETUP_TASK_SIZE             (1280)
+#define INITIAL_SETUP_TASK_SIZE             (1536)
 #define NTP_TASK_SIZE                       (512)
 #define PING_TASK_SIZE                      GLOBAL_TASK_SIZE
 #define AUTODIMMER_TASK_SIZE                GLOBAL_TASK_SIZE
@@ -208,7 +210,7 @@
 #define TH_IAIRZONING_GATE_CURRENT_STATE    ch_group->num[12]
 #define TH_IAIRZONING_GATE_CLOSE            (0)
 #define TH_IAIRZONING_GATE_OPEN             (1)
-#define THERMOSTAT_MODE_INT                 ch_group->ch4->value.int_value
+#define THERMOSTAT_MODE_INT                 ch_group->ch3->value.int_value
 #define THERMOSTAT_CURRENT_ACTION           ch_group->last_wildcard_action[2]
 #define THERMOSTAT_MODE_OFF                 (0)
 #define THERMOSTAT_MODE_IDLE                (1)
@@ -234,8 +236,8 @@
 #define THERMOSTAT_TEMP_UP                  (0)
 #define THERMOSTAT_TEMP_DOWN                (1)
 #define TH_SENSOR_MAX_ALLOWED_ERRORS        (3)
-#define TH_HEATER_TARGET_TEMP_FLOAT         ch_group->ch6->value.float_value
-#define TH_COOLER_TARGET_TEMP_FLOAT         ch_group->ch7->value.float_value
+#define TH_HEATER_TARGET_TEMP_FLOAT         ch_group->ch5->value.float_value
+#define TH_COOLER_TARGET_TEMP_FLOAT         ch_group->ch6->value.float_value
 
 #define IAIRZONING_LAST_ACTION              iairzoning_group->num[0]
 #define IAIRZONING_MAIN_MODE                iairzoning_group->num[1]

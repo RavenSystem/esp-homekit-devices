@@ -134,7 +134,6 @@ typedef struct _ch_group {
     homekit_characteristic_t* ch4;
     homekit_characteristic_t* ch5;
     homekit_characteristic_t* ch6;
-    homekit_characteristic_t* ch7;
 
     TimerHandle_t timer;
     TimerHandle_t timer2;
@@ -257,6 +256,16 @@ typedef struct _timetable_action {
     struct _timetable_action* next;
 } timetable_action_t;
 
+typedef struct _historical {
+    uint16_t size;
+    uint16_t last_entry;
+    
+    homekit_characteristic_t* ch_hist_data;
+    homekit_characteristic_t* ch;
+    
+    struct _historical* next;
+} historical_t;
+
 typedef struct _main_config {
     uint8_t wifi_status: 2;
     uint8_t wifi_channel: 4;
@@ -311,6 +320,8 @@ typedef struct _main_config {
     
     char* ntp_host;
     timetable_action_t* timetable_actions;
+    
+    historical_t* historicals;
     
     led_t* status_led;
 } main_config_t;
