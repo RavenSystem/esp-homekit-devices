@@ -278,11 +278,11 @@ void extended_gpio_write(const uint16_t extended_gpio, bool value) {
         if (mcp23017) {
             uint8_t gpio = extended_gpio % 100;
             uint8_t mcp_outs = mcp23017->a_outs;
-            uint8_t channel = 0x14;
+            uint8_t mcp_reg = 0x14;
             if (gpio > 7) {
                 gpio -= 8;
                 mcp_outs = mcp23017->b_outs;
-                channel = 0x15;
+                mcp_reg = 0x15;
             }
             
             const uint8_t bit = 1 << gpio;
@@ -293,13 +293,13 @@ void extended_gpio_write(const uint16_t extended_gpio, bool value) {
                 mcp_outs ^= bit;
             }
             
-            if (channel == 0) {
+            if (mcp_reg == 0x14) {
                 mcp23017->a_outs = mcp_outs;
             } else {
                 mcp23017->b_outs = mcp_outs;
             }
             
-            i2c_slave_write(mcp23017->bus, mcp23017->addr, &channel, 1, &mcp_outs, 1);
+            i2c_slave_write(mcp23017->bus, mcp23017->addr, &mcp_reg, 1, &mcp_outs, 1);
         }
     }
 }
