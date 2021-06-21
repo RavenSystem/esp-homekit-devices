@@ -80,7 +80,7 @@ EXTRA_CFLAGS += -DconfigTIMER_TASK_PRIORITY=\(tskIDLE_PRIORITY+3\)
 EXTRA_CFLAGS += -DconfigTIMER_QUEUE_LENGTH=10
 EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=600
 
-include $(abspath ../../sdk/esp-open-rtos/common.mk)
+include $(abspath ../../sdk/esp-open-rtos-ng/common.mk)
 
 monitor:
 	$(FILTEROUTPUT) --port $(ESPPORT) --baud 115200 --elf $(PROGRAM_OUT)
