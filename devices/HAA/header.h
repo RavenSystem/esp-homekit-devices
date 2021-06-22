@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "6.1.3"
+#define FIRMWARE_VERSION                    "6.1.4"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -27,10 +27,8 @@
 #define CH_TYPE_BOOL                        (0)
 #define CH_TYPE_INT8                        (1)
 #define CH_TYPE_INT                         (2)
-#define CH_TYPE_UINT32                      (3)
-#define CH_TYPE_UINT64                      (4)
-#define CH_TYPE_FLOAT                       (5)
-#define CH_TYPE_STRING                      (6)
+#define CH_TYPE_FLOAT                       (3)
+#define CH_TYPE_STRING                      (4)
 
 // Auto-off types (type)
 #define TYPE_ON                             (0)

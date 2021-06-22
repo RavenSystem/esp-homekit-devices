@@ -514,33 +514,27 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
             HOMEKIT_ERROR("Ch value format is different from ch format");
         } else {
             switch(v.format) {
-                case HOMETKIT_FORMAT_BOOL:
+                case HOMETKIT_FORMAT_BOOL: {
                     json_string(json, "value"); json_boolean(json, v.bool_value);
                     break;
-                
+                }
                 case HOMETKIT_FORMAT_UINT8:
                 case HOMETKIT_FORMAT_UINT16:
-                case HOMETKIT_FORMAT_INT:
+                case HOMETKIT_FORMAT_UINT32:
+                case HOMETKIT_FORMAT_UINT64:
+                case HOMETKIT_FORMAT_INT: {
                     json_string(json, "value"); json_integer(json, v.int_value);
                     break;
-                    
-                case HOMETKIT_FORMAT_UINT32:
-                    json_string(json, "value"); json_integer(json, v.uint32_value);
-                    break;
-                    
-                case HOMETKIT_FORMAT_UINT64:
-                    json_string(json, "value"); json_integer(json, v.uint64_value);
-                    break;
-                    
-                case HOMETKIT_FORMAT_FLOAT:
+                }
+                case HOMETKIT_FORMAT_FLOAT: {
                     json_string(json, "value"); json_float(json, v.float_value);
                     break;
-                
-                case HOMETKIT_FORMAT_STRING:
+                }
+                case HOMETKIT_FORMAT_STRING: {
                     json_string(json, "value"); json_string(json, v.string_value);
                     break;
-                
-                case HOMETKIT_FORMAT_TLV:
+                }
+                case HOMETKIT_FORMAT_TLV: {
                     json_string(json, "value");
                     if (!v.tlv_values) {
                         json_string(json, "");
@@ -565,20 +559,20 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
                         }
                     }
                     break;
-                
+                }
                 case HOMETKIT_FORMAT_DATA:
                     json_string(json, "value");
-                    if (!v.data_value || v.data_size == 0) {
+                    if (!v.string_value || v.data_size == 0) {
                         json_string(json, "");
                     } else {
-                        size_t encoded_data_size = base64_encoded_size(v.data_value, v.data_size);
+                        size_t encoded_data_size = base64_encoded_size((uint8_t*) v.string_value, v.data_size);
                         byte* encoded_data = malloc(encoded_data_size + 1);
                         if (!encoded_data) {
                             CLIENT_ERROR(client, "Allocate %d bytes for encoding data", encoded_data_size + 1);
                             json_string(json, "");
                             break;
                         }
-                        base64_encode(v.data_value, v.data_size, encoded_data);
+                        base64_encode((uint8_t*) v.string_value, v.data_size, encoded_data);
                         encoded_data[encoded_data_size] = 0;
 
                         json_string(json, (char*) encoded_data);
@@ -2381,31 +2375,34 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 
                     CLIENT_DEBUG(context, "Updating ch %d.%d with integer %d", aid, iid, value);
 
+                    // Old style
+                    h_value = HOMEKIT_INT(value);
+                    h_value.format = ch->format;
+                    
+                    /*
+                    // New style
                     switch (ch->format) {
                         case HOMETKIT_FORMAT_UINT8:
                             h_value = HOMEKIT_UINT8(value);
                             break;
-                            
                         case HOMETKIT_FORMAT_UINT16:
                             h_value = HOMEKIT_UINT16(value);
                             break;
-                            
                         case HOMETKIT_FORMAT_UINT32:
                             h_value = HOMEKIT_UINT32(value);
                             break;
-                            
                         case HOMETKIT_FORMAT_UINT64:
                             h_value = HOMEKIT_UINT64(value);
                             break;
-                            
                         case HOMETKIT_FORMAT_INT:
                             h_value = HOMEKIT_INT(value);
                             break;
 
                         default:
-                            CLIENT_ERROR(context, "Updateg num value: %d", ch->format);
+                            CLIENT_ERROR(context, "Unexpected format when updating numeric value: %d", ch->format);
                             return HAPStatus_InvalidValue;
                     }
+                    */
                     
                     if (ch->setter_ex) {
                         ch->setter_ex(ch, h_value);

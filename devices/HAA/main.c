@@ -47,8 +47,6 @@
 #include "header.h"
 #include "types.h"
 
-char haa_version[] = FIRMWARE_VERSION;
-
 main_config_t main_config = {
     .wifi_status = WIFI_STATUS_DISCONNECTED,
     .wifi_channel = 0,
@@ -693,7 +691,7 @@ void wifi_watchdog() {
         if (main_config.wifi_ping_max_errors != 255 && !homekit_is_pairing() && !main_config.network_is_busy) {
             const uint32_t free_heap = xPortGetFreeHeapSize();
             if (free_heap <= MINIMUM_FREE_HEAP ||
-                xTaskCreate(wifi_ping_gw_task, "wifi_ping_gw", WIFI_PING_GW_TASK_SIZE, NULL, WIFI_PING_GW_TASK_PRIORITY, NULL) != pdPASS) {
+                xTaskCreate(wifi_ping_gw_task, "gwping", WIFI_PING_GW_TASK_SIZE, NULL, WIFI_PING_GW_TASK_PRIORITY, NULL) != pdPASS) {
                 ERROR("Creating wifi_ping_gw. Free HEAP %d", free_heap);
             }
         }
@@ -710,7 +708,7 @@ void wifi_watchdog() {
         
         const uint32_t free_heap = xPortGetFreeHeapSize();
         if (free_heap <= MINIMUM_FREE_HEAP ||
-            xTaskCreate(wifi_reconnection_task, "reconnect", WIFI_RECONNECTION_TASK_SIZE, (void*) force_disconnect, WIFI_RECONNECTION_TASK_PRIORITY, NULL) != pdPASS) {
+            xTaskCreate(wifi_reconnection_task, "recon", WIFI_RECONNECTION_TASK_SIZE, (void*) force_disconnect, WIFI_RECONNECTION_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("Creating wifi_reconnection. Free HEAP %d", free_heap);
         }
     }
@@ -827,14 +825,6 @@ void save_states() {
                 status = sysparam_set_int32(last_state->id, last_state->ch->value.int_value);
                 break;
                 
-            case CH_TYPE_UINT32:
-                status = sysparam_set_int32(last_state->id, (int) last_state->ch->value.uint32_value);
-                break;
-                
-            //case CH_TYPE_UINT64:
-                // TO-DO
-                //break;
-                
             case CH_TYPE_FLOAT:
                 status = sysparam_set_int32(last_state->id, (int) (last_state->ch->value.float_value * 1000000));
                 break;
@@ -910,7 +900,7 @@ void pm_custom_consumption_reset(ch_group_t* ch_group) {
     if (timeinfo->tm_year > 120) {
         ch_group->ch4->value.float_value = ch_group->ch3->value.float_value;
         ch_group->ch3->value.float_value = 0;
-        ch_group->ch5->value.uint32_value = time;
+        ch_group->ch5->value.int_value = time;
         
         save_states_callback();
     } else {
@@ -1334,7 +1324,7 @@ void power_monitor_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
         const uint32_t free_heap = xPortGetFreeHeapSize();
         if (free_heap <= MINIMUM_FREE_HEAP ||
-            xTaskCreate(power_monitor_task, "power_monitor", POWER_MONITOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), POWER_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
+            xTaskCreate(power_monitor_task, "pm", POWER_MONITOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), POWER_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("Creating power_monitor. Free HEAP %d", free_heap);
         }
     } else {
@@ -1604,7 +1594,7 @@ void set_zones_task(void* args) {
 void set_zones_timer_worker(TimerHandle_t xTimer) {
     const uint32_t free_heap = xPortGetFreeHeapSize();
     if (free_heap <= MINIMUM_FREE_HEAP ||
-        xTaskCreate(set_zones_task, "set_zones", SET_ZONES_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), SET_ZONES_TASK_PRIORITY, NULL) != pdPASS) {
+        xTaskCreate(set_zones_task, "zones", SET_ZONES_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), SET_ZONES_TASK_PRIORITY, NULL) != pdPASS) {
         ERROR("Creating set_zones. Free HEAP %d", free_heap);
         esp_timer_start(xTimer);
     }
@@ -1814,7 +1804,7 @@ void process_th_task(void* args) {
 void process_th_timer(TimerHandle_t xTimer) {
     const uint32_t free_heap = xPortGetFreeHeapSize();
     if (free_heap <= MINIMUM_FREE_HEAP ||
-        xTaskCreate(process_th_task, "process_th", PROCESS_TH_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_TH_TASK_PRIORITY, NULL) != pdPASS) {
+        xTaskCreate(process_th_task, "th", PROCESS_TH_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_TH_TASK_PRIORITY, NULL) != pdPASS) {
         ERROR("Creating process_th. Free HEAP %d", free_heap);
         esp_timer_start(xTimer);
     }
@@ -2126,7 +2116,7 @@ void temperature_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
         const uint32_t free_heap = xPortGetFreeHeapSize();
         if (free_heap <= MINIMUM_FREE_HEAP ||
-            xTaskCreate(temperature_task, "temperature", TEMPERATURE_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), TEMPERATURE_TASK_PRIORITY, NULL) != pdPASS) {
+            xTaskCreate(temperature_task, "temp", TEMPERATURE_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), TEMPERATURE_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("Creating temperature. Free HEAP %d", free_heap);
         }
     } else {
@@ -2817,7 +2807,7 @@ void lightbulb_task(void* args) {
 void lightbulb_task_timer(TimerHandle_t xTimer) {
     const uint32_t free_heap = xPortGetFreeHeapSize();
     if (free_heap <= MINIMUM_FREE_HEAP ||
-        xTaskCreate(lightbulb_task, "lightbulb", LIGHTBULB_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), LIGHTBULB_TASK_PRIORITY, NULL) != pdPASS) {
+        xTaskCreate(lightbulb_task, "light", LIGHTBULB_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), LIGHTBULB_TASK_PRIORITY, NULL) != pdPASS) {
         ERROR("Creating lightbulb. Free HEAP %d", free_heap);
         esp_timer_start(xTimer);
     }
@@ -2930,7 +2920,7 @@ void autodimmer_call(homekit_characteristic_t* ch0, const homekit_value_t value)
             
             const uint32_t free_heap = xPortGetFreeHeapSize();
             if (free_heap <= MINIMUM_FREE_HEAP ||
-                xTaskCreate(autodimmer_task, "autodimmer", AUTODIMMER_TASK_SIZE, (void*) ch0, AUTODIMMER_TASK_PRIORITY, NULL) != pdPASS) {
+                xTaskCreate(autodimmer_task, "autodim", AUTODIMMER_TASK_SIZE, (void*) ch0, AUTODIMMER_TASK_PRIORITY, NULL) != pdPASS) {
                 ERROR("<%i> Creating autodimmer. Free HEAP %d", ch_group->accessory, free_heap);
             }
         } else {
@@ -3451,7 +3441,7 @@ void light_sensor_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
         const uint32_t free_heap = xPortGetFreeHeapSize();
         if (free_heap <= MINIMUM_FREE_HEAP ||
-            xTaskCreate(light_sensor_task, "light_sensor", LIGHT_SENSOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), LIGHT_SENSOR_TASK_PRIORITY, NULL) != pdPASS) {
+            xTaskCreate(light_sensor_task, "lux", LIGHT_SENSOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), LIGHT_SENSOR_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("Creating light_sensor. Free HEAP %d", free_heap);
         }
     } else {
@@ -4090,14 +4080,13 @@ void net_action_task(void* pvParameters) {
                                 req = action_network->content;
                                 
                             } else if (action_network->method_n != 4) {     // HTTP
-                                action_network->len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(haa_version) + strlen(action_network->host) +  strlen(action_network->url) + strlen(action_network->header) + content_len_n;
+                                action_network->len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(action_network->host) +  strlen(action_network->url) + strlen(action_network->header) + content_len_n;
                                 
                                 req = malloc(action_network->len);
-                                snprintf(req, action_network->len, "%s /%s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HAA/%s esp8266\r\nConnection: close\r\n%s%s\r\n",
+                                snprintf(req, action_network->len, "%s /%s HTTP/1.1\r\nHost: %s\r\nUser-Agent: HAA/"FIRMWARE_VERSION" esp8266\r\nConnection: close\r\n%s%s\r\n",
                                          method,
                                          action_network->url,
                                          action_network->host,
-                                         haa_version,
                                          action_network->header,
                                          (method_req != NULL) ? method_req : "");
                                 free(method);
@@ -5090,19 +5079,14 @@ void delayed_sensor_task() {
     vTaskDelete(NULL);
 }
 
-char my_name[] = "José A. Jiménez Campos";
-char my_firm[] = "RavenSystem HAA";
-char hapv[] = "1.1.0";
-char null_char[] = "";
-char tv[] = "TV";
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, NULL);
-homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, my_name);
-homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, my_firm);
+homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, "José A. Jiménez Campos");
+homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "RavenSystem HAA");
 homekit_characteristic_t identify_function = HOMEKIT_CHARACTERISTIC_(IDENTIFY, identify);
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, haa_version);
-homekit_characteristic_t hap_version = HOMEKIT_CHARACTERISTIC_(VERSION, hapv);
-homekit_characteristic_t haa_ota_update = HOMEKIT_CHARACTERISTIC_(CUSTOM_OTA_UPDATE, null_char, .setter_ex=hkc_custom_ota_setter);
-homekit_characteristic_t haa_enable_setup = HOMEKIT_CHARACTERISTIC_(CUSTOM_ENABLE_SETUP, null_char, .setter_ex=hkc_custom_setup_setter);
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, FIRMWARE_VERSION);
+homekit_characteristic_t hap_version = HOMEKIT_CHARACTERISTIC_(VERSION, "1.1.0");
+homekit_characteristic_t haa_ota_update = HOMEKIT_CHARACTERISTIC_(CUSTOM_OTA_UPDATE, "", .setter_ex=hkc_custom_ota_setter);
+homekit_characteristic_t haa_enable_setup = HOMEKIT_CHARACTERISTIC_(CUSTOM_ENABLE_SETUP, "", .setter_ex=hkc_custom_setup_setter);
 
 homekit_server_config_t config;
 
@@ -5153,7 +5137,7 @@ void run_homekit_server() {
 
 void printf_header() {
     INFO("\n\n");
-    INFO("Home Accessory Architect v%s", haa_version);
+    INFO("Home Accessory Architect v"FIRMWARE_VERSION"");
     INFO("(c) 2019-2021 José Antonio Jiménez Campos\n");
     
 #ifdef HAA_DEBUG
@@ -5337,7 +5321,6 @@ void normal_mode_init() {
                         break;
                         
                     case CH_TYPE_INT:
-                    case CH_TYPE_UINT32:
                         status = sysparam_get_int32(saved_state_id, &saved_state_int);
                         
                         if (status == SYSPARAM_OK) {
@@ -6145,7 +6128,7 @@ void normal_mode_init() {
             }
             
             for (uint8_t channel = 0; channel < 2; channel++) {
-                uint16_t mcp_mode = 0;
+                uint16_t mcp_mode = 258;    // Default set to INPUT and not pullup
                 if (channel == 0) {
                     if (cJSON_GetArrayItem(json_mcp23017, 2) != NULL) {
                         mcp_mode = (uint16_t) cJSON_GetArrayItem(json_mcp23017, 2)->valuedouble;
@@ -8150,8 +8133,7 @@ void normal_mode_init() {
         service++;
         
         ch_group->ch0 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_tv_active);
-        char* initial_name = strdup("HAA");
-        ch_group->ch1 = NEW_HOMEKIT_CHARACTERISTIC(CONFIGURED_NAME, initial_name, .setter_ex=hkc_tv_configured_name);
+        ch_group->ch1 = NEW_HOMEKIT_CHARACTERISTIC(CONFIGURED_NAME, "HAA", .setter_ex=hkc_tv_configured_name);
         ch_group->ch2 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE_IDENTIFIER, 1, .setter_ex=hkc_tv_active_identifier);
         ch_group->ch3 = NEW_HOMEKIT_CHARACTERISTIC(REMOTE_KEY, .setter_ex=hkc_tv_key);
         ch_group->ch4 = NEW_HOMEKIT_CHARACTERISTIC(POWER_MODE_SELECTION, .setter_ex=hkc_tv_power_mode);
@@ -8428,7 +8410,7 @@ void normal_mode_init() {
         ch_group->ch3 = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_CONSUMP, 0);
         ch_group->ch4 = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_CONSUMP_BEFORE_RESET, 0);
         ch_group->ch5 = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_CONSUMP_RESET_DATE, 0);
-        ch_group->ch6 = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_CONSUMP_RESET, null_char, .setter_ex=hkc_custom_consumption_reset_setter);
+        ch_group->ch6 = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_CONSUMP_RESET, "", .setter_ex=hkc_custom_consumption_reset_setter);
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
@@ -8454,7 +8436,7 @@ void normal_mode_init() {
         
         ch_group->ch3->value.float_value = set_initial_state(ch_group->accessory, 3, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch3, CH_TYPE_FLOAT, 0);
         ch_group->ch4->value.float_value = set_initial_state(ch_group->accessory, 4, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch4, CH_TYPE_FLOAT, 0);
-        ch_group->ch5->value.uint32_value = set_initial_state(ch_group->accessory, 5, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch5, CH_TYPE_INT, 0);
+        ch_group->ch5->value.int_value = set_initial_state(ch_group->accessory, 5, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch5, CH_TYPE_INT, 0);
         
         PM_VOLTAGE_FACTOR = PM_VOLTAGE_FACTOR_DEFAULT;
         if (cJSON_GetObjectItemCaseSensitive(json_context, PM_VOLTAGE_FACTOR_SET) != NULL) {
@@ -8781,7 +8763,7 @@ void normal_mode_init() {
     
     cJSON_Delete(json_haa);
     
-    if (xTaskCreate(delayed_sensor_task, "delayed_sensor", DELAYED_SENSOR_START_TASK_SIZE, NULL, DELAYED_SENSOR_START_TASK_PRIORITY, NULL) != pdPASS) {
+    if (xTaskCreate(delayed_sensor_task, "delayed", DELAYED_SENSOR_START_TASK_SIZE, NULL, DELAYED_SENSOR_START_TASK_PRIORITY, NULL) != pdPASS) {
         ERROR("Creating delayed_sensor");
         FREEHEAP();
     }
@@ -8911,7 +8893,7 @@ void user_init(void) {
         printf_header();
         INFO("IR CAPTURE MODE\n");
         const int ir_capture_gpio = haa_setup;
-        xTaskCreate(ir_capture_task, "ir_capture", IR_CAPTURE_TASK_SIZE, (void*) ir_capture_gpio, IR_CAPTURE_TASK_PRIORITY, NULL);
+        xTaskCreate(ir_capture_task, "ir_cap", IR_CAPTURE_TASK_SIZE, (void*) ir_capture_gpio, IR_CAPTURE_TASK_PRIORITY, NULL);
         
     } else if (haa_setup > 0 || !wifi_ssid) {
         enter_setup(0);
@@ -8932,7 +8914,7 @@ void user_init(void) {
             
             name.value = HOMEKIT_STRING(main_config.name_value);
             
-            xTaskCreate(normal_mode_init, "normal_init", INITIAL_SETUP_TASK_SIZE, NULL, INITIAL_SETUP_TASK_PRIORITY, NULL);
+            xTaskCreate(normal_mode_init, "init", INITIAL_SETUP_TASK_SIZE, NULL, INITIAL_SETUP_TASK_PRIORITY, NULL);
             
         } else {
             enter_setup(1);

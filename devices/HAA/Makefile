@@ -74,7 +74,7 @@ EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=600
 ## mDNS Responder DEBUG
 #EXTRA_CFLAGS += -DqDebugLog -DqLogIncoming -DqLogAllTraffic
 
-include $(abspath ../../sdk/esp-open-rtos-ng/common.mk)
+include $(abspath ../../sdk/esp-open-rtos/common.mk)
 
 LIBS += m
 

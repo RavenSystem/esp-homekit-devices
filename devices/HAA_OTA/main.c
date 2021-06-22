@@ -212,7 +212,7 @@ void ota_task(void *arg) {
 }
 
 void on_wifi_ready() {
-    xTaskCreate(ota_task, "ota_task", 4096, NULL, 1, NULL);
+    xTaskCreate(ota_task, "ota", 4096, NULL, 1, NULL);
 }
 
 void user_init(void) {
