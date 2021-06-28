@@ -1748,11 +1748,11 @@ void process_th_task(void* args) {
             homekit_characteristic_notify_safe(ch_group->ch6);
             
         } else {    // THERMOSTAT_TARGET_MODE_AUTO
-            const float mid_target_temp = (TH_HEATER_TARGET_TEMP_FLOAT + TH_COOLER_TARGET_TEMP_FLOAT) / 2.000f;
+            const float mid_target = (TH_HEATER_TARGET_TEMP_FLOAT + TH_COOLER_TARGET_TEMP_FLOAT) / 2.000f;
             
             bool is_heater = false;
             if (THERMOSTAT_MODE_INT == THERMOSTAT_MODE_OFF) {
-                if (SENSOR_TEMPERATURE_FLOAT < mid_target_temp) {
+                if (SENSOR_TEMPERATURE_FLOAT < mid_target) {
                     is_heater = true;
                 }
             } else if (SENSOR_TEMPERATURE_FLOAT <= TH_HEATER_TARGET_TEMP_FLOAT) {
@@ -1765,13 +1765,13 @@ void process_th_task(void* args) {
                 is_heater = true;
             }
             
-            const float th_deadband_force_idle = TH_COOLER_TARGET_TEMP_FLOAT - mid_target_temp;
-            const float th_deadband = th_deadband_force_idle / 1.500f;
+            const float deadband_force_idle = TH_COOLER_TARGET_TEMP_FLOAT - mid_target;
+            const float deadband = deadband_force_idle / 1.500f;
             
             if (is_heater) {
-                heating(th_deadband, th_deadband_force_idle - th_deadband, th_deadband_force_idle);
+                heating(deadband, deadband_force_idle - deadband, deadband_force_idle);
             } else {
-                cooling(th_deadband, th_deadband_force_idle - th_deadband, th_deadband_force_idle);
+                cooling(deadband, deadband_force_idle - deadband, deadband_force_idle);
             }
             
             homekit_characteristic_notify_safe(ch_group->ch5);
@@ -1924,6 +1924,311 @@ void th_input_temp(const uint16_t gpio, void* args, const uint8_t type) {
     }
 }
 
+// --- HUMIDIFIER
+void process_humidif_task(void* args) {
+    ch_group_t* ch_group = args;
+    
+    INFO("<%i> Humidif Process", ch_group->accessory);
+    
+    void hum(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
+        INFO("<%i> Hum", ch_group->accessory);
+        if (SENSOR_HUMIDITY_FLOAT < (HM_HUM_TARGET_FLOAT - deadband - deadband_soft_on)) {
+            HUMIDIF_MODE_INT = HUMIDIF_MODE_HUM;
+            if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_HUM_ON) {
+                HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_ON;
+                do_actions(ch_group, HUMIDIF_ACTION_HUM_ON);
+            }
+            
+        } else if (SENSOR_HUMIDITY_FLOAT < (HM_HUM_TARGET_FLOAT - deadband)) {
+            HUMIDIF_MODE_INT = HUMIDIF_MODE_HUM;
+            if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_HUM_SOFT_ON) {
+                HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_SOFT_ON;
+                do_actions(ch_group, HUMIDIF_ACTION_HUM_SOFT_ON);
+            }
+            
+        } else if (SENSOR_HUMIDITY_FLOAT < (HM_HUM_TARGET_FLOAT + deadband)) {
+            if (HUMIDIF_MODE_INT == HUMIDIF_MODE_HUM) {
+                if (HM_DEADBAND_SOFT_ON > 0.000f) {
+                    if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_HUM_SOFT_ON) {
+                        HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_SOFT_ON;
+                        do_actions(ch_group, HUMIDIF_ACTION_HUM_SOFT_ON);
+                    }
+                } else {
+                    if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_HUM_ON) {
+                        HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_ON;
+                        do_actions(ch_group, HUMIDIF_ACTION_HUM_ON);
+                    }
+                }
+                
+            } else {
+                HUMIDIF_MODE_INT = HUMIDIF_MODE_IDLE;
+                if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_HUM_IDLE) {
+                    HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_IDLE;
+                    do_actions(ch_group, HUMIDIF_ACTION_HUM_IDLE);
+                }
+            }
+            
+        } else if ((SENSOR_HUMIDITY_FLOAT >= (HM_HUM_TARGET_FLOAT + deadband + deadband_force_idle) ||
+                    SENSOR_HUMIDITY_FLOAT == 100.f ) &&
+                   HM_DEADBAND_FORCE_IDLE > 0.000f) {
+            HUMIDIF_MODE_INT = HUMIDIF_MODE_IDLE;
+            if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_HUM_FORCE_IDLE) {
+                HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_FORCE_IDLE;
+                do_actions(ch_group, HUMIDIF_ACTION_HUM_FORCE_IDLE);
+            }
+            
+        } else {
+            HUMIDIF_MODE_INT = HUMIDIF_MODE_IDLE;
+            if (HM_DEADBAND_FORCE_IDLE == 0.000f ||
+                HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_HUM_FORCE_IDLE) {
+                if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_HUM_IDLE) {
+                    HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_IDLE;
+                    do_actions(ch_group, HUMIDIF_ACTION_HUM_IDLE);
+                }
+            }
+        }
+    }
+    
+    void dehum(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
+        INFO("<%i> Dehum", ch_group->accessory);
+        if (SENSOR_HUMIDITY_FLOAT > (HM_DEHUM_TARGET_FLOAT + deadband + deadband_soft_on)) {
+            HUMIDIF_MODE_INT = HUMIDIF_MODE_DEHUM;
+            if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_DEHUM_ON) {
+                HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_ON;
+                do_actions(ch_group, HUMIDIF_ACTION_DEHUM_ON);
+            }
+            
+        } else if (SENSOR_HUMIDITY_FLOAT > (HM_DEHUM_TARGET_FLOAT + deadband)) {
+            HUMIDIF_MODE_INT = HUMIDIF_MODE_DEHUM;
+            if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_DEHUM_SOFT_ON) {
+                HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_SOFT_ON;
+                do_actions(ch_group, HUMIDIF_ACTION_DEHUM_SOFT_ON);
+            }
+            
+        } else if (SENSOR_HUMIDITY_FLOAT > (HM_DEHUM_TARGET_FLOAT - deadband)) {
+            if (HUMIDIF_MODE_INT == HUMIDIF_MODE_DEHUM) {
+                if (HM_DEADBAND_SOFT_ON > 0.000f) {
+                    if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_DEHUM_SOFT_ON) {
+                        HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_SOFT_ON;
+                        do_actions(ch_group, HUMIDIF_ACTION_DEHUM_SOFT_ON);
+                    }
+                } else {
+                    if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_DEHUM_ON) {
+                        HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_ON;
+                        do_actions(ch_group, HUMIDIF_ACTION_DEHUM_ON);
+                    }
+                }
+                
+            } else {
+                HUMIDIF_MODE_INT = HUMIDIF_MODE_IDLE;
+                if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_DEHUM_IDLE) {
+                    HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_IDLE;
+                    do_actions(ch_group, HUMIDIF_ACTION_DEHUM_IDLE);
+                }
+            }
+            
+        } else if ((SENSOR_HUMIDITY_FLOAT <= (HM_DEHUM_TARGET_FLOAT - deadband - deadband_force_idle) ||
+                    SENSOR_HUMIDITY_FLOAT == 0.f) &&
+                   HM_DEADBAND_FORCE_IDLE > 0.000f) {
+            HUMIDIF_MODE_INT = HUMIDIF_MODE_IDLE;
+            if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_DEHUM_FORCE_IDLE) {
+                HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_FORCE_IDLE;
+                do_actions(ch_group, HUMIDIF_ACTION_DEHUM_FORCE_IDLE);
+            }
+            
+        } else {
+            HUMIDIF_MODE_INT = HUMIDIF_MODE_IDLE;
+            if (HM_DEADBAND_FORCE_IDLE == 0.000f ||
+                ch_group->last_wildcard_action[2] != HUMIDIF_ACTION_DEHUM_FORCE_IDLE) {
+                if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_DEHUM_IDLE) {
+                    HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_IDLE;
+                    do_actions(ch_group, HUMIDIF_ACTION_DEHUM_IDLE);
+                }
+            }
+        }
+    }
+    
+    if (ch_group->ch2->value.int_value) {
+        if (ch_group->ch4->value.int_value == HUMIDIF_TARGET_MODE_HUM) {
+            hum(HM_DEADBAND, HM_DEADBAND_SOFT_ON, HM_DEADBAND_FORCE_IDLE);
+            homekit_characteristic_notify_safe(ch_group->ch5);
+                    
+        } else if (ch_group->ch4->value.int_value == HUMIDIF_TARGET_MODE_DEHUM) {
+            dehum(HM_DEADBAND, HM_DEADBAND_SOFT_ON, HM_DEADBAND_FORCE_IDLE);
+            homekit_characteristic_notify_safe(ch_group->ch6);
+            
+        } else {    // HUMIDIF_TARGET_MODE_HUMDEHUM
+            const float mid_target = (HM_HUM_TARGET_FLOAT + HM_DEHUM_TARGET_FLOAT) / 2.000f;
+            
+            bool is_hum = false;
+            if (HUMIDIF_MODE_INT == HUMIDIF_MODE_OFF) {
+                if (SENSOR_HUMIDITY_FLOAT < mid_target) {
+                    is_hum = true;
+                }
+            } else if (SENSOR_HUMIDITY_FLOAT <= HM_HUM_TARGET_FLOAT) {
+                is_hum = true;
+            } else if (SENSOR_HUMIDITY_FLOAT < (HM_DEHUM_TARGET_FLOAT + 8) &&
+                       (HUMIDIF_CURRENT_ACTION == HUMIDIF_ACTION_HUM_IDLE ||
+                        HUMIDIF_CURRENT_ACTION == HUMIDIF_ACTION_HUM_ON ||
+                        HUMIDIF_CURRENT_ACTION == HUMIDIF_ACTION_HUM_FORCE_IDLE ||
+                        HUMIDIF_CURRENT_ACTION == HUMIDIF_ACTION_HUM_SOFT_ON)) {
+                is_hum = true;
+            }
+            
+            const float deadband_force_idle = HUMIDIF_TARGET_MODE_HUM - mid_target;
+            const float deadband = deadband_force_idle / 1.500f;
+            
+            if (is_hum) {
+                hum(deadband, deadband_force_idle - deadband, deadband_force_idle);
+            } else {
+                dehum(deadband, deadband_force_idle - deadband, deadband_force_idle);
+            }
+            
+            homekit_characteristic_notify_safe(ch_group->ch5);
+            homekit_characteristic_notify_safe(ch_group->ch6);
+        }
+        
+    } else {
+        INFO("<%i> Off", ch_group->accessory);
+        HUMIDIF_MODE_INT = HUMIDIF_MODE_OFF;
+        if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_TOTAL_OFF) {
+            HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_TOTAL_OFF;
+            do_actions(ch_group, HUMIDIF_ACTION_TOTAL_OFF);
+        }
+    }
+    
+    homekit_characteristic_notify_safe(ch_group->ch2);
+    homekit_characteristic_notify_safe(ch_group->ch3);
+    homekit_characteristic_notify_safe(ch_group->ch4);
+    
+    save_states_callback();
+    
+    vTaskDelete(NULL);
+}
+
+void process_humidif_timer(TimerHandle_t xTimer) {
+    const uint32_t free_heap = xPortGetFreeHeapSize();
+    if (free_heap <= MINIMUM_FREE_HEAP ||
+        xTaskCreate(process_humidif_task, "humidif", PROCESS_HUMIDIF_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_HUMIDIF_TASK_PRIORITY, NULL) != pdPASS) {
+        ERROR("Creating process_humidif. Free HEAP %d", free_heap);
+        esp_timer_start(xTimer);
+    }
+}
+
+void update_humidif(homekit_characteristic_t* ch, const homekit_value_t value) {
+    ch_group_t* ch_group = ch_group_find(ch);
+    if (ch_group->main_enabled) {
+        led_blink(1);
+        INFO("<%i> Setter Humidif", ch_group->accessory);
+        
+        ch->value = value;
+        
+        esp_timer_start(ch_group->timer2);
+
+    } else {
+        homekit_characteristic_notify_safe(ch);
+    }
+}
+
+void hkc_humidif_target_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
+    setup_mode_toggle_upcount();
+    
+    update_humidif(ch, value);
+}
+
+void humidif_input(const uint16_t gpio, void* args, const uint8_t type) {
+    ch_group_t* ch_group = args;
+
+    if (ch_group->child_enabled) {
+        switch (type) {
+            case 0:
+                ch_group->ch2->value.int_value = 0;
+                break;
+                
+            case 1:
+                ch_group->ch2->value.int_value = 1;
+                break;
+                
+            case 5:
+                ch_group->ch2->value.int_value = 1;
+                ch_group->ch4->value.int_value = 2;
+                break;
+                
+            case 6:
+                ch_group->ch2->value.int_value = 1;
+                ch_group->ch4->value.int_value = 1;
+                break;
+                
+            case 7:
+                ch_group->ch2->value.int_value = 1;
+                ch_group->ch4->value.int_value = 0;
+                break;
+                
+            default:    // case 9:  // Cyclic
+                if (ch_group->ch2->value.int_value) {
+                    if (HM_TYPE == HUMIDIF_TYPE_HUMDEHUM) {
+                        if (ch_group->ch4->value.int_value > 0) {
+                            ch_group->ch4->value.int_value--;
+                        } else {
+                            ch_group->ch2->value.int_value = 0;
+                        }
+                    } else {
+                        ch_group->ch2->value.int_value = 0;
+                    }
+                } else {
+                    ch_group->ch2->value.int_value = 1;
+                    if (HM_TYPE == HUMIDIF_TYPE_HUMDEHUM) {
+                        ch_group->ch4->value.int_value = HUMIDIF_TARGET_MODE_DEHUM;
+                    }
+                }
+                break;
+        }
+        
+        hkc_humidif_target_setter(ch_group->ch0, ch_group->ch0->value);
+    }
+}
+
+void humidif_input_temp(const uint16_t gpio, void* args, const uint8_t type) {
+    ch_group_t* ch_group = args;
+
+    if (ch_group->child_enabled) {
+        int8_t set_h_temp = ch_group->ch5->value.float_value;
+        int8_t set_c_temp = ch_group->ch6->value.float_value;
+
+        if (type == HUMIDIF_UP) {
+            set_h_temp += 5;
+            set_c_temp += 5;
+            if (set_h_temp > 100) {
+                set_h_temp = 100;
+            }
+            if (set_c_temp > 100) {
+                set_c_temp = 100;
+            }
+        } else {    // type == HUMIDIF_DOWN
+            set_h_temp -= 5;
+            set_c_temp -= 5;
+            if (set_h_temp < 0) {
+                set_h_temp = 0;
+            }
+            if (set_c_temp < 0) {
+                set_c_temp = 0;
+            }
+        }
+        
+        ch_group->ch5->value.float_value = set_h_temp;
+        ch_group->ch6->value.float_value = set_c_temp;
+        
+        update_humidif(ch_group->ch1, ch_group->ch1->value);
+        
+        // Extra actions
+        if (type == HUMIDIF_UP) {
+            do_actions(ch_group, HUMIDIF_ACTION_UP);
+        } else {    // type == HUMIDIF_DOWN
+            do_actions(ch_group, HUMIDIF_ACTION_DOWN);
+        }
+    }
+}
+
 // --- TEMPERATURE
 void temperature_task(void* args) {
     float taylor_log(float x) {
@@ -2068,6 +2373,10 @@ void temperature_task(void* args) {
                     if ((uint8_t) humidity_value != (uint8_t) ch_group->ch1->value.float_value) {
                         ch_group->ch1->value.float_value = (uint8_t) humidity_value;
                         homekit_characteristic_notify_safe(ch_group->ch1);
+                        
+                        if (ch_group->ch4) {
+                            update_humidif(ch_group->ch1, ch_group->ch1->value);
+                        }
                         
                         do_wildcard_actions(ch_group, 1, (uint8_t) humidity_value);
                     }
@@ -4759,6 +5068,18 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             }
                             break;
                             
+                        case ACC_TYPE_HUMIDIFIER:
+                            if (action_acc_manager->value < 0.f) {
+                                update_humidif(ch_group->ch4, HOMEKIT_UINT8(action_acc_manager->value + 3));
+                            } else if (action_acc_manager->value <= 1.f) {
+                                update_humidif(ch_group->ch2, HOMEKIT_UINT8(action_acc_manager->value));
+                            } else if (action_acc_manager->value <= 1000.f) {
+                                update_humidif(ch_group->ch5, HOMEKIT_FLOAT(action_acc_manager->value - 1000.f));
+                            } else {    // if (action_acc_manager->value <= 2000.f)
+                                update_humidif(ch_group->ch6, HOMEKIT_FLOAT(action_acc_manager->value - 2000.f));
+                            }
+                            break;
+                            
                         case ACC_TYPE_GARAGE_DOOR:
                             if (action_acc_manager->value < 2.f) {
                                 hkc_garage_door_setter(ch_group->ch1, HOMEKIT_UINT8((uint8_t) action_acc_manager->value));
@@ -5137,7 +5458,7 @@ void run_homekit_server() {
 
 void printf_header() {
     INFO("\n\n");
-    INFO("Home Accessory Architect v"FIRMWARE_VERSION"");
+    INFO("Home Accessory Architect v"FIRMWARE_VERSION);
     INFO("(c) 2019-2021 José Antonio Jiménez Campos\n");
     
 #ifdef HAA_DEBUG
@@ -6147,6 +6468,15 @@ void normal_mode_init() {
                 uint8_t reg = channel;
                 if (mcp_mode > 255) {   // Mode INPUT
                     switch (mcp_mode) {
+                        case 256:
+                            // Pull-up HIGH
+                            reg += 0x0C;
+                            i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_ones, 1);
+                            // Polarity NORMAL
+                            //reg = channel + 0x02;
+                            //i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_zeros, 1);
+                            break;
+                            
                         case 257:
                             // Pull-up HIGH
                             reg += 0x0C;
@@ -6156,31 +6486,22 @@ void normal_mode_init() {
                             i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_ones, 1);
                             break;
                             
-                        case 258:
-                            // Pull-up LOW
-                            reg += 0x0C;
-                            i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_zeros, 1);
-                            // Polarity NORMAL
-                            reg = channel + 0x02;
-                            i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_zeros, 1);
-                            break;
-                            
                         case 259:
                             // Pull-up LOW
-                            reg += 0x0C;
-                            i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_zeros, 1);
+                            //reg += 0x0C;
+                            //i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_zeros, 1);
                             // Polarity INVERTED
                             reg = channel + 0x02;
                             i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_ones, 1);
                             break;
                             
-                        default:    // 256
-                            // Pull-up HIGH
-                            reg += 0x0C;
-                            i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_ones, 1);
+                        default:    // 258
+                            // Pull-up LOW
+                            //reg += 0x0C;
+                            //i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_zeros, 1);
                             // Polarity NORMAL
-                            reg = channel + 0x02;
-                            i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_zeros, 1);
+                            //reg = channel + 0x02;
+                            //i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_zeros, 1);
                             break;
                     }
                     
@@ -6377,6 +6698,7 @@ void normal_mode_init() {
             case ACC_TYPE_DOORBELL:
             case ACC_TYPE_THERMOSTAT_WITH_HUM:
             case ACC_TYPE_TH_SENSOR:
+            case ACC_TYPE_HUMIDIFIER_WITH_TEMP:
                 service_recount = 2;
                 break;
                 
@@ -7143,17 +7465,17 @@ void normal_mode_init() {
         // Temperature Deadbands
         TH_DEADBAND = 0;
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND) != NULL) {
-            TH_DEADBAND = (float) (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND)->valuedouble / 2.000f);
+            TH_DEADBAND = cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND)->valuedouble / 2.000f;
         }
         
         TH_DEADBAND_FORCE_IDLE = 0;
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_FORCE_IDLE) != NULL) {
-            TH_DEADBAND_FORCE_IDLE = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_FORCE_IDLE)->valuedouble;
+            TH_DEADBAND_FORCE_IDLE = cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_FORCE_IDLE)->valuedouble;
         }
         
         TH_DEADBAND_SOFT_ON = 0;
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_SOFT_ON) != NULL) {
-            TH_DEADBAND_SOFT_ON = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_SOFT_ON)->valuedouble;
+            TH_DEADBAND_SOFT_ON = cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_SOFT_ON)->valuedouble;
         }
         
         // Thermostat Type
@@ -7479,6 +7801,180 @@ void normal_mode_init() {
         if (TH_SENSOR_GPIO != -1) {
             set_used_gpio((uint8_t) TH_SENSOR_GPIO);
             th_sensor_starter(ch_group);
+        }
+    }
+    
+    // *** NEW HUMIDIFIER
+    void new_humidifier(const uint8_t accessory,  uint8_t service, const uint8_t total_services, cJSON* json_context, const uint8_t acc_type) {
+        ch_group_t* ch_group = new_ch_group();
+        ch_group->acc_type = ACC_TYPE_HUMIDIFIER;
+        ch_group->accessory = accessory_numerator;
+        uint8_t homekit_enabled = acc_homekit_enabled(json_context);
+        ch_group->homekit_enabled = homekit_enabled;
+        
+        if (service == 0) {
+            new_accessory(accessory, total_services, ch_group->homekit_enabled, json_context);
+        }
+        
+        service++;
+        
+        // Humidity Deadbands
+        HM_DEADBAND = 0;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND) != NULL) {
+            HM_DEADBAND = cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND)->valuedouble / 2.000f;
+        }
+        
+        HM_DEADBAND_FORCE_IDLE = 0;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_FORCE_IDLE) != NULL) {
+            HM_DEADBAND_FORCE_IDLE = cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_FORCE_IDLE)->valuedouble;
+        }
+        
+        HM_DEADBAND_SOFT_ON = 0;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_SOFT_ON) != NULL) {
+            HM_DEADBAND_SOFT_ON = cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_SOFT_ON)->valuedouble;
+        }
+        
+        // Humidifier Type
+        HM_TYPE = HUMIDIF_TYPE_HUM;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_TYPE) != NULL) {
+            HM_TYPE = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_TYPE)->valuedouble;
+        }
+        
+        // HomeKit Characteristics
+        ch_group->ch1 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0);
+        ch_group->ch2 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_humidif_target_setter);
+        ch_group->ch3 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_HUMIDIFIER_DEHUMIDIFIER_STATE, 0);
+        ch_group->ch5 = NEW_HOMEKIT_CHARACTERISTIC(RELATIVE_HUMIDITY_HUMIDIFIER_THRESHOLD, 40, .setter_ex=update_humidif);
+        ch_group->ch6 = NEW_HOMEKIT_CHARACTERISTIC(RELATIVE_HUMIDITY_DEHUMIDIFIER_THRESHOLD, 60, .setter_ex=update_humidif);
+        
+        if (ch_group->homekit_enabled) {
+            uint8_t calloc_count = 6;
+            if (HM_TYPE == HUMIDIF_TYPE_HUMDEHUM) {
+                calloc_count += 1;
+            }
+        
+            accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
+            accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            accessories[accessory]->services[service]->primary = !(service - 1);
+            accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
+            
+            if (homekit_enabled == 2) {
+                accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_CUSTOM_HAA_HIDDEN_HUMIDIFIER_DEHUMIDIFIER;
+            } else {
+                accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_HUMIDIFIER_DEHUMIDIFIER;
+            }
+
+            accessories[accessory]->services[service]->characteristics = calloc(calloc_count, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[service]->characteristics[0] = ch_group->ch2;
+            accessories[accessory]->services[service]->characteristics[1] = ch_group->ch1;
+            accessories[accessory]->services[service]->characteristics[2] = ch_group->ch3;
+        }
+        
+        ch_group->ch5->value.float_value = set_initial_state(ch_group->accessory, 5, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch5, CH_TYPE_FLOAT, 40);
+        ch_group->ch6->value.float_value = set_initial_state(ch_group->accessory, 6, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch6, CH_TYPE_FLOAT, 60);
+        
+        switch ((uint8_t) HM_TYPE) {
+            case HUMIDIF_TYPE_DEHUM:
+                ch_group->ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HUMIDIFIER_DEHUMIDIFIER_STATE, HUMIDIF_TARGET_MODE_DEHUM, .min_value=(float[]) {HUMIDIF_TARGET_MODE_DEHUM}, .max_value=(float[]) {HUMIDIF_TARGET_MODE_DEHUM}, .valid_values={.count=1, .values=(uint8_t[]) {HUMIDIF_TARGET_MODE_DEHUM}});
+                
+                if (ch_group->homekit_enabled) {
+                    accessories[accessory]->services[service]->characteristics[4] = ch_group->ch6;
+                }
+                break;
+                
+            case HUMIDIF_TYPE_HUMDEHUM:
+                ch_group->ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HUMIDIFIER_DEHUMIDIFIER_STATE, HUMIDIF_TARGET_MODE_HUMDEHUM, .setter_ex=update_humidif);
+                
+                if (ch_group->homekit_enabled) {
+                    accessories[accessory]->services[service]->characteristics[4] = ch_group->ch5;
+                    accessories[accessory]->services[service]->characteristics[5] = ch_group->ch6;
+                }
+                break;
+                
+            default:        // case HUMIDIF_TYPE_HUM:
+                ch_group->ch4 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HUMIDIFIER_DEHUMIDIFIER_STATE, HUMIDIF_TARGET_MODE_HUM, .min_value=(float[]) {HUMIDIF_TARGET_MODE_HUM}, .max_value=(float[]) {HUMIDIF_TARGET_MODE_HUM}, .valid_values={.count=1, .values=(uint8_t[]) {HUMIDIF_TARGET_MODE_HUM}});
+
+                if (ch_group->homekit_enabled) {
+                    accessories[accessory]->services[service]->characteristics[4] = ch_group->ch5;
+                }
+                break;
+        }
+        
+        if (ch_group->homekit_enabled) {
+            accessories[accessory]->services[service]->characteristics[3] = ch_group->ch4;
+        }
+        
+        if (acc_type == ACC_TYPE_HUMIDIFIER_WITH_TEMP) {
+            service++;
+            
+            ch_group->ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0);
+            
+            if (ch_group->homekit_enabled) {
+                accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
+                accessories[accessory]->services[service]->id = (service - 1) * 50;
+                accessories[accessory]->services[service]->primary = false;
+                accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
+                
+                if (homekit_enabled == 2) {
+                    accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_CUSTOM_HAA_HIDDEN_TEMPERATURE_SENSOR;
+                } else {
+                    accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_TEMPERATURE_SENSOR;
+                }
+
+                accessories[accessory]->services[service]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
+                accessories[accessory]->services[service]->characteristics[0] = ch_group->ch0;
+            }
+        }
+        
+        register_actions(ch_group, json_context, 0);
+        set_accessory_ir_protocol(ch_group, json_context);
+        register_wildcard_actions(ch_group, json_context);
+        th_sensor(ch_group, json_context);
+        
+        ch_group->timer2 = esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, process_humidif_timer);
+        
+        if (TH_SENSOR_GPIO != -1) {
+            set_used_gpio((uint8_t) TH_SENSOR_GPIO);
+        }
+        
+        if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 4) {
+            th_sensor_starter(ch_group);
+        }
+        
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), humidif_input, ch_group, 9);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), humidif_input_temp, ch_group, HUMIDIF_UP);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), humidif_input_temp, ch_group, HUMIDIF_DOWN);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), humidif_input, ch_group, 9);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_3), humidif_input_temp, ch_group, HUMIDIF_UP);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_4), humidif_input_temp, ch_group, HUMIDIF_DOWN);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), humidif_input, ch_group, 1);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), humidif_input, ch_group, 0);
+        
+        if (TH_TYPE == HUMIDIF_TYPE_HUMDEHUM) {
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), humidif_input, ch_group, 5);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), humidif_input, ch_group, 6);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_7), humidif_input, ch_group, 7);
+            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_5), humidif_input, ch_group, 5);
+            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), humidif_input, ch_group, 6);
+            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_7), humidif_input, ch_group, 7);
+            
+            ch_group->ch4->value.int_value = set_initial_state(ch_group->accessory, 4, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch4, CH_TYPE_INT8, 0);
+        }
+        
+        if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), humidif_input, ch_group, 1);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), humidif_input, ch_group, 0);
+            
+            ch_group->ch2->value.int_value = !((uint8_t) set_initial_state(ch_group->accessory, 2, json_context, ch_group->ch2, CH_TYPE_INT8, 0));
+            update_humidif(ch_group->ch2, HOMEKIT_UINT8(!ch_group->ch2->value.int_value));
+        } else {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), humidif_input, ch_group, 1)) {
+                humidif_input(0, ch_group, 1);
+            }
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), humidif_input, ch_group, 0)) {
+                ch_group->ch2->value.int_value = 1;
+                humidif_input(0, ch_group, 0);
+            }
         }
     }
     
@@ -8588,6 +9084,11 @@ void normal_mode_init() {
             INFO("TEMPERATURE AND HUMIDITY SENSOR");
             new_th_sensor(acc_count, serv_count, total_services, json_accessory);
             
+        } else if (acc_type == ACC_TYPE_HUMIDIFIER ||
+                   acc_type == ACC_TYPE_HUMIDIFIER_WITH_TEMP) {
+            INFO("HUMIDIFIER");
+            new_humidifier(acc_count, serv_count, total_services, json_accessory, acc_type);
+            
         } else if (acc_type == ACC_TYPE_LIGHTBULB) {
             INFO("LIGHTBULB");
             new_lightbulb(acc_count, serv_count, total_services, json_accessory);
@@ -8728,6 +9229,11 @@ void normal_mode_init() {
                 config.category = homekit_accessory_category_air_conditioner;
                 break;
                 
+            case ACC_TYPE_HUMIDIFIER:
+            case ACC_TYPE_HUMIDIFIER_WITH_TEMP:
+                config.category = homekit_accessory_category_humidifier;
+                break;
+                
             case ACC_TYPE_LIGHTBULB:
                 config.category = homekit_accessory_category_lightbulb;
                 break;
@@ -8813,7 +9319,7 @@ void ir_capture_task(void* args) {
             if (c > 0) {
                 
                 INFO("Packets: %i", c - 1);
-                INFO("Standard Format");
+                INFO("Standard");
                 for (i = 1; i < c; i++) {
                     printf("%s%5d ", i & 1 ? "+" : "-", buffer[i]);
                     
@@ -8823,7 +9329,7 @@ void ir_capture_task(void* args) {
                 }
                 INFO("\n");
                 
-                INFO("HAA RAW Format");
+                INFO("RAW");
                 for (i = 1; i < c; i++) {
                     char haa_code[] = "00";
                     
@@ -8852,9 +9358,9 @@ void user_init(void) {
     sysparam_status_t status;
     status = sysparam_init(SYSPARAMSECTOR, 0);
     if (status == SYSPARAM_OK) {
-        INFO("HAA Sysparam ready");
+        INFO("Sysparam OK");
     } else {
-        ERROR("HAA Sysparam. Creating...");
+        ERROR("Sysparam. Creating");
 
         wifi_config_remove_sys_param();
 
@@ -8899,9 +9405,20 @@ void user_init(void) {
         enter_setup(0);
         
     } else {
+        haa_setup = 0;
+        
         // Arming emergency Setup Mode
-        sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
-        sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &haa_setup);
+        void arming() {
+            sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
+            sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &haa_setup);
+        }
+        arming();
+        
+        if (haa_setup != 1) {
+            ERROR("Sysparam. Recovering");
+            sysparam_compact();
+            arming();
+        }
 
         if (haa_setup == 1) {
 #ifdef HAA_DEBUG

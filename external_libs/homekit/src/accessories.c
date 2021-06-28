@@ -40,16 +40,16 @@ bool homekit_value_equal(homekit_value_t *a, homekit_value_t *b) {
             return (!ta && !tb);
         }
         case HOMETKIT_FORMAT_DATA:
-            if (!a->string_value && !b->string_value)
+            if (!a->data_value && !b->data_value)
                 return true;
 
-            if (!a->string_value || !b->string_value)
+            if (!a->data_value || !b->data_value)
                 return false;
 
             if (a->data_size != b->data_size)
                 return false;
 
-            return !memcmp(a->string_value, b->string_value, a->data_size);
+            return !memcmp(a->data_value, b->data_value, a->data_size);
     }
 
     return false;
@@ -98,12 +98,12 @@ void homekit_value_copy(homekit_value_t *dst, homekit_value_t *src) {
             }
             case HOMETKIT_FORMAT_DATA:
                 if (src->is_static) {
-                    dst->string_value = src->string_value;
+                    dst->data_value = src->data_value;
                     dst->data_size = src->data_size;
                 } else {
                     dst->data_size = src->data_size;
-                    dst->string_value = malloc(src->data_size);
-                    memcpy(dst->string_value, src->string_value, src->data_size);
+                    dst->data_value = malloc(src->data_size);
+                    memcpy(dst->data_value, src->data_value, src->data_size);
                 }
                 break;
             default:
@@ -132,9 +132,10 @@ void homekit_value_destruct(homekit_value_t *value) {
                     tlv_free(value->tlv_values);
                 break;
             case HOMETKIT_FORMAT_DATA:
-                if (!value->is_static && value->string_value)
-                    free(value->string_value);
-                value->data_size = 0;
+                if (!value->is_static && value->data_value) {
+                    free(value->data_value);
+                    value->data_size = 0;
+                }
                 break;
             default:
                 // unknown format

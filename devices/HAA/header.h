@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "6.1.4"
+#define FIRMWARE_VERSION                    "6.2.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -56,6 +56,7 @@
 #define DELAYED_SENSOR_START_TASK_SIZE      GLOBAL_TASK_SIZE
 #define TEMPERATURE_TASK_SIZE               GLOBAL_TASK_SIZE
 #define PROCESS_TH_TASK_SIZE                GLOBAL_TASK_SIZE
+#define PROCESS_HUMIDIF_TASK_SIZE           GLOBAL_TASK_SIZE
 #define SET_ZONES_TASK_SIZE                 GLOBAL_TASK_SIZE
 #define LIGHTBULB_TASK_SIZE                 GLOBAL_TASK_SIZE
 #define POWER_MONITOR_TASK_SIZE             GLOBAL_TASK_SIZE
@@ -78,6 +79,7 @@
 #define DELAYED_SENSOR_START_TASK_PRIORITY  (tskIDLE_PRIORITY + 1)
 #define TEMPERATURE_TASK_PRIORITY           (tskIDLE_PRIORITY + 1)
 #define PROCESS_TH_TASK_PRIORITY            (tskIDLE_PRIORITY + 1)
+#define PROCESS_HUMIDIF_TASK_PRIORITY       (tskIDLE_PRIORITY + 1)
 #define SET_ZONES_TASK_PRIORITY             (tskIDLE_PRIORITY + 1)
 #define LIGHTBULB_TASK_PRIORITY             (tskIDLE_PRIORITY + 1)
 #define POWER_MONITOR_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
@@ -233,7 +235,6 @@
 #define THERMOSTAT_ACTION_GATE_OPEN         (13)
 #define THERMOSTAT_TEMP_UP                  (0)
 #define THERMOSTAT_TEMP_DOWN                (1)
-#define TH_SENSOR_MAX_ALLOWED_ERRORS        (3)
 #define TH_HEATER_TARGET_TEMP_FLOAT         ch_group->ch5->value.float_value
 #define TH_COOLER_TARGET_TEMP_FLOAT         ch_group->ch6->value.float_value
 
@@ -255,7 +256,45 @@
 #define HUMIDITY_OFFSET                     "k"
 #define TH_SENSOR_HUM_OFFSET                ch_group->num[4]
 #define SENSOR_TEMPERATURE_FLOAT            ch_group->ch0->value.float_value
+#define SENSOR_HUMIDITY_FLOAT               ch_group->ch1->value.float_value
 #define TH_SENSOR_ERROR_COUNT               ch_group->num[9]
+#define TH_SENSOR_MAX_ALLOWED_ERRORS        (3)
+
+#define HUMIDIF_TYPE                        "w"
+#define HM_TYPE                             ch_group->num[5]
+#define HUMIDIF_TYPE_HUM                    (1)
+#define HUMIDIF_TYPE_DEHUM                  (2)
+#define HUMIDIF_TYPE_HUMDEHUM               (3)
+#define HUMIDIF_DEADBAND                    "d"
+#define HM_DEADBAND                         ch_group->num[6]
+#define HUMIDIF_DEADBAND_FORCE_IDLE         "df"
+#define HM_DEADBAND_FORCE_IDLE              ch_group->num[7]
+#define HUMIDIF_DEADBAND_SOFT_ON            "ds"
+#define HM_DEADBAND_SOFT_ON                 ch_group->num[8]
+#define HUMIDIF_MODE_INT                    ch_group->ch3->value.int_value
+#define HUMIDIF_CURRENT_ACTION              ch_group->last_wildcard_action[2]
+#define HUMIDIF_MODE_OFF                    (0)
+#define HUMIDIF_MODE_IDLE                   (1)
+#define HUMIDIF_MODE_HUM                    (2)
+#define HUMIDIF_MODE_DEHUM                  (3)
+#define HUMIDIF_TARGET_MODE_HUMDEHUM        (0)
+#define HUMIDIF_TARGET_MODE_HUM             (1)
+#define HUMIDIF_TARGET_MODE_DEHUM           (2)
+#define HUMIDIF_ACTION_TOTAL_OFF            (0)
+#define HUMIDIF_ACTION_HUM_IDLE             (1)
+#define HUMIDIF_ACTION_DEHUM_IDLE           (2)
+#define HUMIDIF_ACTION_HUM_ON               (3)
+#define HUMIDIF_ACTION_DEHUM_ON             (4)
+#define HUMIDIF_ACTION_UP                   (6)
+#define HUMIDIF_ACTION_DOWN                 (7)
+#define HUMIDIF_ACTION_HUM_FORCE_IDLE       (8)
+#define HUMIDIF_ACTION_DEHUM_FORCE_IDLE     (9)
+#define HUMIDIF_ACTION_HUM_SOFT_ON          (10)
+#define HUMIDIF_ACTION_DEHUM_SOFT_ON        (11)
+#define HUMIDIF_UP                          (0)
+#define HUMIDIF_DOWN                        (1)
+#define HM_HUM_TARGET_FLOAT                 ch_group->ch5->value.float_value
+#define HM_DEHUM_TARGET_FLOAT               ch_group->ch6->value.float_value
 
 #define LIGHTBULB_TYPE                      ch_group->num[5]
 #define LIGHTBULB_CHANNELS_SET              "n"
@@ -489,6 +528,8 @@
 #define ACC_TYPE_HUM_SENSOR                 (23)
 #define ACC_TYPE_TH_SENSOR                  (24)
 #define ACC_TYPE_THERMOSTAT_WITH_HUM        (25)
+#define ACC_TYPE_HUMIDIFIER                 (26)
+#define ACC_TYPE_HUMIDIFIER_WITH_TEMP       (27)
 #define ACC_TYPE_LIGHTBULB                  (30)
 #define ACC_TYPE_GARAGE_DOOR                (40)
 #define ACC_TYPE_WINDOW_COVER               (45)

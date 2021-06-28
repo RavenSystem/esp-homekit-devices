@@ -562,17 +562,17 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
                 }
                 case HOMETKIT_FORMAT_DATA:
                     json_string(json, "value");
-                    if (!v.string_value || v.data_size == 0) {
+                    if (!v.data_value || v.data_size == 0) {
                         json_string(json, "");
                     } else {
-                        size_t encoded_data_size = base64_encoded_size((uint8_t*) v.string_value, v.data_size);
+                        size_t encoded_data_size = base64_encoded_size(v.data_value, v.data_size);
                         byte* encoded_data = malloc(encoded_data_size + 1);
                         if (!encoded_data) {
                             CLIENT_ERROR(client, "Allocate %d bytes for encoding data", encoded_data_size + 1);
                             json_string(json, "");
                             break;
                         }
-                        base64_encode((uint8_t*) v.string_value, v.data_size, encoded_data);
+                        base64_encode(v.data_value, v.data_size, encoded_data);
                         encoded_data[encoded_data_size] = 0;
 
                         json_string(json, (char*) encoded_data);
@@ -763,15 +763,32 @@ void client_send_chunk(byte *data, size_t size, void *arg) {
     free(payload);
 }
 
-
-void send_204_response(client_context_t *context) {
-    static char response[] = "HTTP/1.1 204 No Content\r\n\r\n";
-    client_send(context, (byte *)response, sizeof(response)-1);
+IRAM void send_200_response(client_context_t* context) {
+    byte response[] =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: application/hap+json\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "Connection: keep-alive\r\n\r\n";
+    client_send(context, response, sizeof(response) - 1);
 }
 
-void send_404_response(client_context_t *context) {
-    static char response[] = "HTTP/1.1 404 Not Found\r\n\r\n";
-    client_send(context, (byte *)response, sizeof(response)-1);
+void send_204_response(client_context_t* context) {
+    byte response[] = "HTTP/1.1 204 No Content\r\n\r\n";
+    client_send(context, response, sizeof(response) - 1);
+}
+
+void send_207_response(client_context_t* context) {
+    byte response[] =
+        "HTTP/1.1 207 Multi-Status\r\n"
+        "Content-Type: application/hap+json\r\n"
+        "Transfer-Encoding: chunked\r\n"
+        "Connection: keep-alive\r\n\r\n";
+    client_send(context, response, sizeof(response) - 1);
+}
+
+void send_404_response(client_context_t* context) {
+    byte response[] = "HTTP/1.1 404 Not Found\r\n\r\n";
+    client_send(context, response, sizeof(response) - 1);
 }
 
 typedef struct _client_event {
@@ -786,12 +803,11 @@ void send_client_events(client_context_t *context, client_event_t *events) {
     CLIENT_DEBUG(context, "Sending EVENT");
     DEBUG_HEAP();
 
-    static byte http_headers[] =
+    byte http_headers[] =
         "EVENT/1.0 200 OK\r\n"
         "Content-Type: application/hap+json\r\n"
         "Transfer-Encoding: chunked\r\n\r\n";
-
-    client_send(context, http_headers, sizeof(http_headers)-1);
+    client_send(context, http_headers, sizeof(http_headers) - 1);
 
     // ~35 bytes per event JSON
     // 256 should be enough for ~7 characteristic updates
@@ -846,7 +862,7 @@ void send_tlv_response(client_context_t *context, tlv_values_t *values) {
 
     tlv_free(values);
 
-    static char http_headers[] =
+    char http_headers[] =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: application/pairing+tlv8\r\n"
         "Content-Length: %d\r\n"
@@ -872,26 +888,11 @@ void send_tlv_response(client_context_t *context, tlv_values_t *values) {
     free(response);
 }
 
-
-static byte json_200_response_headers[] =
-    "HTTP/1.1 200 OK\r\n"
-    "Content-Type: application/hap+json\r\n"
-    "Transfer-Encoding: chunked\r\n"
-    "Connection: keep-alive\r\n\r\n";
-
-
-static byte json_207_response_headers[] =
-    "HTTP/1.1 207 Multi-Status\r\n"
-    "Content-Type: application/hap+json\r\n"
-    "Transfer-Encoding: chunked\r\n"
-    "Connection: keep-alive\r\n\r\n";
-
-
 void send_json_response(client_context_t *context, int status_code, byte *payload, size_t payload_size) {
     CLIENT_DEBUG(context, "Sending JSON response");
     DEBUG_HEAP();
 
-    static char http_headers[] =
+    char http_headers[] =
         "HTTP/1.1 %d %s\r\n"
         "Content-Type: application/hap+json\r\n"
         "Content-Length: %d\r\n"
@@ -1982,7 +1983,7 @@ void homekit_server_on_get_accessories(client_context_t *context) {
     sdk_system_overclock();
 #endif
     
-    client_send(context, json_200_response_headers, sizeof(json_200_response_headers) - 1);
+    send_200_response(context);
 
     json_stream *json = json_new(1024, client_send_chunk, context);
     json_object_start(json);
@@ -2120,9 +2121,9 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
     id = strdup(id_param->value);
 
     if (success) {
-        client_send(context, json_200_response_headers, sizeof(json_200_response_headers)-1);
+        send_200_response(context);
     } else {
-        client_send(context, json_207_response_headers, sizeof(json_207_response_headers)-1);
+        send_207_response(context);
     }
 
     json_stream *json = json_new(256, client_send_chunk, context);
@@ -2526,7 +2527,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         return HAPStatus_InvalidValue;
                     }
 
-                    size_t data_size = base64_decoded_size((unsigned char*)value, value_len);
+                    size_t data_size = base64_decoded_size((unsigned char*) value, value_len);
                     byte *data = malloc(data_size);
                     if (!data) {
                         CLIENT_ERROR(context, "Update %d.%d: allocating %d bytes", aid, iid, data_size);
@@ -2595,7 +2596,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
         send_204_response(context);
     } else {
         CLIENT_DEBUG(context, "There were processing errors, sending Multi-Status response");
-        client_send(context, json_207_response_headers, sizeof(json_207_response_headers)-1);
+        send_207_response(context);
 
         json_stream *json1 = json_new(1024, client_send_chunk, context);
         json_object_start(json1);
@@ -2932,7 +2933,7 @@ int homekit_server_on_url(http_parser *parser, const char *data, size_t length) 
         if (!strncmp(data, "/accessories", length)) {
             context->endpoint = HOMEKIT_ENDPOINT_GET_ACCESSORIES;
         } else {
-            static const char url[] = "/characteristics";
+            const char url[] = "/characteristics";
             size_t url_len = sizeof(url)-1;
 
             if (length >= url_len && !strncmp(data, url, url_len) &&

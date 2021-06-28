@@ -87,6 +87,7 @@ typedef struct {
         int int_value;
         float float_value;
         char* string_value;
+        uint8_t* data_value;
         tlv_values_t* tlv_values;
     };
 } homekit_value_t;
@@ -139,7 +140,7 @@ void homekit_value_free(homekit_value_t *value);
 #define HOMEKIT_TLV(value, ...) (homekit_value_t) HOMEKIT_TLV_(value, ##__VA_ARGS__)
 
 #define HOMEKIT_DATA_(value, size, ...) \
-    {.format=HOMETKIT_FORMAT_DATA, .string_value=((char*) value), .data_size=(size), ##__VA_ARGS__}
+    {.format=HOMETKIT_FORMAT_DATA, .data_value=(value), .data_size=(size), ##__VA_ARGS__}
 #define HOMEKIT_DATA(value, size, ...) (homekit_value_t) HOMEKIT_DATA_(value, size, ##__VA_ARGS__)
 
 
