@@ -5367,7 +5367,8 @@ void delayed_sensor_task() {
     ch_group = main_config.ch_groups;
     while (ch_group) {
         if ((ch_group->acc_type == ACC_TYPE_THERMOSTAT ||
-            ch_group->acc_type == ACC_TYPE_TH_SENSOR) &&
+             ch_group->acc_type == ACC_TYPE_HUMIDIFIER ||
+             ch_group->acc_type == ACC_TYPE_TH_SENSOR) &&
             ch_group->timer) {
             
             INFO("<%i> Starting delayed Thermostat", ch_group->accessory);
