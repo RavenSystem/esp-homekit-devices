@@ -5327,8 +5327,7 @@ void timetable_actions_timer_worker(TimerHandle_t xTimer) {
         timetable_action = timetable_action->next;
     }
     
-    if (timeinfo->tm_wday == 0 &&
-        timeinfo->tm_hour == 23 &&
+    if (timeinfo->tm_hour == 23 &&
         timeinfo->tm_min  == 59 &&
         timeinfo->tm_sec  != 0) {
         esp_timer_change_period(xTimer, 1000);
@@ -5349,16 +5348,16 @@ void delayed_sensor_task() {
     
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
-        if ((ch_group->acc_type == ACC_TYPE_TEMP_SENSOR ||
-            ch_group->acc_type == ACC_TYPE_HUM_SENSOR) &&
-            ch_group->timer) {
+        if (ch_group->timer &&
+            ch_group->acc_type >= ACC_TYPE_THERMOSTAT &&
+            ch_group->acc_type <= ACC_TYPE_HUMIDIFIER_WITH_TEMP) {
             
-            INFO("<%i> Starting delayed sensor", ch_group->accessory);
+            INFO("<%i> Starting TH sensor", ch_group->accessory);
             
             temperature_timer_worker(ch_group->timer);
             esp_timer_start(ch_group->timer);
             
-            vTaskDelay(MS_TO_TICKS(3000));
+            vTaskDelay(MS_TO_TICKS(4000));
         }
         
         ch_group = ch_group->next;
@@ -5366,28 +5365,10 @@ void delayed_sensor_task() {
     
     ch_group = main_config.ch_groups;
     while (ch_group) {
-        if ((ch_group->acc_type == ACC_TYPE_THERMOSTAT ||
-             ch_group->acc_type == ACC_TYPE_HUMIDIFIER ||
-             ch_group->acc_type == ACC_TYPE_TH_SENSOR) &&
-            ch_group->timer) {
-            
-            INFO("<%i> Starting delayed Thermostat", ch_group->accessory);
-            
-            temperature_timer_worker(ch_group->timer);
-            esp_timer_start(ch_group->timer);
-            
-            vTaskDelay(MS_TO_TICKS(4000));
-        }
-
-        ch_group = ch_group->next;
-    }
-    
-    ch_group = main_config.ch_groups;
-    while (ch_group) {
         if (ch_group->acc_type == ACC_TYPE_IAIRZONING &&
             ch_group->timer) {
-
-            INFO("<%i> Starting delayed iAirZoning", ch_group->accessory);
+            
+            INFO("<%i> Starting iAirZoning", ch_group->accessory);
             
             temperature_timer_worker(ch_group->timer);
             esp_timer_start(ch_group->timer);
