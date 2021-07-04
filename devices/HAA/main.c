@@ -1247,6 +1247,12 @@ void power_monitor_task(void* args) {
         power = (PM_POWER_FACTOR * power) + PM_POWER_OFFSET;
     }
     
+#ifdef POWER_MONITOR_DEBUG
+    voltage = (hwrand() % 40) + 200;
+    current = (hwrand() % 100) / 10.0f;
+    power = hwrand() % 70;
+#endif //POWER_MONITOR_DEBUG
+    
     INFO("<%i> PM: V = %g, C = %g, P = %g", ch_group->accessory, voltage, current, power);
     
     if (PM_SENSOR_TYPE < 2.f) {
@@ -1261,7 +1267,9 @@ void power_monitor_task(void* args) {
     
     PM_LAST_SAVED_CONSUPTION += PM_POLL_PERIOD;
     
-    if (voltage < 750.f) {
+    if (voltage < 600.f &&
+        current < 200.f &&
+        power < 50000.f) {
         const float consumption = ch_group->ch3->value.float_value + ((power * PM_POLL_PERIOD) / 3600000.f);
         INFO("<%i> PM: KWh = %1.7g", ch_group->accessory, consumption);
         
@@ -1328,7 +1336,7 @@ void power_monitor_timer_worker(TimerHandle_t xTimer) {
             ERROR("Creating power_monitor. Free HEAP %d", free_heap);
         }
     } else {
-        ERROR("Power_monitor_task: HK pairing");
+        ERROR("pm_task: HK pairing");
     }
 }
 
