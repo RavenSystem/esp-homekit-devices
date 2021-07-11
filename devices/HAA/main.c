@@ -5,6 +5,8 @@
  *
  */
 
+#if defined(ESP_OPEN_RTOS)
+
 #include <unistd.h>
 #include <string.h>
 #include <esp/uart.h>
@@ -14,9 +16,15 @@
 #include <rboot-api.h>
 #include <sysparam.h>
 #include <math.h>
-#include <spiflash.h>
-
 #include <esplibs/libmain.h>
+
+#elif defined(ESP_IDF)
+
+#define sdk_system_restart()                esp_restart()
+
+#else
+#error "!!! UNKNOWN PLATFORM: ESP_OPEN_RTOS or ESP_IDF"
+#endif
 
 #include <lwip/err.h>
 #include <lwip/sockets.h>
@@ -1414,7 +1422,7 @@ void valve_timer_worker(TimerHandle_t xTimer) {
 void set_zones_task(void* args) {
     ch_group_t* iairzoning_group = args;
     
-    INFO("<%i> iAirZoning evaluation", iairzoning_group->accessory);
+    INFO("<%i> iAirZoning eval", iairzoning_group->accessory);
 
     uint8_t iairzoning_final_main_mode = IAIRZONING_LAST_ACTION;
     
@@ -1508,7 +1516,7 @@ void set_zones_task(void* args) {
                         do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
                     }
                     
-                    vTaskDelay(MS_TO_TICKS(500));
+                    vTaskDelay(MS_TO_TICKS(290));
                 }
 
                 ch_group = ch_group->next;
@@ -1895,31 +1903,45 @@ void th_input_temp(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
 
     if (ch_group->child_enabled) {
-        float set_h_temp = ch_group->ch5->value.float_value;
-        float set_c_temp = ch_group->ch6->value.float_value;
-        
-        if (type == THERMOSTAT_TEMP_UP) {
-            set_h_temp += 0.5;
-            set_c_temp += 0.5;
-            if (set_h_temp > TH_MAX_TEMP) {
-                set_h_temp = TH_MAX_TEMP;
+        if (TH_TYPE == THERMOSTAT_TYPE_HEATER ||
+            TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
+            float set_h_temp = ch_group->ch5->value.float_value;
+            
+            if (type == THERMOSTAT_TEMP_UP) {
+                set_h_temp += 0.5;
+                if (set_h_temp > TH_MAX_TEMP) {
+                    set_h_temp = TH_MAX_TEMP;
+                }
+            } else {    // type == THERMOSTAT_TEMP_DOWN
+                set_h_temp -= 0.5;
+                if (set_h_temp < TH_MIN_TEMP) {
+                    set_h_temp = TH_MIN_TEMP;
+                }
             }
-            if (set_c_temp > TH_MAX_TEMP) {
-                set_c_temp = TH_MAX_TEMP;
-            }
-        } else {    // type == THERMOSTAT_TEMP_DOWN
-            set_h_temp -= 0.5;
-            set_c_temp -= 0.5;
-            if (set_h_temp < TH_MIN_TEMP) {
-                set_h_temp = TH_MIN_TEMP;
-            }
-            if (set_c_temp < TH_MIN_TEMP) {
-                set_c_temp = TH_MIN_TEMP;
-            }
+            
+            ch_group->ch5->value.float_value = set_h_temp;
+            homekit_characteristic_notify_safe(ch_group->ch5);
         }
         
-        ch_group->ch5->value.float_value = set_h_temp;
-        ch_group->ch6->value.float_value = set_c_temp;
+        if (TH_TYPE == THERMOSTAT_TYPE_COOLER ||
+            TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
+            float set_c_temp = ch_group->ch5->value.float_value;
+            
+            if (type == THERMOSTAT_TEMP_UP) {
+                set_c_temp += 0.5;
+                if (set_c_temp > TH_MAX_TEMP) {
+                    set_c_temp = TH_MAX_TEMP;
+                }
+            } else {    // type == THERMOSTAT_TEMP_DOWN
+                set_c_temp -= 0.5;
+                if (set_c_temp < TH_MIN_TEMP) {
+                    set_c_temp = TH_MIN_TEMP;
+                }
+            }
+            
+            ch_group->ch6->value.float_value = set_c_temp;
+            homekit_characteristic_notify_safe(ch_group->ch6);
+        }
         
         update_th(ch_group->ch0, ch_group->ch0->value);
         
@@ -1933,10 +1955,10 @@ void th_input_temp(const uint16_t gpio, void* args, const uint8_t type) {
 }
 
 // --- HUMIDIFIER
-void process_humidif_task(void* args) {
+void process_hum_task(void* args) {
     ch_group_t* ch_group = args;
     
-    INFO("<%i> Humidif Process", ch_group->accessory);
+    INFO("<%i> Hum Process", ch_group->accessory);
     
     void hum(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
         INFO("<%i> Hum", ch_group->accessory);
@@ -2117,8 +2139,8 @@ void process_humidif_task(void* args) {
 void process_humidif_timer(TimerHandle_t xTimer) {
     const uint32_t free_heap = xPortGetFreeHeapSize();
     if (free_heap <= MINIMUM_FREE_HEAP ||
-        xTaskCreate(process_humidif_task, "humidif", PROCESS_HUMIDIF_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_HUMIDIF_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("Creating process_humidif. Free HEAP %d", free_heap);
+        xTaskCreate(process_hum_task, "hum", PROCESS_HUMIDIF_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_HUMIDIF_TASK_PRIORITY, NULL) != pdPASS) {
+        ERROR("Creating process_hum. Free HEAP %d", free_heap);
         esp_timer_start(xTimer);
     }
 }
@@ -2200,31 +2222,45 @@ void humidif_input_temp(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
 
     if (ch_group->child_enabled) {
-        int8_t set_h_temp = ch_group->ch5->value.float_value;
-        int8_t set_c_temp = ch_group->ch6->value.float_value;
+        if (HM_TYPE == HUMIDIF_TYPE_HUM ||
+            HM_TYPE == HUMIDIF_TYPE_HUMDEHUM) {
+            int8_t set_h_temp = ch_group->ch5->value.float_value;
 
-        if (type == HUMIDIF_UP) {
-            set_h_temp += 5;
-            set_c_temp += 5;
-            if (set_h_temp > 100) {
-                set_h_temp = 100;
+            if (type == HUMIDIF_UP) {
+                set_h_temp += 5;
+                if (set_h_temp > 100) {
+                    set_h_temp = 100;
+                }
+            } else {    // type == HUMIDIF_DOWN
+                set_h_temp -= 5;
+                if (set_h_temp < 0) {
+                    set_h_temp = 0;
+                }
             }
-            if (set_c_temp > 100) {
-                set_c_temp = 100;
-            }
-        } else {    // type == HUMIDIF_DOWN
-            set_h_temp -= 5;
-            set_c_temp -= 5;
-            if (set_h_temp < 0) {
-                set_h_temp = 0;
-            }
-            if (set_c_temp < 0) {
-                set_c_temp = 0;
-            }
+            
+            ch_group->ch5->value.float_value = set_h_temp;
+            homekit_characteristic_notify_safe(ch_group->ch5);
         }
         
-        ch_group->ch5->value.float_value = set_h_temp;
-        ch_group->ch6->value.float_value = set_c_temp;
+        if (HM_TYPE == HUMIDIF_TYPE_DEHUM ||
+            HM_TYPE == HUMIDIF_TYPE_HUMDEHUM) {
+            int8_t set_c_temp = ch_group->ch6->value.float_value;
+
+            if (type == HUMIDIF_UP) {
+                set_c_temp += 5;
+                if (set_c_temp > 100) {
+                    set_c_temp = 100;
+                }
+            } else {    // type == HUMIDIF_DOWN
+                set_c_temp -= 5;
+                if (set_c_temp < 0) {
+                    set_c_temp = 0;
+                }
+            }
+            
+            ch_group->ch6->value.float_value = set_c_temp;
+            homekit_characteristic_notify_safe(ch_group->ch6);
+        }
         
         update_humidif(ch_group->ch1, ch_group->ch1->value);
         
@@ -3251,17 +3287,17 @@ void autodimmer_call(homekit_characteristic_t* ch0, const homekit_value_t value)
 void garage_door_stop(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
-    if (ch_group->ch0->value.int_value == GARAGE_DOOR_OPENING || ch_group->ch0->value.int_value == GARAGE_DOOR_CLOSING) {
+    if (GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_OPENING || GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_CLOSING) {
         led_blink(1);
         INFO("<%i> GD stop", ch_group->accessory);
         
-        ch_group->ch0->value.int_value = GARAGE_DOOR_STOPPED;
+        GD_CURRENT_DOOR_STATE_INT = GARAGE_DOOR_STOPPED;
         
         esp_timer_stop(ch_group->timer);
 
         do_actions(ch_group, 10);
         
-        homekit_characteristic_notify_safe(ch_group->ch0);
+        homekit_characteristic_notify_safe(GD_CURRENT_DOOR_STATE);
     }
 }
 
@@ -3271,9 +3307,9 @@ void garage_door_obstruction(const uint16_t gpio, void* args, const uint8_t type
     led_blink(1);
     INFO("<%i> GD obstr %i", ch_group->accessory, type);
     
-    ch_group->ch2->value.bool_value = (bool) type;
+    GD_OBSTRUCTION_DETECTED_BOOL = (bool) type;
     
-    homekit_characteristic_notify_safe(ch_group->ch2);
+    homekit_characteristic_notify_safe(GD_OBSTRUCTION_DETECTED);
     
     do_actions(ch_group, type + 8);
 }
@@ -3284,13 +3320,13 @@ void garage_door_sensor(const uint16_t gpio, void* args, const uint8_t type) {
     led_blink(1);
     INFO("<%i> GD sensor %i", ch_group->accessory, type);
     
-    ch_group->ch0->value.int_value = type;
+    GD_CURRENT_DOOR_STATE_INT = type;
     
     if (type > 1) {
-        ch_group->ch1->value.int_value = type - 2;
+        GD_TARGET_DOOR_STATE_INT = type - 2;
         esp_timer_start(ch_group->timer);
     } else {
-        ch_group->ch1->value.int_value = type;
+        GD_TARGET_DOOR_STATE_INT = type;
         esp_timer_stop(ch_group->timer);
         
         if (type == 0) {
@@ -3299,24 +3335,24 @@ void garage_door_sensor(const uint16_t gpio, void* args, const uint8_t type) {
             GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_TIME_MARGIN;
         }
         
-        if (ch_group->ch2->value.bool_value) {
+        if (GD_OBSTRUCTION_DETECTED_BOOL) {
             garage_door_obstruction(0, ch_group, 0);
         }
     }
     
-    homekit_characteristic_notify_safe(ch_group->ch0);
-    homekit_characteristic_notify_safe(ch_group->ch1);
+    homekit_characteristic_notify_safe(GD_CURRENT_DOOR_STATE);
+    homekit_characteristic_notify_safe(GD_TARGET_DOOR_STATE);
     
     do_actions(ch_group, type + 4);
 }
 
 void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch1);
-    if ((ch_group->main_enabled) && !ch_group->ch2->value.bool_value) {
-        uint8_t current_door_state = ch_group->ch0->value.int_value;
+    if ((ch_group->main_enabled) && !GD_OBSTRUCTION_DETECTED_BOOL) {
+        uint8_t current_door_state = GD_CURRENT_DOOR_STATE_INT;
         if (current_door_state == GARAGE_DOOR_STOPPED) {
-            current_door_state = ch_group->ch1->value.int_value;
-            ch_group->ch0->value.int_value = current_door_state + 2;
+            current_door_state = GD_TARGET_DOOR_STATE_INT;
+            GD_CURRENT_DOOR_STATE_INT = current_door_state + 2;
         } else if (current_door_state > GARAGE_DOOR_CLOSED) {
             if (GARAGE_DOOR_VIRTUAL_STOP == 1) {
                 garage_door_stop(0, ch_group, 0);
@@ -3325,20 +3361,20 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
             }
         }
 
-        if (value.int_value != current_door_state && ch_group->ch0->value.int_value != GARAGE_DOOR_STOPPED) {
+        if (value.int_value != current_door_state && GD_CURRENT_DOOR_STATE_INT != GARAGE_DOOR_STOPPED) {
             led_blink(1);
             INFO("<%i> Setter GD %i", ch_group->accessory, value.int_value);
             
             ch1->value = value;
 
-            do_actions(ch_group, (uint8_t) ch_group->ch0->value.int_value);
+            do_actions(ch_group, (uint8_t) GD_CURRENT_DOOR_STATE_INT);
    
             if ((value.int_value == GARAGE_DOOR_OPENED && GARAGE_DOOR_HAS_F4 == 0) ||
-                       ch_group->ch0->value.int_value == GARAGE_DOOR_CLOSING) {
+                GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_CLOSING) {
                 garage_door_sensor(0, ch_group, GARAGE_DOOR_OPENING);
                 
             } else if ((value.int_value == GARAGE_DOOR_CLOSED && GARAGE_DOOR_HAS_F5 == 0) ||
-                       ch_group->ch0->value.int_value == GARAGE_DOOR_OPENING) {
+                       GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_OPENING) {
                 garage_door_sensor(0, ch_group, GARAGE_DOOR_CLOSING);
             }
             
@@ -3975,10 +4011,10 @@ void diginput(const uint16_t gpio, void* args, const uint8_t type) {
                 break;
                 
             case TYPE_GARAGE_DOOR:
-                if (ch_group->ch1->value.int_value == 1) {
-                    hkc_garage_door_setter(ch_group->ch1, HOMEKIT_UINT8(0));
+                if (GD_TARGET_DOOR_STATE_INT == GARAGE_DOOR_CLOSED) {
+                    hkc_garage_door_setter(GD_TARGET_DOOR_STATE, HOMEKIT_UINT8(GARAGE_DOOR_OPENED));
                 } else {
-                    hkc_garage_door_setter(ch_group->ch1, HOMEKIT_UINT8(1));
+                    hkc_garage_door_setter(GD_TARGET_DOOR_STATE, HOMEKIT_UINT8(GARAGE_DOOR_CLOSED));
                 }
                 break;
                 
@@ -4039,8 +4075,8 @@ void diginput_1(const uint16_t gpio, void* args, const uint8_t type) {
                 break;
                 
             case TYPE_GARAGE_DOOR:
-                if (ch_group->ch1->value.int_value == 0) {
-                    hkc_garage_door_setter(ch_group->ch1, HOMEKIT_UINT8(1));
+                if (GD_TARGET_DOOR_STATE_INT == GARAGE_DOOR_OPENED) {
+                    hkc_garage_door_setter(GD_TARGET_DOOR_STATE, HOMEKIT_UINT8(GARAGE_DOOR_CLOSED));
                 }
                 break;
                 
@@ -4131,8 +4167,8 @@ void diginput_0(const uint16_t gpio, void* args, const uint8_t type) {
                 break;
                 
             case TYPE_GARAGE_DOOR:
-                if (ch_group->ch1->value.int_value == 1) {
-                    hkc_garage_door_setter(ch_group->ch1, HOMEKIT_UINT8(0));
+                if (GD_TARGET_DOOR_STATE_INT == 1) {
+                    hkc_garage_door_setter(GD_TARGET_DOOR_STATE, HOMEKIT_UINT8(GARAGE_DOOR_OPENED));
                 }
                 break;
                 
@@ -5090,7 +5126,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             
                         case ACC_TYPE_GARAGE_DOOR:
                             if (action_acc_manager->value < 2.f) {
-                                hkc_garage_door_setter(ch_group->ch1, HOMEKIT_UINT8((uint8_t) action_acc_manager->value));
+                                hkc_garage_door_setter(GD_TARGET_DOOR_STATE, HOMEKIT_UINT8((uint8_t) action_acc_manager->value));
                             } else if (action_acc_manager->value == 2.f) {
                                 garage_door_stop(0, ch_group, 0);
                             } else {
@@ -7432,25 +7468,25 @@ void normal_mode_init() {
         service++;
         
         // Custom ranges of Target Temperatures
-        TH_MIN_TEMP = THERMOSTAT_DEFAULT_MIN_TEMP;
+        float min_temp = THERMOSTAT_DEFAULT_MIN_TEMP;
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MIN_TEMP) != NULL) {
-            TH_MIN_TEMP = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MIN_TEMP)->valuedouble;
+            min_temp = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MIN_TEMP)->valuedouble;
         }
         
-        if (TH_MIN_TEMP < -100) {
-            TH_MIN_TEMP = -100;
+        if (min_temp < -100) {
+            min_temp = -100;
         }
         
-        TH_MAX_TEMP = THERMOSTAT_DEFAULT_MAX_TEMP;
+        float max_temp = THERMOSTAT_DEFAULT_MAX_TEMP;
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MAX_TEMP) != NULL) {
-            TH_MAX_TEMP = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MAX_TEMP)->valuedouble;
+            max_temp = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MAX_TEMP)->valuedouble;
         }
         
-        if (TH_MAX_TEMP > 200) {
-            TH_MAX_TEMP = 200;
+        if (max_temp > 200) {
+            max_temp = 200;
         }
         
-        const float default_target_temp = (TH_MIN_TEMP + TH_MAX_TEMP) / 2;
+        const float default_target_temp = (min_temp + max_temp) / 2;
         
         // Temperature Deadbands
         TH_DEADBAND = 0;
@@ -7478,8 +7514,30 @@ void normal_mode_init() {
         ch_group->ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200});
         ch_group->ch2 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_th_target_setter);
         ch_group->ch3 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_HEATER_COOLER_STATE, 0);
-        ch_group->ch5 = NEW_HOMEKIT_CHARACTERISTIC(HEATING_THRESHOLD_TEMPERATURE, default_target_temp -1, .min_value=(float[]) {TH_MIN_TEMP}, .max_value=(float[]) {TH_MAX_TEMP}, .setter_ex=update_th);
-        ch_group->ch6 = NEW_HOMEKIT_CHARACTERISTIC(COOLING_THRESHOLD_TEMPERATURE, default_target_temp +1, .min_value=(float[]) {TH_MIN_TEMP}, .max_value=(float[]) {TH_MAX_TEMP}, .setter_ex=update_th);
+        
+        if (TH_TYPE == THERMOSTAT_TYPE_HEATER ||
+            TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
+            ch_group->ch5 = NEW_HOMEKIT_CHARACTERISTIC(HEATING_THRESHOLD_TEMPERATURE, default_target_temp -1, .min_value=(float[]) {min_temp}, .max_value=(float[]) {max_temp}, .setter_ex=update_th);
+            
+            const float initial_h_target_temp = set_initial_state(ch_group->accessory, 5, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch5, CH_TYPE_FLOAT, default_target_temp -1);
+            if (initial_h_target_temp > TH_MAX_TEMP || initial_h_target_temp < min_temp) {
+                ch_group->ch5->value.float_value = default_target_temp - 1;
+            } else {
+                ch_group->ch5->value.float_value = initial_h_target_temp;
+            }
+        }
+        
+        if (TH_TYPE == THERMOSTAT_TYPE_COOLER ||
+            TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
+            ch_group->ch6 = NEW_HOMEKIT_CHARACTERISTIC(COOLING_THRESHOLD_TEMPERATURE, default_target_temp +1, .min_value=(float[]) {min_temp}, .max_value=(float[]) {max_temp}, .setter_ex=update_th);
+            
+            const float initial_c_target_temp = set_initial_state(ch_group->accessory, 6, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch6, CH_TYPE_FLOAT, default_target_temp +1);
+            if (initial_c_target_temp > TH_MAX_TEMP || initial_c_target_temp < max_temp) {
+                ch_group->ch6->value.float_value = default_target_temp + 1;
+            } else {
+                ch_group->ch6->value.float_value = initial_c_target_temp;
+            }
+        }
         
         if (ch_group->homekit_enabled) {
             uint8_t calloc_count = 6;
@@ -7502,20 +7560,6 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics[0] = ch_group->ch2;
             accessories[accessory]->services[service]->characteristics[1] = ch_group->ch0;
             accessories[accessory]->services[service]->characteristics[2] = ch_group->ch3;
-        }
-        
-        const float initial_h_target_temp = set_initial_state(ch_group->accessory, 5, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch5, CH_TYPE_FLOAT, default_target_temp -1);
-        if (initial_h_target_temp > TH_MAX_TEMP || initial_h_target_temp < TH_MIN_TEMP) {
-            ch_group->ch5->value.float_value = default_target_temp - 1;
-        } else {
-            ch_group->ch5->value.float_value = initial_h_target_temp;
-        }
-        
-        const float initial_c_target_temp = set_initial_state(ch_group->accessory, 6, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch6, CH_TYPE_FLOAT, default_target_temp +1);
-        if (initial_c_target_temp > TH_MAX_TEMP || initial_c_target_temp < TH_MIN_TEMP) {
-            ch_group->ch6->value.float_value = default_target_temp + 1;
-        } else {
-            ch_group->ch6->value.float_value = initial_c_target_temp;
         }
         
         switch ((uint8_t) TH_TYPE) {
@@ -7834,8 +7878,19 @@ void normal_mode_init() {
         ch_group->ch1 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0);
         ch_group->ch2 = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_humidif_target_setter);
         ch_group->ch3 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_HUMIDIFIER_DEHUMIDIFIER_STATE, 0);
-        ch_group->ch5 = NEW_HOMEKIT_CHARACTERISTIC(RELATIVE_HUMIDITY_HUMIDIFIER_THRESHOLD, 40, .setter_ex=update_humidif);
-        ch_group->ch6 = NEW_HOMEKIT_CHARACTERISTIC(RELATIVE_HUMIDITY_DEHUMIDIFIER_THRESHOLD, 60, .setter_ex=update_humidif);
+        
+        if (HM_TYPE == HUMIDIF_TYPE_HUM ||
+            HM_TYPE == HUMIDIF_TYPE_HUMDEHUM) {
+            ch_group->ch5 = NEW_HOMEKIT_CHARACTERISTIC(RELATIVE_HUMIDITY_HUMIDIFIER_THRESHOLD, 40, .setter_ex=update_humidif);
+            ch_group->ch5->value.float_value = set_initial_state(ch_group->accessory, 5, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch5, CH_TYPE_FLOAT, 40);
+        }
+        
+        if (HM_TYPE == HUMIDIF_TYPE_DEHUM ||
+            HM_TYPE == HUMIDIF_TYPE_HUMDEHUM) {
+            ch_group->ch6 = NEW_HOMEKIT_CHARACTERISTIC(RELATIVE_HUMIDITY_DEHUMIDIFIER_THRESHOLD, 60, .setter_ex=update_humidif);
+            ch_group->ch6->value.float_value = set_initial_state(ch_group->accessory, 6, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch6, CH_TYPE_FLOAT, 60);
+        }
+        
         
         if (ch_group->homekit_enabled) {
             uint8_t calloc_count = 6;
@@ -7859,9 +7914,6 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics[1] = ch_group->ch1;
             accessories[accessory]->services[service]->characteristics[2] = ch_group->ch3;
         }
-        
-        ch_group->ch5->value.float_value = set_initial_state(ch_group->accessory, 5, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch5, CH_TYPE_FLOAT, 40);
-        ch_group->ch6->value.float_value = set_initial_state(ch_group->accessory, 6, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch6, CH_TYPE_FLOAT, 60);
         
         switch ((uint8_t) HM_TYPE) {
             case HUMIDIF_TYPE_DEHUM:
@@ -8300,9 +8352,9 @@ void normal_mode_init() {
         
         service++;
         
-        ch_group->ch0 = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_DOOR_STATE, 1);
-        ch_group->ch1 = NEW_HOMEKIT_CHARACTERISTIC(TARGET_DOOR_STATE, 1, .setter_ex=hkc_garage_door_setter);
-        ch_group->ch2 = NEW_HOMEKIT_CHARACTERISTIC(OBSTRUCTION_DETECTED, false);
+        GD_CURRENT_DOOR_STATE = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_DOOR_STATE, 1);
+        GD_TARGET_DOOR_STATE = NEW_HOMEKIT_CHARACTERISTIC(TARGET_DOOR_STATE, 1, .setter_ex=hkc_garage_door_setter);
+        GD_OBSTRUCTION_DETECTED = NEW_HOMEKIT_CHARACTERISTIC(OBSTRUCTION_DETECTED, false);
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
@@ -8317,9 +8369,9 @@ void normal_mode_init() {
             }
             
             accessories[accessory]->services[service]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
-            accessories[accessory]->services[service]->characteristics[0] = ch_group->ch0;
-            accessories[accessory]->services[service]->characteristics[1] = ch_group->ch1;
-            accessories[accessory]->services[service]->characteristics[2] = ch_group->ch2;
+            accessories[accessory]->services[service]->characteristics[0] = GD_CURRENT_DOOR_STATE;
+            accessories[accessory]->services[service]->characteristics[1] = GD_TARGET_DOOR_STATE;
+            accessories[accessory]->services[service]->characteristics[2] = GD_OBSTRUCTION_DETECTED;
         }
 
         register_actions(ch_group, json_context, 0);
@@ -8330,7 +8382,7 @@ void normal_mode_init() {
         GARAGE_DOOR_CLOSE_TIME_FACTOR = 1;
         GARAGE_DOOR_VIRTUAL_STOP = virtual_stop(json_context);
         
-        ch_group->timer = esp_timer_create(1000, true, (void*) ch_group->ch0, garage_door_timer_worker);
+        ch_group->timer = esp_timer_create(1000, true, (void*) GD_CURRENT_DOOR_STATE, garage_door_timer_worker);
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN_SET) != NULL) {
             GARAGE_DOOR_TIME_MARGIN = cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN_SET)->valuedouble;
@@ -8361,14 +8413,14 @@ void normal_mode_init() {
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), garage_door_obstruction, ch_group, 0);
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_7), garage_door_obstruction, ch_group, 1);
         
-        ch_group->ch0->value.int_value = (uint8_t) set_initial_state(ch_group->accessory, 0, json_context, ch_group->ch0, CH_TYPE_INT8, 1);
-        if (ch_group->ch0->value.int_value > 1) {
-            ch_group->ch1->value.int_value = ch_group->ch0->value.int_value - 2;
+        GD_CURRENT_DOOR_STATE_INT = (uint8_t) set_initial_state(ch_group->accessory, 0, json_context, GD_CURRENT_DOOR_STATE, CH_TYPE_INT8, 1);
+        if (GD_CURRENT_DOOR_STATE_INT > 1) {
+            GD_TARGET_DOOR_STATE_INT = GD_CURRENT_DOOR_STATE_INT - 2;
         } else {
-            ch_group->ch1->value.int_value = ch_group->ch0->value.int_value;
+            GD_TARGET_DOOR_STATE_INT = GD_CURRENT_DOOR_STATE_INT;
         }
         
-        if (ch_group->ch0->value.int_value == 0) {
+        if (GD_CURRENT_DOOR_STATE_INT == 0) {
             GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN;
         }
 

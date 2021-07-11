@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "6.2.4"
+#define FIRMWARE_VERSION                    "6.3.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -191,23 +191,23 @@
 #define THERMOSTAT_TYPE_COOLER              (2)
 #define THERMOSTAT_TYPE_HEATERCOOLER        (3)
 #define THERMOSTAT_MIN_TEMP                 "m"
-#define TH_MIN_TEMP                         ch_group->num[7]
+#define TH_MIN_TEMP                         *ch_group->ch5->min_value
 #define THERMOSTAT_DEFAULT_MIN_TEMP         (10)
 #define THERMOSTAT_MAX_TEMP                 "x"
-#define TH_MAX_TEMP                         ch_group->num[8]
+#define TH_MAX_TEMP                         *ch_group->ch5->max_value
 #define THERMOSTAT_DEFAULT_MAX_TEMP         (38)
 #define THERMOSTAT_DEADBAND                 "d"
 #define TH_DEADBAND                         ch_group->num[6]
 #define THERMOSTAT_DEADBAND_FORCE_IDLE      "df"
 #define TH_DEADBAND_FORCE_IDLE              ch_group->num[10]
 #define THERMOSTAT_DEADBAND_SOFT_ON         "ds"
-#define TH_DEADBAND_SOFT_ON                 ch_group->num[11]
+#define TH_DEADBAND_SOFT_ON                 ch_group->num[7]
 #define THERMOSTAT_UPDATE_DELAY             "dl"
 #define THERMOSTAT_UPDATE_DELAY_MIN         (0.15f)
 #define THERMOSTAT_UPDATE_DELAY_DEFAULT     (3.0f)
 #define THERMOSTAT_IAIRZONING_CONTROLLER    "ia"
 #define TH_IAIRZONING_CONTROLLER            ch_group->num[2]
-#define TH_IAIRZONING_GATE_CURRENT_STATE    ch_group->num[12]
+#define TH_IAIRZONING_GATE_CURRENT_STATE    ch_group->num[8]
 #define TH_IAIRZONING_GATE_CLOSE            (0)
 #define TH_IAIRZONING_GATE_OPEN             (1)
 #define THERMOSTAT_MODE_INT                 ch_group->ch3->value.int_value
@@ -336,6 +336,12 @@
 #define myCMY                               lightbulb_group->cmy
 #define myRGB                               lightbulb_group->rgb
 
+#define GD_CURRENT_DOOR_STATE               ch_group->ch0
+#define GD_TARGET_DOOR_STATE                ch_group->ch1
+#define GD_OBSTRUCTION_DETECTED             ch_group->ch2
+#define GD_CURRENT_DOOR_STATE_INT           ch_group->ch0->value.int_value
+#define GD_TARGET_DOOR_STATE_INT            ch_group->ch1->value.int_value
+#define GD_OBSTRUCTION_DETECTED_BOOL        ch_group->ch2->value.bool_value
 #define GARAGE_DOOR_OPENED                  (0)
 #define GARAGE_DOOR_CLOSED                  (1)
 #define GARAGE_DOOR_OPENING                 (2)

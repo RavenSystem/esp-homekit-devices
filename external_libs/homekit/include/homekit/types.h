@@ -191,8 +191,11 @@ struct _homekit_characteristic {
     float *min_value;
     float *max_value;
     float *min_step;
+    
+#ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
     int *max_len;
     int *max_data_len;
+#endif //HOMEKIT_DISABLE_MAXLEN_CHECK
 
     homekit_valid_values_t valid_values;
     homekit_valid_values_ranges_t valid_values_ranges;

@@ -471,6 +471,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
             json_string(json, "minStep"); json_float(json, *ch->min_step);
         }
 
+#ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
         if (ch->max_len) {
             json_string(json, "maxLen"); json_integer(json, *ch->max_len);
         }
@@ -478,6 +479,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
         if (ch->max_data_len) {
             json_string(json, "maxDataLen"); json_integer(json, *ch->max_data_len);
         }
+#endif //HOMEKIT_DISABLE_MAXLEN_CHECK
 
         if (ch->valid_values.count) {
             json_string(json, "valid-values"); json_array_start(json);
@@ -1122,11 +1124,13 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 break;
             }
 
+#ifdef ESP_OPEN_RTOS
             bool low_mdns_buffer = false;
             if (xPortGetFreeHeapSize() < 25000) {
                 homekit_mdns_buffer_set(500);
                 low_mdns_buffer = true;
             }
+#endif //ESP_OPEN_RTOS
             
             CLIENT_DEBUG(context, "Computing pairing code (SRP shared secret)");
             DEBUG_HEAP();
@@ -2441,13 +2445,18 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         return HAPStatus_InvalidValue;
                     }
 
+#ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
                     int max_len = (ch->max_len) ? *ch->max_len : 64;
-
+#endif //HOMEKIT_DISABLE_MAXLEN_CHECK
+                    
                     char *value = j_value->valuestring;
+                    
+#ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
                     if (strlen(value) > max_len) {
                         CLIENT_ERROR(context, "Update %d.%d: too long", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
+#endif //HOMEKIT_DISABLE_MAXLEN_CHECK
 
                     CLIENT_DEBUG(context, "Updating ch %d.%d with \"%s\"", aid, iid, value);
 
@@ -2466,14 +2475,19 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         return HAPStatus_InvalidValue;
                     }
 
+#ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
                     int max_len = (ch->max_len) ? *ch->max_len : 256;
-
+#endif //HOMEKIT_DISABLE_MAXLEN_CHECK
+                    
                     char *value = j_value->valuestring;
                     size_t value_len = strlen(value);
+                    
+#ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
                     if (value_len > max_len) {
                         CLIENT_ERROR(context, "Update %d.%d: too long", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
+#endif //HOMEKIT_DISABLE_MAXLEN_CHECK
 
                     size_t tlv_size = base64_decoded_size((unsigned char*)value, value_len);
                     byte *tlv_data = malloc(tlv_size);
@@ -2518,14 +2532,19 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 
                     // Default max data len = 2,097,152 but that does not make sense
                     // for this accessory
+#ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
                     int max_len = (ch->max_data_len) ? *ch->max_data_len : 4096;
-
+#endif //HOMEKIT_DISABLE_MAXLEN_CHECK
+                    
                     char *value = j_value->valuestring;
                     size_t value_len = strlen(value);
+                    
+#ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
                     if (value_len > max_len) {
                         CLIENT_ERROR(context, "Update %d.%d: too long", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
+#endif //HOMEKIT_DISABLE_MAXLEN_CHECK
 
                     size_t data_size = base64_decoded_size((unsigned char*) value, value_len);
                     byte *data = malloc(data_size);

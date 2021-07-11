@@ -1,9 +1,10 @@
 #include "base64.h"
 
-static unsigned char base64_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+//static unsigned char base64_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 unsigned char base64_encode_char(unsigned char c) {
-  return base64_chars[c];
+    unsigned char base64_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    return base64_chars[c];
 }
 
 unsigned char base64_decode_char(unsigned char c) {

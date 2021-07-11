@@ -125,7 +125,7 @@ typedef struct _ch_group {
     uint8_t acc_type: 7;
     bool homekit_enabled: 1;
     
-    float num[13];
+    float num[11];
     
     homekit_characteristic_t* ch0;
     homekit_characteristic_t* ch1;

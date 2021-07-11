@@ -180,10 +180,14 @@ homekit_characteristic_t* homekit_characteristic_clone(homekit_characteristic_t*
         size += sizeof(float);
     if (ch->min_step)
         size += sizeof(float);
+
+#ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
     if (ch->max_len)
         size += sizeof(int);
     if (ch->max_data_len)
         size += sizeof(int);
+#endif //HOMEKIT_DISABLE_MAXLEN_CHECK
+     
     if (ch->valid_values.count)
         size += align_size(sizeof(uint8_t) * ch->valid_values.count);
     if (ch->valid_values_ranges.count)
@@ -233,6 +237,7 @@ homekit_characteristic_t* homekit_characteristic_clone(homekit_characteristic_t*
         p += sizeof(float);
     }
 
+#ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
     if (ch->max_len) {
         clone->max_len = (int*) p;
         *clone->max_len = *ch->max_len;
@@ -244,6 +249,7 @@ homekit_characteristic_t* homekit_characteristic_clone(homekit_characteristic_t*
         *clone->max_data_len = *ch->max_data_len;
         p += sizeof(int);
     }
+#endif //HOMEKIT_DISABLE_MAXLEN_CHECK
 
     if (ch->valid_values.count) {
         clone->valid_values.count = ch->valid_values.count;

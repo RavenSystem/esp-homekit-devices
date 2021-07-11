@@ -60,7 +60,6 @@ void homekit_mdns_configure_finalize(const uint16_t mdns_ttl) {
     printf("mDNS announcement: Name=%s %s Port=%d TTL=%d\n", mdns_instance_name, mdns_txt_rec, mdns_port, mdns_ttl);
 }
 
-
 void homekit_port_mdns_announce() {
     mdns_announce();
 }
@@ -89,16 +88,6 @@ void homekit_random_fill(uint8_t *data, size_t size) {
     }
 }
 
-void homekit_system_restart() {
-    esp_restart();
-}
-
-void homekit_overclock_start() {
-}
-
-void homekit_overclock_end() {
-}
-
 void homekit_mdns_init() {
     mdns_init();
 }
@@ -118,7 +107,7 @@ void homekit_mdns_add_txt(const char *key, const char *format, ...) {
 
     va_end(arg_ptr);
 
-    if (value_len && value_len < sizeof(value)-1) {
+    if (value_len && value_len < sizeof(value) - 1) {
         mdns_service_txt_item_set("_hap", "_tcp", key, value);
     }
 }
