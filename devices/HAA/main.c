@@ -247,23 +247,6 @@ void set_used_gpio(const uint16_t gpio) {
     }
 }
 
-void config_unused_gpios() {
-    set_used_gpio(1);
-    set_used_gpio(3);
-    
-    for (uint8_t i = 0; i < (GPIO_OVERFLOW - 1); i++) {
-        if (((i < 6) || (i > 11)) && !get_used_gpio(i)) {
-            gpio_enable(i, GPIO_INPUT);
-        }
-    }
-}
-
-void extended_gpio_enable(const uint16_t extended_gpio, const gpio_direction_t direction) {
-    if (extended_gpio < 17) {
-        gpio_enable((uint8_t) extended_gpio, direction);
-    }
-}
-
 mcp23017_t* mcp_find_by_index(const uint8_t index) {
     mcp23017_t* mcp23017 = main_config.mcp23017s;
     while (mcp23017 && mcp23017->index != index) {
@@ -349,8 +332,12 @@ void led_create(const uint8_t gpio, const bool inverted) {
     main_config.status_led->inverted = inverted;
     main_config.status_led->status = inverted;
     
-    extended_gpio_enable(main_config.status_led->gpio, GPIO_OUTPUT);
-    extended_gpio_write(main_config.status_led->gpio, main_config.status_led->status);
+    if (gpio < 17) {
+        gpio_write(gpio, inverted);
+        gpio_enable(gpio, GPIO_OUTPUT);
+    }
+    
+    extended_gpio_write(gpio, inverted);
 }
 
 void hkc_autooff_setter_task(TimerHandle_t xTimer);
@@ -5492,6 +5479,13 @@ void printf_header() {
 #endif  // HAA_DEBUG
 }
 
+void reset_uart() {
+    gpio_disable(1);
+    iomux_set_pullup_flags(5, 0);
+    iomux_set_function(5, IOMUX_GPIO1_FUNC_UART0_TXD);
+    uart_set_baud(0, 115200);
+}
+
 void normal_mode_init() {
     char* txt_config = NULL;
     sysparam_get_string(HAA_JSON_SYSPARAM, &txt_config);
@@ -5504,7 +5498,7 @@ void normal_mode_init() {
     const uint8_t total_accessories = cJSON_GetArraySize(json_accessories);
     
     if (total_accessories == 0) {
-        uart_set_baud(0, 115200);
+        reset_uart();
         printf_header();
         INFO("JSON:\n %s\n", txt_config ? txt_config : "none");
         ERROR("Invalid JSON\n");
@@ -5782,7 +5776,6 @@ void normal_mode_init() {
                         action_binary_output->gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuedouble;
                         if (!get_used_gpio(action_binary_output->gpio)) {
                             change_uart_gpio(action_binary_output->gpio);
-                            extended_gpio_enable(action_binary_output->gpio, GPIO_OUTPUT);
                             
                             if (action_binary_output->gpio < 17) {
                                 bool initial_value = false;
@@ -5790,7 +5783,9 @@ void normal_mode_init() {
                                     initial_value = (bool) cJSON_GetObjectItemCaseSensitive(json_relay, INITIAL_VALUE)->valuedouble;
                                 }
                                 
-                                extended_gpio_write(action_binary_output->gpio, initial_value);
+                                gpio_write(action_binary_output->gpio, initial_value);
+                                gpio_enable(action_binary_output->gpio, GPIO_OUTPUT);
+                                gpio_write(action_binary_output->gpio, initial_value);
                                 set_used_gpio(action_binary_output->gpio);
                             }
                             
@@ -6283,17 +6278,20 @@ void normal_mode_init() {
                 
                 switch (uart_config) {
                     case 1:
+                        gpio_disable(2);
                         gpio_set_iomux_function(2, IOMUX_GPIO2_FUNC_UART1_TXD);
                         set_used_gpio(2);
                         break;
                         
                     case 2:
+                        gpio_disable(15);
                         sdk_system_uart_swap();
                         set_used_gpio(15);
                         uart_config = 0;
                         break;
                         
                     default:    // case 0:
+                        reset_uart();
                         set_used_gpio(1);
                         break;
                 }
@@ -6365,9 +6363,11 @@ void normal_mode_init() {
         log_output_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT)->valuedouble;
         
         if ((log_output_type == 1 || log_output_type == 4) && !used_uart[0]) {
-            uart_set_baud(0, 115200);
+            reset_uart();
             set_used_gpio(1);
         } else if ((log_output_type == 2 || log_output_type == 5) && !used_uart[1]) {
+            gpio_disable(2);
+            gpio_set_iomux_function(2, IOMUX_GPIO2_FUNC_UART1_TXD);
             uart_set_baud(1, 115200);
             set_used_gpio(2);
         }
@@ -9221,8 +9221,6 @@ void normal_mode_init() {
     
     sysparam_set_int8(TOTAL_ACC_SYSPARAM, accessory_numerator);
     
-    config_unused_gpios();
-    
     printf("\n");
     
     // --- HOMEKIT SET CONFIG
@@ -9337,8 +9335,6 @@ void normal_mode_init() {
 void ir_capture_task(void* args) {
     const int ir_capture_gpio = ((int) args) - 100;
     INFO("\nIR Capture GPIO: %i\n", ir_capture_gpio);
-    set_used_gpio(ir_capture_gpio);
-    config_unused_gpios();
     gpio_enable(ir_capture_gpio, GPIO_INPUT);
     
     bool read, last = true;
@@ -9389,6 +9385,18 @@ void ir_capture_task(void* args) {
 }
 
 void user_init(void) {
+    gpio_enable(15, GPIO_INPUT);
+    gpio_enable(16, GPIO_INPUT);
+    gpio_enable(3, GPIO_INPUT);
+    gpio_enable(2, GPIO_INPUT);
+    gpio_enable(1, GPIO_INPUT);
+    gpio_enable(0, GPIO_INPUT);
+    gpio_enable(4, GPIO_INPUT);
+    gpio_enable(5, GPIO_INPUT);
+    gpio_enable(12, GPIO_INPUT);
+    gpio_enable(13, GPIO_INPUT);
+    gpio_enable(14, GPIO_INPUT);
+    
     sdk_wifi_station_set_auto_connect(false);
     sdk_wifi_set_opmode(STATION_MODE);
     sdk_wifi_station_disconnect();
@@ -9426,8 +9434,7 @@ void user_init(void) {
     //sysparam_set_string("ota_repo", "1");             // Simulates Installation with OTA. Only for tests. Keep comment for releases
     
     void enter_setup(const int param) {
-        uart_set_baud(0, 115200);
-        config_unused_gpios();
+        reset_uart();
         printf_header();
         INFO("SETUP MODE");
         wifi_config_init("HAA", NULL, NULL, main_config.name_value, param);
@@ -9437,7 +9444,7 @@ void user_init(void) {
     if (haa_setup > 99) {
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
         
-        uart_set_baud(0, 115200);
+        reset_uart();
         printf_header();
         INFO("IR CAPTURE MODE\n");
         const int ir_capture_gpio = haa_setup;
