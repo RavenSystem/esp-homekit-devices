@@ -5208,20 +5208,19 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             break;
                             
                         case ACC_TYPE_SECURITY_SYSTEM:
-                            if (action_acc_manager->value >= 4.f &&
-                                action_acc_manager->value <= 7.f &&
-                                SEC_SYSTEM_CH_TARGET_STATE->value.int_value != SEC_SYSTEM_OFF) {
+                            if (action_acc_manager->value == 4.f && SEC_SYSTEM_CH_TARGET_STATE->value.int_value != SEC_SYSTEM_OFF) {
                                 SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = 4;
-                                
                                 do_actions(ch_group, 4);
-                                
-                                if (SEC_SYSTEM_CH_TARGET_STATE->value.int_value == (uint8_t) action_acc_manager->value - 5) {
-                                    do_actions(ch_group, (uint8_t) action_acc_manager->value);
-                                }
-                                
                                 homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
+                                
+                            } else if (SEC_SYSTEM_CH_TARGET_STATE->value.int_value == (uint8_t) action_acc_manager->value - 5) {
+                                SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = 4;
+                                do_actions(ch_group, (uint8_t) action_acc_manager->value);
+                                homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
+                                
                             } else if (action_acc_manager->value >= 10.f) {
                                 hkc_sec_system_status(SEC_SYSTEM_CH_TARGET_STATE, HOMEKIT_UINT8((uint8_t) action_acc_manager->value - 10));
+                                
                             } else if (action_acc_manager->value <= 3.f) {
                                 hkc_sec_system(SEC_SYSTEM_CH_TARGET_STATE, HOMEKIT_UINT8(action_acc_manager->value));
                             }
