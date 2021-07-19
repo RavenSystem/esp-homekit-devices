@@ -923,7 +923,7 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
             led_blink(1);
             INFO("<%i> Setter ON %i", ch_group->accessory, value.bool_value);
             
-            ch->value = value;
+            ch->value.bool_value = value.bool_value;
             
             do_actions(ch_group, (uint8_t) ch->value.bool_value);
             
@@ -959,7 +959,7 @@ void hkc_on_status_setter(homekit_characteristic_t* ch0, const homekit_value_t v
         led_blink(1);
         ch_group_t* ch_group = ch_group_find(ch0);
         INFO("<%i> Setter Status ON %i", ch_group->accessory, value.bool_value);
-        ch0->value = value;
+        ch0->value.bool_value = value.bool_value;
         
         homekit_characteristic_notify_safe(ch0);
     }
@@ -986,9 +986,9 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
             led_blink(1);
             INFO("<%i> Setter LOCK %i", ch_group->accessory, value.int_value);
             
-            ch->value = value;
+            ch->value.int_value = value.int_value;
             
-            ch_group->ch0->value = value;
+            ch_group->ch0->value.int_value = value.int_value;
             do_actions(ch_group, (uint8_t) ch->value.int_value);
             
             if (ch->value.int_value == 0 && ch_group->num[0] > 0) {
@@ -1014,16 +1014,11 @@ void hkc_lock_status_setter(homekit_characteristic_t* ch, const homekit_value_t 
         
         INFO("<%i> Setter Status LOCK %i", ch_group->accessory, value.int_value);
         
-        ch->value = value;
+        ch->value.int_value = value.int_value;
         
-        if (ch == ch_group->ch1) {
-            ch_group->ch0->value = value;
-            homekit_characteristic_notify_safe(ch_group->ch0);
-        } else {
-            ch_group->ch2->value = value;
-            homekit_characteristic_notify_safe(ch_group->ch2);
-        }
+        ch_group->ch0->value.int_value = value.int_value;
 
+        homekit_characteristic_notify_safe(ch_group->ch0);
         homekit_characteristic_notify_safe(ch);
     }
 }
@@ -1343,8 +1338,8 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
             led_blink(1);
             INFO("<%i> Setter VALVE", ch_group->accessory);
             
-            ch->value = value;
-            ch_group->ch1->value = value;
+            ch->value.int_value = value.int_value;
+            ch_group->ch1->value.int_value = value.int_value;
             
             do_actions(ch_group, (uint8_t) ch->value.int_value);
             
@@ -1381,9 +1376,9 @@ void hkc_valve_status_setter(homekit_characteristic_t* ch, const homekit_value_t
     if (ch->value.int_value != value.int_value) {
         led_blink(1);
         
-        ch->value = value;
+        ch->value.int_value = value.int_value;
         ch_group_t* ch_group = ch_group_find(ch);
-        ch_group->ch1->value = value;
+        ch_group->ch1->value.int_value = value.int_value;
         
         INFO("<%i> Setter Status VALVE", ch_group->accessory);
         
@@ -1896,13 +1891,13 @@ void th_input_temp(const uint16_t gpio, void* args, const uint8_t type) {
             
             if (type == THERMOSTAT_TEMP_UP) {
                 set_h_temp += 0.5;
-                if (set_h_temp > TH_MAX_TEMP) {
-                    set_h_temp = TH_MAX_TEMP;
+                if (set_h_temp > TH_HEATER_MAX_TEMP) {
+                    set_h_temp = TH_HEATER_MAX_TEMP;
                 }
             } else {    // type == THERMOSTAT_TEMP_DOWN
                 set_h_temp -= 0.5;
-                if (set_h_temp < TH_MIN_TEMP) {
-                    set_h_temp = TH_MIN_TEMP;
+                if (set_h_temp < TH_HEATER_MIN_TEMP) {
+                    set_h_temp = TH_HEATER_MIN_TEMP;
                 }
             }
             
@@ -1916,13 +1911,13 @@ void th_input_temp(const uint16_t gpio, void* args, const uint8_t type) {
             
             if (type == THERMOSTAT_TEMP_UP) {
                 set_c_temp += 0.5;
-                if (set_c_temp > TH_MAX_TEMP) {
-                    set_c_temp = TH_MAX_TEMP;
+                if (set_c_temp > TH_COOLER_MAX_TEMP) {
+                    set_c_temp = TH_COOLER_MAX_TEMP;
                 }
             } else {    // type == THERMOSTAT_TEMP_DOWN
                 set_c_temp -= 0.5;
-                if (set_c_temp < TH_MIN_TEMP) {
-                    set_c_temp = TH_MIN_TEMP;
+                if (set_c_temp < TH_COOLER_MIN_TEMP) {
+                    set_c_temp = TH_COOLER_MIN_TEMP;
                 }
             }
             
@@ -3352,7 +3347,7 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
             led_blink(1);
             INFO("<%i> Setter GD %i", ch_group->accessory, value.int_value);
             
-            ch1->value = value;
+            ch1->value.int_value = value.int_value;
 
             do_actions(ch_group, (uint8_t) GD_CURRENT_DOOR_STATE_INT);
    
@@ -3528,7 +3523,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
         led_blink(1);
         INFO("<%i> Setter WC: Current: %i, Target: %i", ch_group->accessory, WINDOW_COVER_CH_CURRENT_POSITION->value.int_value, value.int_value);
         
-        ch1->value = value;
+        ch1->value.int_value = value.int_value;
 
         normalize_position(ch_group);
         
@@ -3674,18 +3669,18 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
 void hkc_fan_setter(homekit_characteristic_t* ch0, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch0);
     if (ch_group->main_enabled) {
-        if (ch0->value.bool_value != value.bool_value) {
+        if (ch0->value.int_value != value.int_value) {
             led_blink(1);
-            INFO("<%i> Setter FAN %i", ch_group->accessory, value.bool_value);
+            INFO("<%i> Setter FAN %i", ch_group->accessory, value.int_value);
             
-            ch0->value = value;
+            ch0->value.int_value = value.int_value;
             
             do_actions(ch_group, (uint8_t) value.int_value);
             
-            if (value.bool_value) {
+            if (value.int_value) {
                 do_wildcard_actions(ch_group, 0, ch_group->ch1->value.float_value);
                 
-                if (ch0->value.bool_value && ch_group->num[0] > 0) {
+                if (ch0->value.int_value && ch_group->num[0] > 0) {
                     autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                     autooff_setter_params->ch = ch0;
                     autooff_setter_params->type = TYPE_FAN;
@@ -3711,7 +3706,7 @@ void hkc_fan_speed_setter(homekit_characteristic_t* ch1, const homekit_value_t v
             led_blink(1);
             INFO("<%i> Setter Speed FAN %g", ch_group->accessory, value.float_value);
             
-            ch1->value = value;
+            ch1->value.float_value = value.float_value;
             
             if (ch_group->ch0->value.bool_value) {
                 do_wildcard_actions(ch_group, 0, value.float_value);
@@ -3725,13 +3720,13 @@ void hkc_fan_speed_setter(homekit_characteristic_t* ch1, const homekit_value_t v
 }
 
 void hkc_fan_status_setter(homekit_characteristic_t* ch0, const homekit_value_t value) {
-    if (ch0->value.bool_value != value.bool_value) {
+    if (ch0->value.int_value != value.int_value) {
         led_blink(1);
         ch_group_t* ch_group = ch_group_find(ch0);
         
-        INFO("<%i> Setter Status FAN %i", ch_group->accessory, value.bool_value);
+        INFO("<%i> Setter Status FAN %i", ch_group->accessory, value.int_value);
         
-        ch0->value = value;
+        ch0->value.int_value = value.int_value;
         
         homekit_characteristic_notify_safe(ch0);
         
@@ -3789,6 +3784,46 @@ void light_sensor_timer_worker(TimerHandle_t xTimer) {
     }
 }
 
+// --- SECURITY SYSTEM
+void hkc_sec_system(homekit_characteristic_t* ch, const homekit_value_t value) {
+    ch_group_t* ch_group = ch_group_find(ch);
+    if (ch_group->main_enabled) {
+        if (ch->value.int_value != value.int_value) {
+            led_blink(1);
+            INFO("<%i> Setter SEC SYSTEM %i", ch_group->accessory, value.int_value);
+            
+            ch->value.int_value = value.int_value;
+            SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = value.int_value;
+            
+            do_actions(ch_group, value.int_value);
+            
+            setup_mode_toggle_upcount();
+            save_states_callback();
+            
+            homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
+        }
+    }
+    
+    homekit_characteristic_notify_safe(ch);
+}
+
+void hkc_sec_system_status(homekit_characteristic_t* ch, const homekit_value_t value) {
+    ch_group_t* ch_group = ch_group_find(ch);
+    if (ch->value.int_value != value.int_value) {
+        led_blink(1);
+        INFO("<%i> Setter Status SEC SYSTEM %i", ch_group->accessory, value.int_value);
+        
+        ch->value.int_value = value.int_value;
+        SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = value.int_value;
+        
+        save_states_callback();
+        
+        homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
+    }
+    
+    homekit_characteristic_notify_safe(ch);
+}
+
 // --- TV
 void hkc_tv_active(homekit_characteristic_t* ch0, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch0);
@@ -3797,7 +3832,7 @@ void hkc_tv_active(homekit_characteristic_t* ch0, const homekit_value_t value) {
             led_blink(1);
             INFO("<%i> Setter TV ON %i", ch_group->accessory, value.int_value);
             
-            ch0->value = value;
+            ch0->value.int_value = value.int_value;
             
             do_actions(ch_group, value.int_value);
             
@@ -3816,7 +3851,7 @@ void hkc_tv_status_active(homekit_characteristic_t* ch0, const homekit_value_t v
         
         INFO("<%i> Setter Status TV ON %i", ch_group->accessory, value.int_value);
         
-        ch0->value = value;
+        ch0->value.int_value = value.int_value;
         
         homekit_characteristic_notify_safe(ch0);
         
@@ -3831,7 +3866,7 @@ void hkc_tv_active_identifier(homekit_characteristic_t* ch, const homekit_value_
             led_blink(1);
             INFO("<%i> Setter TV Input %i", ch_group->accessory, value.int_value);
             
-            ch->value = value;
+            ch->value.int_value = value.int_value;
 
             do_actions(ch_group, (MAX_ACTIONS - 1) + value.int_value);
         }
@@ -3846,7 +3881,7 @@ void hkc_tv_key(homekit_characteristic_t* ch, const homekit_value_t value) {
         led_blink(1);
         INFO("<%i> Setter TV Key %i", ch_group->accessory, value.int_value + 2);
         
-        ch->value = value;
+        ch->value.int_value = value.int_value;
         
         do_actions(ch_group, value.int_value + 2);
     }
@@ -3860,7 +3895,7 @@ void hkc_tv_power_mode(homekit_characteristic_t* ch, const homekit_value_t value
         led_blink(1);
         INFO("<%i> Setter TV Settings %i", ch_group->accessory, value.int_value + 30);
         
-        ch->value = value;
+        ch->value.int_value = value.int_value;
         
         do_actions(ch_group, value.int_value + 30);
     }
@@ -3874,7 +3909,7 @@ void hkc_tv_mute(homekit_characteristic_t* ch, const homekit_value_t value) {
         led_blink(1);
         INFO("<%i> Setter TV Mute %i", ch_group->accessory, value.int_value + 20);
         
-        ch->value = value;
+        ch->value.int_value = value.int_value;
         
         do_actions(ch_group, value.int_value + 20);
     }
@@ -3888,7 +3923,7 @@ void hkc_tv_volume(homekit_characteristic_t* ch, const homekit_value_t value) {
         led_blink(1);
         INFO("<%i> Setter TV Volume %i", ch_group->accessory, value.int_value + 22);
         
-        ch->value = value;
+        ch->value.int_value = value.int_value;
         
         do_actions(ch_group, value.int_value + 22);
     }
@@ -5169,6 +5204,26 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 hkc_fan_setter(ch_group->ch0, HOMEKIT_BOOL(true));
                             } else {
                                 hkc_fan_speed_setter(ch_group->ch1, HOMEKIT_FLOAT(action_acc_manager->value));
+                            }
+                            break;
+                            
+                        case ACC_TYPE_SECURITY_SYSTEM:
+                            if (action_acc_manager->value >= 4.f &&
+                                action_acc_manager->value <= 7.f &&
+                                SEC_SYSTEM_CH_TARGET_STATE->value.int_value != SEC_SYSTEM_OFF) {
+                                SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = 4;
+                                
+                                do_actions(ch_group, 4);
+                                
+                                if (SEC_SYSTEM_CH_TARGET_STATE->value.int_value == (uint8_t) action_acc_manager->value - 5) {
+                                    do_actions(ch_group, (uint8_t) action_acc_manager->value);
+                                }
+                                
+                                homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
+                            } else if (action_acc_manager->value >= 10.f) {
+                                hkc_sec_system_status(SEC_SYSTEM_CH_TARGET_STATE, HOMEKIT_UINT8((uint8_t) action_acc_manager->value - 10));
+                            } else {
+                                hkc_sec_system(SEC_SYSTEM_CH_TARGET_STATE, HOMEKIT_UINT8(action_acc_manager->value));
                             }
                             break;
                             
@@ -7518,25 +7573,13 @@ void normal_mode_init() {
         if (TH_TYPE == THERMOSTAT_TYPE_HEATER ||
             TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
             ch_group->ch5 = NEW_HOMEKIT_CHARACTERISTIC(HEATING_THRESHOLD_TEMPERATURE, default_target_temp -1, .min_value=(float[]) {min_temp}, .max_value=(float[]) {max_temp}, .setter_ex=update_th);
-            
-            const float initial_h_target_temp = set_initial_state(ch_group->accessory, 5, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch5, CH_TYPE_FLOAT, default_target_temp -1);
-            if (initial_h_target_temp > TH_MAX_TEMP || initial_h_target_temp < min_temp) {
-                ch_group->ch5->value.float_value = default_target_temp - 1;
-            } else {
-                ch_group->ch5->value.float_value = initial_h_target_temp;
-            }
+            ch_group->ch5->value.float_value = set_initial_state(ch_group->accessory, 5, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch5, CH_TYPE_FLOAT, default_target_temp - 1);
         }
         
         if (TH_TYPE == THERMOSTAT_TYPE_COOLER ||
             TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
             ch_group->ch6 = NEW_HOMEKIT_CHARACTERISTIC(COOLING_THRESHOLD_TEMPERATURE, default_target_temp +1, .min_value=(float[]) {min_temp}, .max_value=(float[]) {max_temp}, .setter_ex=update_th);
-            
-            const float initial_c_target_temp = set_initial_state(ch_group->accessory, 6, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch6, CH_TYPE_FLOAT, default_target_temp +1);
-            if (initial_c_target_temp > TH_MAX_TEMP || initial_c_target_temp < max_temp) {
-                ch_group->ch6->value.float_value = default_target_temp + 1;
-            } else {
-                ch_group->ch6->value.float_value = initial_c_target_temp;
-            }
+            ch_group->ch6->value.float_value = set_initial_state(ch_group->accessory, 6, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch6, CH_TYPE_FLOAT, default_target_temp + 1);
         }
         
         if (ch_group->homekit_enabled) {
@@ -8649,6 +8692,58 @@ void normal_mode_init() {
         esp_timer_start(esp_timer_create(poll_period * 1000, true, (void*) ch_group, light_sensor_timer_worker));
     }
     
+    // *** NEW SECURITY SYSTEM
+    void new_sec_system(const uint8_t accessory, uint8_t service, const uint8_t total_services, cJSON* json_context) {
+        ch_group_t* ch_group = new_ch_group();
+        ch_group->acc_type = ACC_TYPE_SECURITY_SYSTEM;
+        ch_group->accessory = accessory_numerator;
+        uint8_t homekit_enabled = acc_homekit_enabled(json_context);
+        ch_group->homekit_enabled = homekit_enabled;
+        
+        if (service == 0) {
+            new_accessory(accessory, total_services, ch_group->homekit_enabled, json_context);
+        }
+        
+        service++;
+        
+        SEC_SYSTEM_CH_CURRENT_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_CURRENT_STATE, SEC_SYSTEM_OFF);
+        SEC_SYSTEM_CH_TARGET_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_TARGET_STATE, SEC_SYSTEM_OFF, .setter_ex=hkc_sec_system);
+  
+        register_actions(ch_group, json_context, 0);
+        set_accessory_ir_protocol(ch_group, json_context);
+        register_wildcard_actions(ch_group, json_context);
+        
+        if (ch_group->homekit_enabled) {
+            accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
+            accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            accessories[accessory]->services[service]->primary = !(service - 1);
+            accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
+            
+            if (homekit_enabled == 2) {
+                accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_CUSTOM_HAA_HIDDEN_SECURITY_SYSTEM;
+            } else {
+                accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_SECURITY_SYSTEM;
+            }
+            
+            accessories[accessory]->services[service]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[service]->characteristics[0] = SEC_SYSTEM_CH_CURRENT_STATE;
+            accessories[accessory]->services[service]->characteristics[1] = SEC_SYSTEM_CH_TARGET_STATE;
+        }
+        
+        SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = set_initial_state(ch_group->accessory, 1, json_context, SEC_SYSTEM_CH_TARGET_STATE, CH_TYPE_INT8, SEC_SYSTEM_OFF);
+        
+        const bool exec_actions_on_boot = get_exec_actions_on_boot(json_context);
+        
+        if (exec_actions_on_boot) {
+            if (SEC_SYSTEM_CH_CURRENT_STATE->value.int_value == SEC_SYSTEM_OFF) {
+                SEC_SYSTEM_CH_TARGET_STATE->value.int_value = SEC_SYSTEM_AT_HOME;
+            }
+            hkc_sec_system(SEC_SYSTEM_CH_TARGET_STATE, SEC_SYSTEM_CH_CURRENT_STATE->value);
+        } else {
+            hkc_sec_system_status(SEC_SYSTEM_CH_TARGET_STATE, SEC_SYSTEM_CH_CURRENT_STATE->value);
+        }
+    }
+    
     // *** NEW TV
     void new_tv(const uint8_t accessory, uint8_t service, const uint8_t total_services, cJSON* json_context) {
         cJSON* json_inputs = cJSON_GetObjectItemCaseSensitive(json_context, TV_INPUTS_ARRAY);
@@ -9144,8 +9239,12 @@ void normal_mode_init() {
             new_window_cover(acc_count, serv_count, total_services, json_accessory);
 
         } else if (acc_type == ACC_TYPE_LIGHT_SENSOR) {
-            INFO("LIGHTSENSOR");
+            INFO("LIGHT SENSOR");
             new_light_sensor(acc_count, serv_count, total_services, json_accessory);
+            
+        } else if (acc_type == ACC_TYPE_SECURITY_SYSTEM) {
+            INFO("SEC SYSTEM");
+            new_sec_system(acc_count, serv_count, total_services, json_accessory);
             
         } else if (acc_type == ACC_TYPE_TV) {
             INFO("TV");
@@ -9284,6 +9383,10 @@ void normal_mode_init() {
                 
             case ACC_TYPE_WINDOW_COVER:
                 config.category = homekit_accessory_category_window_covering;
+                break;
+                
+            case ACC_TYPE_SECURITY_SYSTEM:
+                config.category = homekit_accessory_category_security_system;
                 break;
                 
             case ACC_TYPE_TV:

@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "6.4.0"
+#define FIRMWARE_VERSION                    "6.5.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -191,10 +191,12 @@
 #define THERMOSTAT_TYPE_COOLER              (2)
 #define THERMOSTAT_TYPE_HEATERCOOLER        (3)
 #define THERMOSTAT_MIN_TEMP                 "m"
-#define TH_MIN_TEMP                         *ch_group->ch5->min_value
+#define TH_HEATER_MIN_TEMP                  *ch_group->ch5->min_value
+#define TH_COOLER_MIN_TEMP                  *ch_group->ch6->min_value
 #define THERMOSTAT_DEFAULT_MIN_TEMP         (10)
 #define THERMOSTAT_MAX_TEMP                 "x"
-#define TH_MAX_TEMP                         *ch_group->ch5->max_value
+#define TH_HEATER_MAX_TEMP                  *ch_group->ch5->max_value
+#define TH_COOLER_MAX_TEMP                  *ch_group->ch5->max_value
 #define THERMOSTAT_DEFAULT_MAX_TEMP         (38)
 #define THERMOSTAT_DEADBAND                 "d"
 #define TH_DEADBAND                         ch_group->num[6]
@@ -451,6 +453,12 @@
 #define LIGHT_SENSOR_POW_DEFAULT            (1)
 #define LIGHT_SENSOR_POW                    ch_group->num[4]
 
+#define SEC_SYSTEM_CH_CURRENT_STATE         ch_group->ch0
+#define SEC_SYSTEM_CH_TARGET_STATE          ch_group->ch1
+#define SEC_SYSTEM_AT_HOME                  (0)
+#define SEC_SYSTEM_OFF                      (3)
+#define SEC_SYSTEM_ALARM                    (4)
+
 #define MAX_ACTIONS                         (51)    // from 0 to (MAX_ACTIONS - 1)
 #define MAX_WILDCARD_ACTIONS                (4)     // from 0 to (MAX_WILDCARD_ACTIONS - 1)
 #define WILDCARD_ACTIONS_ARRAY_HEADER       "y"
@@ -540,6 +548,7 @@
 #define ACC_TYPE_GARAGE_DOOR                (40)
 #define ACC_TYPE_WINDOW_COVER               (45)
 #define ACC_TYPE_LIGHT_SENSOR               (50)
+#define ACC_TYPE_SECURITY_SYSTEM            (55)
 #define ACC_TYPE_TV                         (60)
 #define ACC_TYPE_FAN                        (65)
 #define ACC_TYPE_POWER_MONITOR              (75)
