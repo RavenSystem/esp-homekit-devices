@@ -5222,7 +5222,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
                             } else if (action_acc_manager->value >= 10.f) {
                                 hkc_sec_system_status(SEC_SYSTEM_CH_TARGET_STATE, HOMEKIT_UINT8((uint8_t) action_acc_manager->value - 10));
-                            } else {
+                            } else if (action_acc_manager->value <= 3.f) {
                                 hkc_sec_system(SEC_SYSTEM_CH_TARGET_STATE, HOMEKIT_UINT8(action_acc_manager->value));
                             }
                             break;
