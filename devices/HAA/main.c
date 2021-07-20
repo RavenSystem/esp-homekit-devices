@@ -9196,7 +9196,8 @@ void normal_mode_init() {
         INFO("\n* SERVICE %i", accessory_numerator);
         printf("Type %i: ", acc_type);
 
-        if (acc_type == ACC_TYPE_BUTTON || acc_type == ACC_TYPE_DOORBELL) {
+        if (acc_type == ACC_TYPE_BUTTON ||
+            acc_type == ACC_TYPE_DOORBELL) {
             INFO("BUTON EVENT / DOORBELL");
             new_button_event(acc_count, serv_count, total_services, json_accessory, acc_type);
             
@@ -9204,7 +9205,8 @@ void normal_mode_init() {
             INFO("LOCK");
             new_lock(acc_count, serv_count, total_services, json_accessory);
             
-        } else if (acc_type >= ACC_TYPE_CONTACT_SENSOR && acc_type <= ACC_TYPE_MOTION_SENSOR) {
+        } else if (acc_type >= ACC_TYPE_CONTACT_SENSOR &&
+                   acc_type <= ACC_TYPE_MOTION_SENSOR) {
             INFO("BINARY SENSOR");
             new_binary_sensor(acc_count, serv_count, total_services, json_accessory, acc_type);
             
@@ -9250,7 +9252,7 @@ void normal_mode_init() {
             INFO("LIGHT SENSOR");
             new_light_sensor(acc_count, serv_count, total_services, json_accessory);
             
-        } else if (acc_type >= ACC_TYPE_SECURITY_SYSTEM ||
+        } else if (acc_type >= ACC_TYPE_SECURITY_SYSTEM &&
                    acc_type <= ACC_TYPE_SECURITY_SYSTEM_NIGHT) {
             INFO("SEC SYSTEM");
             new_sec_system(acc_count, serv_count, total_services, json_accessory, acc_type);
