@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "6.5.2"
+#define FIRMWARE_VERSION                    "6.6.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -549,6 +549,7 @@
 #define ACC_TYPE_WINDOW_COVER               (45)
 #define ACC_TYPE_LIGHT_SENSOR               (50)
 #define ACC_TYPE_SECURITY_SYSTEM            (55)
+#define ACC_TYPE_SECURITY_SYSTEM_SIMPLE     (56)
 #define ACC_TYPE_TV                         (60)
 #define ACC_TYPE_FAN                        (65)
 #define ACC_TYPE_POWER_MONITOR              (75)

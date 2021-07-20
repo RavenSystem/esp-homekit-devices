@@ -3743,7 +3743,7 @@ void light_sensor_task(void* args) {
     if (LIGHT_SENSOR_TYPE < 2) {
         // https://www.allaboutcircuits.com/projects/design-a-luxmeter-using-a-light-dependent-resistor/
         const float adc_raw_read = sdk_system_adc_read();
-
+        
         float ldr_resistor;
         if (LIGHT_SENSOR_TYPE == 0) {
             ldr_resistor = LIGHT_SENSOR_RESISTOR * ((1023.1 - adc_raw_read) / adc_raw_read);
@@ -3799,12 +3799,11 @@ void hkc_sec_system(homekit_characteristic_t* ch, const homekit_value_t value) {
             
             setup_mode_toggle_upcount();
             save_states_callback();
-            
-            homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
         }
     }
     
     homekit_characteristic_notify_safe(ch);
+    homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
 }
 
 void hkc_sec_system_status(homekit_characteristic_t* ch, const homekit_value_t value) {
@@ -3817,11 +3816,10 @@ void hkc_sec_system_status(homekit_characteristic_t* ch, const homekit_value_t v
         SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = value.int_value;
         
         save_states_callback();
-        
-        homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
     }
     
     homekit_characteristic_notify_safe(ch);
+    homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
 }
 
 // --- TV
@@ -8692,7 +8690,7 @@ void normal_mode_init() {
     }
     
     // *** NEW SECURITY SYSTEM
-    void new_sec_system(const uint8_t accessory, uint8_t service, const uint8_t total_services, cJSON* json_context) {
+    void new_sec_system(const uint8_t accessory, uint8_t service, const uint8_t total_services, cJSON* json_context, const uint8_t acc_type) {
         ch_group_t* ch_group = new_ch_group();
         ch_group->acc_type = ACC_TYPE_SECURITY_SYSTEM;
         ch_group->accessory = accessory_numerator;
@@ -8705,8 +8703,13 @@ void normal_mode_init() {
         
         service++;
         
-        SEC_SYSTEM_CH_CURRENT_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_CURRENT_STATE, SEC_SYSTEM_OFF);
-        SEC_SYSTEM_CH_TARGET_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_TARGET_STATE, SEC_SYSTEM_OFF, .setter_ex=hkc_sec_system);
+        if (acc_type == ACC_TYPE_SECURITY_SYSTEM_SIMPLE) {
+            SEC_SYSTEM_CH_CURRENT_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_CURRENT_STATE, SEC_SYSTEM_OFF, .min_value=(float[]) {1}, .valid_values={.count=2, .values=(uint8_t[]) {1, 3}});
+            SEC_SYSTEM_CH_TARGET_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_TARGET_STATE, SEC_SYSTEM_OFF, .min_value=(float[]) {1}, .valid_values={.count=3, .values=(uint8_t[]) {1, 3, 4}}, .setter_ex=hkc_sec_system);
+        } else {
+            SEC_SYSTEM_CH_CURRENT_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_CURRENT_STATE, SEC_SYSTEM_OFF);
+            SEC_SYSTEM_CH_TARGET_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_TARGET_STATE, SEC_SYSTEM_OFF, .setter_ex=hkc_sec_system);
+        }
   
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
@@ -9241,9 +9244,10 @@ void normal_mode_init() {
             INFO("LIGHT SENSOR");
             new_light_sensor(acc_count, serv_count, total_services, json_accessory);
             
-        } else if (acc_type == ACC_TYPE_SECURITY_SYSTEM) {
+        } else if (acc_type == ACC_TYPE_SECURITY_SYSTEM ||
+                   acc_type == ACC_TYPE_SECURITY_SYSTEM_SIMPLE) {
             INFO("SEC SYSTEM");
-            new_sec_system(acc_count, serv_count, total_services, json_accessory);
+            new_sec_system(acc_count, serv_count, total_services, json_accessory, acc_type);
             
         } else if (acc_type == ACC_TYPE_TV) {
             INFO("TV");
@@ -9385,6 +9389,7 @@ void normal_mode_init() {
                 break;
                 
             case ACC_TYPE_SECURITY_SYSTEM:
+            case ACC_TYPE_SECURITY_SYSTEM_SIMPLE:
                 config.category = homekit_accessory_category_security_system;
                 break;
                 
