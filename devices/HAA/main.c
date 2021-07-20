@@ -8706,6 +8706,12 @@ void normal_mode_init() {
         if (acc_type == ACC_TYPE_SECURITY_SYSTEM_SIMPLE) {
             SEC_SYSTEM_CH_CURRENT_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_CURRENT_STATE, SEC_SYSTEM_OFF, .min_value=(float[]) {1}, .valid_values={.count=2, .values=(uint8_t[]) {1, 3}});
             SEC_SYSTEM_CH_TARGET_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_TARGET_STATE, SEC_SYSTEM_OFF, .min_value=(float[]) {1}, .valid_values={.count=3, .values=(uint8_t[]) {1, 3, 4}}, .setter_ex=hkc_sec_system);
+        } else if (acc_type == ACC_TYPE_SECURITY_SYSTEM_HOME) {
+            SEC_SYSTEM_CH_CURRENT_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_CURRENT_STATE, SEC_SYSTEM_OFF, .valid_values={.count=3, .values=(uint8_t[]) {0, 1, 3}});
+            SEC_SYSTEM_CH_TARGET_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_TARGET_STATE, SEC_SYSTEM_OFF, .valid_values={.count=4, .values=(uint8_t[]) {0, 1, 3, 4}}, .setter_ex=hkc_sec_system);
+        } else if (acc_type == ACC_TYPE_SECURITY_SYSTEM_NIGHT) {
+            SEC_SYSTEM_CH_CURRENT_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_CURRENT_STATE, SEC_SYSTEM_OFF, .min_value=(float[]) {1}, .valid_values={.count=3, .values=(uint8_t[]) {1, 2, 3}});
+            SEC_SYSTEM_CH_TARGET_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_TARGET_STATE, SEC_SYSTEM_OFF, .min_value=(float[]) {1}, .valid_values={.count=4, .values=(uint8_t[]) {1, 2, 3, 4}}, .setter_ex=hkc_sec_system);
         } else {
             SEC_SYSTEM_CH_CURRENT_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_CURRENT_STATE, SEC_SYSTEM_OFF);
             SEC_SYSTEM_CH_TARGET_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_TARGET_STATE, SEC_SYSTEM_OFF, .setter_ex=hkc_sec_system);
@@ -9244,8 +9250,8 @@ void normal_mode_init() {
             INFO("LIGHT SENSOR");
             new_light_sensor(acc_count, serv_count, total_services, json_accessory);
             
-        } else if (acc_type == ACC_TYPE_SECURITY_SYSTEM ||
-                   acc_type == ACC_TYPE_SECURITY_SYSTEM_SIMPLE) {
+        } else if (acc_type >= ACC_TYPE_SECURITY_SYSTEM ||
+                   acc_type <= ACC_TYPE_SECURITY_SYSTEM_NIGHT) {
             INFO("SEC SYSTEM");
             new_sec_system(acc_count, serv_count, total_services, json_accessory, acc_type);
             
@@ -9390,6 +9396,8 @@ void normal_mode_init() {
                 
             case ACC_TYPE_SECURITY_SYSTEM:
             case ACC_TYPE_SECURITY_SYSTEM_SIMPLE:
+            case ACC_TYPE_SECURITY_SYSTEM_HOME:
+            case ACC_TYPE_SECURITY_SYSTEM_NIGHT:
                 config.category = homekit_accessory_category_security_system;
                 break;
                 
