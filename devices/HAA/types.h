@@ -125,16 +125,13 @@ typedef struct _ch_group {
     uint8_t acc_type: 7;
     bool homekit_enabled: 1;
     
-    float num[11];
+    uint8_t chs: 4;
     
-    homekit_characteristic_t* ch0;
-    homekit_characteristic_t* ch1;
-    homekit_characteristic_t* ch2;
-    homekit_characteristic_t* ch3;
-    homekit_characteristic_t* ch4;
-    homekit_characteristic_t* ch5;
-    homekit_characteristic_t* ch6;
-
+    homekit_characteristic_t** ch;
+    
+    float* num;
+    float* last_wildcard_action;
+    
     TimerHandle_t timer;
     TimerHandle_t timer2;
     
@@ -149,8 +146,6 @@ typedef struct _ch_group {
     action_uart_t* action_uart;
     
     wildcard_action_t* wildcard_action;
-    
-    float last_wildcard_action[4];
     
     struct _ch_group* next;
 } ch_group_t;

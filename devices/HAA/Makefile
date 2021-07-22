@@ -40,7 +40,7 @@ EXTRA_CFLAGS += -O2 \
 	-ftree-partial-pre \
 	-ftree-loop-distribution \
 	-fipa-cp-clone \
-	-funswitch-loops \
+#	-funswitch-loops \
 #	-fpeel-loops \
 
 EXTRA_CFLAGS += -I../.. -DHOMEKIT_SHORT_APPLE_UUIDS

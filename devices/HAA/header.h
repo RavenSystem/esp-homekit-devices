@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "6.6.2"
+#define FIRMWARE_VERSION                    "6.7.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -186,17 +186,17 @@
 #define DOORBELL_LAST_STATE                 ch_group->num[0]
 
 #define THERMOSTAT_TYPE                     "w"
-#define TH_TYPE                             ch_group->num[5]
+#define TH_TYPE                             ch_group->num[9]
 #define THERMOSTAT_TYPE_HEATER              (1)
 #define THERMOSTAT_TYPE_COOLER              (2)
 #define THERMOSTAT_TYPE_HEATERCOOLER        (3)
 #define THERMOSTAT_MIN_TEMP                 "m"
-#define TH_HEATER_MIN_TEMP                  *ch_group->ch5->min_value
-#define TH_COOLER_MIN_TEMP                  *ch_group->ch6->min_value
+#define TH_HEATER_MIN_TEMP                  *ch_group->ch[5]->min_value
+#define TH_COOLER_MIN_TEMP                  *ch_group->ch[6]->min_value
 #define THERMOSTAT_DEFAULT_MIN_TEMP         (10)
 #define THERMOSTAT_MAX_TEMP                 "x"
-#define TH_HEATER_MAX_TEMP                  *ch_group->ch5->max_value
-#define TH_COOLER_MAX_TEMP                  *ch_group->ch5->max_value
+#define TH_HEATER_MAX_TEMP                  *ch_group->ch[5]->max_value
+#define TH_COOLER_MAX_TEMP                  *ch_group->ch[6]->max_value
 #define THERMOSTAT_DEFAULT_MAX_TEMP         (38)
 #define THERMOSTAT_DEADBAND                 "d"
 #define TH_DEADBAND                         ch_group->num[6]
@@ -212,8 +212,7 @@
 #define TH_IAIRZONING_GATE_CURRENT_STATE    ch_group->num[8]
 #define TH_IAIRZONING_GATE_CLOSE            (0)
 #define TH_IAIRZONING_GATE_OPEN             (1)
-#define THERMOSTAT_MODE_INT                 ch_group->ch3->value.int_value
-#define THERMOSTAT_CURRENT_ACTION           ch_group->last_wildcard_action[2]
+#define THERMOSTAT_CURRENT_ACTION           ch_group->num[11]
 #define THERMOSTAT_MODE_OFF                 (0)
 #define THERMOSTAT_MODE_IDLE                (1)
 #define THERMOSTAT_MODE_HEATER              (2)
@@ -237,8 +236,11 @@
 #define THERMOSTAT_ACTION_GATE_OPEN         (13)
 #define THERMOSTAT_TEMP_UP                  (0)
 #define THERMOSTAT_TEMP_DOWN                (1)
-#define TH_HEATER_TARGET_TEMP_FLOAT         ch_group->ch5->value.float_value
-#define TH_COOLER_TARGET_TEMP_FLOAT         ch_group->ch6->value.float_value
+#define TH_ACTIVE_INT                       ch_group->ch[2]->value.int_value
+#define TH_MODE_INT                         ch_group->ch[3]->value.int_value
+#define TH_TARGET_MODE_INT                  ch_group->ch[4]->value.int_value
+#define TH_HEATER_TARGET_TEMP_FLOAT         ch_group->ch[5]->value.float_value
+#define TH_COOLER_TARGET_TEMP_FLOAT         ch_group->ch[6]->value.float_value
 
 #define IAIRZONING_LAST_ACTION              iairzoning_group->num[0]
 #define IAIRZONING_MAIN_MODE                iairzoning_group->num[1]
@@ -257,13 +259,13 @@
 #define TH_SENSOR_TEMP_OFFSET               ch_group->num[3]
 #define HUMIDITY_OFFSET                     "k"
 #define TH_SENSOR_HUM_OFFSET                ch_group->num[4]
-#define SENSOR_TEMPERATURE_FLOAT            ch_group->ch0->value.float_value
-#define SENSOR_HUMIDITY_FLOAT               ch_group->ch1->value.float_value
-#define TH_SENSOR_ERROR_COUNT               ch_group->num[9]
+#define SENSOR_TEMPERATURE_FLOAT            ch_group->ch[0]->value.float_value
+#define SENSOR_HUMIDITY_FLOAT               ch_group->ch[1]->value.float_value
+#define TH_SENSOR_ERROR_COUNT               ch_group->num[5]
 #define TH_SENSOR_MAX_ALLOWED_ERRORS        (3)
 
 #define HUMIDIF_TYPE                        "w"
-#define HM_TYPE                             ch_group->num[5]
+#define HM_TYPE                             ch_group->num[9]
 #define HUMIDIF_TYPE_HUM                    (1)
 #define HUMIDIF_TYPE_DEHUM                  (2)
 #define HUMIDIF_TYPE_HUMDEHUM               (3)
@@ -273,13 +275,12 @@
 #define HM_DEADBAND_FORCE_IDLE              ch_group->num[7]
 #define HUMIDIF_DEADBAND_SOFT_ON            "ds"
 #define HM_DEADBAND_SOFT_ON                 ch_group->num[8]
-#define HUMIDIF_MODE_INT                    ch_group->ch3->value.int_value
-#define HUMIDIF_CURRENT_ACTION              ch_group->last_wildcard_action[2]
+#define HUMIDIF_CURRENT_ACTION              ch_group->num[10]
 #define HUMIDIF_MODE_OFF                    (0)
 #define HUMIDIF_MODE_IDLE                   (1)
 #define HUMIDIF_MODE_HUM                    (2)
 #define HUMIDIF_MODE_DEHUM                  (3)
-#define HUMIDIF_TARGET_MODE_HUMDEHUM        (0)
+#define HUMIDIF_TARGET_MODE_AUTO            (0)
 #define HUMIDIF_TARGET_MODE_HUM             (1)
 #define HUMIDIF_TARGET_MODE_DEHUM           (2)
 #define HUMIDIF_ACTION_TOTAL_OFF            (0)
@@ -295,8 +296,11 @@
 #define HUMIDIF_ACTION_DEHUM_SOFT_ON        (11)
 #define HUMIDIF_UP                          (0)
 #define HUMIDIF_DOWN                        (1)
-#define HM_HUM_TARGET_FLOAT                 ch_group->ch5->value.float_value
-#define HM_DEHUM_TARGET_FLOAT               ch_group->ch6->value.float_value
+#define HM_ACTIVE_INT                       ch_group->ch[2]->value.int_value
+#define HM_MODE_INT                         ch_group->ch[3]->value.int_value
+#define HM_TARGET_MODE_INT                  ch_group->ch[4]->value.int_value
+#define HM_HUM_TARGET_FLOAT                 ch_group->ch[5]->value.float_value
+#define HM_DEHUM_TARGET_FLOAT               ch_group->ch[6]->value.float_value
 
 #define LIGHTBULB_TYPE                      ch_group->num[5]
 #define LIGHTBULB_CHANNELS_SET              "n"
@@ -338,12 +342,12 @@
 #define myCMY                               lightbulb_group->cmy
 #define myRGB                               lightbulb_group->rgb
 
-#define GD_CURRENT_DOOR_STATE               ch_group->ch0
-#define GD_TARGET_DOOR_STATE                ch_group->ch1
-#define GD_OBSTRUCTION_DETECTED             ch_group->ch2
-#define GD_CURRENT_DOOR_STATE_INT           ch_group->ch0->value.int_value
-#define GD_TARGET_DOOR_STATE_INT            ch_group->ch1->value.int_value
-#define GD_OBSTRUCTION_DETECTED_BOOL        ch_group->ch2->value.bool_value
+#define GD_CURRENT_DOOR_STATE               ch_group->ch[0]
+#define GD_TARGET_DOOR_STATE                ch_group->ch[1]
+#define GD_OBSTRUCTION_DETECTED             ch_group->ch[2]
+#define GD_CURRENT_DOOR_STATE_INT           ch_group->ch[0]->value.int_value
+#define GD_TARGET_DOOR_STATE_INT            ch_group->ch[1]->value.int_value
+#define GD_OBSTRUCTION_DETECTED_BOOL        ch_group->ch[2]->value.bool_value
 #define GARAGE_DOOR_OPENED                  (0)
 #define GARAGE_DOOR_CLOSED                  (1)
 #define GARAGE_DOOR_OPENING                 (2)
@@ -395,10 +399,10 @@
 #define WINDOW_COVER_STOP_ENABLE            ch_group->num[7]
 #define WINDOW_COVER_STOP_ENABLE_DELAY_MS   (80)
 #define WINDOW_COVER_VIRTUAL_STOP           ch_group->num[8]
-#define WINDOW_COVER_CH_CURRENT_POSITION    ch_group->ch0
-#define WINDOW_COVER_CH_TARGET_POSITION     ch_group->ch1
-#define WINDOW_COVER_CH_STATE               ch_group->ch2
-#define WINDOW_COVER_CH_OBSTRUCTION         ch_group->ch3
+#define WINDOW_COVER_CH_CURRENT_POSITION    ch_group->ch[0]
+#define WINDOW_COVER_CH_TARGET_POSITION     ch_group->ch[1]
+#define WINDOW_COVER_CH_STATE               ch_group->ch[2]
+#define WINDOW_COVER_CH_OBSTRUCTION         ch_group->ch[3]
 
 #define TV_INPUTS_ARRAY                     "i"
 #define TV_INPUT_NAME                       "n"
@@ -453,8 +457,9 @@
 #define LIGHT_SENSOR_POW_DEFAULT            (1)
 #define LIGHT_SENSOR_POW                    ch_group->num[4]
 
-#define SEC_SYSTEM_CH_CURRENT_STATE         ch_group->ch0
-#define SEC_SYSTEM_CH_TARGET_STATE          ch_group->ch1
+#define SEC_SYSTEM_MODES_ARRAY_SET          "n"
+#define SEC_SYSTEM_CH_CURRENT_STATE         ch_group->ch[0]
+#define SEC_SYSTEM_CH_TARGET_STATE          ch_group->ch[1]
 #define SEC_SYSTEM_AT_HOME                  (0)
 #define SEC_SYSTEM_OFF                      (3)
 #define SEC_SYSTEM_ALARM                    (4)
@@ -549,9 +554,6 @@
 #define ACC_TYPE_WINDOW_COVER               (45)
 #define ACC_TYPE_LIGHT_SENSOR               (50)
 #define ACC_TYPE_SECURITY_SYSTEM            (55)
-#define ACC_TYPE_SECURITY_SYSTEM_SIMPLE     (56)
-#define ACC_TYPE_SECURITY_SYSTEM_HOME       (57)
-#define ACC_TYPE_SECURITY_SYSTEM_NIGHT      (58)
 #define ACC_TYPE_TV                         (60)
 #define ACC_TYPE_FAN                        (65)
 #define ACC_TYPE_POWER_MONITOR              (75)
