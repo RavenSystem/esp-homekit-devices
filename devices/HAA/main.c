@@ -413,14 +413,16 @@ ch_group_t* new_ch_group(const uint8_t chs, const uint8_t nums, const uint8_t la
     ch_group->child_enabled = true;
     
     if (chs > 0) {
+        size_t size = chs * sizeof(homekit_characteristic_t*);
         ch_group->chs = chs;
-        ch_group->ch = (homekit_characteristic_t**) malloc(chs * sizeof(homekit_characteristic_t*));
-        memset(ch_group->ch, 0, chs * sizeof(homekit_characteristic_t*));
+        ch_group->ch = (homekit_characteristic_t**) malloc(size);
+        memset(ch_group->ch, 0, size);
     }
     
     if (nums > 0) {
-        ch_group->num = (float*) malloc(nums * sizeof(float));
-        memset(ch_group->num, 0, nums * sizeof(float));
+        size_t size = nums * sizeof(float);
+        ch_group->num = (float*) malloc(size);
+        memset(ch_group->num, 0, size);
     }
     
     if (last_wildcard_actions > 0) {
@@ -953,7 +955,7 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
             
             if (ch_group->chs > 1) {
                 if (value.bool_value) {
-                    ch_group->ch[2]->value = ch_group->ch[1]->value;
+                    ch_group->ch[2]->value.int_value = ch_group->ch[1]->value.int_value;
                     esp_timer_start(ch_group->timer);
                 } else {
                     ch_group->ch[2]->value.int_value = 0;
@@ -980,15 +982,14 @@ void hkc_on_status_setter(homekit_characteristic_t* ch0, const homekit_value_t v
 }
 
 void on_timer_worker(TimerHandle_t xTimer) {
-    homekit_characteristic_t* ch = (homekit_characteristic_t*) pvTimerGetTimerID(xTimer);
-    ch_group_t* ch_group = ch_group_find(ch);
+    ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
     
     ch_group->ch[2]->value.int_value--;
     
     if (ch_group->ch[2]->value.int_value == 0) {
         esp_timer_stop(ch_group->timer);
         
-        hkc_on_setter(ch, HOMEKIT_BOOL(false));
+        hkc_on_setter(ch_group->ch[0], HOMEKIT_BOOL(false));
     }
 }
 
@@ -1402,15 +1403,14 @@ void hkc_valve_status_setter(homekit_characteristic_t* ch, const homekit_value_t
 }
 
 void valve_timer_worker(TimerHandle_t xTimer) {
-    homekit_characteristic_t* ch = (homekit_characteristic_t*) pvTimerGetTimerID(xTimer);
-    ch_group_t* ch_group = ch_group_find(ch);
+    ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
     
     ch_group->ch[3]->value.int_value--;
     
     if (ch_group->ch[3]->value.int_value == 0) {
         esp_timer_stop(ch_group->timer);
         
-        hkc_valve_setter(ch, HOMEKIT_UINT8(0));
+        hkc_valve_setter(ch_group->ch[0], HOMEKIT_UINT8(0));
     }
 }
 
@@ -3403,9 +3403,8 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
 }
 
 void garage_door_timer_worker(TimerHandle_t xTimer) {
-    homekit_characteristic_t* ch0 = (homekit_characteristic_t*) pvTimerGetTimerID(xTimer);
-    ch_group_t* ch_group = ch_group_find(ch0);
-
+    ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
+    
     void halt_timer() {
         esp_timer_stop(ch_group->timer);
         if (GARAGE_DOOR_TIME_MARGIN > 0) {
@@ -3413,7 +3412,7 @@ void garage_door_timer_worker(TimerHandle_t xTimer) {
         }
     }
     
-    if (ch0->value.int_value == GARAGE_DOOR_OPENING) {
+    if (GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_OPENING) {
         GARAGE_DOOR_CURRENT_TIME++;
 
         if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN && GARAGE_DOOR_HAS_F2 == 0) {
@@ -7046,7 +7045,7 @@ void normal_mode_init() {
                 ch_group->ch[1]->value.int_value = initial_time;
             }
             
-            ch_group->timer = esp_timer_create(1000, true, (void*) ch_group->ch[0], on_timer_worker);
+            ch_group->timer = esp_timer_create(1000, true, (void*) ch_group, on_timer_worker);
         }
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, TYPE_ON);
@@ -7471,7 +7470,7 @@ void normal_mode_init() {
                 ch_group->ch[2]->value.int_value = initial_time;
             }
             
-            ch_group->timer = esp_timer_create(1000, true, (void*) ch_group->ch[0], valve_timer_worker);
+            ch_group->timer = esp_timer_create(1000, true, (void*) ch_group, valve_timer_worker);
         }
         
         if (ch_group->homekit_enabled) {
@@ -8323,6 +8322,7 @@ void normal_mode_init() {
             
         } else if ((uint8_t) LIGHTBULB_CHANNELS == 2) {
             // Channels 2
+            ch_group->chs = 3;
             calloc_count++;
             
             ch_group->ch[2] = NEW_HOMEKIT_CHARACTERISTIC(COLOR_TEMPERATURE, 152, .setter_ex=hkc_rgbw_setter);
@@ -8342,6 +8342,7 @@ void normal_mode_init() {
             
         } else {
             // Channels 1
+            ch_group->chs = 2;
             if (ch_group->homekit_enabled) {
                 accessories[accessory]->services[service]->characteristics = calloc(calloc_count, sizeof(homekit_characteristic_t*));
                 accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[0];
@@ -8440,7 +8441,7 @@ void normal_mode_init() {
         GARAGE_DOOR_CLOSE_TIME_FACTOR = 1;
         GARAGE_DOOR_VIRTUAL_STOP = virtual_stop(json_context);
         
-        ch_group->timer = esp_timer_create(1000, true, (void*) GD_CURRENT_DOOR_STATE, garage_door_timer_worker);
+        ch_group->timer = esp_timer_create(1000, true, (void*) ch_group, garage_door_timer_worker);
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN_SET) != NULL) {
             GARAGE_DOOR_TIME_MARGIN = cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN_SET)->valuedouble;
