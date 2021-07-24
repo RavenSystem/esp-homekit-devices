@@ -941,8 +941,6 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
             
             ch->value.bool_value = value.bool_value;
             
-            do_actions(ch_group, (uint8_t) ch->value.bool_value);
-            
             if (ch->value.bool_value && ch_group->num[0] > 0) {
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
                 autooff_setter_params->ch = ch;
@@ -964,6 +962,8 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
                 
                 homekit_characteristic_notify_safe(ch_group->ch[2]);
             }
+            
+            do_actions(ch_group, (uint8_t) ch->value.bool_value);
         }
     }
     
@@ -1004,7 +1004,6 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
             ch->value.int_value = value.int_value;
             
             ch_group->ch[0]->value.int_value = value.int_value;
-            do_actions(ch_group, (uint8_t) ch->value.int_value);
             
             if (ch->value.int_value == 0 && ch_group->num[0] > 0) {
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
@@ -1012,9 +1011,11 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
                 autooff_setter_params->type = TYPE_LOCK;
                 esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
             }
-
+            
             setup_mode_toggle_upcount();
             save_states_callback();
+            
+            do_actions(ch_group, (uint8_t) ch->value.int_value);
         }
     }
     
@@ -1085,8 +1086,6 @@ void sensor_1(const uint16_t gpio, void* args, const uint8_t type) {
             } else {
                 ch_group->ch[0]->value.bool_value = true;
             }
-
-            do_actions(ch_group, 1);
             
             if (ch_group->num[0] > 0) {
                 autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
@@ -1094,6 +1093,8 @@ void sensor_1(const uint16_t gpio, void* args, const uint8_t type) {
                 autooff_setter_params->type = type;
                 esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
             }
+            
+            do_actions(ch_group, 1);
         }
     }
     
@@ -1202,7 +1203,7 @@ void power_monitor_task(void* args) {
         
         uint8_t value[4] = { 0, 0, 0, 0 };
         uint8_t reg1[2] = { 0x03, 0x1C };
-        uint8_t reg2[4] = { 0x03, 0x12 };
+        uint8_t reg2[2] = { 0x03, 0x12 };
         i2c_slave_read(bus, addr, reg1, 2, value, 4);
         vTaskDelay(1);
         voltage = convert_ade_read(value);
@@ -1356,8 +1357,6 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
             ch->value.int_value = value.int_value;
             ch_group->ch[1]->value.int_value = value.int_value;
             
-            do_actions(ch_group, (uint8_t) ch->value.int_value);
-            
             homekit_characteristic_notify_safe(ch_group->ch[1]);
             
             if (ch->value.int_value == 1 && ch_group->num[0] > 0) {
@@ -1381,6 +1380,8 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
                 
                 homekit_characteristic_notify_safe(ch_group->ch[3]);
             }
+            
+            do_actions(ch_group, (uint8_t) ch->value.int_value);
         }
     }
     
@@ -1809,6 +1810,10 @@ void process_th_task(void* args) {
             TH_TARGET_MODE_INT == THERMOSTAT_TARGET_MODE_AUTO) {
             do_wildcard_actions(ch_group, 3, TH_COOLER_TARGET_TEMP_FLOAT);
         }
+    } else {
+        for (uint8_t i = 2; i <= 3; i++) {
+            ch_group->last_wildcard_action[i] = NO_LAST_WILDCARD_ACTION;
+        }
     }
     
     homekit_characteristic_notify_safe(ch_group->ch[2]);
@@ -1884,8 +1889,9 @@ void th_input(const uint16_t gpio, void* args, const uint8_t type) {
                 
             default:    // case 9:  // Cyclic
                 if (TH_ACTIVE_INT) {
-                    if (TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
-                        if (TH_TARGET_MODE_INT > THERMOSTAT_TARGET_MODE_AUTO) {
+                    if (TH_TYPE >= THERMOSTAT_TYPE_HEATERCOOLER) {
+                        if ((TH_TARGET_MODE_INT > THERMOSTAT_TARGET_MODE_AUTO && TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) ||
+                            (TH_TARGET_MODE_INT > THERMOSTAT_TARGET_MODE_COOLER && TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER_NOAUTO)) {
                             TH_TARGET_MODE_INT--;
                         } else {
                             TH_ACTIVE_INT = 0;
@@ -1896,6 +1902,8 @@ void th_input(const uint16_t gpio, void* args, const uint8_t type) {
                 } else {
                     TH_ACTIVE_INT = 1;
                     if (TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
+                        TH_TARGET_MODE_INT = THERMOSTAT_TARGET_MODE_AUTO;
+                    } else if (TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER_NOAUTO) {
                         TH_TARGET_MODE_INT = THERMOSTAT_TARGET_MODE_COOLER;
                     }
                 }
@@ -1911,7 +1919,7 @@ void th_input_temp(const uint16_t gpio, void* args, const uint8_t type) {
 
     if (ch_group->child_enabled) {
         if (TH_TYPE == THERMOSTAT_TYPE_HEATER ||
-            TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
+            TH_TYPE >= THERMOSTAT_TYPE_HEATERCOOLER) {
             float set_h_temp = TH_HEATER_TARGET_TEMP_FLOAT;
             
             if (type == THERMOSTAT_TEMP_UP) {
@@ -1931,7 +1939,7 @@ void th_input_temp(const uint16_t gpio, void* args, const uint8_t type) {
         }
         
         if (TH_TYPE == THERMOSTAT_TYPE_COOLER ||
-            TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
+            TH_TYPE >= THERMOSTAT_TYPE_HEATERCOOLER) {
             float set_c_temp = TH_COOLER_TARGET_TEMP_FLOAT;
             
             if (type == THERMOSTAT_TEMP_UP) {
@@ -3709,8 +3717,6 @@ void hkc_fan_setter(homekit_characteristic_t* ch0, const homekit_value_t value) 
             
             ch0->value.int_value = value.int_value;
             
-            do_actions(ch_group, (uint8_t) value.int_value);
-            
             if (value.int_value) {
                 do_wildcard_actions(ch_group, 0, ch_group->ch[1]->value.float_value);
                 
@@ -3725,8 +3731,9 @@ void hkc_fan_setter(homekit_characteristic_t* ch0, const homekit_value_t value) 
             }
 
             setup_mode_toggle_upcount();
-            
             save_states_callback();
+            
+            do_actions(ch_group, (uint8_t) value.int_value);
         }
     }
     
@@ -5636,31 +5643,37 @@ void normal_mode_init() {
                 button_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE)->valuedouble;
             }
             
-            if (!get_used_gpio(gpio)) {
-                if (gpio < GPIO_OVERFLOW) {
+            if (gpio < GPIO_OVERFLOW) {
+                if (!get_used_gpio(gpio)) {
                     change_uart_gpio(gpio);
                     adv_button_create(gpio, pullup_resistor, inverted, button_mode);
                     set_used_gpio(gpio);
+                    
                     INFO("New Input GPIO %i: inv %i, filter %i, mode %i", gpio, inverted, button_filter, button_mode);
-                } else {
-                    mcp23017_t* mcp = mcp_find_by_index(gpio / 100);
-                    adv_button_create(gpio, mcp->bus, inverted, mcp->addr);
-                    INFO("New Input MCP GPIO %i: inv %i, filter %i, bus %i, addr %i", gpio, inverted, button_filter, mcp->bus, mcp->addr);
+                    
+                    if ((gpio_read(gpio) ^ inverted) == button_type) {
+                        run_at_launch = true;
+                    }
                 }
                 
-                if (button_filter > 0) {
-                    adv_button_set_gpio_probes(gpio, button_filter);
+            } else {    // MCP23017
+                mcp23017_t* mcp = mcp_find_by_index(gpio / 100);
+                adv_button_create(gpio, mcp->bus, inverted, mcp->addr);
+                
+                INFO("New Input MCP GPIO %i: inv %i, filter %i, bus %i, addr %i", gpio, inverted, button_filter, mcp->bus, mcp->addr);
+                
+                if ((adv_button_read_mcp_gpio(gpio) ^ inverted) == button_type) {
+                    run_at_launch = true;
                 }
+            }
+            
+            if (button_filter > 0) {
+                adv_button_set_gpio_probes(gpio, button_filter);
             }
             
             adv_button_register_callback_fn(gpio, callback, button_type, (void*) ch_group, param);
             
             INFO("New Input type: gpio %i, type %i", gpio, button_type);
-            
-            if (gpio < GPIO_OVERFLOW &&
-                (gpio_read(gpio) ^ inverted) == button_type) {
-                run_at_launch = true;
-            }
         }
         
         return run_at_launch;
@@ -7584,21 +7597,24 @@ void normal_mode_init() {
         ch_group->ch[2] = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_th_target_setter);
         ch_group->ch[3] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_HEATER_COOLER_STATE, 0);
         
-        if (TH_TYPE == THERMOSTAT_TYPE_HEATER ||
-            TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
-            ch_group->ch[5] = NEW_HOMEKIT_CHARACTERISTIC(HEATING_THRESHOLD_TEMPERATURE, default_target_temp -1, .min_value=(float[]) {min_temp}, .max_value=(float[]) {max_temp}, .setter_ex=update_th);
+        float temp_step = 0.1;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TARGET_TEMP_STEP) != NULL) {
+            temp_step = cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TARGET_TEMP_STEP)->valuedouble;
+        }
+        
+        if (TH_TYPE != THERMOSTAT_TYPE_COOLER) {
+            ch_group->ch[5] = NEW_HOMEKIT_CHARACTERISTIC(HEATING_THRESHOLD_TEMPERATURE, default_target_temp - 1, .min_value=(float[]) {min_temp}, .max_value=(float[]) {max_temp}, .min_step=(float[]) {temp_step}, .setter_ex=update_th);
             ch_group->ch[5]->value.float_value = set_initial_state(ch_group->accessory, 5, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch[5], CH_TYPE_FLOAT, default_target_temp - 1);
         }
         
-        if (TH_TYPE == THERMOSTAT_TYPE_COOLER ||
-            TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
-            ch_group->ch[6] = NEW_HOMEKIT_CHARACTERISTIC(COOLING_THRESHOLD_TEMPERATURE, default_target_temp +1, .min_value=(float[]) {min_temp}, .max_value=(float[]) {max_temp}, .setter_ex=update_th);
+        if (TH_TYPE != THERMOSTAT_TYPE_HEATER) {
+            ch_group->ch[6] = NEW_HOMEKIT_CHARACTERISTIC(COOLING_THRESHOLD_TEMPERATURE, default_target_temp + 1, .min_value=(float[]) {min_temp}, .max_value=(float[]) {max_temp}, .min_step=(float[]) {temp_step}, .setter_ex=update_th);
             ch_group->ch[6]->value.float_value = set_initial_state(ch_group->accessory, 6, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch[6], CH_TYPE_FLOAT, default_target_temp + 1);
         }
         
         if (ch_group->homekit_enabled) {
             uint8_t calloc_count = 6;
-            if (TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
+            if (TH_TYPE >= THERMOSTAT_TYPE_HEATERCOOLER) {
                 calloc_count += 1;
             }
         
@@ -7612,7 +7628,7 @@ void normal_mode_init() {
             } else {
                 accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_HEATER_COOLER;
             }
-
+            
             accessories[accessory]->services[service]->characteristics = calloc(calloc_count, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[2];
             accessories[accessory]->services[service]->characteristics[1] = ch_group->ch[0];
@@ -7637,9 +7653,18 @@ void normal_mode_init() {
                 }
                 break;
                 
+            case THERMOSTAT_TYPE_HEATERCOOLER_NOAUTO:
+                ch_group->ch[4] = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_COOLER, .min_value=(float[]) {THERMOSTAT_TARGET_MODE_HEATER}, .max_value=(float[]) {THERMOSTAT_TARGET_MODE_COOLER}, .valid_values={.count=2, .values=(uint8_t[]) {THERMOSTAT_TARGET_MODE_HEATER, THERMOSTAT_TARGET_MODE_COOLER}}, .setter_ex=update_th);
+                
+                if (ch_group->homekit_enabled) {
+                    accessories[accessory]->services[service]->characteristics[4] = ch_group->ch[5];
+                    accessories[accessory]->services[service]->characteristics[5] = ch_group->ch[6];
+                }
+                break;
+                
             default:        // case THERMOSTAT_TYPE_HEATER:
                 ch_group->ch[4] = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_HEATER, .min_value=(float[]) {THERMOSTAT_TARGET_MODE_HEATER}, .max_value=(float[]) {THERMOSTAT_TARGET_MODE_HEATER}, .valid_values={.count=1, .values=(uint8_t[]) {THERMOSTAT_TARGET_MODE_HEATER}});
-
+                
                 if (ch_group->homekit_enabled) {
                     accessories[accessory]->services[service]->characteristics[4] = ch_group->ch[5];
                 }
@@ -7701,15 +7726,18 @@ void normal_mode_init() {
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), th_input, ch_group, 1);
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), th_input, ch_group, 0);
         
-        if (TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
+        if (TH_TYPE >= THERMOSTAT_TYPE_HEATERCOOLER) {
             diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), th_input, ch_group, 5);
             diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), th_input, ch_group, 6);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_7), th_input, ch_group, 7);
             ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_5), th_input, ch_group, 5);
             ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), th_input, ch_group, 6);
-            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_7), th_input, ch_group, 7);
             
-            ch_group->ch[4]->value.int_value = set_initial_state(ch_group->accessory, 4, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch[4], CH_TYPE_INT8, 0);
+            if (TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
+                diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_7), th_input, ch_group, 7);
+                ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_7), th_input, ch_group, 7);
+            }
+            
+            ch_group->ch[4]->value.int_value = set_initial_state(ch_group->accessory, 4, cJSON_Parse(INIT_STATE_LAST_STR), ch_group->ch[4], CH_TYPE_INT8, ch_group->ch[4]->value.int_value);
         }
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
@@ -7737,8 +7765,9 @@ void normal_mode_init() {
         
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
-        ch_group->num[0] = NO_LAST_WILDCARD_ACTION;
-        ch_group->num[1] = NO_LAST_WILDCARD_ACTION;
+        for (uint8_t i = 0; i <= 1; i++) {
+            ch_group->num[i] = NO_LAST_WILDCARD_ACTION;
+        }
         
         ch_group->timer2 = esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, set_zones_timer_worker);
         
@@ -8102,19 +8131,13 @@ void normal_mode_init() {
         memset(lightbulb_group, 0, sizeof(*lightbulb_group));
         
         lightbulb_group->ch0 = ch_group->ch[0];
-        lightbulb_group->gpio[0] = GPIO_OVERFLOW;
-        lightbulb_group->gpio[1] = GPIO_OVERFLOW;
-        lightbulb_group->gpio[2] = GPIO_OVERFLOW;
-        lightbulb_group->gpio[3] = GPIO_OVERFLOW;
-        lightbulb_group->gpio[4] = GPIO_OVERFLOW;
+        for (uint8_t i = 0; i <= 4; i++) {
+            lightbulb_group->gpio[i] = GPIO_OVERFLOW;
+            lightbulb_group->flux[i] = 1;
+        }
         LIGHTBULB_PWM_DITHER = 0;
         LIGHTBULB_MAX_POWER = 1;
         LIGHTBULB_CURVE_FACTOR = 0;
-        lightbulb_group->flux[0] = 1;
-        lightbulb_group->flux[1] = 1;
-        lightbulb_group->flux[2] = 1;
-        lightbulb_group->flux[3] = 1;
-        lightbulb_group->flux[4] = 1;
         lightbulb_group->r[0] = 0.6914;
         lightbulb_group->r[1] = 0.3077;
         lightbulb_group->g[0] = 0.1451;

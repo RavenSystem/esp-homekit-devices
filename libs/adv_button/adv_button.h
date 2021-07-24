@@ -30,6 +30,7 @@ void adv_button_set_gpio_probes(const uint16_t gpio, const uint8_t max_eval);
 int adv_button_create(const uint16_t gpio, const uint8_t pullup_resistor, const bool inverted, const uint8_t mode);
 int adv_button_destroy(const uint16_t gpio);
 void adv_button_set_disable_time();
+bool adv_button_read_mcp_gpio(const uint16_t gpio);
 
 /*
  * Button callback types:

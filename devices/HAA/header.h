@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "6.7.2"
+#define FIRMWARE_VERSION                    "6.8.0"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -190,6 +190,7 @@
 #define THERMOSTAT_TYPE_HEATER              (1)
 #define THERMOSTAT_TYPE_COOLER              (2)
 #define THERMOSTAT_TYPE_HEATERCOOLER        (3)
+#define THERMOSTAT_TYPE_HEATERCOOLER_NOAUTO (4)
 #define THERMOSTAT_MIN_TEMP                 "m"
 #define TH_HEATER_MIN_TEMP                  *ch_group->ch[5]->min_value
 #define TH_COOLER_MIN_TEMP                  *ch_group->ch[6]->min_value
@@ -207,6 +208,7 @@
 #define THERMOSTAT_UPDATE_DELAY             "dl"
 #define THERMOSTAT_UPDATE_DELAY_MIN         (0.15f)
 #define THERMOSTAT_UPDATE_DELAY_DEFAULT     (3.0f)
+#define THERMOSTAT_TARGET_TEMP_STEP         "st"
 #define THERMOSTAT_IAIRZONING_CONTROLLER    "ia"
 #define TH_IAIRZONING_CONTROLLER            ch_group->num[2]
 #define TH_IAIRZONING_GATE_CURRENT_STATE    ch_group->num[8]

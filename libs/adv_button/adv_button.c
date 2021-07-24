@@ -132,6 +132,20 @@ static adv_button_mcp_t* mcp_find_by_index(const uint8_t index) {
     return NULL;
 }
 
+bool adv_button_read_mcp_gpio(const uint16_t gpio) {
+    adv_button_mcp_t* adv_button_mcp = mcp_find_by_index(gpio / 100);
+    if (adv_button_mcp) {
+        const uint8_t mcp_gpio = gpio % 100;
+        
+        if (mcp_gpio > 7) {
+            return (bool) ((1 << (mcp_gpio - 8)) & adv_button_mcp->value_b);
+        }
+        return (bool) ((1 << mcp_gpio) & adv_button_mcp->value_a);
+    }
+    
+    return false;
+}
+
 static void adv_button_run_callback_fn(adv_button_callback_fn_t* callbacks, const uint16_t gpio) {
     adv_button_callback_fn_t* adv_button_callback_fn = callbacks;
     
@@ -299,16 +313,7 @@ IRAM static void button_evaluate_fn() {
                     }
                 }
             } else {    // MCP23017
-                mcp = mcp_find_by_index(button->gpio / 100);
-                const uint8_t mcp_gpio = button->gpio % 100;
-                uint8_t mcp_gpio_value = 0;
-                if (mcp_gpio > 7) {
-                    mcp_gpio_value = (1 << (mcp_gpio - 8)) & mcp->value_b;
-                } else {
-                    mcp_gpio_value = (1 << mcp_gpio) & mcp->value_a;
-                }
-                
-                if (mcp_gpio_value != 0) {
+                if (adv_button_read_mcp_gpio(button->gpio) != 0) {
                     button->value = MIN(button->value++, button->max_eval);
                     if (button->value == button->max_eval) {
                         button->state = true;
@@ -320,7 +325,7 @@ IRAM static void button_evaluate_fn() {
                     }
                 }
             }
-
+            
             if (button->state != button->old_state) {
                 button->old_state = button->state;
                 adv_button_main_config->button_evaluate_sleep_countdown = 0;
@@ -466,12 +471,7 @@ int adv_button_create(const uint16_t gpio, const uint8_t pullup_resistor, const 
                 }
             }
             
-            if (mcp_gpio > 7) {
-                button->state = mcp->value_b & (1 << (mcp_gpio - 8));
-            } else {
-                button->state = mcp->value_a & (1 << mcp_gpio);
-            }
-
+            button->state = adv_button_read_mcp_gpio(gpio);
             button->old_state = button->state;
             
             if (button->state) {
