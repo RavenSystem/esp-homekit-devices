@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "6.8.1"
+#define FIRMWARE_VERSION                    "6.8.2"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -214,7 +214,7 @@
 #define TH_IAIRZONING_GATE_CURRENT_STATE    ch_group->num[8]
 #define TH_IAIRZONING_GATE_CLOSE            (0)
 #define TH_IAIRZONING_GATE_OPEN             (1)
-#define THERMOSTAT_CURRENT_ACTION           ch_group->num[11]
+#define THERMOSTAT_CURRENT_ACTION           ch_group->last_wildcard_action[4]
 #define THERMOSTAT_MODE_OFF                 (0)
 #define THERMOSTAT_MODE_IDLE                (1)
 #define THERMOSTAT_MODE_HEATER              (2)
@@ -244,8 +244,8 @@
 #define TH_HEATER_TARGET_TEMP_FLOAT         ch_group->ch[5]->value.float_value
 #define TH_COOLER_TARGET_TEMP_FLOAT         ch_group->ch[6]->value.float_value
 
-#define IAIRZONING_LAST_ACTION              iairzoning_group->num[0]
-#define IAIRZONING_MAIN_MODE                iairzoning_group->num[1]
+#define IAIRZONING_LAST_ACTION              iairzoning_group->last_wildcard_action[0]
+#define IAIRZONING_MAIN_MODE                iairzoning_group->last_wildcard_action[1]
 
 #define TEMPERATURE_SENSOR_GPIO             "g"
 #define TH_SENSOR_GPIO                      ch_group->num[0]
@@ -271,13 +271,14 @@
 #define HUMIDIF_TYPE_HUM                    (1)
 #define HUMIDIF_TYPE_DEHUM                  (2)
 #define HUMIDIF_TYPE_HUMDEHUM               (3)
+#define HUMIDIF_TYPE_HUMDEHUM_NOAUTO        (4)
 #define HUMIDIF_DEADBAND                    "d"
 #define HM_DEADBAND                         ch_group->num[6]
 #define HUMIDIF_DEADBAND_FORCE_IDLE         "df"
 #define HM_DEADBAND_FORCE_IDLE              ch_group->num[7]
 #define HUMIDIF_DEADBAND_SOFT_ON            "ds"
 #define HM_DEADBAND_SOFT_ON                 ch_group->num[8]
-#define HUMIDIF_CURRENT_ACTION              ch_group->num[10]
+#define HUMIDIF_CURRENT_ACTION              ch_group->last_wildcard_action[4]
 #define HUMIDIF_MODE_OFF                    (0)
 #define HUMIDIF_MODE_IDLE                   (1)
 #define HUMIDIF_MODE_HUM                    (2)
