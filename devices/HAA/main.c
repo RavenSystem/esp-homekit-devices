@@ -7823,7 +7823,7 @@ void normal_mode_init() {
     
     // *** NEW HUMIDITY SENSOR
     void new_hum_sensor(const uint8_t accessory, uint8_t service, const uint8_t total_services, cJSON* json_context) {
-        ch_group_t* ch_group = new_ch_group(1, 6, 2);
+        ch_group_t* ch_group = new_ch_group(2, 6, 2);
         ch_group->acc_type = ACC_TYPE_HUM_SENSOR;
         ch_group->accessory = accessory_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
