@@ -1426,7 +1426,7 @@ void set_zones_task(void* args) {
     // Fix impossible cases
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
-        if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == - (int8_t) TH_IAIRZONING_CONTROLLER) {
+        if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == (uint8_t) TH_IAIRZONING_CONTROLLER) {
             switch ((uint8_t) THERMOSTAT_CURRENT_ACTION) {
                 case THERMOSTAT_ACTION_HEATER_ON:
                 case THERMOSTAT_ACTION_HEATER_IDLE:
@@ -1468,7 +1468,7 @@ void set_zones_task(void* args) {
     
     ch_group = main_config.ch_groups;
     while (ch_group && thermostat_all_idle) {
-        if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == - (int8_t) TH_IAIRZONING_CONTROLLER) {
+        if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == (uint8_t) TH_IAIRZONING_CONTROLLER) {
             if (THERMOSTAT_CURRENT_ACTION != THERMOSTAT_ACTION_TOTAL_OFF) {
                 thermostat_all_off = false;
                 
@@ -1507,7 +1507,7 @@ void set_zones_task(void* args) {
             // Open all gates
             ch_group = main_config.ch_groups;
             while (ch_group) {
-                if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == - (int8_t) TH_IAIRZONING_CONTROLLER) {
+                if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == (uint8_t) TH_IAIRZONING_CONTROLLER) {
                     if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_OPEN) {
                         TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_OPEN;
                         do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
@@ -1551,7 +1551,7 @@ void set_zones_task(void* args) {
         
         ch_group = main_config.ch_groups;
         while (ch_group) {
-            if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == - (int8_t) TH_IAIRZONING_CONTROLLER) {
+            if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == (uint8_t) TH_IAIRZONING_CONTROLLER) {
                 switch ((uint8_t) THERMOSTAT_CURRENT_ACTION) {
                     case THERMOSTAT_ACTION_HEATER_ON:
                     case THERMOSTAT_ACTION_COOLER_ON:
@@ -1820,8 +1820,8 @@ void process_th_task(void* args) {
     homekit_characteristic_notify_safe(ch_group->ch[3]);
     homekit_characteristic_notify_safe(ch_group->ch[4]);
     
-    if (TH_IAIRZONING_CONTROLLER < 0 && mode_has_changed) {
-        esp_timer_start(ch_group_find_by_acc(- ((int8_t) TH_IAIRZONING_CONTROLLER))->timer2);
+    if (TH_IAIRZONING_CONTROLLER > 0 && mode_has_changed) {
+        esp_timer_start(ch_group_find_by_acc(TH_IAIRZONING_CONTROLLER)->timer2);
     }
     
     save_states_callback();
@@ -2341,7 +2341,7 @@ void temperature_task(void* args) {
     while (ch_group) {
         get_temp = false;
         
-        if (iairzoning == 0 || (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning == - (int8_t) TH_IAIRZONING_CONTROLLER)) {
+        if (iairzoning == 0 || (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning == (uint8_t) TH_IAIRZONING_CONTROLLER)) {
             INFO("<%i> Read TH sensor", ch_group->accessory);
             
             if (TH_SENSOR_TYPE != 3 && TH_SENSOR_TYPE < 5) {
@@ -2480,7 +2480,7 @@ void temperature_task(void* args) {
         }
         
         if (iairzoning > 0) {
-            if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning == - (int8_t) TH_IAIRZONING_CONTROLLER) {
+            if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning == (uint8_t) TH_IAIRZONING_CONTROLLER) {
                 vTaskDelay(MS_TO_TICKS(1300));
             }
 
@@ -7708,8 +7708,9 @@ void normal_mode_init() {
         register_wildcard_actions(ch_group, json_context);
         const float poll_period = th_sensor(ch_group, json_context);
         
+        TH_IAIRZONING_CONTROLLER = 0;
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER) != NULL) {
-            TH_IAIRZONING_CONTROLLER = -((float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER)->valuedouble);
+            TH_IAIRZONING_CONTROLLER = cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER)->valuedouble;
         }
         
         ch_group->timer2 = esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, process_th_timer);
@@ -7718,7 +7719,7 @@ void normal_mode_init() {
             set_used_gpio((uint8_t) TH_SENSOR_GPIO);
         }
         
-        if ((TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 4) && TH_IAIRZONING_CONTROLLER > 0) {
+        if ((TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 4) && TH_IAIRZONING_CONTROLLER == 0) {
             th_sensor_starter(ch_group, poll_period);
         }
         
