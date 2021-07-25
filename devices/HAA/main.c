@@ -1071,7 +1071,7 @@ void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
 void sensor_1(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
-    INFO("<%i> DigI Sensor GPIO %i", ch_group->accessory, gpio);
+    INFO("<%i> DigI Sensor 1 GPIO %i", ch_group->accessory, gpio);
 
     if (ch_group->main_enabled) {
         if ((type == TYPE_SENSOR &&
@@ -1104,7 +1104,7 @@ void sensor_1(const uint16_t gpio, void* args, const uint8_t type) {
 void sensor_status_1(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
-    INFO("<%i> DigI Sensor Status GPIO %i", ch_group->accessory, gpio);
+    INFO("<%i> DigI Sensor S1 GPIO %i", ch_group->accessory, gpio);
 
     if ((type == TYPE_SENSOR &&
         ch_group->ch[0]->value.int_value == 0) ||
@@ -1126,7 +1126,7 @@ void sensor_status_1(const uint16_t gpio, void* args, const uint8_t type) {
 void sensor_0(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
-    INFO("<%i> DigI Sensor GPIO %i", ch_group->accessory, gpio);
+    INFO("<%i> DigI Sensor 0 GPIO %i", ch_group->accessory, gpio);
     
     if (ch_group->main_enabled) {
         if ((type == TYPE_SENSOR &&
@@ -1152,7 +1152,7 @@ void sensor_0(const uint16_t gpio, void* args, const uint8_t type) {
 void sensor_status_0(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
-    INFO("<%i> DigI Sensor Status GPIO %i", ch_group->accessory, gpio);
+    INFO("<%i> DigI Sensor S0 GPIO %i", ch_group->accessory, gpio);
 
     if ((type == TYPE_SENSOR &&
         ch_group->ch[0]->value.int_value == 1) ||
@@ -5615,7 +5615,7 @@ void normal_mode_init() {
     
     // Buttons GPIO Setup function
     bool diginput_register(cJSON* json_buttons, void* callback, ch_group_t* ch_group, const uint8_t param) {
-        bool run_at_launch = false;
+        bool active = false;
         
         for (uint8_t j = 0; j < cJSON_GetArraySize(json_buttons); j++) {
             const uint16_t gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PIN_GPIO)->valuedouble;
@@ -5654,9 +5654,6 @@ void normal_mode_init() {
                     
                     INFO("New Input GPIO %i: inv %i, filter %i, mode %i", gpio, inverted, button_filter, button_mode);
                     
-                    if ((gpio_read(gpio) ^ inverted) == button_type) {
-                        run_at_launch = true;
-                    }
                 }
                 
             } else {    // MCP23017
@@ -5664,10 +5661,6 @@ void normal_mode_init() {
                 adv_button_create(gpio, mcp->bus, inverted, mcp->addr);
                 
                 INFO("New Input MCP GPIO %i: inv %i, filter %i, bus %i, addr %i", gpio, inverted, button_filter, mcp->bus, mcp->addr);
-                
-                if ((adv_button_read_mcp_gpio(gpio) ^ inverted) == button_type) {
-                    run_at_launch = true;
-                }
             }
             
             if (button_filter > 0) {
@@ -5676,10 +5669,14 @@ void normal_mode_init() {
             
             adv_button_register_callback_fn(gpio, callback, button_type, (void*) ch_group, param);
             
-            INFO("New Input type: gpio %i, type %i", gpio, button_type);
+            if ((adv_button_read_gpio(gpio) ^ inverted) == button_type) {
+                active = true;
+            }
+            
+            INFO("New DigI: gpio %i, type %i, active %i", gpio, button_type, active);
         }
         
-        return run_at_launch;
+        return active;
     }
     
     // Ping Setup function
@@ -6346,20 +6343,21 @@ void normal_mode_init() {
         return THERMOSTAT_UPDATE_DELAY_DEFAULT;
     }
     
-    void th_sensor(ch_group_t* ch_group, cJSON* json_accessory) {
+    float th_sensor(ch_group_t* ch_group, cJSON* json_accessory) {
         TH_SENSOR_GPIO = th_sensor_gpio(json_accessory);
         TH_SENSOR_TYPE = th_sensor_type(json_accessory);
         TH_SENSOR_TEMP_OFFSET = th_sensor_temp_offset(json_accessory);
         TH_SENSOR_HUM_OFFSET = th_sensor_hum_offset(json_accessory);
+        TH_SENSOR_ERROR_COUNT = 0;
         if ((uint8_t) TH_SENSOR_TYPE == 3) {
             TH_SENSOR_INDEX = th_sensor_index(json_accessory);
         }
-        TH_SENSOR_POLL_PERIOD = sensor_poll_period(json_accessory, TH_SENSOR_POLL_PERIOD_DEFAULT);
-        TH_SENSOR_ERROR_COUNT = 0;
+        
+        return sensor_poll_period(json_accessory, TH_SENSOR_POLL_PERIOD_DEFAULT);
     }
     
-    void th_sensor_starter(ch_group_t* ch_group) {
-        ch_group->timer = esp_timer_create(TH_SENSOR_POLL_PERIOD * 1000, true, (void*) ch_group, temperature_timer_worker);
+    void th_sensor_starter(ch_group_t* ch_group, float poll_period) {
+        ch_group->timer = esp_timer_create(poll_period * 1000, true, (void*) ch_group, temperature_timer_worker);
     }
     
     uint8_t virtual_stop(cJSON* json_accessory) {
@@ -7259,6 +7257,7 @@ void normal_mode_init() {
             }
             
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate_0, ch_group, TYPE_LOCK)) {
+                ch_group->ch[1]->value.int_value = 0;
                 digstate_0(0, ch_group, TYPE_LOCK);
             }
         }
@@ -7366,6 +7365,7 @@ void normal_mode_init() {
             ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), sensor_status_0, ch_group, TYPE_SENSOR_BOOL);
             
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), sensor_0, ch_group, TYPE_SENSOR_BOOL)) {
+                ch_group->ch[0]->value.bool_value = true;
                 if (exec_actions_on_boot) {
                     sensor_0(0, ch_group, TYPE_SENSOR_BOOL);
                 } else {
@@ -7382,6 +7382,7 @@ void normal_mode_init() {
             }
             
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), sensor_status_0, ch_group, TYPE_SENSOR_BOOL)) {
+                ch_group->ch[0]->value.bool_value = true;
                 sensor_status_0(0, ch_group, TYPE_SENSOR_BOOL);
             }
             
@@ -7391,10 +7392,11 @@ void normal_mode_init() {
         } else {
             ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), sensor_0, ch_group, TYPE_SENSOR);
             ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), sensor_1, ch_group, TYPE_SENSOR);
-            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), sensor_status_1, ch_group, TYPE_SENSOR);
             ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), sensor_status_0, ch_group, TYPE_SENSOR);
+            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), sensor_status_1, ch_group, TYPE_SENSOR);
             
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), sensor_0, ch_group, TYPE_SENSOR)) {
+                ch_group->ch[0]->value.int_value = 1;
                 if (exec_actions_on_boot) {
                     sensor_0(0, ch_group, TYPE_SENSOR);
                 } else {
@@ -7411,6 +7413,7 @@ void normal_mode_init() {
             }
             
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), sensor_status_0, ch_group, TYPE_SENSOR)) {
+                ch_group->ch[0]->value.int_value = 1;
                 sensor_status_0(0, ch_group, TYPE_SENSOR);
             }
             
@@ -7548,7 +7551,7 @@ void normal_mode_init() {
     
     // *** NEW THERMOSTAT
     void new_thermostat(const uint8_t accessory,  uint8_t service, const uint8_t total_services, cJSON* json_context, const uint8_t acc_type) {
-        ch_group_t* ch_group = new_ch_group(7, 11, 5);
+        ch_group_t* ch_group = new_ch_group(7, 10, 6);
         ch_group->acc_type = ACC_TYPE_THERMOSTAT;
         ch_group->accessory = accessory_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
@@ -7703,8 +7706,7 @@ void normal_mode_init() {
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
-        th_sensor(ch_group, json_context);
-        TH_IAIRZONING_GATE_CURRENT_STATE = NO_LAST_WILDCARD_ACTION;
+        const float poll_period = th_sensor(ch_group, json_context);
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER) != NULL) {
             TH_IAIRZONING_CONTROLLER = -((float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER)->valuedouble);
@@ -7717,7 +7719,7 @@ void normal_mode_init() {
         }
         
         if ((TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 4) && TH_IAIRZONING_CONTROLLER > 0) {
-            th_sensor_starter(ch_group);
+            th_sensor_starter(ch_group, poll_period);
         }
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), th_input, ch_group, 9);
@@ -7771,13 +7773,12 @@ void normal_mode_init() {
         
         ch_group->timer2 = esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, set_zones_timer_worker);
         
-        TH_SENSOR_POLL_PERIOD = sensor_poll_period(json_context, TH_SENSOR_POLL_PERIOD_DEFAULT);
-        th_sensor_starter(ch_group);
+        th_sensor_starter(ch_group, sensor_poll_period(json_context, TH_SENSOR_POLL_PERIOD_DEFAULT));
     }
     
     // *** NEW TEMPERATURE SENSOR
     void new_temp_sensor(const uint8_t accessory, uint8_t service, const uint8_t total_services, cJSON* json_context) {
-        ch_group_t* ch_group = new_ch_group(1, 6, 1);
+        ch_group_t* ch_group = new_ch_group(1, 5, 1);
         ch_group->acc_type = ACC_TYPE_TEMP_SENSOR;
         ch_group->accessory = accessory_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
@@ -7791,7 +7792,7 @@ void normal_mode_init() {
         
         ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200});
   
-        th_sensor(ch_group, json_context);
+        const float poll_period = th_sensor(ch_group, json_context);
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
@@ -7817,13 +7818,13 @@ void normal_mode_init() {
         }
         
         if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 4) {
-            th_sensor_starter(ch_group);
+            th_sensor_starter(ch_group, poll_period);
         }
     }
     
     // *** NEW HUMIDITY SENSOR
     void new_hum_sensor(const uint8_t accessory, uint8_t service, const uint8_t total_services, cJSON* json_context) {
-        ch_group_t* ch_group = new_ch_group(2, 6, 2);
+        ch_group_t* ch_group = new_ch_group(2, 5, 2);
         ch_group->acc_type = ACC_TYPE_HUM_SENSOR;
         ch_group->accessory = accessory_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
@@ -7837,7 +7838,7 @@ void normal_mode_init() {
         
         ch_group->ch[1] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0);
         
-        th_sensor(ch_group, json_context);
+        const float poll_period = th_sensor(ch_group, json_context);
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
@@ -7860,13 +7861,13 @@ void normal_mode_init() {
         
         if (TH_SENSOR_GPIO != -1) {
             set_used_gpio((uint8_t) TH_SENSOR_GPIO);
-            th_sensor_starter(ch_group);
+            th_sensor_starter(ch_group, poll_period);
         }
     }
     
     // *** NEW TEMPERATURE AND HUMIDITY SENSOR
     void new_th_sensor(const uint8_t accessory, uint8_t service, const uint8_t total_services, cJSON* json_context) {
-        ch_group_t* ch_group = new_ch_group(2, 6, 2);
+        ch_group_t* ch_group = new_ch_group(2, 5, 2);
         ch_group->acc_type = ACC_TYPE_TH_SENSOR;
         ch_group->accessory = accessory_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
@@ -7881,7 +7882,7 @@ void normal_mode_init() {
         ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200});
         ch_group->ch[1] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0);
         
-        th_sensor(ch_group, json_context);
+        const float poll_period = th_sensor(ch_group, json_context);
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
@@ -7920,13 +7921,13 @@ void normal_mode_init() {
         
         if (TH_SENSOR_GPIO != -1) {
             set_used_gpio((uint8_t) TH_SENSOR_GPIO);
-            th_sensor_starter(ch_group);
+            th_sensor_starter(ch_group, poll_period);
         }
     }
     
     // *** NEW HUMIDIFIER
     void new_humidifier(const uint8_t accessory,  uint8_t service, const uint8_t total_services, cJSON* json_context, const uint8_t acc_type) {
-        ch_group_t* ch_group = new_ch_group(7, 10, 5);
+        ch_group_t* ch_group = new_ch_group(7, 9, 5);
         ch_group->acc_type = ACC_TYPE_HUMIDIFIER;
         ch_group->accessory = accessory_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
@@ -8064,7 +8065,7 @@ void normal_mode_init() {
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
-        th_sensor(ch_group, json_context);
+        const float poll_period = th_sensor(ch_group, json_context);
         
         ch_group->timer2 = esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, process_humidif_timer);
         
@@ -8073,7 +8074,7 @@ void normal_mode_init() {
         }
         
         if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 4) {
-            th_sensor_starter(ch_group);
+            th_sensor_starter(ch_group, poll_period);
         }
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), humidif_input, ch_group, 9);
@@ -8188,7 +8189,7 @@ void normal_mode_init() {
             LIGHTBULB_TYPE = 0;
         }
 
-        INFO("Type: %i", (uint8_t) LIGHTBULB_TYPE);
+        INFO("Type %i", (uint8_t) LIGHTBULB_TYPE);
         
         if ((uint8_t) LIGHTBULB_TYPE != 0 && !main_config.set_lightbulb_timer) {
             main_config.set_lightbulb_timer = esp_timer_create(RGBW_PERIOD, true, NULL, rgbw_set_timer_worker);
@@ -8219,7 +8220,7 @@ void normal_mode_init() {
             }
         }
         
-        INFO("Channels: %i", (uint8_t) LIGHTBULB_CHANNELS);
+        INFO("Channels %i", (uint8_t) LIGHTBULB_CHANNELS);
         
         bool is_custom_initial = false;
         uint16_t custom_initial[3];
@@ -8247,7 +8248,7 @@ void normal_mode_init() {
                 }
             }
             
-            INFO("Flux array: %g, %g, %g, %g, %g", lightbulb_group->flux[0], lightbulb_group->flux[1], lightbulb_group->flux[2], lightbulb_group->flux[3], lightbulb_group->flux[4]);
+            INFO("Flux array %g, %g, %g, %g, %g", lightbulb_group->flux[0], lightbulb_group->flux[1], lightbulb_group->flux[2], lightbulb_group->flux[3], lightbulb_group->flux[4]);
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_RGB_ARRAY_SET) != NULL) {
                 cJSON* rgb_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_RGB_ARRAY_SET);
@@ -8256,7 +8257,7 @@ void normal_mode_init() {
                 }
             }
             
-            INFO("Target RGB array: %g, %g, %g, %g, %g, %g", lightbulb_group->rgb[0][0], lightbulb_group->rgb[0][1], lightbulb_group->rgb[1][0], lightbulb_group->rgb[1][1], lightbulb_group->rgb[2][0], lightbulb_group->rgb[2][1]);
+            INFO("Target RGB array %g, %g, %g, %g, %g, %g", lightbulb_group->rgb[0][0], lightbulb_group->rgb[0][1], lightbulb_group->rgb[1][0], lightbulb_group->rgb[1][1], lightbulb_group->rgb[2][0], lightbulb_group->rgb[2][1]);
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CMY_ARRAY_SET) != NULL) {
                 cJSON* cmy_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CMY_ARRAY_SET);
@@ -8265,9 +8266,9 @@ void normal_mode_init() {
                 }
             }
             
-            INFO("Target CMY array: %g, %g, %g, %g, %g, %g", lightbulb_group->cmy[0][0], lightbulb_group->cmy[0][1], lightbulb_group->cmy[1][0], lightbulb_group->cmy[1][1], lightbulb_group->cmy[2][0], lightbulb_group->cmy[2][1]);
+            INFO("Target CMY array %g, %g, %g, %g, %g, %g", lightbulb_group->cmy[0][0], lightbulb_group->cmy[0][1], lightbulb_group->cmy[1][0], lightbulb_group->cmy[1][1], lightbulb_group->cmy[2][0], lightbulb_group->cmy[2][1]);
             
-            INFO("CMY array: [%g, %g, %g], [%g, %g, %g]", lightbulb_group->cmy[0][0], lightbulb_group->cmy[0][1], lightbulb_group->cmy[0][2], lightbulb_group->cmy[1][0], lightbulb_group->cmy[1][1], lightbulb_group->cmy[1][2]);
+            INFO("CMY array [%g, %g, %g], [%g, %g, %g]", lightbulb_group->cmy[0][0], lightbulb_group->cmy[0][1], lightbulb_group->cmy[0][2], lightbulb_group->cmy[1][0], lightbulb_group->cmy[1][1], lightbulb_group->cmy[1][2]);
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY_SET) != NULL) {
                 cJSON* coordinate_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY_SET);
@@ -8289,7 +8290,7 @@ void normal_mode_init() {
                 }
             }
 
-            INFO("Coordinate array: [%g, %g], [%g, %g], [%g, %g], [%g, %g], [%g, %g]", lightbulb_group->r[0], lightbulb_group->r[1],
+            INFO("Coordinate array [%g, %g], [%g, %g], [%g, %g], [%g, %g], [%g, %g]", lightbulb_group->r[0], lightbulb_group->r[1],
                                                                                         lightbulb_group->g[0], lightbulb_group->g[1],
                                                                                         lightbulb_group->b[0], lightbulb_group->b[1],
                                                                                         lightbulb_group->cw[0], lightbulb_group->cw[1],
@@ -8301,7 +8302,7 @@ void normal_mode_init() {
                 lightbulb_group->wp[1] = (float) cJSON_GetArrayItem(white_point, 1)->valuedouble;
             }
             
-            INFO("White point: [%g, %g]", lightbulb_group->wp[0], lightbulb_group->wp[1]);
+            INFO("White point [%g, %g]", lightbulb_group->wp[0], lightbulb_group->wp[1]);
         }
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, RGBW_STEP_SET) != NULL) {
@@ -8786,7 +8787,6 @@ void normal_mode_init() {
   
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
-        register_wildcard_actions(ch_group, json_context);
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));

@@ -132,7 +132,11 @@ static adv_button_mcp_t* mcp_find_by_index(const uint8_t index) {
     return NULL;
 }
 
-bool adv_button_read_mcp_gpio(const uint16_t gpio) {
+bool adv_button_read_gpio(const uint16_t gpio) {
+    return button_find_by_gpio(gpio)->state;
+}
+
+static bool adv_button_read_mcp_gpio(const uint16_t gpio) {
     adv_button_mcp_t* adv_button_mcp = mcp_find_by_index(gpio / 100);
     if (adv_button_mcp) {
         const uint8_t mcp_gpio = gpio % 100;
@@ -140,7 +144,6 @@ bool adv_button_read_mcp_gpio(const uint16_t gpio) {
         if (mcp_gpio > 7) {
             return (bool) ((1 << (mcp_gpio - 8)) & adv_button_mcp->value_b);
         }
-        return (bool) ((1 << mcp_gpio) & adv_button_mcp->value_a);
     }
     
     return false;

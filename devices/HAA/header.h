@@ -9,7 +9,7 @@
 #define __HAA_HEADER_H__
 
 // Version
-#define FIRMWARE_VERSION                    "6.8.2"
+#define FIRMWARE_VERSION                    "6.8.3"
 
 // Sysparam
 #define SYSPARAMSECTOR                      (0xF3000)
@@ -186,7 +186,7 @@
 #define DOORBELL_LAST_STATE                 ch_group->num[0]
 
 #define THERMOSTAT_TYPE                     "w"
-#define TH_TYPE                             ch_group->num[9]
+#define TH_TYPE                             ch_group->num[5]
 #define THERMOSTAT_TYPE_HEATER              (1)
 #define THERMOSTAT_TYPE_COOLER              (2)
 #define THERMOSTAT_TYPE_HEATERCOOLER        (3)
@@ -202,16 +202,16 @@
 #define THERMOSTAT_DEADBAND                 "d"
 #define TH_DEADBAND                         ch_group->num[6]
 #define THERMOSTAT_DEADBAND_FORCE_IDLE      "df"
-#define TH_DEADBAND_FORCE_IDLE              ch_group->num[10]
+#define TH_DEADBAND_FORCE_IDLE              ch_group->num[7]
 #define THERMOSTAT_DEADBAND_SOFT_ON         "ds"
-#define TH_DEADBAND_SOFT_ON                 ch_group->num[7]
+#define TH_DEADBAND_SOFT_ON                 ch_group->num[8]
 #define THERMOSTAT_UPDATE_DELAY             "dl"
 #define THERMOSTAT_UPDATE_DELAY_MIN         (0.15f)
 #define THERMOSTAT_UPDATE_DELAY_DEFAULT     (3.0f)
 #define THERMOSTAT_TARGET_TEMP_STEP         "st"
 #define THERMOSTAT_IAIRZONING_CONTROLLER    "ia"
-#define TH_IAIRZONING_CONTROLLER            ch_group->num[2]
-#define TH_IAIRZONING_GATE_CURRENT_STATE    ch_group->num[8]
+#define TH_IAIRZONING_CONTROLLER            ch_group->num[9]
+#define TH_IAIRZONING_GATE_CURRENT_STATE    ch_group->last_wildcard_action[5]
 #define TH_IAIRZONING_GATE_CLOSE            (0)
 #define TH_IAIRZONING_GATE_OPEN             (1)
 #define THERMOSTAT_CURRENT_ACTION           ch_group->last_wildcard_action[4]
@@ -252,22 +252,21 @@
 #define TEMPERATURE_SENSOR_TYPE             "n"
 #define TH_SENSOR_TYPE                      ch_group->num[1]
 #define TEMPERATURE_SENSOR_INDEX            "u"
-#define TH_SENSOR_INDEX                     ch_group->num[4]
+#define TH_SENSOR_INDEX                     ch_group->num[3]
 #define TEMPERATURE_SENSOR_POLL_PERIOD      "j"
-#define TH_SENSOR_POLL_PERIOD               ch_group->num[2]
 #define TH_SENSOR_POLL_PERIOD_DEFAULT       (30)
 #define TH_SENSOR_POLL_PERIOD_MIN           (0.1f)
 #define TEMPERATURE_OFFSET                  "z"
-#define TH_SENSOR_TEMP_OFFSET               ch_group->num[3]
+#define TH_SENSOR_TEMP_OFFSET               ch_group->num[2]
 #define HUMIDITY_OFFSET                     "k"
-#define TH_SENSOR_HUM_OFFSET                ch_group->num[4]
+#define TH_SENSOR_HUM_OFFSET                ch_group->num[3]
 #define SENSOR_TEMPERATURE_FLOAT            ch_group->ch[0]->value.float_value
 #define SENSOR_HUMIDITY_FLOAT               ch_group->ch[1]->value.float_value
-#define TH_SENSOR_ERROR_COUNT               ch_group->num[5]
+#define TH_SENSOR_ERROR_COUNT               ch_group->num[4]
 #define TH_SENSOR_MAX_ALLOWED_ERRORS        (3)
 
 #define HUMIDIF_TYPE                        "w"
-#define HM_TYPE                             ch_group->num[9]
+#define HM_TYPE                             ch_group->num[5]
 #define HUMIDIF_TYPE_HUM                    (1)
 #define HUMIDIF_TYPE_DEHUM                  (2)
 #define HUMIDIF_TYPE_HUMDEHUM               (3)
