@@ -35,20 +35,6 @@
 
 #include "header.h"
 
-#define WIFI_CONFIG_SERVER_PORT         (4567)
-
-#define AUTO_REBOOT_TIMEOUT             (90000)
-#define AUTO_REBOOT_LONG_TIMEOUT        (900000)
-
-#define MAX_BODY_LEN                    (16000)
-
-#define BEST_RSSI_MARGIN                (1)
-
-#define MS_TO_TICKS(x)                  ((x) / portTICK_PERIOD_MS)
-
-#define INFO(message, ...)              printf(message "\n", ##__VA_ARGS__);
-#define ERROR(message, ...)             printf("! " message "\n", ##__VA_ARGS__);
-
 
 typedef enum {
     ENDPOINT_UNKNOWN = 0,
@@ -100,18 +86,22 @@ static void wifi_config_station_connect();
 static void wifi_config_softap_start();
 
 int wifi_config_remove_sys_param() {
-    unsigned char blank = 0xFF;
+    unsigned char sector[SPI_FLASH_SECTOR_SIZE];
     
-    for (uint16_t i = 0; i < (SECTORSIZE * SYSPARAMSIZE); i++) {
-        if (!spiflash_write(SYSPARAMSECTOR + i, &blank, 1)) {
+    for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
+        if (!spiflash_erase_sector(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE))) {
+            ERROR("Erasing sysparam");
+            return -1;
+        }
+        
+        memset(sector, 0xFF, sizeof(sector));
+        if (!spiflash_write(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE), sector, sizeof(sector))) {
             ERROR("Format sysparam (1/2)");
             return -1;
         }
-    }
-    
-    blank = 0x00;
-    for (uint16_t i = 0; i < (SECTORSIZE * SYSPARAMSIZE); i++) {
-        if (!spiflash_write(SYSPARAMSECTOR + i, &blank, 1)) {
+        
+        memset(sector, 0x0, sizeof(sector));
+        if (!spiflash_write(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE), sector, sizeof(sector))) {
             ERROR("Format sysparam (2/2)");
             return -1;
         }
@@ -569,11 +559,11 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         form_param_t *repossl_param = form_params_find(form, "repossl");
         
         // Remove saved states
-        int8_t hk_total_ac = 0;
-        sysparam_get_int8(TOTAL_ACC_SYSPARAM, &hk_total_ac);
+        int hk_total_ac = 0;
+        sysparam_get_int32(TOTAL_ACC_SYSPARAM, &hk_total_ac);
         char saved_state_id[5];
         memset(saved_state_id, 0, 5);
-        for (uint16_t int_saved_state_id = 100; int_saved_state_id <= hk_total_ac * 100; int_saved_state_id++) {
+        for (uint32_t int_saved_state_id = 100; int_saved_state_id <= hk_total_ac * 100; int_saved_state_id++) {
             itoa(int_saved_state_id, saved_state_id, 10);
             sysparam_set_data(saved_state_id, NULL, 0, false);
         }
@@ -995,13 +985,13 @@ static void wifi_config_station_connect() {
     sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &setup_mode);
     
     if (wifi_config_connect() == 1 && setup_mode == 0) {
-        INFO("\nHAA OTA - NORMAL MODE\n");
+        INFO("\nHAA INSTALLER - NORMAL MODE\n");
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
 
         xTaskCreate(wifi_config_sta_connect_timeout_task, "sta_connect", 512, NULL, (tskIDLE_PRIORITY + 1), &context->sta_connect_timeout);
         
     } else {
-        INFO("\nHAA OTA - SETUP MODE\n");
+        INFO("\nHAA INSTALLER - SETUP MODE\n");
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
         
         if (setup_mode == 1) {

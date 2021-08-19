@@ -8,20 +8,10 @@
 #ifndef __HAA_HEADER_H__
 #define __HAA_HEADER_H__
 
+#include "../common/common_headers.h"
+
 // Version
-#define FIRMWARE_VERSION                    "6.8.4"
-
-// Sysparam
-#define SYSPARAMSECTOR                      (0xF3000)
-#define SYSPARAMSIZE                        (8)
-#define SECTORSIZE                          (4096)
-
-#define TOTAL_ACC_SYSPARAM                  "total_ac"
-#define HAA_JSON_SYSPARAM                   "haa_conf"
-#define WIFI_SSID_SYSPARAM                  "wifi_ssid"
-#define HAA_SETUP_MODE_SYSPARAM             "setup"
-#define LAST_CONFIG_NUMBER                  "hkcf"
-#define WIFI_MODE_SYSPARAM                  "wifi_mode"
+#define FIRMWARE_VERSION                    "6.9.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -44,7 +34,7 @@
 #define TYPE_DOUBLE_LOCK                    (10)
 
 // Task Stack Sizes
-#define GLOBAL_TASK_SIZE                    (600)
+#define GLOBAL_TASK_SIZE                    (612)
 
 #define INITIAL_SETUP_TASK_SIZE             (1600)
 #define NTP_TASK_SIZE                       (512)
@@ -66,7 +56,7 @@
 #define IR_CAPTURE_TASK_SIZE                (768)
 #define REBOOT_TASK_SIZE                    (384)
 
-#define MINIMUM_FREE_HEAP                   (2700)
+#define MINIMUM_FREE_HEAP                   (3600)
 
 // Task Priorities
 #define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
@@ -246,6 +236,11 @@
 
 #define IAIRZONING_LAST_ACTION              iairzoning_group->last_wildcard_action[0]
 #define IAIRZONING_MAIN_MODE                iairzoning_group->last_wildcard_action[1]
+#define IAIRZONING_DELAY_ACTION_SET         "d"
+#define IAIRZONING_DELAY_ACTION_DEFAULT     (0.5f)
+#define IAIRZONING_DELAY_ACTION_NUM         num[0]
+#define IAIRZONING_DELAY_ACTION             iairzoning_group->IAIRZONING_DELAY_ACTION_NUM
+#define IAIRZONING_DELAY_ACTION_CH_GROUP    ch_group->IAIRZONING_DELAY_ACTION_NUM
 
 #define TEMPERATURE_SENSOR_GPIO             "g"
 #define TH_SENSOR_GPIO                      ch_group->num[0]
@@ -329,7 +324,7 @@
 #define COLOR_TEMP_MAX                      (400)
 #define LIGHTBULB_BRIGHTNESS_UP             (0)
 #define LIGHTBULB_BRIGHTNESS_DOWN           (1)
-#define AUTODIMMER_DELAY                    (500)
+#define AUTODIMMER_DELAY                    (400)
 #define AUTODIMMER_TASK_DELAY_SET           "d"
 #define AUTODIMMER_TASK_DELAY_DEFAULT       (1000)
 #define AUTODIMMER_TASK_STEP_SET            "e"
@@ -594,8 +589,6 @@
 #define SAVE_STATES_DELAY_MS                (5000)
 #define RANDOM_DELAY_MS                     (5000)
 
-#define GPIO_OVERFLOW                       (18)    // GPIO 17 is ADC PIN
-
 #define ACCESSORIES_WITHOUT_BRIDGE          (4)     // Max number of accessories before using a bridge
 
 #define SYSTEM_UPTIME_MS                    ((float) sdk_system_get_time() * 1e-3)
@@ -607,8 +600,6 @@
 
 #define NTP_POLL_PERIOD_MS                  (1 * 3600 * 1000)   // 1 hour
 
-#define MS_TO_TICKS(x)                      ((x) / portTICK_PERIOD_MS)
-
 #ifdef HAA_DEBUG
 #define LIGHT_DEBUG
 #endif
@@ -618,11 +609,5 @@
 #else
 #define L_DEBUG(message, ...)
 #endif
-
-#define DEBUG(message, ...)                 printf("%s: " message "\n", __func__, ##__VA_ARGS__)
-#define INFO(message, ...)                  printf(message "\n", ##__VA_ARGS__)
-#define ERROR(message, ...)                 printf("! " message "\n", ##__VA_ARGS__)
-
-#define FREEHEAP()                          printf("Free Heap %d\n", xPortGetFreeHeapSize())
 
 #endif // __HAA_HEADER_H__

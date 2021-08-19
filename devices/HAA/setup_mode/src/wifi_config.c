@@ -39,40 +39,11 @@
 
 #include <timers_helper.h>
 
-#define CUSTOM_REPO_SYSPARAM            "ota_sever"
-#define PORT_NUMBER_SYSPARAM            "ota_port"
-#define PORT_SECURE_SYSPARAM            "ota_sec"
-#define OTA_VERSION_SYSPARAM            "ota_repo"
-#define WIFI_SSID_SYSPARAM              "wifi_ssid"
-#define WIFI_PASSWORD_SYSPARAM          "wifi_password"
-#define WIFI_MODE_SYSPARAM              "wifi_mode"
-#define WIFI_BSSID_SYSPARAM             "wifi_bssid"
-#define AUTO_OTA_SYSPARAM               "aota"
-#define TOTAL_ACC_SYSPARAM              "total_ac"
-#define HAA_JSON_SYSPARAM               "haa_conf"
-#define HAA_SETUP_MODE_SYSPARAM         "setup"
-#define LAST_CONFIG_NUMBER_SYSPARAM     "hkcf"
+#include "header.h"
+
 #define SETUP_ANNOUNCER_DESTINATION     "255.255.255.255"
 #define SETUP_ANNOUNCER_PORT            "4567"
 
-// Sysparam
-#define SYSPARAMSECTOR                  (0xF3000)
-#define SYSPARAMSIZE                    (8)
-#define SECTORSIZE                      (4096)
-
-#define WIFI_CONFIG_SERVER_PORT         (4567)
-
-#define AUTO_REBOOT_TIMEOUT             (90000)
-#define AUTO_REBOOT_LONG_TIMEOUT        (900000)
-
-#define MAX_BODY_LEN                    (16000)
-
-#define BEST_RSSI_MARGIN                (1)
-
-#define MS_TO_TICKS(x)                  ((x) / portTICK_PERIOD_MS)
-
-#define INFO(message, ...)              printf(message "\n", ##__VA_ARGS__);
-#define ERROR(message, ...)             printf("! " message "\n", ##__VA_ARGS__);
 
 typedef enum {
     ENDPOINT_UNKNOWN = 0,
@@ -128,18 +99,22 @@ static void wifi_config_station_connect();
 static void wifi_config_softap_start();
 
 int wifi_config_remove_sys_param() {
-    unsigned char blank = 0xFF;
+    unsigned char sector[SPI_FLASH_SECTOR_SIZE];
     
-    for (uint16_t i = 0; i < (SECTORSIZE * SYSPARAMSIZE); i++) {
-        if (!spiflash_write(SYSPARAMSECTOR + i, &blank, 1)) {
+    for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
+        if (!spiflash_erase_sector(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE))) {
+            ERROR("Erasing sysparam");
+            return -1;
+        }
+        
+        memset(sector, 0xFF, sizeof(sector));
+        if (!spiflash_write(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE), sector, sizeof(sector))) {
             ERROR("Format sysparam (1/2)");
             return -1;
         }
-    }
-    
-    blank = 0x00;
-    for (uint16_t i = 0; i < (SECTORSIZE * SYSPARAMSIZE); i++) {
-        if (!spiflash_write(SYSPARAMSECTOR + i, &blank, 1)) {
+        
+        memset(sector, 0x0, sizeof(sector));
+        if (!spiflash_write(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE), sector, sizeof(sector))) {
             ERROR("Format sysparam (2/2)");
             return -1;
         }
@@ -651,11 +626,11 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         form_param_t *repossl_param = form_params_find(form, "repossl");
         
         // Remove saved states
-        int8_t hk_total_ac = 0;
-        sysparam_get_int8(TOTAL_ACC_SYSPARAM, &hk_total_ac);
+        int hk_total_ac = 0;
+        sysparam_get_int32(TOTAL_ACC_SYSPARAM, &hk_total_ac);
         char saved_state_id[5];
         memset(saved_state_id, 0, 5);
-        for (uint16_t int_saved_state_id = 100; int_saved_state_id <= hk_total_ac * 100; int_saved_state_id++) {
+        for (uint32_t int_saved_state_id = 100; int_saved_state_id <= hk_total_ac * 100; int_saved_state_id++) {
             itoa(int_saved_state_id, saved_state_id, 10);
             sysparam_set_data(saved_state_id, NULL, 0, false);
         }

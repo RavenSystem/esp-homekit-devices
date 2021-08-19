@@ -113,6 +113,7 @@ typedef struct {
     bool paired: 1;
     bool is_pairing: 1;
     bool has_notifications: 1;
+    bool setup_finish: 1;
     
     byte data[1024 + 18];
     size_t data_size: 16;
@@ -214,47 +215,13 @@ void server_free() {
 #define CLIENT_ERROR(client, message, ...)      ERROR("[%d] " message, client->socket, ##__VA_ARGS__)
 
 void tlv_debug(const tlv_values_t *values) {
-    HOMEKIT_DEBUG_LOG("Got following TLV values:");
+    HOMEKIT_DEBUG_LOG("Got following TLV Values:");
     for (tlv_t *t=values->head; t; t=t->next) {
         char *escaped_payload = binary_to_string(t->value, t->size);
-        HOMEKIT_DEBUG_LOG("Type %d value (%d bytes): %s", t->type, t->size, escaped_payload);
+        HOMEKIT_DEBUG_LOG("Type 0x%02X, Length: %d, Value: %s", t->type, t->size, escaped_payload);
         free(escaped_payload);
     }
 }
-
-
-typedef enum {
-    TLVType_Method = 0,        // (integer) Method to use for pairing. See PairMethod
-    TLVType_Identifier = 1,    // (UTF-8) Identifier for authentication
-    TLVType_Salt = 2,          // (bytes) 16+ bytes of random salt
-    TLVType_PublicKey = 3,     // (bytes) Curve25519, SRP public key or signed Ed25519 key
-    TLVType_Proof = 4,         // (bytes) Ed25519 or SRP proof
-    TLVType_EncryptedData = 5, // (bytes) Encrypted data with auth tag at end
-    TLVType_State = 6,         // (integer) State of the pairing process. 1=M1, 2=M2, etc.
-    TLVType_Error = 7,         // (integer) Error code. Must only be present if error code is
-                               // not 0. See TLVError
-    TLVType_RetryDelay = 8,    // (integer) Seconds to delay until retrying a setup code
-    TLVType_Certificate = 9,   // (bytes) X.509 Certificate
-    TLVType_Signature = 10,    // (bytes) Ed25519
-    TLVType_Permissions = 11,  // (integer) Bit value describing permissions of the controller
-                               // being added.
-                               // None (0x00): Regular user
-                               // Bit 1 (0x01): Admin that is able to add and remove
-                               // pairings against the accessory
-    TLVType_FragmentData = 13, // (bytes) Non-last fragment of data. If length is 0,
-                               // it's an ACK.
-    TLVType_FragmentLast = 14, // (bytes) Last fragment of data
-    TLVType_Separator = 0xff,
-} TLVType;
-
-
-typedef enum {
-  TLVMethod_PairSetup = 1,
-  TLVMethod_PairVerify = 2,
-  TLVMethod_AddPairing = 3,
-  TLVMethod_RemovePairing = 4,
-  TLVMethod_ListPairings = 5,
-} TLVMethod;
 
 
 typedef enum {
@@ -379,6 +346,7 @@ void pairing_context_free(pairing_context_t *context) {
         free(context->public_key);
     }
     free(context);
+    context = NULL;
 }
 
 
@@ -769,8 +737,7 @@ IRAM void send_200_response(client_context_t* context) {
     byte response[] =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: application/hap+json\r\n"
-        "Transfer-Encoding: chunked\r\n"
-        "Connection: keep-alive\r\n\r\n";
+        "Transfer-Encoding: chunked\r\n\r\n";
     client_send(context, response, sizeof(response) - 1);
 }
 
@@ -783,8 +750,7 @@ void send_207_response(client_context_t* context) {
     byte response[] =
         "HTTP/1.1 207 Multi-Status\r\n"
         "Content-Type: application/hap+json\r\n"
-        "Transfer-Encoding: chunked\r\n"
-        "Connection: keep-alive\r\n\r\n";
+        "Transfer-Encoding: chunked\r\n\r\n";
     client_send(context, response, sizeof(response) - 1);
 }
 
@@ -836,17 +802,6 @@ void send_client_events(client_context_t *context, client_event_t *events) {
 }
 
 
-void send_tlv_response(client_context_t *context, tlv_values_t *values);
-
-void send_tlv_error_response(client_context_t *context, int state, TLVError error) {
-    tlv_values_t *response = tlv_new();
-    tlv_add_integer_value(response, TLVType_State, 1, state);
-    tlv_add_integer_value(response, TLVType_Error, 1, error);
-
-    send_tlv_response(context, response);
-}
-
-
 void send_tlv_response(client_context_t *context, tlv_values_t *values) {
     CLIENT_DEBUG(context, "Sending TLV response");
     TLV_DEBUG(values);
@@ -867,8 +822,7 @@ void send_tlv_response(client_context_t *context, tlv_values_t *values) {
     char http_headers[] =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: application/pairing+tlv8\r\n"
-        "Content-Length: %d\r\n"
-        "Connection: keep-alive\r\n\r\n";
+        "Content-Length: %d\r\n\r\n";
 
     int response_size = strlen(http_headers) + payload_size + 32;
     char *response = malloc(response_size);
@@ -890,6 +844,14 @@ void send_tlv_response(client_context_t *context, tlv_values_t *values) {
     free(response);
 }
 
+void send_tlv_error_response(client_context_t *context, int state, TLVError error) {
+    tlv_values_t *response = tlv_new();
+    tlv_add_integer_value(response, TLVType_State, 1, state);
+    tlv_add_integer_value(response, TLVType_Error, 1, error);
+
+    send_tlv_response(context, response);
+}
+
 void send_json_response(client_context_t *context, int status_code, byte *payload, size_t payload_size) {
     CLIENT_DEBUG(context, "Sending JSON response");
     DEBUG_HEAP();
@@ -897,8 +859,7 @@ void send_json_response(client_context_t *context, int status_code, byte *payloa
     char http_headers[] =
         "HTTP/1.1 %d %s\r\n"
         "Content-Type: application/hap+json\r\n"
-        "Content-Length: %d\r\n"
-        "Connection: keep-alive\r\n\r\n";
+        "Content-Length: %d\r\n\r\n";
 
     CLIENT_DEBUG(context, "Payload: %s", payload);
 
@@ -1050,15 +1011,15 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 homekit_server->pairing_context = pairing_context_new();
                 homekit_server->pairing_context->client = context;
             }
-
+            
             CLIENT_DEBUG(context, "Initializing crypto");
             DEBUG_HEAP();
-
+            
             crypto_srp_init(
                 homekit_server->pairing_context->srp,
                 "Pair-Setup", "021-82-017"
             );
-
+            
             if (homekit_server->pairing_context->public_key) {
                 free(homekit_server->pairing_context->public_key);
                 homekit_server->pairing_context->public_key = NULL;
@@ -1072,15 +1033,15 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 CLIENT_ERROR(context, "Dump SPR public key (%d)", r);
 
                 pairing_context_free(homekit_server->pairing_context);
-                homekit_server->pairing_context = NULL;
 
                 send_tlv_error_response(context, 2, TLVError_Unknown);
                 break;
             }
-
-            size_t salt_size = 0;
-            crypto_srp_get_salt(homekit_server->pairing_context->srp, NULL, &salt_size);
-
+            
+            size_t salt_size = 16;
+            //size_t salt_size = 0;
+            //crypto_srp_get_salt(homekit_server->pairing_context->srp, NULL, &salt_size);
+            
             byte *salt = malloc(salt_size);
             r = crypto_srp_get_salt(homekit_server->pairing_context->srp, salt, &salt_size);
             if (r) {
@@ -1088,25 +1049,24 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 
                 free(salt);
                 pairing_context_free(homekit_server->pairing_context);
-                homekit_server->pairing_context = NULL;
 
                 send_tlv_error_response(context, 2, TLVError_Unknown);
                 break;
             }
-
+            
             tlv_values_t *response = tlv_new();
+            tlv_add_integer_value(response, TLVType_State, 1, 2);
             tlv_add_value(response, TLVType_PublicKey, homekit_server->pairing_context->public_key, homekit_server->pairing_context->public_key_size);
             tlv_add_value(response, TLVType_Salt, salt, salt_size);
-            tlv_add_integer_value(response, TLVType_State, 1, 2);
-
+            
             free(salt);
-
+            
             send_tlv_response(context, response);
             
             CLIENT_INFO(context, "Pair done 1/3");
             break;
         }
-            
+        
         case 3: {
             CLIENT_INFO(context, "Pairing 2/3");
             DEBUG_HEAP();
@@ -1154,9 +1114,11 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             CLIENT_DEBUG(context, "Verifying peer's proof");
             DEBUG_HEAP();
             
+#ifdef ESP_OPEN_RTOS
             if (low_mdns_buffer) {
                 homekit_mdns_buffer_set(0);
             }
+#endif //ESP_OPEN_RTOS
             
             r = crypto_srp_verify(homekit_server->pairing_context->srp, proof->value, proof->size);
             if (r) {
@@ -1512,7 +1474,6 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             send_tlv_response(context, response);
 
             pairing_context_free(homekit_server->pairing_context);
-            homekit_server->pairing_context = NULL;
 
             homekit_server->paired = 1;
             
@@ -1534,7 +1495,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
     homekit_server->is_pairing = false;
     
     tlv_free(message);
-
+    
 #ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
     sdk_system_restoreclock();
 #endif
@@ -3099,7 +3060,7 @@ IRAM static void homekit_client_process(client_context_t *context) {
         context->disconnect = true;
         return;
     }
-
+    
     if (data_len < 0) {
         if (errno != EAGAIN) {
             CLIENT_ERROR(context, "Reading from socket (%d). Closing", errno);
@@ -3111,6 +3072,7 @@ IRAM static void homekit_client_process(client_context_t *context) {
     CLIENT_DEBUG(context, "Got %d incomming data", data_len);
     byte *payload = (byte *)homekit_server->data;
     size_t payload_size = (size_t)data_len;
+    CLIENT_DEBUG(context, "Received Payload:\n%s", (char*) payload);
 
     byte *decrypted = NULL;
     size_t decrypted_size = 0;
@@ -3168,7 +3130,6 @@ IRAM void homekit_server_close_client(client_context_t *context) {
 
     if (homekit_server->pairing_context && homekit_server->pairing_context->client == context) {
         pairing_context_free(homekit_server->pairing_context);
-        homekit_server->pairing_context = NULL;
     }
 
     homekit_accessories_clear_notify_callbacks(
@@ -3202,18 +3163,20 @@ void homekit_server_accept_client() {
         return;
     }
     
-    client_context_t* context;
     client_context_t* new_context = client_context_new();
     
     uint32_t free_heap = xPortGetFreeHeapSize();
-    if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS || (free_heap <= HOMEKIT_MIN_FREEHEAP && homekit_server->is_pairing == false) || !new_context) {
-        context = homekit_server->clients;
+    if (!homekit_server->setup_finish && 0b10 < homekit_server->client_count) {
+        close(s);
+        return;
+    } else if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS || (free_heap <= HOMEKIT_MIN_FREEHEAP && homekit_server->is_pairing == false) || !new_context) {
+        client_context_t* context = homekit_server->clients;
         while (context) {
             if (!context->next) {
                 CLIENT_INFO(context, "Closing oldest");
                 context->disconnect = true;
             }
-
+            
             context = context->next;
         }
     }
@@ -3321,7 +3284,7 @@ IRAM void homekit_server_process_notifications() {
 }
 
 
-IRAM void homekit_server_close_clients() {
+IRAM static void homekit_server_close_clients() {
     int max_fd = homekit_server->listen_fd;
 
     client_context_t head;
@@ -3347,7 +3310,7 @@ IRAM void homekit_server_close_clients() {
 }
 
 
-static void homekit_run_server() {
+IRAM static void homekit_run_server() {
     HOMEKIT_DEBUG_LOG("Staring HTTP server");
     
     struct sockaddr_in serv_addr;
@@ -3364,12 +3327,13 @@ static void homekit_run_server() {
     homekit_server->client_count = 0;
     
     struct timeval timeout = { 0, 150000 }; /* 0.15 seconds timeout (orig: 1s) */
+    int triggered_nfds;
+    fd_set read_fds;
     
     for (;;) {
-        fd_set read_fds;
         memcpy(&read_fds, &homekit_server->fds, sizeof(read_fds));
         
-        int triggered_nfds = select(homekit_server->max_fd + 1, &read_fds, NULL, NULL, &timeout);
+        triggered_nfds = select(homekit_server->max_fd + 1, &read_fds, NULL, NULL, &timeout);
         if (triggered_nfds > 0) {
             if (FD_ISSET(homekit_server->listen_fd, &read_fds)) {
                 homekit_server_accept_client();
@@ -3430,7 +3394,7 @@ void homekit_setup_mdns() {
         return;
     }
      */
-
+    
     homekit_mdns_configure_init(name->value.string_value, PORT);
     
     // accessory model name (required)
@@ -3458,9 +3422,9 @@ void homekit_setup_mdns() {
     homekit_mdns_add_txt("ci", "%d", homekit_server->config->category);
     
     homekit_server->config->setup_id = strdup("JOSE");
-
+    
     HOMEKIT_DEBUG_LOG("Setup ID: %s", homekit_server->config->setup_id);
-
+    
     size_t data_size = strlen(homekit_server->config->setup_id) + strlen(homekit_server->accessory_id) + 1;
     char *data = malloc(data_size);
     snprintf(data, data_size, "%s%s", homekit_server->config->setup_id, homekit_server->accessory_id);
@@ -3468,18 +3432,18 @@ void homekit_setup_mdns() {
     
     unsigned char shaHash[SHA512_DIGEST_SIZE];
     wc_Sha512Hash((const unsigned char*) data, data_size - 1, shaHash);
-
+    
     free(data);
     free(homekit_server->config->setup_id);
-
+    
     unsigned char encodedHash[9];
     memset(encodedHash, 0, sizeof(encodedHash));
-
+    
     word32 len = sizeof(encodedHash);
     Base64_Encode_NoNl((const unsigned char *)shaHash, 4, encodedHash, &len);
-
+    
     homekit_mdns_add_txt("sh", "%s", encodedHash);
-
+    
     homekit_mdns_configure_finalize(homekit_server->config->mdns_ttl);
 }
 
@@ -3542,8 +3506,9 @@ void homekit_server_task(void *args) {
         pairing_free(pairing);
         homekit_server->paired = true;
     }
-
+    
     homekit_mdns_init();
+    homekit_server->setup_finish = homekit_storage_finish_setup();
     homekit_setup_mdns();
 
     HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_SERVER_INITIALIZED);

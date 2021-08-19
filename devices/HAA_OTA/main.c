@@ -29,7 +29,6 @@
 #include <adv_logger.h>
 
 #include "ota.h"
-#include "header.h"
 
 char* user_repo = NULL;
 char* user_version = NULL;
@@ -44,7 +43,7 @@ bool is_ssl = true;
 uint8_t tries_count = 0;
 
 void ota_task(void *arg) {
-    printf("\n\nHAA Installer v%s\n\n\n", OTAVERSION);
+    INFO("\n\nHAA Installer v%s\n\n", OTAVERSION);
 
 #ifdef HAABOOT
     sysparam_set_string(USER_VERSION_SYSPARAM, "0.0.0");
@@ -69,27 +68,27 @@ void ota_task(void *arg) {
         }
     }
     
-    printf("- Server %s\n", user_repo);
-    printf("- Port %i\n", port);
-    printf("- SSL %i\n\n", is_ssl);
+    INFO("- Server %s", user_repo);
+    INFO("- Port   %i", port);
+    INFO("- SSL    %s\n", is_ssl ? "yes" : "no");
 
     status = sysparam_get_string(USER_VERSION_SYSPARAM, &user_version);
     if (status == SYSPARAM_OK) {
-        printf("Current HAAMAIN installed v%s\n\n", user_version);
+        INFO("Current HAAMAIN installed v%s\n", user_version);
 
         ota_init(user_repo, is_ssl);
         
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        vTaskDelay(MS_TO_TICKS(2000));
         
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
         
         for (;;) {
-            printf("\n*** STARTING UPDATE PROCESS\n\n");
+            INFO("\n*** STARTING UPDATE PROCESS\n");
             tries_count++;
             
 #ifdef HAABOOT
-            printf("\nRunning HAABOOT\n\n");
-
+            INFO("\nRunning HAABOOT\n");
+/*
             printf("HK data migration\n");
             const char magic1[] = "HAP";
             char magic[sizeof(magic1)];
@@ -126,26 +125,26 @@ void ota_task(void *arg) {
             } else {
                 printf("Data is already migrated\n\n");
             }
-
+*/
             static char otamainfile[] = OTAMAINFILE;
             if (ota_get_sign(user_repo, otamainfile, signature, port, is_ssl) > 0) {
                 file_size = ota_get_file(user_repo, otamainfile, BOOT1SECTOR, port, is_ssl);
                 if (file_size > 0 && ota_verify_sign(BOOT1SECTOR, file_size, signature) == 0) {
                     ota_finalize_file(BOOT1SECTOR);
-                    printf("\n*** OTAMAIN installed\n\n");
+                    INFO("\n*** OTAMAIN installed\n");
                     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
                     rboot_set_temp_rom(1);
                     ota_reboot();
                 } else {
-                    printf("\n! Installing OTAMAIN\n\n");
+                    ERROR("Installing OTAMAIN");
                     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
                 }
             } else {
-                printf("\n! Downloading OTAMAIN signature\n\n");
+                ERROR("Downloading OTAMAIN signature");
                 sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
             }
 #else   // HAABOOT
-            printf("\nRunning OTAMAIN\n\n");
+            INFO("\nRunning OTAMAIN\n");
             
             if (ota_version) {
                 free(ota_version);
@@ -160,14 +159,14 @@ void ota_task(void *arg) {
                     file_size = ota_get_file(user_repo, otabootfile, BOOT0SECTOR, port, is_ssl);
                     if (file_size > 0 && ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
                         ota_finalize_file(BOOT0SECTOR);
-                        printf("\n* HAABOOT new version installed\n\n");
+                        INFO("\n* HAABOOT new version installed\n");
                     } else {
-                        printf("\n! Installing HAABOOT new version\n\n");
+                        ERROR("Installing HAABOOT new version\n");
                     }
                     
                     break;
                 } else {
-                    printf("\n! Downloading HAABOOT new version signature\n\n");
+                    ERROR("Downloading HAABOOT new version signature\n");
                 }
             }
             
@@ -185,12 +184,12 @@ void ota_task(void *arg) {
                     if (file_size > 0 && ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
                         ota_finalize_file(BOOT0SECTOR);
                         sysparam_set_string(USER_VERSION_SYSPARAM, new_version);
-                        printf("\n* HAAMAIN v%s installed\n\n", new_version);
+                        INFO("\n* HAAMAIN v%s installed\n", new_version);
                     } else {
-                        printf("\n! Installing HAAMAIN\n\n");
+                        ERROR("Installing HAAMAIN\n");
                     }
                 } else {
-                    printf("\n! Downloading HAAMAIN signature\n\n");
+                    ERROR("Downloading HAAMAIN signature\n");
                 }
             }
             
@@ -201,10 +200,10 @@ void ota_task(void *arg) {
                 break;
             }
             
-            vTaskDelay(pdMS_TO_TICKS(5000));
+            vTaskDelay(MS_TO_TICKS(5000));
         }
     } else {
-        printf("\n! Reading HAAMAIN Version, fixing\n\n");
+        ERROR("Reading HAAMAIN Version, fixing\n");
         sysparam_set_string(USER_VERSION_SYSPARAM, "0.0.0");
     }
     
@@ -225,6 +224,7 @@ void user_init(void) {
     
     adv_logger_init(ADV_LOGGER_UART0_UDP_BUFFERED, NULL);
     
+    // GPIO Init
     for (uint8_t i = 0; i < 17; i++) {
         if (i < 6 || i > 11) {
             if (!(i == 1 || i == 3)) {
@@ -233,28 +233,28 @@ void user_init(void) {
         }
     }
     
-    printf("\n\n\n");
+    INFO("\n\n");
     
     sysparam_status_t status;
 
     status = sysparam_init(SYSPARAMSECTOR, 0);
     if (status != SYSPARAM_OK) {
-        printf("No sysparam, erasing\n");
+        INFO("No sysparam, erasing");
         
         wifi_config_remove_sys_param();
         
-        printf("Creating new\n");
+        INFO("Creating new");
         status = sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
         if (status == SYSPARAM_OK) {
-            printf("Sysparam created\n");
+            INFO("Sysparam created");
             status = sysparam_init(SYSPARAMSECTOR, 0);
         }
     }
     
     if (status == SYSPARAM_OK) {
-        printf("Sysparam OK\n\n");
+        INFO("Sysparam OK\n");
     } else {
-        printf("! Sysparam %d\n", status);
+        ERROR("Sysparam %d", status);
     }
         
     wifi_config_init("HAA", NULL, on_wifi_ready);

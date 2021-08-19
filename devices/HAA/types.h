@@ -8,6 +8,14 @@
 #ifndef __HAA_TYPES_H__
 #define __HAA_TYPES_H__
 
+#if defined(ESP_OPEN_RTOS)
+    #define MAX_GPIOS                       (18)
+#elif defined(ESP_IDF)
+    #define MAX_GPIOS                       (40)
+#else
+    #error "!!! UNKNOWN PLATFORM: ESP_OPEN_RTOS or ESP_IDF"
+#endif
+
 typedef struct _autooff_setter_params {
     homekit_characteristic_t* ch;
     uint8_t type;
@@ -40,8 +48,8 @@ typedef struct _action_binary_output {
 typedef struct _action_acc_manager {
     uint8_t action;
     
-    uint8_t accessory: 7;
-    bool is_kill_switch: 1;
+    uint16_t accessory: 10;
+
     float value;
     
     struct _action_acc_manager* next;
@@ -119,13 +127,13 @@ typedef struct _wildcard_action {
 } wildcard_action_t;
 
 typedef struct _ch_group {
-    uint8_t accessory: 6;
+    uint16_t accessory: 10;
+    uint8_t chs: 4;
     bool main_enabled: 1;
     bool child_enabled: 1;
-    uint8_t acc_type: 7;
     bool homekit_enabled: 1;
     
-    uint8_t chs: 4;
+    uint8_t acc_type: 7;
     
     homekit_characteristic_t** ch;
     
@@ -156,11 +164,13 @@ typedef struct _action_task {
 } action_task_t;
 
 typedef struct _lightbulb_group {
-    uint8_t autodimmer;
-    uint8_t autodimmer_task_step;
+    uint16_t autodimmer: 10;
     bool armed_autodimmer: 1;
+    bool autodimmer_reverse: 1;
+    bool lightbulb_task_running: 1;
     //bool temp_changed: 1;
-
+    uint8_t autodimmer_task_step;
+    
     uint16_t step;
     uint16_t autodimmer_task_delay;
     
@@ -266,8 +276,9 @@ typedef struct _main_config {
     uint8_t wifi_channel: 4;
     bool ir_tx_inv: 1;
     bool setpwm_bool_semaphore: 1;
-    uint8_t ir_tx_gpio: 5;
-    uint8_t wifi_mode: 3;
+    uint8_t ir_tx_gpio: 6;
+    bool setpwm_is_running: 1;
+    bool timetable_ready: 1;
     int8_t setup_mode_toggle_counter;
     int8_t setup_mode_toggle_counter_max;
     
@@ -281,22 +292,8 @@ typedef struct _main_config {
     uint16_t setup_mode_time;
     uint16_t wifi_roaming_count;
     
-    bool setpwm_is_running: 1;
-    bool timetable_ready: 1;
-    bool used_gpio_0: 1;
-    bool used_gpio_1: 1;
-    bool used_gpio_2: 1;
-    bool used_gpio_3: 1;
-    bool used_gpio_4: 1;
-    bool used_gpio_5: 1;
-    bool used_gpio_9: 1;
-    bool used_gpio_10: 1;
-    bool used_gpio_12: 1;
-    bool used_gpio_13: 1;
-    bool used_gpio_14: 1;
-    bool used_gpio_15: 1;
-    bool used_gpio_16: 1;
-    bool used_gpio_17: 1;
+    uint64_t used_gpio: MAX_GPIOS;
+    uint8_t wifi_mode: 3;
     
     char name_value[11];
     char serial_value[13];

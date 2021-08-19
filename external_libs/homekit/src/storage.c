@@ -6,7 +6,7 @@
 #include "port.h"
 
 #ifndef SPIFLASH_BASE_ADDR
-#define SPIFLASH_BASE_ADDR 0x200000
+#error "!!! Define HOMEKIT_SPI_FLASH_BASE_ADDR or SPIFLASH_BASE_ADDR"
 #endif
 
 #define MAGIC_OFFSET           0
@@ -28,7 +28,8 @@ const char magic1[] = "HAP";
 
 
 int homekit_storage_reset() {
-    byte blank[sizeof(magic1)];
+    byte blank[2];
+    memset(blank, 0, sizeof(blank));
     if (!spiflash_write(MAGIC_ADDR, blank, sizeof(blank))) {
         ERROR("Reset flash");
         return -1;
@@ -46,13 +47,13 @@ int homekit_storage_init() {
         ERROR("Read flash magic");
     }
 
-    if (strncmp(magic, magic1, sizeof(magic1))) {
+    if (strncmp(magic, magic1, 2)) {
         INFO("Formatting flash at 0x%x", SPIFLASH_BASE_ADDR);
         
-        byte blank[1];
-        blank[0] = 0;
-        for (uint16_t i = 0; i < 1024; i++) {
-            if (!spiflash_write(SPIFLASH_BASE_ADDR + i, blank, 1)) {
+        byte blank[64];
+        memset(blank, 0, sizeof(blank));
+        for (uint16_t i = 0; i < SPI_FLASH_SECTOR_SIZE; i += sizeof(blank)) {
+            if (!spiflash_write(SPIFLASH_BASE_ADDR + i, blank, sizeof(blank))) {
                 ERROR("Format flash");
                 return -1;
             }
@@ -63,15 +64,21 @@ int homekit_storage_init() {
             return -1;
         }
 
-        strncpy(magic, magic1, sizeof(magic1));
+        if (magic[2] != magic1[1]) {
+            strncpy(magic, magic1, sizeof(magic1));
+        } else {
+            strncpy(magic, magic1, sizeof(magic1));
+            magic[2] = magic1[1];
+        }
+        
         if (!spiflash_write(MAGIC_ADDR, (byte *)magic, sizeof(magic))) {
-            ERROR("Initialize flash");
+            ERROR("Init sector start");
             return -1;
         }
-
+        
         return 1;
     }
-
+    
     return 0;
 }
 
@@ -163,14 +170,25 @@ bool homekit_storage_can_add_pairing() {
     return false;
 }
 
+bool homekit_storage_finish_setup() {
+    char magic[sizeof(magic1)];
+    if (!spiflash_read(SPIFLASH_BASE_ADDR, (byte *)magic, sizeof(magic))) {
+        ERROR("Read flash");
+        return true;
+    }
+    return magic[2] == magic1[1];
+}
+
 static int compact_data() {
+    INFO("Compacting data");
+    
     byte *data = malloc(SPI_FLASH_SECTOR_SIZE);
     if (!spiflash_read(SPIFLASH_BASE_ADDR, data, SPI_FLASH_SECTOR_SIZE)) {
         free(data);
         ERROR("Compact data: sector data read error");
         return -1;
     }
-
+    
     int next_pairing_idx = 0;
     for (int i=0; i<MAX_PAIRINGS; i++) {
         pairing_data_t *pairing_data = (pairing_data_t *)&data[PAIRINGS_OFFSET + sizeof(pairing_data_t)*i];

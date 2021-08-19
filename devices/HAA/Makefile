@@ -1,6 +1,5 @@
 PROGRAM = haamain
 
-
 EXTRA_COMPONENTS = \
 	$(abspath setup_mode) \
     extras/onewire \
@@ -25,9 +24,9 @@ FLASH_SIZE = 8
 FLASH_MODE = dout
 FLASH_SPEED = 40
 
-# Max HAA firmware size is 581616 bytes
+# Max HAA firmware size is 585728 bytes
 
-HOMEKIT_SPI_FLASH_BASE_ADDR = 0xf2000
+HOMEKIT_SPI_FLASH_BASE_ADDR = 0xF2000
 HOMEKIT_MAX_CLIENTS = 8
 HOMEKIT_SMALL = 0
 

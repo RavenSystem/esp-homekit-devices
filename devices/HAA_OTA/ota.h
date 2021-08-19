@@ -13,6 +13,8 @@
 #ifndef __HAA_OTA_H__
 #define __HAA_OTA_H__
 
+#include "header.h"
+
 #define OTAREPO                 "github.com/RavenSystem/haa/releases/latest/download"
 #define OTAMAINFILE             "otamain.bin"
 #define OTABOOTFILE             "haaboot.bin"
@@ -24,11 +26,7 @@
 
 #define MAX_TRIES               2
 
-#define BOOT0SECTOR             0x02000
-#define BOOT1SECTOR             0x90000     // Must match the program1.ld value
-
 #define HTTPS_PORT              443
-#define FAILED                  "failed\n"
 #define REQUESTHEAD             "GET /"
 #define REQUESTTAIL             " HTTP/1.1\r\nHost: "
 #define CRLFCRLF                "\r\n\r\n"
