@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "6.9.0"
+#define FIRMWARE_VERSION                    "6.10.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -453,6 +453,9 @@
 #define LIGHT_SENSOR_POW_SET                "po"
 #define LIGHT_SENSOR_POW_DEFAULT            (1)
 #define LIGHT_SENSOR_POW                    ch_group->num[4]
+#define LIGHT_SENSOR_I2C_DATA_ARRAY_SET     "dt"
+#define LIGHT_SENSOR_I2C_BUS                ch_group->num[3]
+#define LIGHT_SENSOR_I2C_ADDR               ch_group->num[4]
 
 #define SEC_SYSTEM_MODES_ARRAY_SET          "n"
 #define SEC_SYSTEM_CH_CURRENT_STATE         ch_group->ch[0]

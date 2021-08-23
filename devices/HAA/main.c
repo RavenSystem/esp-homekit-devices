@@ -1395,15 +1395,19 @@ void set_zones_task(void* args) {
             iairzoning_final_main_mode = THERMOSTAT_ACTION_TOTAL_OFF;
             
             // Open all gates
+            bool must_wait = false;
             ch_group = main_config.ch_groups;
             while (ch_group) {
                 if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == (uint16_t) TH_IAIRZONING_CONTROLLER) {
                     if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_OPEN) {
                         TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_OPEN;
+                        must_wait = true;
                         do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
                     }
                     
-                    vTaskDelay(IAIRZONING_DELAY_ACTION);
+                    if (must_wait) {
+                        vTaskDelay(IAIRZONING_DELAY_ACTION);
+                    }
                 }
 
                 ch_group = ch_group->next;
@@ -1439,6 +1443,7 @@ void set_zones_task(void* args) {
             }
         }
         
+        bool must_wait = false;
         ch_group = main_config.ch_groups;
         while (ch_group) {
             if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == (uint16_t) TH_IAIRZONING_CONTROLLER) {
@@ -1449,6 +1454,7 @@ void set_zones_task(void* args) {
                     case THERMOSTAT_ACTION_COOLER_SOFT_ON:
                         if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_OPEN) {
                             TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_OPEN;
+                            must_wait = true;
                             do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
                         }
                         break;
@@ -1460,11 +1466,13 @@ void set_zones_task(void* args) {
                         if (thermostat_all_idle) {
                             if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_OPEN) {
                                 TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_OPEN;
+                                must_wait = true;
                                 do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
                             }
                         } else {
                             if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_CLOSE) {
                                 TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_CLOSE;
+                                must_wait = true;
                                 do_actions(ch_group, THERMOSTAT_ACTION_GATE_CLOSE);
                             }
                         }
@@ -1473,14 +1481,17 @@ void set_zones_task(void* args) {
                     default:    // THERMOSTAT_OFF
                         if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_CLOSE) {
                             TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_CLOSE;
+                            must_wait = true;
                             do_actions(ch_group, THERMOSTAT_ACTION_GATE_CLOSE);
                         }
                         break;
                 }
                 
-                vTaskDelay(IAIRZONING_DELAY_ACTION);
+                if (must_wait) {
+                    vTaskDelay(IAIRZONING_DELAY_ACTION);
+                }
             }
-
+            
             ch_group = ch_group->next;
         }
     }
@@ -3146,7 +3157,7 @@ void autodimmer_task(void* args) {
     ch_group_t* ch_group = ch_group_find(ch);
     lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_group->ch[0]);
     
-    lightbulb_group->autodimmer = 8 * 100 / lightbulb_group->autodimmer_task_step;
+    lightbulb_group->autodimmer = ((8 * 100) / lightbulb_group->autodimmer_task_step) + 1;
     
     vTaskDelay(MS_TO_TICKS(AUTODIMMER_DELAY));
     
@@ -3212,7 +3223,6 @@ void autodimmer_call(homekit_characteristic_t* ch0, const homekit_value_t value)
     } else if (lightbulb_group->autodimmer > 0) {
         lightbulb_group->autodimmer = 0;
     } else {
-        lightbulb_group->autodimmer = 0;
         ch_group_t* ch_group = ch_group_find(ch0);
         if (lightbulb_group->armed_autodimmer) {
             lightbulb_group->armed_autodimmer = false;
@@ -3715,6 +3725,14 @@ void light_sensor_task(void* args) {
         }
         
         luxes = 1 / fast_precise_pow(ldr_resistor, LIGHT_SENSOR_POW);
+        
+    } else if (LIGHT_SENSOR_TYPE == 2.f) {  // BH1750
+        uint8_t value[2] = { 0, 0 };
+        i2c_slave_read(LIGHT_SENSOR_I2C_BUS, LIGHT_SENSOR_I2C_ADDR, NULL, 0, value, 2);
+        
+        uint16_t final_value = value[0] << 8 | value[1];
+        
+        luxes = final_value / 1.2f;
     }
     
     luxes = (luxes * LIGHT_SENSOR_FACTOR) + LIGHT_SENSOR_OFFSET;
@@ -5020,7 +5038,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         if (action_acc_manager->action == action) {
             ch_group_t* ch_group = ch_group_find_by_acc(action_acc_manager->accessory);
             if (ch_group) {
-                INFO("Acc Manager: target %i, val %g", action_acc_manager->accessory, action_acc_manager->value);
+                INFO("Serv Manager: target %i, val %g", action_acc_manager->accessory, action_acc_manager->value);
                 
                 if (action_acc_manager->value == -10000.f) {
                     ch_group->main_enabled = false;
@@ -5118,7 +5136,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             break;
                             
                         case ACC_TYPE_LIGHTBULB:
-                            if (action_acc_manager->value > 1) {
+                            if (action_acc_manager->value > 1.f) {
                                 if (action_acc_manager->value < 103) {            // BRI
                                     hkc_rgbw_setter(ch_group->ch[1], HOMEKIT_INT(((int) action_acc_manager->value) - 2));
                                     
@@ -5887,7 +5905,7 @@ void normal_mode_init() {
                             }
                         }
                         
-                        INFO("New Acc Manager Action %i: acc %i, val %g", new_int_action, action_acc_manager->accessory, action_acc_manager->value);
+                        INFO("New Serv Manager Act %i: ser %i, val %g", new_int_action, action_acc_manager->accessory, action_acc_manager->value);
                     }
                 }
             }
@@ -8331,14 +8349,8 @@ void normal_mode_init() {
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput_1, ch_group, TYPE_LIGHTBULB);
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput_0, ch_group, TYPE_LIGHTBULB);
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY) != NULL ||
-            cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0) != NULL ||
-            cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1) != NULL) {
-            if (lightbulb_group->autodimmer_task_step > 0) {
-                ch_group->timer = esp_timer_create(AUTODIMMER_DELAY, false, (void*) ch_group->ch[0], no_autodimmer_called);
-            }
-        } else {
-            lightbulb_group->autodimmer_task_step = 0;
+        if (lightbulb_group->autodimmer_task_step > 0) {
+            ch_group->timer = esp_timer_create(AUTODIMMER_DELAY, false, (void*) ch_group->ch[0], no_autodimmer_called);
         }
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
@@ -8660,14 +8672,23 @@ void normal_mode_init() {
             LIGHT_SENSOR_OFFSET = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_OFFSET_SET)->valuedouble;
         }
         
-        LIGHT_SENSOR_RESISTOR = LIGHT_SENSOR_RESISTOR_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_RESISTOR_SET) != NULL) {
-            LIGHT_SENSOR_RESISTOR = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_RESISTOR_SET)->valuedouble * 1000;
-        }
-        
-        LIGHT_SENSOR_POW = LIGHT_SENSOR_POW_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_POW_SET) != NULL) {
-            LIGHT_SENSOR_POW = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_POW_SET)->valuedouble;
+        if (LIGHT_SENSOR_TYPE < 2) {
+            LIGHT_SENSOR_RESISTOR = LIGHT_SENSOR_RESISTOR_DEFAULT;
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_RESISTOR_SET) != NULL) {
+                LIGHT_SENSOR_RESISTOR = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_RESISTOR_SET)->valuedouble * 1000;
+            }
+            
+            LIGHT_SENSOR_POW = LIGHT_SENSOR_POW_DEFAULT;
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_POW_SET) != NULL) {
+                LIGHT_SENSOR_POW = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_POW_SET)->valuedouble;
+            }
+        } else if (LIGHT_SENSOR_TYPE == 2.f) {
+            cJSON* data_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_I2C_DATA_ARRAY_SET);
+            LIGHT_SENSOR_I2C_BUS = (float) cJSON_GetArrayItem(data_array, 0)->valuedouble;
+            LIGHT_SENSOR_I2C_ADDR = (float) cJSON_GetArrayItem(data_array, 1)->valuedouble;
+            
+            const uint8_t start_bh1750 = 0x10;
+            i2c_slave_write(LIGHT_SENSOR_I2C_BUS, LIGHT_SENSOR_I2C_ADDR, NULL, 0, &start_bh1750, 1);
         }
         
         const float poll_period = sensor_poll_period(json_context, LIGHT_SENSOR_POLL_PERIOD_DEFAULT);
