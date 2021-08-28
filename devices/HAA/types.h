@@ -128,11 +128,11 @@ typedef struct _wildcard_action {
 
 typedef struct _ch_group {
     uint16_t accessory: 10;
-    uint8_t chs: 4;
     bool main_enabled: 1;
     bool child_enabled: 1;
     bool homekit_enabled: 1;
     
+    uint8_t chs;
     uint8_t acc_type: 7;
     
     homekit_characteristic_t** ch;
@@ -143,7 +143,10 @@ typedef struct _ch_group {
     TimerHandle_t timer;
     TimerHandle_t timer2;
     
-    char* ir_protocol;
+    union {
+        char* ir_protocol;
+        homekit_characteristic_t* ch_hist;
+    };
     
     action_copy_t* action_copy;
     action_binary_output_t* action_binary_output;
@@ -261,16 +264,6 @@ typedef struct _timetable_action {
     struct _timetable_action* next;
 } timetable_action_t;
 
-typedef struct _historical {
-    uint16_t size;
-    uint16_t last_entry;
-    
-    homekit_characteristic_t* ch_hist_data;
-    homekit_characteristic_t* ch;
-    
-    struct _historical* next;
-} historical_t;
-
 typedef struct _main_config {
     uint8_t wifi_status: 2;
     uint8_t wifi_channel: 4;
@@ -312,8 +305,6 @@ typedef struct _main_config {
     
     char* ntp_host;
     timetable_action_t* timetable_actions;
-    
-    historical_t* historicals;
     
     led_t* status_led;
 } main_config_t;

@@ -543,7 +543,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     
     if (reset_sys_param) {
         wifi_config_remove_sys_param();
-        vTaskDelay(MS_TO_TICKS(3000));
+        vTaskDelay(MS_TO_TICKS(500));
         wifi_config_reset();
         
     } else {
@@ -877,7 +877,7 @@ static void wifi_config_sta_connect_timeout_task() {
 
         } else {
             context->check_counter++;
-            if (context->check_counter == 120) {
+            if (context->check_counter == 35) {
                 wifi_config_reset();
                 vTaskDelay(MS_TO_TICKS(5000));
                 wifi_config_connect();
@@ -886,7 +886,7 @@ static void wifi_config_sta_connect_timeout_task() {
             } else if (context->check_counter > 240) {
                 auto_reboot_run();
                 
-            } else if (context->check_counter % 16 == 0) {
+            } else if (context->check_counter % 13 == 0) {
                 wifi_config_resend_arp();
             }
         }

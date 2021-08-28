@@ -344,7 +344,20 @@ ch_group_t* ch_group_find(homekit_characteristic_t* ch) {
     return NULL;
 }
 
-ch_group_t* ch_group_find_by_acc(uint8_t accessory) {
+ch_group_t* ch_group_find_historical(homekit_characteristic_t* ch_hist) {
+    ch_group_t* ch_group = main_config.ch_groups;
+    while (ch_group) {
+        if (ch_group->ch_hist == ch_hist) {
+                return ch_group;
+        }
+        
+        ch_group = ch_group->next;
+    }
+
+    return NULL;
+}
+
+ch_group_t* ch_group_find_by_acc(uint16_t accessory) {
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group &&
            ch_group->accessory != accessory) {
@@ -363,15 +376,70 @@ lightbulb_group_t* lightbulb_group_find(homekit_characteristic_t* ch) {
 
     return lightbulb_group;
 }
-/*
-historical_t* new_historical_data() {
-      
+
+void save_historical_data(homekit_characteristic_t* ch_hist) {
+    ch_group_t* ch_group = ch_group_find_historical(ch_hist);
+    
+    if (!ch_group) {
+        return;
+    }
+    
+    struct tm* timeinfo;
+    time_t time = raven_ntp_get_time_t();
+    timeinfo = localtime(&time);
+    
+    if (timeinfo->tm_year < 120) {
+        return;
+    }
+    
+    float value = 0;
+    switch (ch_hist->value.format) {
+        case HOMETKIT_FORMAT_BOOL:
+            value = (uint8_t) ch_hist->value.bool_value;
+            break;
+            
+        case HOMETKIT_FORMAT_UINT8:
+        case HOMETKIT_FORMAT_UINT16:
+        case HOMETKIT_FORMAT_UINT32:
+        case HOMETKIT_FORMAT_UINT64:
+        case HOMETKIT_FORMAT_INT:
+            value = ch_hist->value.int_value;
+            break;
+            
+        case HOMETKIT_FORMAT_FLOAT:
+            value = ch_hist->value.float_value;
+            break;
+            
+        default:
+            return;
+    }
+    
+    uint32_t final_time = time;
+    int32_t final_data = value * FLOAT_FACTOR_SAVE_AS_INT;
+    
+    uint32_t last_register = HIST_LAST_REGISTER;
+    last_register += HIST_REGISTER_SIZE;
+    uint32_t current_ch = last_register / HIST_BLOCK_SIZE;
+    uint32_t current_pos = last_register % HIST_BLOCK_SIZE;
+    
+    if (current_ch >= ch_group->chs) {
+        current_ch = 0;
+        current_pos = 0;
+    }
+    
+    //INFO("Current ch & pos: %i, %i", current_ch, current_pos);
+    
+    memcpy(ch_group->ch[current_ch]->value.data_value + current_pos, &final_time, HIST_TIME_SIZE);
+    memcpy(ch_group->ch[current_ch]->value.data_value + current_pos + HIST_TIME_SIZE, &final_data, HIST_DATA_SIZE);
+    
+    HIST_LAST_REGISTER = (current_ch * HIST_BLOCK_SIZE) + current_pos;
 }
 
-void save_historical_data(homekit_characteristic_t* ch) {
-    
+void historical_timer_worker(TimerHandle_t xTimer) {
+    homekit_characteristic_t* ch = (homekit_characteristic_t*) pvTimerGetTimerID(xTimer);
+    save_historical_data(ch);
 }
-*/
+
 bool ping_host(char* host) {
     if (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
         return false;
@@ -727,7 +795,7 @@ void save_states() {
                 break;
                 
             case CH_TYPE_FLOAT:
-                status = sysparam_set_int32(last_state->id, (int) (last_state->ch->value.float_value * 1000000));
+                status = sysparam_set_int32(last_state->id, (int) (last_state->ch->value.float_value * FLOAT_FACTOR_SAVE_AS_INT));
                 break;
                 
             case CH_TYPE_STRING:
@@ -853,6 +921,8 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
                 homekit_characteristic_notify_safe(ch_group->ch[2]);
             }
             
+            save_historical_data(ch);
+            
             do_actions(ch_group, (uint8_t) ch->value.bool_value);
         }
     }
@@ -860,14 +930,16 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     homekit_characteristic_notify_safe(ch);
 }
 
-void hkc_on_status_setter(homekit_characteristic_t* ch0, const homekit_value_t value) {
-    if (ch0->value.bool_value != value.bool_value) {
+void hkc_on_status_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
+    if (ch->value.bool_value != value.bool_value) {
         led_blink(1);
-        ch_group_t* ch_group = ch_group_find(ch0);
+        ch_group_t* ch_group = ch_group_find(ch);
         INFO("<%i> Setter Status ON %i", ch_group->accessory, value.bool_value);
-        ch0->value.bool_value = value.bool_value;
+        ch->value.bool_value = value.bool_value;
         
-        homekit_characteristic_notify_safe(ch0);
+        homekit_characteristic_notify_safe(ch);
+        
+        save_historical_data(ch);
     }
 }
 
@@ -905,6 +977,8 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
             setup_mode_toggle_upcount();
             save_states_callback();
             
+            save_historical_data(ch);
+            
             do_actions(ch_group, (uint8_t) ch->value.int_value);
         }
     }
@@ -926,6 +1000,8 @@ void hkc_lock_status_setter(homekit_characteristic_t* ch, const homekit_value_t 
 
         homekit_characteristic_notify_safe(ch_group->ch[0]);
         homekit_characteristic_notify_safe(ch);
+        
+        save_historical_data(ch);
     }
 }
 
@@ -940,6 +1016,8 @@ void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
         ch_group->ch[0]->value.int_value = event_type;
         homekit_characteristic_notify_safe(ch_group->ch[0]);
         
+        save_historical_data(ch_group->ch[0]);
+        
         do_actions(ch_group, event_type);
         
         if (ch_group->chs > 1 && event_type == 0) {
@@ -951,6 +1029,8 @@ void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
             }
             ch_group->ch[1]->value.int_value = (uint8_t) DOORBELL_LAST_STATE;
             homekit_characteristic_notify_safe(ch_group->ch[1]);
+            
+            save_historical_data(ch_group->ch[1]);
         }
         
         setup_mode_toggle_upcount();
@@ -984,6 +1064,8 @@ void sensor_1(const uint16_t gpio, void* args, const uint8_t type) {
                 esp_timer_start(esp_timer_create(ch_group->num[0] * 1000, false, (void*) autooff_setter_params, hkc_autooff_setter_task));
             }
             
+            save_historical_data(ch_group->ch[0]);
+            
             do_actions(ch_group, 1);
         }
     }
@@ -1010,6 +1092,8 @@ void sensor_status_1(const uint16_t gpio, void* args, const uint8_t type) {
         }
         
         homekit_characteristic_notify_safe(ch_group->ch[0]);
+        
+        save_historical_data(ch_group->ch[0]);
     }
 }
 
@@ -1031,6 +1115,8 @@ void sensor_0(const uint16_t gpio, void* args, const uint8_t type) {
             } else {
                 ch_group->ch[0]->value.bool_value = false;
             }
+            
+            save_historical_data(ch_group->ch[0]);
             
             do_actions(ch_group, 0);
         }
@@ -1058,6 +1144,8 @@ void sensor_status_0(const uint16_t gpio, void* args, const uint8_t type) {
         }
         
         homekit_characteristic_notify_safe(ch_group->ch[0]);
+        
+        save_historical_data(ch_group->ch[0]);
     }
 }
 
@@ -1271,6 +1359,8 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
                 homekit_characteristic_notify_safe(ch_group->ch[3]);
             }
             
+            save_historical_data(ch);
+            
             do_actions(ch_group, (uint8_t) ch->value.int_value);
         }
     }
@@ -1290,6 +1380,8 @@ void hkc_valve_status_setter(homekit_characteristic_t* ch, const homekit_value_t
         
         homekit_characteristic_notify_safe(ch_group->ch[1]);
         homekit_characteristic_notify_safe(ch);
+        
+        save_historical_data(ch);
     }
 }
 
@@ -1395,17 +1487,12 @@ void set_zones_task(void* args) {
             iairzoning_final_main_mode = THERMOSTAT_ACTION_TOTAL_OFF;
             
             // Open all gates
-            bool must_wait = false;
             ch_group = main_config.ch_groups;
             while (ch_group) {
                 if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == (uint16_t) TH_IAIRZONING_CONTROLLER) {
-                    if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_OPEN) {
+                    if ((uint8_t) TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_OPEN) {
                         TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_OPEN;
-                        must_wait = true;
                         do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
-                    }
-                    
-                    if (must_wait) {
                         vTaskDelay(IAIRZONING_DELAY_ACTION);
                     }
                 }
@@ -1443,7 +1530,6 @@ void set_zones_task(void* args) {
             }
         }
         
-        bool must_wait = false;
         ch_group = main_config.ch_groups;
         while (ch_group) {
             if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == (uint16_t) TH_IAIRZONING_CONTROLLER) {
@@ -1452,10 +1538,10 @@ void set_zones_task(void* args) {
                     case THERMOSTAT_ACTION_COOLER_ON:
                     case THERMOSTAT_ACTION_HEATER_SOFT_ON:
                     case THERMOSTAT_ACTION_COOLER_SOFT_ON:
-                        if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_OPEN) {
+                        if ((uint8_t) TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_OPEN) {
                             TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_OPEN;
-                            must_wait = true;
                             do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
+                            vTaskDelay(IAIRZONING_DELAY_ACTION);
                         }
                         break;
                         
@@ -1464,31 +1550,27 @@ void set_zones_task(void* args) {
                     case THERMOSTAT_ACTION_HEATER_FORCE_IDLE:
                     case THERMOSTAT_ACTION_COOLER_FORCE_IDLE:
                         if (thermostat_all_idle) {
-                            if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_OPEN) {
+                            if ((uint8_t) TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_OPEN) {
                                 TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_OPEN;
-                                must_wait = true;
                                 do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
+                                vTaskDelay(IAIRZONING_DELAY_ACTION);
                             }
                         } else {
-                            if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_CLOSE) {
+                            if ((uint8_t) TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_CLOSE) {
                                 TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_CLOSE;
-                                must_wait = true;
                                 do_actions(ch_group, THERMOSTAT_ACTION_GATE_CLOSE);
+                                vTaskDelay(IAIRZONING_DELAY_ACTION);
                             }
                         }
                         break;
                         
                     default:    // THERMOSTAT_OFF
-                        if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_CLOSE) {
+                        if ((uint8_t) TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_CLOSE) {
                             TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_CLOSE;
-                            must_wait = true;
                             do_actions(ch_group, THERMOSTAT_ACTION_GATE_CLOSE);
+                            vTaskDelay(IAIRZONING_DELAY_ACTION);
                         }
                         break;
-                }
-                
-                if (must_wait) {
-                    vTaskDelay(IAIRZONING_DELAY_ACTION);
                 }
             }
             
@@ -1727,6 +1809,8 @@ void process_th_task(void* args) {
     
     save_states_callback();
     
+    save_historical_data(ch_group->ch[3]);
+    
     vTaskDelete(NULL);
 }
 
@@ -1748,6 +1832,10 @@ void update_th(homekit_characteristic_t* ch, const homekit_value_t value) {
         ch->value = value;
         
         esp_timer_start(ch_group->timer2);
+        
+        if (ch != ch_group->ch[0]) {
+            save_historical_data(ch);
+        }
 
     } else {
         homekit_characteristic_notify_safe(ch);
@@ -2062,6 +2150,8 @@ void process_hum_task(void* args) {
     
     save_states_callback();
     
+    save_historical_data(ch_group->ch[3]);
+    
     vTaskDelete(NULL);
 }
 
@@ -2084,6 +2174,10 @@ void update_humidif(homekit_characteristic_t* ch, const homekit_value_t value) {
         
         esp_timer_start(ch_group->timer2);
 
+        if (ch != ch_group->ch[1]) {
+            save_historical_data(ch);
+        }
+        
     } else {
         homekit_characteristic_notify_safe(ch);
     }
@@ -3124,6 +3218,8 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
             esp_timer_stop(ch_group->timer2);
             lightbulb_task_timer(ch_group->timer2);
         }
+        
+        save_historical_data(ch);
 
     } else {
         homekit_characteristic_notify_safe(ch_group->ch[0]);
@@ -3252,6 +3348,8 @@ void garage_door_stop(const uint16_t gpio, void* args, const uint8_t type) {
         
         esp_timer_stop(ch_group->timer);
 
+        save_historical_data(ch_group->ch[0]);
+        
         do_actions(ch_group, 10);
         
         homekit_characteristic_notify_safe(GD_CURRENT_DOOR_STATE);
@@ -3267,6 +3365,8 @@ void garage_door_obstruction(const uint16_t gpio, void* args, const uint8_t type
     GD_OBSTRUCTION_DETECTED_BOOL = (bool) type;
     
     homekit_characteristic_notify_safe(GD_OBSTRUCTION_DETECTED);
+    
+    save_historical_data(ch_group->ch[2]);
     
     do_actions(ch_group, type + 8);
 }
@@ -3299,6 +3399,8 @@ void garage_door_sensor(const uint16_t gpio, void* args, const uint8_t type) {
     
     homekit_characteristic_notify_safe(GD_CURRENT_DOOR_STATE);
     homekit_characteristic_notify_safe(GD_TARGET_DOOR_STATE);
+    
+    save_historical_data(ch_group->ch[0]);
     
     do_actions(ch_group, type + 4);
 }
@@ -3337,6 +3439,8 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
             
             setup_mode_toggle_upcount();
         }
+        
+        save_historical_data(ch1);
     }
     
     homekit_characteristic_notify_safe(ch1);
@@ -3446,6 +3550,10 @@ void window_cover_stop(ch_group_t* ch_group) {
     
     setup_mode_toggle_upcount();
     
+    save_historical_data(ch_group->ch[0]);
+    save_historical_data(ch_group->ch[1]);
+    save_historical_data(ch_group->ch[2]);
+    
     save_states_callback();
 }
 
@@ -3462,6 +3570,8 @@ void window_cover_obstruction(const uint16_t gpio, void* args, const uint8_t typ
     if (WINDOW_COVER_VIRTUAL_STOP == 2) {
         WINDOW_COVER_VIRTUAL_STOP = 1;
     }
+    
+    save_historical_data(ch_group->ch[3]);
     
     homekit_characteristic_notify_safe(ch_group->ch[3]);
 }
@@ -3564,6 +3674,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
         
         do_wildcard_actions(ch_group, 0, value.int_value);
         
+        save_historical_data(ch1);
     }
     
     if (WINDOW_COVER_VIRTUAL_STOP == 2) {
@@ -3666,6 +3777,8 @@ void hkc_fan_setter(homekit_characteristic_t* ch0, const homekit_value_t value) 
             save_states_callback();
             
             do_actions(ch_group, (uint8_t) value.int_value);
+            
+            save_historical_data(ch0);
         }
     }
     
@@ -3686,6 +3799,8 @@ void hkc_fan_speed_setter(homekit_characteristic_t* ch1, const homekit_value_t v
             }
             
             save_states_callback();
+            
+            save_historical_data(ch1);
         }
     }
     
@@ -3704,6 +3819,8 @@ void hkc_fan_status_setter(homekit_characteristic_t* ch0, const homekit_value_t 
         homekit_characteristic_notify_safe(ch0);
         
         save_states_callback();
+        
+        save_historical_data(ch0);
     }
 }
 
@@ -3780,6 +3897,9 @@ void hkc_sec_system(homekit_characteristic_t* ch, const homekit_value_t value) {
             
             setup_mode_toggle_upcount();
             save_states_callback();
+            
+            save_historical_data(ch);
+            save_historical_data(SEC_SYSTEM_CH_CURRENT_STATE);
         }
     }
     
@@ -3797,6 +3917,9 @@ void hkc_sec_system_status(homekit_characteristic_t* ch, const homekit_value_t v
         SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = value.int_value;
         
         save_states_callback();
+        
+        save_historical_data(ch);
+        save_historical_data(SEC_SYSTEM_CH_CURRENT_STATE);
     }
     
     homekit_characteristic_notify_safe(ch);
@@ -3817,6 +3940,8 @@ void hkc_tv_active(homekit_characteristic_t* ch0, const homekit_value_t value) {
             
             setup_mode_toggle_upcount();
             save_states_callback();
+            
+            save_historical_data(ch0);
         }
     }
     
@@ -3835,6 +3960,8 @@ void hkc_tv_status_active(homekit_characteristic_t* ch0, const homekit_value_t v
         homekit_characteristic_notify_safe(ch0);
         
         save_states_callback();
+        
+        save_historical_data(ch0);
     }
 }
 
@@ -3848,6 +3975,8 @@ void hkc_tv_active_identifier(homekit_characteristic_t* ch, const homekit_value_
             ch->value.int_value = value.int_value;
 
             do_actions(ch_group, (MAX_ACTIONS - 1) + value.int_value);
+            
+            save_historical_data(ch);
         }
     }
     
@@ -3863,6 +3992,8 @@ void hkc_tv_key(homekit_characteristic_t* ch, const homekit_value_t value) {
         ch->value.int_value = value.int_value;
         
         do_actions(ch_group, value.int_value + 2);
+        
+        save_historical_data(ch);
     }
     
     homekit_characteristic_notify_safe(ch);
@@ -3877,6 +4008,8 @@ void hkc_tv_power_mode(homekit_characteristic_t* ch, const homekit_value_t value
         ch->value.int_value = value.int_value;
         
         do_actions(ch_group, value.int_value + 30);
+        
+        save_historical_data(ch);
     }
     
     homekit_characteristic_notify_safe(ch);
@@ -3891,6 +4024,8 @@ void hkc_tv_mute(homekit_characteristic_t* ch, const homekit_value_t value) {
         ch->value.int_value = value.int_value;
         
         do_actions(ch_group, value.int_value + 20);
+        
+        save_historical_data(ch);
     }
     
     homekit_characteristic_notify_safe(ch);
@@ -3905,6 +4040,8 @@ void hkc_tv_volume(homekit_characteristic_t* ch, const homekit_value_t value) {
         ch->value.int_value = value.int_value;
         
         do_actions(ch_group, value.int_value + 22);
+        
+        save_historical_data(ch);
     }
     
     homekit_characteristic_notify_safe(ch);
@@ -5201,16 +5338,19 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = 4;
                                 do_actions(ch_group, 4);
                                 homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
+                                save_historical_data(SEC_SYSTEM_CH_CURRENT_STATE);
                                 
                             } else if (SEC_SYSTEM_CH_TARGET_STATE->value.int_value == (uint8_t) action_acc_manager->value - 5) {
                                 SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = 4;
                                 do_actions(ch_group, (uint8_t) action_acc_manager->value);
                                 homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
+                                save_historical_data(SEC_SYSTEM_CH_CURRENT_STATE);
                                 
                             } else if (action_acc_manager->value == 8.f) {
                                 SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = SEC_SYSTEM_CH_TARGET_STATE->value.int_value;
                                 do_actions(ch_group, 8);
                                 homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
+                                save_historical_data(SEC_SYSTEM_CH_CURRENT_STATE);
                                 
                             } else if (action_acc_manager->value >= 10.f) {
                                 hkc_sec_system_status(SEC_SYSTEM_CH_TARGET_STATE, HOMEKIT_UINT8((uint8_t) action_acc_manager->value - 10));
@@ -5725,7 +5865,7 @@ void normal_mode_init() {
                         status = sysparam_get_int32(saved_state_id, &saved_state_int);
                         
                         if (status == SYSPARAM_OK) {
-                            state = saved_state_int / 1000000.000000f;
+                            state = saved_state_int / FLOAT_FACTOR_SAVE_AS_INT;
                         }
                         break;
                         
@@ -9188,6 +9328,49 @@ void normal_mode_init() {
         esp_timer_start(esp_timer_create(PM_POLL_PERIOD * 1000, true, (void*) ch_group, power_monitor_timer_worker));
     }
     
+    // *** HISTORICAL
+    void new_historical(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+        cJSON* data_array = cJSON_GetObjectItemCaseSensitive(json_context, HIST_DATA_ARRAY_SET);
+        
+        const uint16_t hist_accessory = cJSON_GetArrayItem(data_array, 0)->valuedouble;
+        const uint8_t hist_ch = cJSON_GetArrayItem(data_array, 1)->valuedouble;
+        const uint8_t hist_size = cJSON_GetArrayItem(data_array, 2)->valuedouble;
+        
+        ch_group_t* ch_group = new_ch_group(hist_size, 1, 0);
+        ch_group->acc_type = ACC_TYPE_HISTORICAL;
+        ch_group->accessory = accessory_numerator;
+        ch_group->homekit_enabled = 2;
+        
+        if (service == 0) {
+            new_accessory(accessory, total_services, ch_group->homekit_enabled, json_context);
+        }
+        
+        service++;
+        
+        ch_group->ch_hist = ch_group_find_by_acc(hist_accessory)->ch[hist_ch];
+        
+        accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
+        accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+        accessories[accessory]->services[service]->primary = !(service - 1);
+        accessories[accessory]->services[service]->hidden = true;
+        accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_CUSTOM_HISTORICAL_DATA;
+        
+        accessories[accessory]->services[service]->characteristics = calloc(hist_size + 1, sizeof(homekit_characteristic_t*));
+        
+        for (uint8_t i = 0; i < hist_size; i++) {
+            uint8_t* data = malloc(HIST_BLOCK_SIZE);
+            memset(data, 0, HIST_BLOCK_SIZE);
+            
+            ch_group->ch[i] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_HISTORICAL_DATA, data, HIST_BLOCK_SIZE);
+            accessories[accessory]->services[service]->characteristics[i] = ch_group->ch[i];
+        }
+        
+        const float poll_period = sensor_poll_period(json_context, 0);
+        if (poll_period > 0.00f) {
+            esp_timer_start(esp_timer_create(poll_period * 1000, true, (void*) ch_group->ch_hist, historical_timer_worker));
+        }
+    }
+    
     // *** Accessory Builder
     // Root device
     ch_group_t* root_device_ch_group = new_ch_group(0, 0, 0);
@@ -9290,6 +9473,10 @@ void normal_mode_init() {
         } else if (acc_type == ACC_TYPE_POWER_MONITOR) {
             INFO("POWER MONITOR");
             new_power_monitor(acc_count, serv_count, total_services, json_accessory);
+            
+        } else if (acc_type == ACC_TYPE_HISTORICAL) {
+            INFO("HISTORICAL");
+            new_historical(acc_count, serv_count, total_services, json_accessory);
             
         } else if (acc_type == ACC_TYPE_IAIRZONING) {
             INFO("IAIRZONING");

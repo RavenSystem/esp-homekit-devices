@@ -608,7 +608,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         }
         
         wifi_config_remove_sys_param();
-        vTaskDelay(MS_TO_TICKS(3000));
+        vTaskDelay(MS_TO_TICKS(500));
         wifi_config_reset();
         
     } else {
@@ -959,14 +959,17 @@ static void wifi_config_softap_start() {
 
 static void wifi_config_sta_connect_timeout_task() {
     if (context->custom_hostname) {
-        struct netif *netif = sdk_system_get_netif(STATION_IF);
-        while (!netif) {
-            vTaskDelay(MS_TO_TICKS(200));
+        struct netif *netif = NULL;
+        for (;;) {
             netif = sdk_system_get_netif(STATION_IF);
+            if (netif) {
+                break;
+            }
+            vTaskDelay(MS_TO_TICKS(100));
         }
         
         netif->hostname = context->custom_hostname;
-        INFO("Hostname: %s", context->custom_hostname);
+        INFO("Set hostname");
     }
 
     for (;;) {
@@ -988,17 +991,17 @@ static void wifi_config_sta_connect_timeout_task() {
             }
             
             break;
-
-        } else if (context->on_wifi_ready) {
+            
+        } else if (sdk_wifi_get_opmode() == STATION_MODE) {
             context->check_counter++;
-            if (context->check_counter > 120) {
+            if (context->check_counter > 35) {
                 context->check_counter = 0;
                 wifi_config_reset();
                 vTaskDelay(MS_TO_TICKS(5000));
                 wifi_config_connect(0);
                 vTaskDelay(MS_TO_TICKS(1000));
                 
-            } else if (context->check_counter % 16 == 0) {
+            } else if (context->check_counter % 13 == 0) {
                 wifi_config_resend_arp();
             }
         }

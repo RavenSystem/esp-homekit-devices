@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "6.10.0"
+#define FIRMWARE_VERSION                    "7.0.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -19,6 +19,8 @@
 #define CH_TYPE_INT                         (2)
 #define CH_TYPE_FLOAT                       (3)
 #define CH_TYPE_STRING                      (4)
+
+#define FLOAT_FACTOR_SAVE_AS_INT            (100000.00000f)
 
 // Auto-off types (type)
 #define TYPE_ON                             (0)
@@ -464,6 +466,14 @@
 #define SEC_SYSTEM_OFF                      (3)
 #define SEC_SYSTEM_ALARM                    (4)
 
+#define HIST_DATA_ARRAY_SET                 "h"
+#define HIST_LAST_REGISTER                  ch_group->num[0]
+#define HIST_TIME_SIZE                      (sizeof(uint32_t))
+#define HIST_DATA_SIZE                      (sizeof(int32_t))
+#define HIST_REGISTER_SIZE                  (HIST_TIME_SIZE + HIST_DATA_SIZE)
+#define HIST_REGISTERS_BY_BLOCK             (32)
+#define HIST_BLOCK_SIZE                     (HIST_REGISTERS_BY_BLOCK * HIST_REGISTER_SIZE)
+
 #define MAX_ACTIONS                         (51)    // from 0 to (MAX_ACTIONS - 1)
 #define MAX_WILDCARD_ACTIONS                (4)     // from 0 to (MAX_WILDCARD_ACTIONS - 1)
 #define WILDCARD_ACTIONS_ARRAY_HEADER       "y"
@@ -557,6 +567,7 @@
 #define ACC_TYPE_TV                         (60)
 #define ACC_TYPE_FAN                        (65)
 #define ACC_TYPE_POWER_MONITOR              (75)
+#define ACC_TYPE_HISTORICAL                 (95)
 #define ACC_TYPE_IAIRZONING                 (99)
 
 #define SERIAL_STRING                       "sn"

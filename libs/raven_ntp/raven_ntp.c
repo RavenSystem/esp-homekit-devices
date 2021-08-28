@@ -137,7 +137,7 @@ int raven_ntp_update(char* ntp_server) {
             uint8_t* ntp_payload = malloc(49);
             if (ntp_payload) {
                 memset(ntp_payload, 0, 49);
-                ntp_payload[0] = 0x1b;
+                ntp_payload[0] = 0x1B;
                 
                 const struct timeval sndtimeout = { 3, 0 };
                 setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
