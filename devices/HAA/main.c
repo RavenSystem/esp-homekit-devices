@@ -3405,7 +3405,7 @@ void garage_door_sensor(const uint16_t gpio, void* args, const uint8_t type) {
 
 void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch1);
-    if ((ch_group->main_enabled) && !GD_OBSTRUCTION_DETECTED_BOOL) {
+    if (ch_group->main_enabled) {
         uint8_t current_door_state = GD_CURRENT_DOOR_STATE_INT;
         if (current_door_state == GARAGE_DOOR_STOPPED) {
             current_door_state = GD_TARGET_DOOR_STATE_INT;
