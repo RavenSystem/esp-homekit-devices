@@ -44,14 +44,16 @@ struct json_stream {
 
 
 json_stream *json_new(size_t buffer_size, json_flush_callback on_flush, void *context) {
-    json_stream *json = malloc(sizeof(json_stream));
-    json->size = buffer_size;
-    json->pos = 0;
-    json->buffer = malloc(json->size);
-    json->state = JSON_STATE_START;
-    json->nesting_idx = 0;
-    json->on_flush = on_flush;
-    json->context = context;
+    json_stream* json = malloc(sizeof(json_stream));
+    if (json) {
+        json->size = buffer_size;
+        json->pos = 0;
+        json->buffer = malloc(json->size);
+        json->state = JSON_STATE_START;
+        json->nesting_idx = 0;
+        json->on_flush = on_flush;
+        json->context = context;
+    }
 
     return json;
 }
@@ -85,7 +87,7 @@ void json_write(json_stream *json, const char *format, ...) {
         va_end(arg_ptr);
 
         if (len > json->size - 1) {
-            ERROR("Write value too large");
+            ERROR("Write value too large %i/%i", len, json->size);
             DEBUG("Format = %s", format);
         } else {
             json->pos += len;

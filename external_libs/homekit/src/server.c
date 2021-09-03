@@ -349,6 +349,17 @@ void pairing_context_free(pairing_context_t *context) {
     context = NULL;
 }
 
+void remove_oldest_client() {
+    client_context_t* context = homekit_server->clients;
+    while (context) {
+        if (!context->next) {
+            CLIENT_INFO(context, "Closing oldest");
+            context->disconnect = true;
+        }
+        
+        context = context->next;
+    }
+}
 
 void client_notify_characteristic(homekit_characteristic_t *ch, homekit_value_t value, void *client);
 
@@ -474,7 +485,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
             json_array_end(json);
         }
     }
-
+    
     if (ch->permissions & HOMEKIT_PERMISSIONS_PAIRED_READ) {
         homekit_value_t v = value ? *value : ch->getter_ex ? ch->getter_ex(ch) : ch->value;
 
@@ -493,10 +504,38 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
                 case HOMETKIT_FORMAT_UINT32:
                 case HOMETKIT_FORMAT_UINT64:
                 case HOMETKIT_FORMAT_INT: {
+                    if (ch->max_value) {
+                        int max_value = (int) *ch->max_value;
+                        if (v.int_value > max_value) {
+                            v.int_value = max_value;
+                        }
+                    }
+                    
+                    if (ch->min_value) {
+                        int min_value = (int) *ch->min_value;
+                        if (v.int_value < min_value) {
+                            v.int_value = min_value;
+                        }
+                    }
+                    
                     json_string(json, "value"); json_integer(json, v.int_value);
                     break;
                 }
                 case HOMETKIT_FORMAT_FLOAT: {
+                    if (ch->max_value) {
+                        int max_value = (int) *ch->max_value;
+                        if (v.float_value > max_value) {
+                            v.float_value = max_value;
+                        }
+                    }
+                    
+                    if (ch->min_value) {
+                        int min_value = (int) *ch->min_value;
+                        if (v.float_value < min_value) {
+                            v.float_value = min_value;
+                        }
+                    }
+                    
                     json_string(json, "value"); json_float(json, v.float_value);
                     break;
                 }
@@ -589,7 +628,7 @@ int client_send_encrypted(
             nonce[i++] = x % 256;
             x /= 256;
         }
-
+        
         size_t available = sizeof(encrypted) - 2;
         int r = crypto_chacha20poly1305_encrypt(
             context->read_key, nonce, aead, 2,
@@ -779,7 +818,12 @@ void send_client_events(client_context_t *context, client_event_t *events) {
 
     // ~35 bytes per event JSON
     // 256 should be enough for ~7 characteristic updates
-    json_stream *json = json_new(256, client_send_chunk, context);
+    json_stream *json = json_new(1024, client_send_chunk, context);
+    if (!json) {
+        remove_oldest_client();
+        return;
+    }
+    
     json_object_start(json);
     json_string(json, "characteristics"); json_array_start(json);
 
@@ -1949,8 +1993,13 @@ void homekit_server_on_get_accessories(client_context_t *context) {
 #endif
     
     send_200_response(context);
-
+    
     json_stream *json = json_new(1024, client_send_chunk, context);
+    if (!json) {
+        remove_oldest_client();
+        return;
+    }
+    
     json_object_start(json);
     json_string(json, "accessories"); json_array_start(json);
 
@@ -2091,7 +2140,12 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
         send_207_response(context);
     }
 
-    json_stream *json = json_new(256, client_send_chunk, context);
+    json_stream *json = json_new(1024, client_send_chunk, context);
+    if (!json) {
+        remove_oldest_client();
+        return;
+    }
+    
     json_object_start(json);
     json_string(json, "characteristics"); json_array_start(json);
 
@@ -2188,10 +2242,10 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
             CLIENT_ERROR(context, "\"iid\" field is not a number");
             return HAPStatus_NoResource;
         }
-
+        
         int aid = j_aid->valueint;
         int iid = j_iid->valueint;
-
+        
         homekit_characteristic_t *ch = homekit_characteristic_by_aid_and_iid(
             homekit_server->config->accessories, aid, iid
         );
@@ -2199,7 +2253,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
             CLIENT_ERROR(context, "Update %d.%d: no such ch", aid, iid);
             return HAPStatus_NoResource;
         }
-
+        
         cJSON *j_value = cJSON_GetObjectItem(j_ch, "value");
         if (j_value) {
             homekit_value_t h_value = HOMEKIT_NULL();
@@ -2303,14 +2357,24 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     }
                     */
                     
+                    
+                    /*
                     if (value < min_value || value > max_value) {
                         CLIENT_ERROR(context, "Update %d.%d: not in range", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
+                    */
+                    
+                    if (value < min_value) {
+                        value = min_value;
+                    } else if (value > max_value) {
+                        value = max_value;
+                    }
 
+                    
                     if (ch->valid_values.count) {
                         bool matches = false;
-                        for (int i=0; i<ch->valid_values.count; i++) {
+                        for (int i = 0; i < ch->valid_values.count; i++) {
                             if (value == ch->valid_values.values[i]) {
                                 matches = true;
                                 break;
@@ -2325,7 +2389,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 
                     if (ch->valid_values_ranges.count) {
                         bool matches = false;
-                        for (int i=0; i<ch->valid_values_ranges.count; i++) {
+                        for (int i = 0; i < ch->valid_values_ranges.count; i++) {
                             if (value >= ch->valid_values_ranges.ranges[i].start &&
                                     value <= ch->valid_values_ranges.ranges[i].end) {
                                 matches = true;
@@ -2461,7 +2525,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     tlv_values_t *tlv_values = tlv_new();
                     int r = tlv_parse(tlv_data, tlv_size, tlv_values);
                     free(tlv_data);
-
+                    
                     if (r) {
                         CLIENT_ERROR(context, "Update %d.%d: error parsing TLV", aid, iid);
                         return HAPStatus_InvalidValue;
@@ -2506,7 +2570,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         return HAPStatus_InvalidValue;
                     }
 #endif //HOMEKIT_DISABLE_MAXLEN_CHECK
-
+                    
                     size_t data_size = base64_decoded_size((unsigned char*) value, value_len);
                     byte *data = malloc(data_size);
                     if (!data) {
@@ -2572,13 +2636,20 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 
     if (!has_errors) {
         CLIENT_DEBUG(context, "There were no processing errors, sending No Content response");
-
+        
         send_204_response(context);
     } else {
         CLIENT_DEBUG(context, "There were processing errors, sending Multi-Status response");
         send_207_response(context);
-
+        
         json_stream *json1 = json_new(1024, client_send_chunk, context);
+        if (!json1) {
+            free(statuses);
+            cJSON_Delete(json);
+            remove_oldest_client();
+            return;
+        }
+        
         json_object_start(json1);
         json_string(json1, "characteristics"); json_array_start(json1);
 
@@ -3170,15 +3241,7 @@ void homekit_server_accept_client() {
         close(s);
         return;
     } else if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS || (free_heap <= HOMEKIT_MIN_FREEHEAP && homekit_server->is_pairing == false) || !new_context) {
-        client_context_t* context = homekit_server->clients;
-        while (context) {
-            if (!context->next) {
-                CLIENT_INFO(context, "Closing oldest");
-                context->disconnect = true;
-            }
-            
-            context = context->next;
-        }
+        remove_oldest_client();
     }
     
     if (new_context) {
