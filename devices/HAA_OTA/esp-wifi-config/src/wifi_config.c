@@ -877,7 +877,7 @@ static void wifi_config_sta_connect_timeout_task() {
 
         } else {
             context->check_counter++;
-            if (context->check_counter == 35) {
+            if (context->check_counter % 35 == 0) {
                 wifi_config_reset();
                 vTaskDelay(MS_TO_TICKS(5000));
                 wifi_config_connect();

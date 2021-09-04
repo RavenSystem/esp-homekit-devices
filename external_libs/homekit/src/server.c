@@ -3238,6 +3238,7 @@ void homekit_server_accept_client() {
     
     uint32_t free_heap = xPortGetFreeHeapSize();
     if (!homekit_server->setup_finish && 0b10 < homekit_server->client_count) {
+        HOMEKIT_INFO("[%d] New %s:%d Free HEAP: %d", s, address_buffer, addr.sin_port, free_heap);
         close(s);
         return;
     } else if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS || (free_heap <= HOMEKIT_MIN_FREEHEAP && homekit_server->is_pairing == false) || !new_context) {

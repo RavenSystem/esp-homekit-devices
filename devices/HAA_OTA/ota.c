@@ -392,17 +392,18 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
     return ret;
 }
 
+#ifndef HAABOOT
 static void sign_check_client(const int set) {
     byte sector[SPI_FLASH_SECTOR_SIZE];
     
-    if (!spiflash_read(SPIFLASH_BASE_ADDR, sector, sizeof(sector))) {
+    if (!spiflash_read(SPIFLASH_BASE_ADDR, sector, SPI_FLASH_SECTOR_SIZE)) {
         ERROR("Read sector");
         return;
     }
     
     void write_flash() {
         if (!spiflash_erase_sector(SPIFLASH_BASE_ADDR) ||
-            !spiflash_write(SPIFLASH_BASE_ADDR, sector, sizeof(sector))) {
+            !spiflash_write(SPIFLASH_BASE_ADDR, sector, SPI_FLASH_SECTOR_SIZE)) {
             ERROR("Writing flash");
         }
     }
@@ -410,11 +411,14 @@ static void sign_check_client(const int set) {
     if (set == 0 && sector[2] != magic1[2]) {
         sector[2] = magic1[2];
         write_flash();
+        INFO("Ending ..");
     } else if (set == 1 && sector[2] != magic1[1]) {
         sector[2] = magic1[1];
         write_flash();
+        INFO("Ending...");
     }
 }
+#endif  // HAABOOT
 
 static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int bufsz, uint16_t port, const bool is_ssl) { //number of bytes
     INFO("\nDOWNLOADING FILE\n");
@@ -687,10 +691,6 @@ int ota_verify_sign(int start_sector, int filesize, byte* signature) {
 
 void ota_finalize_file(int sector) {
     INFO("Finalize file");
-    
-#ifdef HAABOOT
-    sign_check_client(2);
-#endif  // HAABOOT
     
     if (!spiflash_write(sector, file_first_byte, 1))
         ERROR("Writing flash");
