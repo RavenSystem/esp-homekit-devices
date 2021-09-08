@@ -31,6 +31,9 @@
 #include <lwip/sys.h>
 #include <lwip/netdb.h>
 #include <lwip/dns.h>
+#ifdef HAA_DEBUG
+#include <lwip/stats.h>
+#endif // HAA_DEBUG
 
 #include <homekit/homekit.h>
 #include <homekit/characteristics.h>
@@ -79,6 +82,7 @@ main_config_t main_config = {
     .setpwm_bool_semaphore = false,
     .setpwm_is_running = false,
     
+    .clock_ready = false,
     .timetable_ready = false,
     
     .used_gpio = 0,
@@ -251,6 +255,7 @@ void free_heap_watchdog() {
         free(space);
         INFO("* Max chunk = %i", size + 4);
         INFO("* CPU Speed = %i", sdk_system_get_cpu_freq());
+        stats_display();
     }
 }
 #endif  // HAA_DEBUG
@@ -344,19 +349,6 @@ ch_group_t* ch_group_find(homekit_characteristic_t* ch) {
     return NULL;
 }
 
-ch_group_t* ch_group_find_historical(homekit_characteristic_t* ch_hist) {
-    ch_group_t* ch_group = main_config.ch_groups;
-    while (ch_group) {
-        if (ch_group->ch_hist == ch_hist) {
-                return ch_group;
-        }
-        
-        ch_group = ch_group->next;
-    }
-
-    return NULL;
-}
-
 ch_group_t* ch_group_find_by_acc(uint16_t accessory) {
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group &&
@@ -378,67 +370,66 @@ lightbulb_group_t* lightbulb_group_find(homekit_characteristic_t* ch) {
 }
 
 void save_historical_data(homekit_characteristic_t* ch_hist) {
-    ch_group_t* ch_group = ch_group_find_historical(ch_hist);
-    
-    if (!ch_group || !ch_group->main_enabled) {
+    if (!main_config.clock_ready) {
         return;
     }
     
-    struct tm* timeinfo;
     time_t time = raven_ntp_get_time_t();
-    timeinfo = localtime(&time);
     
-    if (timeinfo->tm_year < 120) {
-        return;
-    }
-    
-    float value = 0;
-    switch (ch_hist->value.format) {
-        case HOMETKIT_FORMAT_BOOL:
-            value = (uint8_t) ch_hist->value.bool_value;
-            break;
+    ch_group_t* ch_group = main_config.ch_groups;
+    while (ch_group) {
+        if (ch_group->ch_hist == ch_hist && ch_group->main_enabled) {
+            float value = 0;
+            switch (ch_hist->value.format) {
+                case HOMETKIT_FORMAT_BOOL:
+                    value = (uint8_t) ch_hist->value.bool_value;
+                    break;
+                    
+                case HOMETKIT_FORMAT_UINT8:
+                case HOMETKIT_FORMAT_UINT16:
+                case HOMETKIT_FORMAT_UINT32:
+                case HOMETKIT_FORMAT_UINT64:
+                case HOMETKIT_FORMAT_INT:
+                    value = ch_hist->value.int_value;
+                    break;
+                    
+                case HOMETKIT_FORMAT_FLOAT:
+                    value = ch_hist->value.float_value;
+                    break;
+                    
+                default:
+                    return;
+            }
             
-        case HOMETKIT_FORMAT_UINT8:
-        case HOMETKIT_FORMAT_UINT16:
-        case HOMETKIT_FORMAT_UINT32:
-        case HOMETKIT_FORMAT_UINT64:
-        case HOMETKIT_FORMAT_INT:
-            value = ch_hist->value.int_value;
-            break;
+            uint32_t final_time = time;
+            int32_t final_data = value * FLOAT_FACTOR_SAVE_AS_INT;
             
-        case HOMETKIT_FORMAT_FLOAT:
-            value = ch_hist->value.float_value;
-            break;
+            //INFO("Saved %i, %i (%0.5f)", final_time, final_data, value);
             
-        default:
-            return;
+            uint32_t last_register = HIST_LAST_REGISTER;
+            last_register += HIST_REGISTER_SIZE;
+            uint32_t current_ch = last_register / HIST_BLOCK_SIZE;
+            uint32_t current_pos = last_register % HIST_BLOCK_SIZE;
+            
+            if (current_ch >= ch_group->chs) {
+                current_ch = 0;
+                current_pos = 0;
+            }
+            
+            //INFO("Current ch & pos: %i, %i", current_ch, current_pos);
+            
+            if (ch_group->ch[current_ch]->value.data_size < HIST_BLOCK_SIZE) {
+                ch_group->ch[current_ch]->value.data_size = HIST_BLOCK_SIZE;
+            }
+            
+            memcpy(ch_group->ch[current_ch]->value.data_value + current_pos, &final_time, HIST_TIME_SIZE);
+            memcpy(ch_group->ch[current_ch]->value.data_value + current_pos + HIST_TIME_SIZE, &final_data, HIST_DATA_SIZE);
+            
+            HIST_LAST_REGISTER = (current_ch * HIST_BLOCK_SIZE) + current_pos;
+        }
+        
+        ch_group = ch_group->next;
     }
-    
-    uint32_t final_time = time;
-    int32_t final_data = value * FLOAT_FACTOR_SAVE_AS_INT;
-    
-    //INFO("Saved %i, %i (%0.5f)", final_time, final_data, value);
-    
-    uint32_t last_register = HIST_LAST_REGISTER;
-    last_register += HIST_REGISTER_SIZE;
-    uint32_t current_ch = last_register / HIST_BLOCK_SIZE;
-    uint32_t current_pos = last_register % HIST_BLOCK_SIZE;
-    
-    if (current_ch >= ch_group->chs) {
-        current_ch = 0;
-        current_pos = 0;
-    }
-    
-    //INFO("Current ch & pos: %i, %i", current_ch, current_pos);
-    
-    if (ch_group->ch[current_ch]->value.data_size < HIST_BLOCK_SIZE) {
-        ch_group->ch[current_ch]->value.data_size = HIST_BLOCK_SIZE;
-    }
-    
-    memcpy(ch_group->ch[current_ch]->value.data_value + current_pos, &final_time, HIST_TIME_SIZE);
-    memcpy(ch_group->ch[current_ch]->value.data_value + current_pos + HIST_TIME_SIZE, &final_data, HIST_DATA_SIZE);
-    
-    HIST_LAST_REGISTER = (current_ch * HIST_BLOCK_SIZE) + current_pos;
 }
 
 void historical_timer_worker(TimerHandle_t xTimer) {
@@ -521,6 +512,7 @@ void ntp_task() {
         if (result != 0 && tries < 4) {
             vTaskDelay(MS_TO_TICKS(10000));
         } else {
+            main_config.clock_ready = true;
             break;
         }
     }
@@ -865,24 +857,23 @@ void hkc_setter_with_setup(homekit_characteristic_t* ch, const homekit_value_t v
 }
 
 void pm_custom_consumption_reset(ch_group_t* ch_group) {
+    if (!main_config.clock_ready) {
+        ERROR("<%i> Clock not ready", ch_group->accessory);
+        return;
+    }
+    
     led_blink(1);
     INFO("<%i> Setter Consumption Reset", ch_group->accessory);
     
-    struct tm* timeinfo;
     time_t time = raven_ntp_get_time_t();
-    timeinfo = localtime(&time);
     
-    if (timeinfo->tm_year > 120) {
-        ch_group->ch[4]->value.float_value = ch_group->ch[3]->value.float_value;
-        ch_group->ch[3]->value.float_value = 0;
-        ch_group->ch[5]->value.int_value = time;
-        
-        save_states_callback();
-        
-        save_historical_data(ch_group->ch[4]);
-    } else {
-        ERROR("<%i> Consumption Reset. Internal clock not ready", ch_group->accessory);
-    }
+    ch_group->ch[4]->value.float_value = ch_group->ch[3]->value.float_value;
+    ch_group->ch[3]->value.float_value = 0;
+    ch_group->ch[5]->value.int_value = time;
+    
+    save_states_callback();
+    
+    save_historical_data(ch_group->ch[4]);
     
     homekit_characteristic_notify_safe(ch_group->ch[3]);
     homekit_characteristic_notify_safe(ch_group->ch[4]);
@@ -5515,14 +5506,14 @@ void do_wildcard_actions(ch_group_t* ch_group, uint8_t index, const float action
 }
 
 void timetable_actions_timer_worker(TimerHandle_t xTimer) {
+    if (!main_config.clock_ready) {
+        return;
+    }
+    
     struct tm* timeinfo;
     time_t time = raven_ntp_get_time_t();
     timeinfo = localtime(&time);
     
-    if (timeinfo->tm_year <= 120) {
-        return;
-    }
-        
     if (!main_config.timetable_ready) {
         if (timeinfo->tm_sec == 0) {
             esp_timer_change_period(xTimer, 60000);
@@ -5692,7 +5683,7 @@ void normal_mode_init() {
         printf_header();
         INFO("JSON:\n %s\n", txt_config ? txt_config : "none");
         ERROR("Invalid JSON\n");
-        sysparam_set_int32(TOTAL_ACC_SYSPARAM, 0);
+        sysparam_set_int32(TOTAL_SERV_SYSPARAM, 0);
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);
         
         INFO("Rebooting...\n\n");
@@ -6975,7 +6966,7 @@ void normal_mode_init() {
     homekit_accessory_t** accessories = calloc(hk_total_ac, sizeof(homekit_accessory_t*));
     
     // Define services and characteristics
-    uint16_t accessory_numerator = 0;
+    uint16_t service_numerator = 0;
     uint16_t acc_count = 0;
     
     // HomeKit last config number
@@ -7013,10 +7004,14 @@ void normal_mode_init() {
         uint8_t macaddr[6];
         sdk_wifi_get_macaddr(STATION_IF, macaddr);
         
+        uint16_t serial_index = accessory + 1;
+        if (bridge_needed) {
+            serial_index--;
+        }
         if (use_config_number) {
-            snprintf(serial_str, serial_prefix_len, "%i-%02X%02X%02X-%i", last_config_number, macaddr[3], macaddr[4], macaddr[5], accessory_numerator);
+            snprintf(serial_str, serial_prefix_len, "%i-%02X%02X%02X-%i", last_config_number, macaddr[3], macaddr[4], macaddr[5], serial_index);
         } else {
-            snprintf(serial_str, serial_prefix_len, "%s%s%02X%02X%02X-%i", serial_prefix ? serial_prefix : "", serial_prefix ? "-" : "", macaddr[3], macaddr[4], macaddr[5], accessory_numerator);
+            snprintf(serial_str, serial_prefix_len, "%s%s%02X%02X%02X-%i", serial_prefix ? serial_prefix : "", serial_prefix ? "-" : "", macaddr[3], macaddr[4], macaddr[5], serial_index);
         }
         
         INFO("Serial %s", serial_str);
@@ -7099,7 +7094,7 @@ void normal_mode_init() {
         }
         
         ch_group_t* ch_group = new_ch_group(ch_calloc - 1, 1, 0);
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
@@ -7210,7 +7205,7 @@ void normal_mode_init() {
     // *** NEW BUTTON EVENT / DOORBELL
     void new_button_event(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context, const uint8_t acc_type) {
         ch_group_t* ch_group = new_ch_group(1 + (acc_type == ACC_TYPE_DOORBELL), 1, 0);
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
 
@@ -7265,7 +7260,7 @@ void normal_mode_init() {
     // *** NEW LOCK
     void new_lock(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group(2, 1, 0);
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
@@ -7354,7 +7349,7 @@ void normal_mode_init() {
     void new_binary_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context, uint8_t acc_type) {
         ch_group_t* ch_group = new_ch_group(1, 1, 0);
         ch_group->acc_type = ACC_TYPE_CONTACT_SENSOR;
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
 
@@ -7524,7 +7519,7 @@ void normal_mode_init() {
         
         ch_group_t* ch_group = new_ch_group(calloc_count - 2, 1, 0);
         ch_group->acc_type = ACC_TYPE_WATER_VALVE;
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
@@ -7640,7 +7635,7 @@ void normal_mode_init() {
     void new_thermostat(const uint8_t accessory,  uint8_t service, const uint8_t total_services, cJSON* json_context, const uint8_t acc_type) {
         ch_group_t* ch_group = new_ch_group(7, 10, 6);
         ch_group->acc_type = ACC_TYPE_THERMOSTAT;
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
@@ -7853,7 +7848,7 @@ void normal_mode_init() {
     // *** NEW IAIRZONING
     void new_iairzoning(cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group(0, 1, 2);
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         ch_group->acc_type = ACC_TYPE_IAIRZONING;
         
         register_actions(ch_group, json_context, 0);
@@ -7873,7 +7868,7 @@ void normal_mode_init() {
     void new_temp_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group(1, 5, 1);
         ch_group->acc_type = ACC_TYPE_TEMP_SENSOR;
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
@@ -7919,7 +7914,7 @@ void normal_mode_init() {
     void new_hum_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group(2, 5, 2);
         ch_group->acc_type = ACC_TYPE_HUM_SENSOR;
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
@@ -7962,7 +7957,7 @@ void normal_mode_init() {
     void new_th_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group(2, 5, 2);
         ch_group->acc_type = ACC_TYPE_TH_SENSOR;
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
@@ -8022,7 +8017,7 @@ void normal_mode_init() {
     void new_humidifier(const uint8_t accessory,  uint8_t service, const uint8_t total_services, cJSON* json_context, const uint8_t acc_type) {
         ch_group_t* ch_group = new_ch_group(7, 9, 5);
         ch_group->acc_type = ACC_TYPE_HUMIDIFIER;
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
@@ -8215,7 +8210,7 @@ void normal_mode_init() {
     void new_lightbulb(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group(4, 10, 1);
         ch_group->acc_type = ACC_TYPE_LIGHTBULB;
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
@@ -8523,7 +8518,7 @@ void normal_mode_init() {
     void new_garage_door(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group(3, 9, 0);
         ch_group->acc_type = ACC_TYPE_GARAGE_DOOR;
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
@@ -8653,7 +8648,7 @@ void normal_mode_init() {
     void new_window_cover(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group(4, 9, 1);
         ch_group->acc_type = ACC_TYPE_WINDOW_COVER;
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
@@ -8769,7 +8764,7 @@ void normal_mode_init() {
     void new_light_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group(1, 5, 1);
         ch_group->acc_type = ACC_TYPE_LIGHT_SENSOR;
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
@@ -8843,7 +8838,7 @@ void normal_mode_init() {
     void new_sec_system(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group(2, 0, 0);
         ch_group->acc_type = ACC_TYPE_SECURITY_SYSTEM;
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
@@ -8929,7 +8924,7 @@ void normal_mode_init() {
         
         ch_group_t* ch_group = new_ch_group(7, 0, 0);
         ch_group->acc_type = ACC_TYPE_TV;
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
@@ -9094,7 +9089,7 @@ void normal_mode_init() {
     // *** NEW FAN
     void new_fan(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group(2, 1, 1);
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
@@ -9196,7 +9191,7 @@ void normal_mode_init() {
     void new_power_monitor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group(7, 11, 4);
         ch_group->acc_type = ACC_TYPE_POWER_MONITOR;
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
@@ -9344,7 +9339,7 @@ void normal_mode_init() {
         
         ch_group_t* ch_group = new_ch_group(hist_size, 1, 0);
         ch_group->acc_type = ACC_TYPE_HISTORICAL;
-        ch_group->accessory = accessory_numerator;
+        ch_group->accessory = service_numerator;
         ch_group->homekit_enabled = 2;
         
         if (service == 0) {
@@ -9384,6 +9379,8 @@ void normal_mode_init() {
         
         HIST_LAST_REGISTER = hist_size * HIST_BLOCK_SIZE;
         
+        //save_historical_data(ch_group->ch_hist);      // Never exec because clock is not ready
+        
         const float poll_period = sensor_poll_period(json_context, 0);
         if (poll_period > 0.00f) {
             esp_timer_start(esp_timer_create(poll_period * 1000, true, (void*) ch_group->ch_hist, historical_timer_worker));
@@ -9416,9 +9413,9 @@ void normal_mode_init() {
     
     // Creating HomeKit Accessory
     void new_service(const uint16_t acc_count, uint16_t serv_count, const uint16_t total_services, cJSON* json_accessory, const uint8_t acc_type) {
-        accessory_numerator++;
+        service_numerator++;
         
-        INFO("\n* SERVICE %i", accessory_numerator);
+        INFO("\n* SERVICE %i", service_numerator);
         printf("Type %i: ", acc_type);
 
         if (acc_type == ACC_TYPE_BUTTON ||
@@ -9555,7 +9552,7 @@ void normal_mode_init() {
         taskYIELD();
     }
     
-    sysparam_set_int32(TOTAL_ACC_SYSPARAM, accessory_numerator);
+    sysparam_set_int32(TOTAL_SERV_SYSPARAM, service_numerator);
     
     printf("\n");
     

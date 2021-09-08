@@ -5,60 +5,44 @@
 #include "json.h"
 #include "debug.h"
 
-#define JSON_MAX_DEPTH 30
-#define MAX(a, b) (((a) > (b)) ? (a) : (b))
+#define MAX(a, b)           (((a) > (b)) ? (a) : (b))
 
 #define DEBUG_STATE(json) \
     DEBUG("State = %d, last JSON output: %s", \
           json->state, json->buffer + MAX(0, (long int)json->pos - 20));
 
-typedef enum {
-    JSON_STATE_START = 1,
-    JSON_STATE_END,
-    JSON_STATE_OBJECT,
-    JSON_STATE_OBJECT_KEY,
-    JSON_STATE_OBJECT_VALUE,
-    JSON_STATE_ARRAY,
-    JSON_STATE_ARRAY_ITEM,
-    JSON_STATE_ERROR,
-} json_state;
-
-typedef enum {
-    JSON_NESTING_OBJECT,
-    JSON_NESTING_ARRAY,
-} json_nesting;
-
-struct json_stream {
-    uint8_t *buffer;
-    size_t size;
-    size_t pos;
-
-    json_state state;
-
-    uint8_t nesting_idx;
-    json_nesting nesting[JSON_MAX_DEPTH];
-
-    json_flush_callback on_flush;
-    void *context;
-};
+#define JSON_NESTING_OBJECT (0)
+#define JSON_NESTING_ARRAY  (1)
 
 
-json_stream *json_new(size_t buffer_size, json_flush_callback on_flush, void *context) {
+void json_init(json_stream *json, void *context) {
+    json->pos = 0;
+    json->state = JSON_STATE_START;
+    json->nesting_idx = 0;
+    json->context = context;
+}
+
+json_stream *json_new(size_t buffer_size, uint8_t* buffer_data, json_flush_callback on_flush, void *context) {
     json_stream* json = malloc(sizeof(json_stream));
     if (json) {
         json->size = buffer_size;
-        json->pos = 0;
-        json->buffer = malloc(json->size);
-        json->state = JSON_STATE_START;
-        json->nesting_idx = 0;
+        if (buffer_data) {
+            json->buffer = buffer_data;
+        } else {
+            json->buffer = malloc(json->size);
+        }
         json->on_flush = on_flush;
-        json->context = context;
+        json_init(json, context);
+        if (!json->buffer) {
+            free(json);
+            json = NULL;
+        }
     }
-
+    
     return json;
 }
 
-void json_free(json_stream *json) {
+void json_buffer_free(json_stream *json) {
     free(json->buffer);
     free(json);
 }
@@ -85,10 +69,11 @@ void json_write(json_stream *json, const char *format, ...) {
         va_start(arg_ptr, format);
         int len = vsnprintf((char *)json->buffer + json->pos, json->size - json->pos, format, arg_ptr);
         va_end(arg_ptr);
-
+        
         if (len > json->size - 1) {
             ERROR("Write value too large %i/%i", len, json->size);
             DEBUG("Format = %s", format);
+            DEBUG("Data = %s", (char *)json->buffer);
         } else {
             json->pos += len;
         }

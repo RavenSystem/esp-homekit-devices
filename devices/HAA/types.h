@@ -287,6 +287,7 @@ typedef struct _main_config {
     
     uint64_t used_gpio: MAX_GPIOS;
     uint8_t wifi_mode: 3;
+    bool clock_ready: 1;
     
     char name_value[11];
     char serial_value[13];

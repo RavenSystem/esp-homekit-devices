@@ -627,7 +627,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         
         // Remove saved states
         int hk_total_ac = 0;
-        sysparam_get_int32(TOTAL_ACC_SYSPARAM, &hk_total_ac);
+        sysparam_get_int32(TOTAL_SERV_SYSPARAM, &hk_total_ac);
         char saved_state_id[5];
         memset(saved_state_id, 0, 5);
         for (uint32_t int_saved_state_id = 100; int_saved_state_id <= hk_total_ac * 100; int_saved_state_id++) {

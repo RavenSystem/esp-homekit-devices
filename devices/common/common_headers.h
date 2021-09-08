@@ -18,7 +18,7 @@
 #define WIFI_MODE_SYSPARAM                  "wifi_mode"
 #define WIFI_BSSID_SYSPARAM                 "wifi_bssid"
 #define AUTO_OTA_SYSPARAM                   "aota"
-#define TOTAL_ACC_SYSPARAM                  "total_ac"
+#define TOTAL_SERV_SYSPARAM                 "total_ac"
 #define HAA_JSON_SYSPARAM                   "haa_conf"
 #define HAA_SETUP_MODE_SYSPARAM             "setup"
 #define LAST_CONFIG_NUMBER_SYSPARAM         "hkcf"

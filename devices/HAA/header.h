@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "7.1.2"
+#define FIRMWARE_VERSION                    "7.2.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -471,7 +471,7 @@
 #define HIST_TIME_SIZE                      (4)     // (sizeof(uint32_t))
 #define HIST_DATA_SIZE                      (4)     // (sizeof(int32_t))
 #define HIST_REGISTER_SIZE                  (HIST_TIME_SIZE + HIST_DATA_SIZE)
-#define HIST_REGISTERS_BY_BLOCK             (64)
+#define HIST_REGISTERS_BY_BLOCK             (100)
 #define HIST_BLOCK_SIZE                     (HIST_REGISTERS_BY_BLOCK * HIST_REGISTER_SIZE)
 
 #define MAX_ACTIONS                         (51)    // from 0 to (MAX_ACTIONS - 1)
