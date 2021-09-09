@@ -847,14 +847,18 @@ void hkc_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch->value = value;
     homekit_characteristic_notify_safe(ch);
     
+    save_historical_data(ch);
+    
     save_states_callback();
 }
 
+/*
 void hkc_setter_with_setup(homekit_characteristic_t* ch, const homekit_value_t value) {
     hkc_setter(ch, value);
     
     setup_mode_toggle_upcount();
 }
+*/
 
 void pm_custom_consumption_reset(ch_group_t* ch_group) {
     if (!main_config.clock_ready) {
