@@ -19,13 +19,13 @@ void homekit_random_fill(uint8_t *data, size_t size);
 #define sdk_system_restart()                esp_restart()
 #endif
 
-
 #ifdef ESP_IDF
 #define SERVER_TASK_STACK                   (12288)
 #else
 #define SERVER_TASK_STACK                   (1664)
 #endif //ESP_IDF
 
+#define SERVER_TASK_PRIORITY                (tskIDLE_PRIORITY + 2)
 
 void homekit_mdns_init();
 void homekit_mdns_buffer_set(const uint16_t size);

@@ -512,7 +512,19 @@ void ntp_task() {
         if (result != 0 && tries < 4) {
             vTaskDelay(MS_TO_TICKS(10000));
         } else {
-            main_config.clock_ready = true;
+            if (!main_config.clock_ready && result == 0) {
+                main_config.clock_ready = true;
+                
+                ch_group_t* ch_group = main_config.ch_groups;
+                while (ch_group) {
+                    if (ch_group->acc_type == ACC_TYPE_HISTORICAL && ch_group->child_enabled) {
+                        save_historical_data(ch_group->ch_hist);
+                    }
+                    
+                    ch_group = ch_group->next;
+                }
+            }
+            
             break;
         }
     }
@@ -5644,7 +5656,7 @@ void run_homekit_server() {
     
     led_blink(4);
     
-    vTaskDelay(MS_TO_TICKS(10000));
+    vTaskDelay(MS_TO_TICKS(1000));
     
     WIFI_WATCHDOG_TIMER = esp_timer_create(WIFI_WATCHDOG_POLL_PERIOD_MS, true, NULL, wifi_watchdog);
     esp_timer_start(WIFI_WATCHDOG_TIMER);
@@ -6977,6 +6989,8 @@ void normal_mode_init() {
     int last_config_number = 1;
     sysparam_get_int32(LAST_CONFIG_NUMBER_SYSPARAM, &last_config_number);
     
+    //uint16_t service_iid = 100;
+    
     void new_accessory(const uint16_t accessory, uint16_t services, const bool homekit_enabled, cJSON* json_context) {
         if (!homekit_enabled) {
             return;
@@ -7034,7 +7048,7 @@ void normal_mode_init() {
         accessories[accessory]->services[0]->characteristics[3] = &model;
         accessories[accessory]->services[0]->characteristics[4] = &firmware;
         accessories[accessory]->services[0]->characteristics[5] = &identify_function;
-
+        
         if (acc_count == 0) {
             services -= 3;
             accessories[accessory]->services[services] = calloc(1, sizeof(homekit_service_t));
@@ -7053,6 +7067,8 @@ void normal_mode_init() {
             accessories[accessory]->services[services]->characteristics[0] = &haa_ota_update;
             accessories[accessory]->services[services]->characteristics[1] = &haa_enable_setup;
         }
+        
+        //service_iid = 100;
     }
 
     void set_accessory_ir_protocol(ch_group_t* ch_group, cJSON* json_context) {
@@ -7118,6 +7134,7 @@ void normal_mode_init() {
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = !(service - 1);
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
             accessories[accessory]->services[service]->characteristics = calloc(ch_calloc, sizeof(homekit_characteristic_t*));
@@ -7127,6 +7144,8 @@ void normal_mode_init() {
             } else {    // acc_type == ACC_TYPE_OUTLET
                 accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_OUTLET;
             }
+            
+            //service_iid += 2;
         }
         
         if (max_duration > 0) {
@@ -7136,6 +7155,8 @@ void normal_mode_init() {
             if (ch_group->homekit_enabled) {
                 accessories[accessory]->services[service]->characteristics[1] = ch_group->ch[1];
                 accessories[accessory]->services[service]->characteristics[2] = ch_group->ch[2];
+                
+                //service_iid += 2;
             }
             
             const uint32_t initial_time = (uint32_t) set_initial_state(ch_group->accessory, 1, init_last_state_json, ch_group->ch[1], CH_TYPE_INT, max_duration);
@@ -7229,6 +7250,7 @@ void normal_mode_init() {
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
             if (homekit_enabled == 2) {
                 accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_CUSTOM_HAA_HIDDEN_PROGRAMMABLE_SWITCH;
             } else {
@@ -7239,6 +7261,8 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[0];
             
+            //service_iid += 2;
+            
             if (acc_type == ACC_TYPE_DOORBELL) {
                 service++;
                 
@@ -7246,10 +7270,13 @@ void normal_mode_init() {
                 
                 accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
                 accessories[accessory]->services[service]->id = (service - 1) * 50;
+                //accessories[accessory]->services[service]->id = service_iid;
                 accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_DOORBELL;
                 accessories[accessory]->services[service]->primary = false;
                 accessories[accessory]->services[service]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
                 accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[1];
+                
+                //service_iid += 2;
             }
         }
         
@@ -7285,6 +7312,7 @@ void normal_mode_init() {
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = !(service - 1);
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
             
@@ -7297,6 +7325,8 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[0];
             accessories[accessory]->services[service]->characteristics[1] = ch_group->ch[1];
+            
+            //service_iid += 3;
         }
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, TYPE_LOCK);
@@ -7366,6 +7396,7 @@ void normal_mode_init() {
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = !(service - 1);
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
         }
@@ -7440,6 +7471,8 @@ void normal_mode_init() {
             
             accessories[accessory]->services[service]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[0];
+            
+            //service_iid += 2;
         }
 
         const bool exec_actions_on_boot = get_exec_actions_on_boot(json_context);
@@ -7548,6 +7581,7 @@ void normal_mode_init() {
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = !(service - 1);
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
             accessories[accessory]->services[service]->characteristics = calloc(calloc_count, sizeof(homekit_characteristic_t*));
@@ -7557,6 +7591,8 @@ void normal_mode_init() {
             } else {
                 accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_VALVE;
             }
+            
+            //service_iid += 2;
         }
         
         if (valve_max_duration > 0) {
@@ -7566,6 +7602,8 @@ void normal_mode_init() {
             if (ch_group->homekit_enabled) {
                 accessories[accessory]->services[service]->characteristics[3] = ch_group->ch[2];
                 accessories[accessory]->services[service]->characteristics[4] = ch_group->ch[3];
+                
+                //service_iid += 2;
             }
             
             const uint32_t initial_time = (uint32_t) set_initial_state(ch_group->accessory, 2, init_last_state_json, ch_group->ch[2], CH_TYPE_INT, 900);
@@ -7712,6 +7750,7 @@ void normal_mode_init() {
         
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = !(service - 1);
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
             
@@ -7725,6 +7764,8 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[2];
             accessories[accessory]->services[service]->characteristics[1] = ch_group->ch[0];
             accessories[accessory]->services[service]->characteristics[2] = ch_group->ch[3];
+            
+            //service_iid += 5;
         }
         
         switch ((uint8_t) TH_TYPE) {
@@ -7742,6 +7783,7 @@ void normal_mode_init() {
                 if (ch_group->homekit_enabled) {
                     accessories[accessory]->services[service]->characteristics[4] = ch_group->ch[5];
                     accessories[accessory]->services[service]->characteristics[5] = ch_group->ch[6];
+                    //service_iid++;
                 }
                 break;
                 
@@ -7751,6 +7793,7 @@ void normal_mode_init() {
                 if (ch_group->homekit_enabled) {
                     accessories[accessory]->services[service]->characteristics[4] = ch_group->ch[5];
                     accessories[accessory]->services[service]->characteristics[5] = ch_group->ch[6];
+                    //service_iid++;
                 }
                 break;
                 
@@ -7775,6 +7818,7 @@ void normal_mode_init() {
             if (ch_group->homekit_enabled) {
                 accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
                 accessories[accessory]->services[service]->id = (service - 1) * 50;
+                //accessories[accessory]->services[service]->id = service_iid;
                 accessories[accessory]->services[service]->primary = false;
                 accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
                 
@@ -7786,6 +7830,8 @@ void normal_mode_init() {
 
                 accessories[accessory]->services[service]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
                 accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[1];
+                
+                //service_iid += 2;
             }
         }
         
@@ -7892,6 +7938,7 @@ void normal_mode_init() {
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = !(service - 1);
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
             
@@ -7903,6 +7950,8 @@ void normal_mode_init() {
             
             accessories[accessory]->services[service]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[0];
+            
+            //service_iid += 2;
         }
             
         if (TH_SENSOR_GPIO != -1) {
@@ -7938,6 +7987,7 @@ void normal_mode_init() {
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = !(service - 1);
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
             
@@ -7949,6 +7999,8 @@ void normal_mode_init() {
             
             accessories[accessory]->services[service]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[1];
+            
+            //service_iid += 2;
         }
         
         if (TH_SENSOR_GPIO != -1) {
@@ -7982,6 +8034,7 @@ void normal_mode_init() {
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = !(service - 1);
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
             
@@ -7994,10 +8047,13 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[0];
             
+            //service_iid += 2;
+            
             service++;
             
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = (service - 1) * 50;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = false;
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
             
@@ -8009,6 +8065,8 @@ void normal_mode_init() {
             
             accessories[accessory]->services[service]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[1];
+            
+            //service_iid += 2;
         }
         
         if (TH_SENSOR_GPIO != -1) {
@@ -8077,6 +8135,7 @@ void normal_mode_init() {
         
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = !(service - 1);
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
             
@@ -8090,6 +8149,8 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[2];
             accessories[accessory]->services[service]->characteristics[1] = ch_group->ch[1];
             accessories[accessory]->services[service]->characteristics[2] = ch_group->ch[3];
+            
+            //service_iid += 5;
         }
         
         switch ((uint8_t) HM_TYPE) {
@@ -8107,6 +8168,7 @@ void normal_mode_init() {
                 if (ch_group->homekit_enabled) {
                     accessories[accessory]->services[service]->characteristics[4] = ch_group->ch[5];
                     accessories[accessory]->services[service]->characteristics[5] = ch_group->ch[6];
+                    //service_iid++;
                 }
                 break;
                 
@@ -8116,6 +8178,7 @@ void normal_mode_init() {
                 if (ch_group->homekit_enabled) {
                     accessories[accessory]->services[service]->characteristics[4] = ch_group->ch[5];
                     accessories[accessory]->services[service]->characteristics[5] = ch_group->ch[6];
+                    //service_iid++;
                 }
                 break;
                 
@@ -8140,6 +8203,7 @@ void normal_mode_init() {
             if (ch_group->homekit_enabled) {
                 accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
                 accessories[accessory]->services[service]->id = (service - 1) * 50;
+                //accessories[accessory]->services[service]->id = service_iid;
                 accessories[accessory]->services[service]->primary = false;
                 accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
                 
@@ -8151,6 +8215,8 @@ void normal_mode_init() {
 
                 accessories[accessory]->services[service]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
                 accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[0];
+                
+                //service_iid += 2;
             }
         }
         
@@ -8412,6 +8478,7 @@ void normal_mode_init() {
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = !(service - 1);
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
             
@@ -8420,6 +8487,8 @@ void normal_mode_init() {
             } else {
                 accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_LIGHTBULB;
             }
+            
+            //service_iid += 3;
         }
         
         uint8_t calloc_count = 3;
@@ -8437,6 +8506,8 @@ void normal_mode_init() {
                 accessories[accessory]->services[service]->characteristics[1] = ch_group->ch[1];
                 accessories[accessory]->services[service]->characteristics[2] = ch_group->ch[2];
                 accessories[accessory]->services[service]->characteristics[3] = ch_group->ch[3];
+                
+                //service_iid += 2;
             }
             
             if (is_custom_initial)  {
@@ -8459,6 +8530,8 @@ void normal_mode_init() {
                 accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[0];
                 accessories[accessory]->services[service]->characteristics[1] = ch_group->ch[1];
                 accessories[accessory]->services[service]->characteristics[2] = ch_group->ch[2];
+                
+                //service_iid++;
             }
             
             if (is_custom_initial)  {
@@ -8539,6 +8612,7 @@ void normal_mode_init() {
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = !(service - 1);
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
             
@@ -8552,6 +8626,8 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics[0] = GD_CURRENT_DOOR_STATE;
             accessories[accessory]->services[service]->characteristics[1] = GD_TARGET_DOOR_STATE;
             accessories[accessory]->services[service]->characteristics[2] = GD_OBSTRUCTION_DETECTED;
+            
+            //service_iid += 4;
         }
 
         register_actions(ch_group, json_context, 0);
@@ -8675,6 +8751,7 @@ void normal_mode_init() {
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = !(service - 1);
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
         
@@ -8701,6 +8778,8 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics[1] = WINDOW_COVER_CH_TARGET_POSITION;
             accessories[accessory]->services[service]->characteristics[2] = WINDOW_COVER_CH_STATE;
             accessories[accessory]->services[service]->characteristics[3] = WINDOW_COVER_CH_OBSTRUCTION;
+            
+            //service_iid += 5;
         }
         
         WINDOW_COVER_TIME_OPEN = WINDOW_COVER_TIME_DEFAULT;
@@ -8787,6 +8866,7 @@ void normal_mode_init() {
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = !(service - 1);
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
             
@@ -8798,6 +8878,8 @@ void normal_mode_init() {
             
             accessories[accessory]->services[service]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[0];
+            
+            //service_iid += 2;
         }
         
         LIGHT_SENSOR_TYPE = LIGHT_SENSOR_TYPE_DEFAULT;
@@ -8886,6 +8968,7 @@ void normal_mode_init() {
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = !(service - 1);
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
             
@@ -8898,6 +8981,8 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[service]->characteristics[0] = SEC_SYSTEM_CH_CURRENT_STATE;
             accessories[accessory]->services[service]->characteristics[1] = SEC_SYSTEM_CH_TARGET_STATE;
+            
+            //service_iid += 3;
         }
         
         SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = set_initial_state(ch_group->accessory, 1, json_context, SEC_SYSTEM_CH_TARGET_STATE, CH_TYPE_INT8, target_valid_values[valid_values_len - 1]);
@@ -8957,6 +9042,7 @@ void normal_mode_init() {
             
             input_service[0] = calloc(1, sizeof(homekit_service_t));
             input_service[0]->id = ((service_number + service - 1) * 50) + 26;
+            //input_service[0]->id = service_iid;
             input_service[0]->primary = false;
             input_service[0]->hidden = homekit_enabled - 1;
             
@@ -8973,12 +9059,15 @@ void normal_mode_init() {
             input_service[0]->characteristics[3] = NEW_HOMEKIT_CHARACTERISTIC(IS_CONFIGURED, true);
             input_service[0]->characteristics[4] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_VISIBILITY_STATE, HOMEKIT_CURRENT_VISIBILITY_STATE_SHOWN);
             
+            //service_iid += 6;
+            
             return *input_service;
         }
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 18;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = !(service - 1);
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
             
@@ -8996,6 +9085,8 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics[4] = ch_group->ch[3];
             accessories[accessory]->services[service]->characteristics[5] = NEW_HOMEKIT_CHARACTERISTIC(PICTURE_MODE, HOMEKIT_PICTURE_MODE_STANDARD);
             accessories[accessory]->services[service]->characteristics[6] = ch_group->ch[4];
+            
+            //service_iid += 8;
             
             accessories[accessory]->services[service]->linked = calloc(inputs + 1, sizeof(homekit_service_t*));
             
@@ -9024,6 +9115,7 @@ void normal_mode_init() {
             service++;
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 28;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = false;
             accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_TELEVISION_SPEAKER;
             accessories[accessory]->services[service]->characteristics = calloc(5, sizeof(homekit_characteristic_t*));
@@ -9031,6 +9123,8 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 1);
             accessories[accessory]->services[service]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(VOLUME_CONTROL_TYPE, HOMEKIT_VOLUME_CONTROL_TYPE_RELATIVE);
             accessories[accessory]->services[service]->characteristics[3] = ch_group->ch[6];
+            
+            //service_iid += 5;
         }
         
         uint32_t configured_name = set_initial_state(ch_group->accessory, 1, init_last_state_json, ch_group->ch[1], CH_TYPE_STRING, 0);
@@ -9120,6 +9214,7 @@ void normal_mode_init() {
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = !(service - 1);
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
             
@@ -9132,6 +9227,8 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[0];
             accessories[accessory]->services[service]->characteristics[1] = ch_group->ch[1];
+            
+            //service_iid += 3;
         }
         
         float saved_max_speed = set_initial_state(ch_group->accessory, 1, init_last_state_json, ch_group->ch[1], CH_TYPE_FLOAT, max_speed);
@@ -9221,6 +9318,7 @@ void normal_mode_init() {
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
             accessories[accessory]->services[service]->primary = !(service - 1);
             accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
             
@@ -9238,6 +9336,8 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics[4] = ch_group->ch[4];
             accessories[accessory]->services[service]->characteristics[5] = ch_group->ch[5];
             accessories[accessory]->services[service]->characteristics[6] = ch_group->ch[6];
+            
+            //service_iid += 8;
         }
         
         ch_group->ch[3]->value.float_value = set_initial_state(ch_group->accessory, 3, init_last_state_json, ch_group->ch[3], CH_TYPE_FLOAT, 0);
@@ -9344,7 +9444,11 @@ void normal_mode_init() {
         ch_group_t* ch_group = new_ch_group(hist_size, 1, 0);
         ch_group->acc_type = ACC_TYPE_HISTORICAL;
         ch_group->accessory = service_numerator;
-        ch_group->homekit_enabled = 2;
+        ch_group->homekit_enabled = true;
+        
+        if (cJSON_GetObjectItemCaseSensitive(json_context, HIST_READ_ON_CLOCK_READY_SET) != NULL) {
+            ch_group->child_enabled = (bool) cJSON_GetObjectItemCaseSensitive(json_context, HIST_READ_ON_CLOCK_READY_SET)->valuedouble;
+        }
         
         if (service == 0) {
             new_accessory(accessory, total_services, ch_group->homekit_enabled, json_context);
@@ -9356,11 +9460,14 @@ void normal_mode_init() {
         
         accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
         accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+        //accessories[accessory]->services[service]->id = service_iid;
         accessories[accessory]->services[service]->primary = !(service - 1);
         accessories[accessory]->services[service]->hidden = true;
         accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_CUSTOM_HISTORICAL_DATA;
         
         accessories[accessory]->services[service]->characteristics = calloc(hist_size + 1, sizeof(homekit_characteristic_t*));
+        
+        //service_iid += (hist_size + 1);
         
         for (uint8_t i = 0; i < hist_size; i++) {
             // Each block uses 132 + HIST_BLOCK_SIZE bytes
@@ -9382,8 +9489,6 @@ void normal_mode_init() {
         }
         
         HIST_LAST_REGISTER = hist_size * HIST_BLOCK_SIZE;
-        
-        //save_historical_data(ch_group->ch_hist);      // Never exec because clock is not ready
         
         const float poll_period = sensor_poll_period(json_context, 0);
         if (poll_period > 0.00f) {

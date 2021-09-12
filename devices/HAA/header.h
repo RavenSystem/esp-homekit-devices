@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "7.2.1"
+#define FIRMWARE_VERSION                    "7.3.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -467,6 +467,7 @@
 #define SEC_SYSTEM_ALARM                    (4)
 
 #define HIST_DATA_ARRAY_SET                 "h"
+#define HIST_READ_ON_CLOCK_READY_SET        "x"
 #define HIST_LAST_REGISTER                  ch_group->num[0]
 #define HIST_TIME_SIZE                      (4)     // (sizeof(uint32_t))
 #define HIST_DATA_SIZE                      (4)     // (sizeof(int32_t))
@@ -601,7 +602,7 @@
 #define STATUS_LED_DURATION_OFF             (120)
 
 #define SAVE_STATES_DELAY_MS                (5000)
-#define RANDOM_DELAY_MS                     (5000)
+#define RANDOM_DELAY_MS                     (6000)
 
 #define ACCESSORIES_WITHOUT_BRIDGE          (4)     // Max number of accessories before using a bridge
 
