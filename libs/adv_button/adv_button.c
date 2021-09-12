@@ -18,7 +18,7 @@
 
 #include "adv_button.h"
 
-#define ADV_BUTTON_DEFAULT_EVAL     (6)
+#define ADV_BUTTON_DEFAULT_EVAL     (4)
 
 #define DOUBLEPRESS_TIME            (400)
 #define LONGPRESS_TIME              (DOUBLEPRESS_TIME + 10)
@@ -26,7 +26,7 @@
 #define HOLDPRESS_TIME              (8000)
 
 #define BUTTON_EVAL_DELAY_MIN       (10)
-#define BUTTON_EVAL_DELAY_DEFAULT   (10)
+#define BUTTON_EVAL_DELAY_DEFAULT   (20)
 
 #define DISABLE_PRESS_COUNT         (15)
 
