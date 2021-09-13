@@ -174,7 +174,7 @@ homekit_server_t *server_new() {
     FD_ZERO(&homekit_server->fds);
     
     json_init(&homekit_server->json, NULL);
-    homekit_server->json.size = BUFFER_DATA_SIZE;
+    homekit_server->json.size = BUFFER_DATA_SIZE - 2;   // 2 bytes reserved for client_send_chunk() end
     homekit_server->json.buffer = homekit_server->data;
     homekit_server->json.on_flush = client_send_chunk;
     
@@ -772,11 +772,17 @@ IRAM void client_send_chunk(byte *data, size_t size, void *arg) {
     byte header[9];
     header[0] = 0;
     int header_size = snprintf((char*) header, sizeof(header), "%x\r\n", size);
-    byte end[2] = { '\r', '\n' };
     
     client_send(context, header, header_size);
-    client_send(context, data, size);
-    client_send(context, end, sizeof(end));
+    
+    if (size > 0) {
+        data[size] = '\r';
+        data[size + 1] = '\n';
+        client_send(context, data, size + 2);
+    } else {
+        byte end[2] = { '\r', '\n' };
+        client_send(context, end, sizeof(end));
+    }
     
     /*
     size_t payload_size = size + 8;
@@ -1169,9 +1175,16 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 homekit_server->pairing_context->public_key_size
             );
             
+#ifdef ESP_OPEN_RTOS
+            if (low_mdns_buffer) {
+                homekit_mdns_buffer_set(0);
+            }
+#endif //ESP_OPEN_RTOS
+            
             if (r) {
-                CLIENT_ERROR(context, "Compute pairing code (%d)", r);
+                CLIENT_ERROR(context, "No DRAM to compute pairing code (%d)", r);
                 send_tlv_error_response(context, 4, TLVError_Authentication);
+                pairing_context_free(homekit_server->pairing_context);
                 break;
             }
             
@@ -1181,12 +1194,6 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 
             CLIENT_DEBUG(context, "Verifying peer's proof");
             DEBUG_HEAP();
-            
-#ifdef ESP_OPEN_RTOS
-            if (low_mdns_buffer) {
-                homekit_mdns_buffer_set(0);
-            }
-#endif //ESP_OPEN_RTOS
             
             r = crypto_srp_verify(homekit_server->pairing_context->srp, proof->value, proof->size);
             if (r) {

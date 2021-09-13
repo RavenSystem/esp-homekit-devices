@@ -5656,11 +5656,11 @@ void run_homekit_server() {
     
     led_blink(4);
     
-    vTaskDelay(MS_TO_TICKS(1000));
+    vTaskDelay(MS_TO_TICKS(1500));
     
     WIFI_WATCHDOG_TIMER = esp_timer_create(WIFI_WATCHDOG_POLL_PERIOD_MS, true, NULL, wifi_watchdog);
     esp_timer_start(WIFI_WATCHDOG_TIMER);
-
+    
     if (main_config.ping_inputs) {
         esp_timer_start(esp_timer_create(main_config.ping_poll_period * 1000.00f, true, NULL, ping_task_timer_worker));
     }
