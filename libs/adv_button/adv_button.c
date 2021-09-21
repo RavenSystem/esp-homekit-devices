@@ -20,7 +20,7 @@
 
 #define ADV_BUTTON_DEFAULT_EVAL     (4)
 
-#define DOUBLEPRESS_TIME            (400)
+#define DOUBLEPRESS_TIME            (450)
 #define LONGPRESS_TIME              (DOUBLEPRESS_TIME + 10)
 #define VERYLONGPRESS_TIME          (1500)
 #define HOLDPRESS_TIME              (8000)

@@ -951,8 +951,8 @@ void hkc_on_status_setter(homekit_characteristic_t* ch, const homekit_value_t va
         ch_group_t* ch_group = ch_group_find(ch);
         INFO("<%i> Setter Status ON %i", ch_group->accessory, value.bool_value);
         ch->value.bool_value = value.bool_value;
-                
-        save_historical_data(ch);
+        
+        homekit_characteristic_notify_safe(ch);
     }
 }
 
@@ -5656,10 +5656,13 @@ void run_homekit_server() {
     
     led_blink(4);
     
-    vTaskDelay(MS_TO_TICKS(1500));
+    vTaskDelay(MS_TO_TICKS(500));
     
     WIFI_WATCHDOG_TIMER = esp_timer_create(WIFI_WATCHDOG_POLL_PERIOD_MS, true, NULL, wifi_watchdog);
-    esp_timer_start(WIFI_WATCHDOG_TIMER);
+    
+    while (esp_timer_start(WIFI_WATCHDOG_TIMER) == TIMER_HELPER_ERR_NO_PROCESS) {
+        vTaskDelay(MS_TO_TICKS(1000));
+    }
     
     if (main_config.ping_inputs) {
         esp_timer_start(esp_timer_create(main_config.ping_poll_period * 1000.00f, true, NULL, ping_task_timer_worker));

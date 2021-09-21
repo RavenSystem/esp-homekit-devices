@@ -18,16 +18,13 @@ ifdef component_compile_rules
     HOMEKIT_SPI_FLASH_BASE_ADDR ?= 0x100000
     # Maximum number of simultaneous clients allowed.
     # Each connected client requires ~1100-1200 bytes of RAM.
-    HOMEKIT_MAX_CLIENTS ?= 16
     # Set to 1 to enable WolfSSL low resources, saving about 70KB in firmware size,
     # but increasing pair verify time from 1 to 7 secs (Without overclocking).
     HOMEKIT_SMALL ?= 0
-    # Set to 1 to enable the ability to use overclock on some functions (It will reduce times by half).
-    HOMEKIT_OVERCLOCK ?= 1
-    # Set to 1 to enable overclock on initial pair-setup function (Requires HOMEKIT_OVERCLOCK = 1).
-    HOMEKIT_OVERCLOCK_PAIR_SETUP ?= 1
-    # Set to 1 to enable overclock on pair-verify function (Requires HOMEKIT_OVERCLOCK = 1).
-    HOMEKIT_OVERCLOCK_PAIR_VERIFY ?= 1
+    # Define it to enable overclock on initial pair-setup function.
+    #HOMEKIT_OVERCLOCK_PAIR_SETUP
+    # Define it to enable overclock on pair-verify function.
+    #HOMEKIT_OVERCLOCK_PAIR_VERIFY ?= 0
 
     INC_DIRS += $(homekit_ROOT)/include
 
@@ -63,21 +60,7 @@ ifdef component_compile_rules
     wolfssl_CFLAGS += $(EXTRA_WOLFSSL_CFLAGS)
     homekit_CFLAGS += $(EXTRA_WOLFSSL_CFLAGS) \
         -DESP_OPEN_RTOS \
-        -DSPIFLASH_BASE_ADDR=$(HOMEKIT_SPI_FLASH_BASE_ADDR) \
-        -DHOMEKIT_MAX_CLIENTS=$(HOMEKIT_MAX_CLIENTS)
-
-    ifeq ($(HOMEKIT_OVERCLOCK),1)
-        ifeq ($(HOMEKIT_OVERCLOCK_PAIR_SETUP),1)
-        homekit_CFLAGS += -DHOMEKIT_OVERCLOCK_PAIR_SETUP
-        endif
-        ifeq ($(HOMEKIT_OVERCLOCK_PAIR_VERIFY),1)
-        homekit_CFLAGS += -DHOMEKIT_OVERCLOCK_PAIR_VERIFY
-        endif
-    endif
-
-    ifeq ($(HOMEKIT_DEBUG),1)
-    homekit_CFLAGS += -DHOMEKIT_DEBUG
-    endif
+        -DSPIFLASH_BASE_ADDR=$(HOMEKIT_SPI_FLASH_BASE_ADDR)
 
 else
     # ESP_IDF

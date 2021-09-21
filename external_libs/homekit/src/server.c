@@ -29,6 +29,8 @@
 #include <wolfssl/wolfcrypt/hash.h>
 #include <wolfssl/wolfcrypt/coding.h>
 
+#include <timers_helper.h>
+
 #include "base64.h"
 #include "crypto.h"
 #include "pairing.h"
@@ -46,7 +48,7 @@
 #define PORT                    (5556)
 
 #ifndef HOMEKIT_MAX_CLIENTS
-#define HOMEKIT_MAX_CLIENTS     (8)
+#define HOMEKIT_MAX_CLIENTS     (12)
 #endif
 
 #ifndef HOMEKIT_MIN_FREEHEAP
@@ -119,6 +121,10 @@ typedef struct {
     bool setup_finish: 1;
     
     json_stream json;
+
+#ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
+    TimerHandle_t overclock_timer;
+#endif
     
     byte data[BUFFER_DATA_SIZE];
     
@@ -167,6 +173,12 @@ void pairing_context_free(pairing_context_t *context);
 void homekit_server_on_reset(client_context_t *context);
 IRAM void client_send_chunk(byte *data, size_t size, void *arg);
 
+#ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
+IRAM static void homekit_restoreclock(TimerHandle_t xTimer) {
+    sdk_system_restoreclock();
+}
+#endif
+
 homekit_server_t *server_new() {
     homekit_server_t* homekit_server = malloc(sizeof(homekit_server_t));
     memset(homekit_server, 0, sizeof(*homekit_server));
@@ -177,6 +189,10 @@ homekit_server_t *server_new() {
     homekit_server->json.size = BUFFER_DATA_SIZE - 2;   // 2 bytes reserved for client_send_chunk() end
     homekit_server->json.buffer = homekit_server->data;
     homekit_server->json.on_flush = client_send_chunk;
+    
+#ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
+    homekit_server->overclock_timer = esp_timer_create(2500, false, NULL, homekit_restoreclock);
+#endif
     
     return homekit_server;
 }
@@ -1131,10 +1147,6 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             
             free(salt);
             
-#ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
-            sdk_system_restoreclock();
-#endif
-            
             send_tlv_response(context, response);
             
             CLIENT_INFO(context, "Pair done 1/3");
@@ -1182,7 +1194,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 #endif //ESP_OPEN_RTOS
             
             if (r) {
-                CLIENT_ERROR(context, "No DRAM to compute pairing code (%d)", r);
+                CLIENT_ERROR(context, "Compute pairing code (%d). No DRAM?", r);
                 send_tlv_error_response(context, 4, TLVError_Authentication);
                 pairing_context_free(homekit_server->pairing_context);
                 break;
@@ -1214,10 +1226,6 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             tlv_add_value(response, TLVType_Proof, server_proof, server_proof_size);
 
             free(server_proof);
-
-#ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
-            sdk_system_restoreclock();
-#endif
             
             send_tlv_response(context, response);
             
@@ -1549,10 +1557,6 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                           encrypted_response_data, encrypted_response_data_size);
 
             free(encrypted_response_data);
-
-#ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
-            sdk_system_restoreclock();
-#endif
             
             send_tlv_response(context, response);
 
@@ -1587,19 +1591,12 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 void homekit_server_on_pair_verify(client_context_t *context, const byte *data, size_t size) {
     HOMEKIT_DEBUG_LOG("Pair Verify");
     DEBUG_HEAP();
-
-#ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
-    sdk_system_overclock();
-#endif
-
+    
     tlv_values_t *message = tlv_new();
     if (tlv_parse(data, size, message)) {
         CLIENT_ERROR(context, "Parse TLV payload");
         tlv_free(message);
         send_tlv_error_response(context, 2, TLVError_Unknown);
-#ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
-        sdk_system_restoreclock();
-#endif
         return;
     }
 
@@ -1792,10 +1789,6 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
                           encrypted_response_data, encrypted_response_data_size);
 
             free(encrypted_response_data);
-
-#ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
-            sdk_system_restoreclock();
-#endif
             
             send_tlv_response(context, response);
 
@@ -1999,10 +1992,6 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
 
             tlv_values_t *response = tlv_new();
             tlv_add_integer_value(response, TLVType_State, 1, 4);
-
-#ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
-            sdk_system_restoreclock();
-#endif
             
             send_tlv_response(context, response);
 
@@ -2024,10 +2013,6 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
     }
 
     tlv_free(message);
-
-#ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
-    sdk_system_restoreclock();
-#endif
 }
 
 
@@ -3236,6 +3221,12 @@ IRAM void homekit_server_close_client(client_context_t *context) {
 
 
 void homekit_server_accept_client() {
+#ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
+    if (homekit_server->paired && esp_timer_start(homekit_server->overclock_timer) == TIMER_HELPER_OK) {
+        sdk_system_overclock();
+    }
+#endif
+    
     int s = accept(homekit_server->listen_fd, (struct sockaddr *)NULL, (socklen_t *)NULL);
     if (s < 0) {
         HOMEKIT_ERROR("New socket");
