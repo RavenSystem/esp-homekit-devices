@@ -18,3 +18,7 @@ Go to the [Wiki](https://github.com/RavenSystem/esp-homekit-devices/wiki) for ad
 In addition to this firmware, you can obtain [**HAA Manager**](https://apps.apple.com/app/id1556105121), the perfect App companion to manage your HAA devices, with batch updates, enable setup mode, and other extra features.
 
 <p align="center"><a href="https://apps.apple.com/app/id1556105121"><img src="https://raw.githubusercontent.com/RavenSystem/ravensystem-media/master/badge-app-store.png"></a></p>
+
+And don't forget to subscribe to YouTube Channel:
+
+<p align="center"><a href="https://www.youtube.com/channel/UCRumJzAoAnQ7dUpSnSUuuJw"><img width="40%" src="https://raw.githubusercontent.com/RavenSystem/ravensystem-media/master/YouTube_logo.png"></a></p>
