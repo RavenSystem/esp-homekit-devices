@@ -3248,11 +3248,18 @@ void homekit_server_accept_client() {
     client_context_t* new_context = client_context_new();
     
     uint32_t free_heap = xPortGetFreeHeapSize();
+    char* malloc_test = malloc(BUFFER_DATA_SIZE);
+    if (malloc_test) {
+        free(malloc_test);
+    }
+    
     if (!homekit_server->setup_finish && 0b10 < homekit_server->client_count) {
         HOMEKIT_INFO("[%d] New %s:%d Free HEAP: %d", s, address_buffer, addr.sin_port, free_heap);
         close(s);
         return;
-    } else if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS || (free_heap <= HOMEKIT_MIN_FREEHEAP && homekit_server->is_pairing == false) || !new_context) {
+    } else if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS ||
+               ((!malloc_test || free_heap <= HOMEKIT_MIN_FREEHEAP) && homekit_server->is_pairing == false) ||
+               !new_context) {
         remove_oldest_client();
     }
     

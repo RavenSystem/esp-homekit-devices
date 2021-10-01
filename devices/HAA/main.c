@@ -136,6 +136,12 @@ bool get_used_gpio(const uint16_t gpio) {
 
 void set_used_gpio(const uint16_t gpio) {
     if (gpio < MAX_GPIOS) {
+        if (gpio == 1) {
+            gpio_set_iomux_function(1, IOMUX_GPIO1_FUNC_GPIO);
+        } else if (gpio == 3) {
+            gpio_set_iomux_function(3, IOMUX_GPIO3_FUNC_GPIO);
+        }
+        
         const uint64_t bit = 1 << gpio;
         main_config.used_gpio |= bit;
     }
@@ -264,14 +270,6 @@ void disable_emergency_setup(TimerHandle_t xTimer) {
     INFO("Disarming Emergency Setup Mode");
     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
     esp_timer_delete(xTimer);
-}
-
-void change_uart_gpio(const uint16_t gpio) {
-    if (gpio == 1) {
-        gpio_set_iomux_function(1, IOMUX_GPIO1_FUNC_GPIO);
-    } else if (gpio == 3) {
-        gpio_set_iomux_function(3, IOMUX_GPIO3_FUNC_GPIO);
-    }
 }
 
 uint16_t process_hexstr(const char* string, uint8_t** output_hex_string) {
@@ -761,10 +759,10 @@ void ping_task_timer_worker() {
 
 // -----
 
-void setup_mode_call(const uint8_t gpio, void* args, const uint8_t param) {
+void setup_mode_call(const uint16_t gpio, void* args, const uint8_t param) {
     INFO("Setup mode call");
     
-    if (main_config.setup_mode_time == 0 || xTaskGetTickCountFromISR() < main_config.setup_mode_time * 1000 / portTICK_PERIOD_MS) {
+    if (main_config.setup_mode_time == 0 || xTaskGetTickCountFromISR() < main_config.setup_mode_time * (1000 / portTICK_PERIOD_MS)) {
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
         reboot_haa();
     } else {
@@ -776,15 +774,16 @@ void setup_mode_toggle_upcount() {
     if (main_config.setup_mode_toggle_counter_max > 0) {
         main_config.setup_mode_toggle_counter++;
         INFO("Setup mode trigger %i/%i", main_config.setup_mode_toggle_counter, main_config.setup_mode_toggle_counter_max);
-        esp_timer_start(main_config.setup_mode_toggle_timer);
+        
+        if (main_config.setup_mode_toggle_counter == main_config.setup_mode_toggle_counter_max) {
+            setup_mode_call(0, NULL, 0);
+        } else {
+            esp_timer_start(main_config.setup_mode_toggle_timer);
+        }
     }
 }
 
 void setup_mode_toggle() {
-    if (main_config.setup_mode_toggle_counter >= main_config.setup_mode_toggle_counter_max) {
-        setup_mode_call(0, NULL, 0);
-    }
-    
     main_config.setup_mode_toggle_counter = 0;
 }
 
@@ -5672,7 +5671,7 @@ void run_homekit_server() {
 void printf_header() {
     INFO("\n\n");
     INFO("Home Accessory Architect v"FIRMWARE_VERSION);
-    INFO("(c) 2019-2021 José Antonio Jiménez Campos\n");
+    INFO("(c) 2018-2021 José Antonio Jiménez Campos\n");
     
 #ifdef HAA_DEBUG
     INFO("HAA DEBUG ENABLED\n");
@@ -5700,7 +5699,7 @@ void normal_mode_init() {
     if (total_accessories == 0) {
         reset_uart();
         printf_header();
-        INFO("JSON:\n %s\n", txt_config ? txt_config : "none");
+        INFO("JSON:\n%s\n", txt_config ? txt_config : "NONE");
         ERROR("Invalid JSON\n");
         sysparam_set_int32(TOTAL_SERV_SYSPARAM, 0);
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);
@@ -5747,9 +5746,8 @@ void normal_mode_init() {
             
             if (gpio < MAX_GPIOS) {
                 if (!get_used_gpio(gpio)) {
-                    change_uart_gpio(gpio);
-                    adv_button_create(gpio, pullup_resistor, inverted, button_mode);
                     set_used_gpio(gpio);
+                    adv_button_create(gpio, pullup_resistor, inverted, button_mode);
                     
                     INFO("New Input GPIO %i: inv %i, filter %i, mode %i", gpio, inverted, button_filter, button_mode);
                     
@@ -5978,20 +5976,16 @@ void normal_mode_init() {
                         }
                         
                         action_binary_output->gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuedouble;
-                        if (!get_used_gpio(action_binary_output->gpio)) {
-                            change_uart_gpio(action_binary_output->gpio);
-                            
-                            if (action_binary_output->gpio < MAX_GPIOS) {
-                                bool initial_value = false;
-                                if (cJSON_GetObjectItemCaseSensitive(json_relay, INITIAL_VALUE) != NULL) {
-                                    initial_value = (bool) cJSON_GetObjectItemCaseSensitive(json_relay, INITIAL_VALUE)->valuedouble;
-                                }
-                                
-                                gpio_write(action_binary_output->gpio, initial_value);
-                                gpio_enable(action_binary_output->gpio, GPIO_OUTPUT);
-                                gpio_write(action_binary_output->gpio, initial_value);
-                                set_used_gpio(action_binary_output->gpio);
+                        if (!get_used_gpio(action_binary_output->gpio) && action_binary_output->gpio < MAX_GPIOS) {
+                            bool initial_value = false;
+                            if (cJSON_GetObjectItemCaseSensitive(json_relay, INITIAL_VALUE) != NULL) {
+                                initial_value = (bool) cJSON_GetObjectItemCaseSensitive(json_relay, INITIAL_VALUE)->valuedouble;
                             }
+                            
+                            set_used_gpio(action_binary_output->gpio);
+                            gpio_write(action_binary_output->gpio, initial_value);
+                            gpio_enable(action_binary_output->gpio, GPIO_OUTPUT);
+                            gpio_write(action_binary_output->gpio, initial_value);
                             
                             INFO("New Binary Output GPIO %i", action_binary_output->gpio);
                         }
@@ -6045,10 +6039,18 @@ void normal_mode_init() {
                         cJSON* json_acc_manager = cJSON_GetArrayItem(json_acc_managers, i);
                         for (uint8_t j = 0; j < cJSON_GetArraySize(json_acc_manager); j++) {
                             const float value = (float) cJSON_GetArrayItem(json_acc_manager, j)->valuedouble;
-
+                            int16_t acc_index;
+                            
                             switch (j) {
                                 case 0:
-                                    action_acc_manager->accessory = (uint16_t) value;
+                                    acc_index = value;
+                                    if (acc_index <= 0) {
+                                        action_acc_manager->accessory = ch_group->accessory + acc_index;
+                                    } else if (acc_index > 7000) {
+                                        action_acc_manager->accessory = ch_group->accessory + (acc_index - 7000);
+                                    } else {
+                                        action_acc_manager->accessory = acc_index;
+                                    }
                                     break;
                                     
                                 case 1:
@@ -6483,21 +6485,21 @@ void normal_mode_init() {
                 
                 switch (uart_config) {
                     case 1:
+                        set_used_gpio(2);
                         gpio_disable(2);
                         gpio_set_iomux_function(2, IOMUX_GPIO2_FUNC_UART1_TXD);
-                        set_used_gpio(2);
                         break;
                         
                     case 2:
+                        set_used_gpio(15);
                         gpio_disable(15);
                         sdk_system_uart_swap();
-                        set_used_gpio(15);
                         uart_config = 0;
                         break;
                         
                     default:    // case 0:
-                        reset_uart();
                         set_used_gpio(1);
+                        reset_uart();
                         break;
                 }
                 
@@ -6568,13 +6570,13 @@ void normal_mode_init() {
         log_output_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT)->valuedouble;
         
         if ((log_output_type == 1 || log_output_type == 4) && !used_uart[0]) {
-            reset_uart();
             set_used_gpio(1);
+            reset_uart();
         } else if ((log_output_type == 2 || log_output_type == 5) && !used_uart[1]) {
+            set_used_gpio(2);
             gpio_disable(2);
             gpio_set_iomux_function(2, IOMUX_GPIO2_FUNC_UART1_TXD);
             uart_set_baud(1, 115200);
-            set_used_gpio(2);
         }
     }
 
@@ -6807,14 +6809,13 @@ void normal_mode_init() {
     // Status LED
     if (cJSON_GetObjectItemCaseSensitive(json_config, STATUS_LED_GPIO) != NULL) {
         const uint8_t led_gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, STATUS_LED_GPIO)->valuedouble;
-        set_used_gpio(led_gpio);
         
         bool led_inverted = true;
         if (cJSON_GetObjectItemCaseSensitive(json_config, INVERTED) != NULL) {
             led_inverted = (bool) cJSON_GetObjectItemCaseSensitive(json_config, INVERTED)->valuedouble;
         }
         
-        change_uart_gpio(led_gpio);
+        set_used_gpio(led_gpio);
         led_create(led_gpio, led_inverted);
         INFO("Status LED GPIO %i, inv %i", led_gpio, led_inverted);
     }
@@ -6834,9 +6835,8 @@ void normal_mode_init() {
     // IR TX LED GPIO
     if (cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO) != NULL) {
         main_config.ir_tx_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO)->valuedouble;
-        change_uart_gpio(main_config.ir_tx_gpio);
-        gpio_enable(main_config.ir_tx_gpio, GPIO_OUTPUT);
         set_used_gpio(main_config.ir_tx_gpio);
+        gpio_enable(main_config.ir_tx_gpio, GPIO_OUTPUT);
         gpio_write(main_config.ir_tx_gpio, false ^ main_config.ir_tx_inv);
         INFO("IR TX GPIO %i", main_config.ir_tx_gpio);
     }
@@ -7101,7 +7101,7 @@ void normal_mode_init() {
         
         return initial_state;
     }
-
+    
     cJSON* init_last_state_json = cJSON_Parse(INIT_STATE_LAST_STR);
     
     // *** NEW SWITCH / OUTLET
