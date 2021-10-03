@@ -44,6 +44,12 @@ typedef struct {
 // Initialize HomeKit accessory server
 void homekit_server_init(homekit_server_config_t *config);
 
+// Check creating of a block into DRAM
+bool homekit_is_enough_dram();
+
+// Remove oldest client to free some DRAM
+void homekit_remove_oldest_client();
+
 // Reset HomeKit accessory server, removing all pairings
 void homekit_server_reset();
 

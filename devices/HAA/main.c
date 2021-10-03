@@ -487,6 +487,7 @@ void reboot_task() {
 void reboot_haa() {
     if (xTaskCreate(reboot_task, "reboot", REBOOT_TASK_SIZE, NULL, REBOOT_TASK_PRIORITY, NULL) != pdPASS) {
         ERROR("Creating reboot");
+        homekit_remove_oldest_client();
     }
 }
 
@@ -532,11 +533,11 @@ void ntp_task() {
 
 void ntp_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
-        const uint32_t free_heap = xPortGetFreeHeapSize();
-        if (main_config.wifi_status != WIFI_STATUS_CONNECTED ||
-            free_heap <= MINIMUM_FREE_HEAP ||
-            xTaskCreate(ntp_task, "ntp", NTP_TASK_SIZE, NULL, NTP_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating ntp. Free HEAP %d", free_heap);
+        if (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
+            raven_ntp_get_time_t();
+        } else if (xTaskCreate(ntp_task, "ntp", NTP_TASK_SIZE, NULL, NTP_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("Creating NTP");
+            homekit_remove_oldest_client();
             raven_ntp_get_time_t();
         }
     } else {
@@ -666,10 +667,9 @@ void wifi_watchdog() {
         }
         
         if (main_config.wifi_ping_max_errors != 255 && !homekit_is_pairing() && !main_config.network_is_busy) {
-            const uint32_t free_heap = xPortGetFreeHeapSize();
-            if (free_heap <= MINIMUM_FREE_HEAP ||
-                xTaskCreate(wifi_ping_gw_task, "gwping", WIFI_PING_GW_TASK_SIZE, NULL, WIFI_PING_GW_TASK_PRIORITY, NULL) != pdPASS) {
-                ERROR("Creating wifi_ping_gw. Free HEAP %d", free_heap);
+            if (xTaskCreate(wifi_ping_gw_task, "gwping", WIFI_PING_GW_TASK_SIZE, NULL, WIFI_PING_GW_TASK_PRIORITY, NULL) != pdPASS) {
+                ERROR("Creating wifi_ping_gw");
+                homekit_remove_oldest_client();
             }
         }
         
@@ -683,10 +683,9 @@ void wifi_watchdog() {
         
         main_config.wifi_error_count = 0;
         
-        const uint32_t free_heap = xPortGetFreeHeapSize();
-        if (free_heap <= MINIMUM_FREE_HEAP ||
-            xTaskCreate(wifi_reconnection_task, "recon", WIFI_RECONNECTION_TASK_SIZE, (void*) force_disconnect, WIFI_RECONNECTION_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating wifi_reconnection. Free HEAP %d", free_heap);
+        if (xTaskCreate(wifi_reconnection_task, "recon", WIFI_RECONNECTION_TASK_SIZE, (void*) force_disconnect, WIFI_RECONNECTION_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("Creating wifi_reconnection");
+            homekit_remove_oldest_client();
         }
     }
 }
@@ -747,10 +746,9 @@ void ping_task() {
 
 void ping_task_timer_worker() {
     if (!main_config.network_is_busy && !homekit_is_pairing()) {
-        const uint32_t free_heap = xPortGetFreeHeapSize();
-        if (free_heap < MINIMUM_FREE_HEAP ||
-            xTaskCreate(ping_task, "ping", PING_TASK_SIZE, NULL, PING_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating ping. Free HEAP %d", free_heap);
+        if (xTaskCreate(ping_task, "ping", PING_TASK_SIZE, NULL, PING_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("Creating ping");
+            homekit_remove_oldest_client();
         }
     } else {
         ERROR("ping_task: network busy %i, HK pairing %i", main_config.network_is_busy, homekit_is_pairing());
@@ -1320,10 +1318,9 @@ void power_monitor_task(void* args) {
 
 void power_monitor_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
-        const uint32_t free_heap = xPortGetFreeHeapSize();
-        if (free_heap <= MINIMUM_FREE_HEAP ||
-            xTaskCreate(power_monitor_task, "pm", POWER_MONITOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), POWER_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating power_monitor. Free HEAP %d", free_heap);
+        if (xTaskCreate(power_monitor_task, "pm", POWER_MONITOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), POWER_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("Creating power_monitor");
+            homekit_remove_oldest_client();
         }
     } else {
         ERROR("pm_task: HK pairing");
@@ -1592,10 +1589,9 @@ void set_zones_task(void* args) {
 }
 
 void set_zones_timer_worker(TimerHandle_t xTimer) {
-    const uint32_t free_heap = xPortGetFreeHeapSize();
-    if (free_heap <= MINIMUM_FREE_HEAP ||
-        xTaskCreate(set_zones_task, "zones", SET_ZONES_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), SET_ZONES_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("Creating set_zones. Free HEAP %d", free_heap);
+    if (xTaskCreate(set_zones_task, "zones", SET_ZONES_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), SET_ZONES_TASK_PRIORITY, NULL) != pdPASS) {
+        ERROR("Creating set_zones");
+        homekit_remove_oldest_client();
         esp_timer_start(xTimer);
     }
 }
@@ -1819,10 +1815,9 @@ void process_th_task(void* args) {
 }
 
 void process_th_timer(TimerHandle_t xTimer) {
-    const uint32_t free_heap = xPortGetFreeHeapSize();
-    if (free_heap <= MINIMUM_FREE_HEAP ||
-        xTaskCreate(process_th_task, "th", PROCESS_TH_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_TH_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("Creating process_th. Free HEAP %d", free_heap);
+    if (xTaskCreate(process_th_task, "th", PROCESS_TH_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_TH_TASK_PRIORITY, NULL) != pdPASS) {
+        ERROR("Creating process_th");
+        homekit_remove_oldest_client();
         esp_timer_start(xTimer);
     }
 }
@@ -2160,10 +2155,9 @@ void process_hum_task(void* args) {
 }
 
 void process_humidif_timer(TimerHandle_t xTimer) {
-    const uint32_t free_heap = xPortGetFreeHeapSize();
-    if (free_heap <= MINIMUM_FREE_HEAP ||
-        xTaskCreate(process_hum_task, "hum", PROCESS_HUMIDIF_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_HUMIDIF_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("Creating process_hum. Free HEAP %d", free_heap);
+    if (xTaskCreate(process_hum_task, "hum", PROCESS_HUMIDIF_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_HUMIDIF_TASK_PRIORITY, NULL) != pdPASS) {
+        ERROR("Creating process_hum");
+        homekit_remove_oldest_client();
         esp_timer_start(xTimer);
     }
 }
@@ -2495,10 +2489,9 @@ void temperature_task(void* args) {
 
 void temperature_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
-        const uint32_t free_heap = xPortGetFreeHeapSize();
-        if (free_heap <= MINIMUM_FREE_HEAP ||
-            xTaskCreate(temperature_task, "temp", TEMPERATURE_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), TEMPERATURE_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating temperature. Free HEAP %d", free_heap);
+        if (xTaskCreate(temperature_task, "temp", TEMPERATURE_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), TEMPERATURE_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("Creating temperature");
+            homekit_remove_oldest_client();
         }
     } else {
         ERROR("temperature_task: HK pairing");
@@ -3187,13 +3180,12 @@ void lightbulb_task(void* args) {
 }
 
 void lightbulb_task_timer(TimerHandle_t xTimer) {
-    const uint32_t free_heap = xPortGetFreeHeapSize();
-    if (free_heap <= MINIMUM_FREE_HEAP ||
-        xTaskCreate(lightbulb_task, "light", LIGHTBULB_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), LIGHTBULB_TASK_PRIORITY, NULL) != pdPASS) {
+    if (xTaskCreate(lightbulb_task, "light", LIGHTBULB_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), LIGHTBULB_TASK_PRIORITY, NULL) != pdPASS) {
         ch_group_t* ch_group = (void*) pvTimerGetTimerID(xTimer);
         lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_group->ch[0]);
         lightbulb_group->lightbulb_task_running = false;
-        ERROR("Creating lightbulb. Free HEAP %d", free_heap);
+        ERROR("Creating lightbulb");
+        homekit_remove_oldest_client();
         esp_timer_start(xTimer);
     }
 }
@@ -3328,10 +3320,9 @@ void autodimmer_call(homekit_characteristic_t* ch0, const homekit_value_t value)
             lightbulb_group->armed_autodimmer = false;
             esp_timer_stop(ch_group->timer);
             
-            const uint32_t free_heap = xPortGetFreeHeapSize();
-            if (free_heap <= MINIMUM_FREE_HEAP ||
-                xTaskCreate(autodimmer_task, "autodim", AUTODIMMER_TASK_SIZE, (void*) ch0, AUTODIMMER_TASK_PRIORITY, NULL) != pdPASS) {
-                ERROR("<%i> Creating AUTODim. Free HEAP %d", ch_group->accessory, free_heap);
+            if (xTaskCreate(autodimmer_task, "autodim", AUTODIMMER_TASK_SIZE, (void*) ch0, AUTODIMMER_TASK_PRIORITY, NULL) != pdPASS) {
+                ERROR("<%i> Creating AUTODim", ch_group->accessory);
+                homekit_remove_oldest_client();
             }
         } else {
             esp_timer_start(ch_group->timer);
@@ -3874,10 +3865,9 @@ void light_sensor_task(void* args) {
 
 void light_sensor_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
-        const uint32_t free_heap = xPortGetFreeHeapSize();
-        if (free_heap <= MINIMUM_FREE_HEAP ||
-            xTaskCreate(light_sensor_task, "lux", LIGHT_SENSOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), LIGHT_SENSOR_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating light_sensor. Free HEAP %d", free_heap);
+        if (xTaskCreate(light_sensor_task, "lux", LIGHT_SENSOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), LIGHT_SENSOR_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("Creating light_sensor");
+            homekit_remove_oldest_client();
         }
     } else {
         ERROR("light_sensor_task: HK pairing");
@@ -3891,6 +3881,8 @@ void hkc_sec_system(homekit_characteristic_t* ch, const homekit_value_t value) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
             INFO("<%i> Setter SEC SYSTEM %i", ch_group->accessory, value.int_value);
+            
+            esp_timer_stop(SEC_SYSTEM_REC_ALARM_TIMER);
             
             ch->value.int_value = value.int_value;
             SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = value.int_value;
@@ -3915,6 +3907,8 @@ void hkc_sec_system_status(homekit_characteristic_t* ch, const homekit_value_t v
         led_blink(1);
         INFO("<%i> Setter Status SEC SYSTEM %i", ch_group->accessory, value.int_value);
         
+        esp_timer_stop(SEC_SYSTEM_REC_ALARM_TIMER);
+        
         ch->value.int_value = value.int_value;
         SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = value.int_value;
         
@@ -3925,6 +3919,18 @@ void hkc_sec_system_status(homekit_characteristic_t* ch, const homekit_value_t v
     }
     
     homekit_characteristic_notify_safe(ch);
+    homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
+}
+
+void sec_system_recurrent_alarm(TimerHandle_t xTimer) {
+    ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
+    
+    if (SEC_SYSTEM_CH_CURRENT_STATE->value.int_value == 4) {
+        SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = SEC_SYSTEM_CH_TARGET_STATE->value.int_value;
+    } else {
+        SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = 4;
+    }
+    
     homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
 }
 
@@ -4147,6 +4153,9 @@ void diginput(const uint16_t gpio, void* args, const uint8_t type) {
                 break;
                 
             case TYPE_LIGHTBULB:
+                if (ch_group->ch[1]->value.int_value == 0) {
+                    ch_group->ch[1]->value.int_value = 100;
+                }
                 autodimmer_call(ch_group->ch[0], HOMEKIT_BOOL(!ch_group->ch[0]->value.bool_value));
                 break;
                 
@@ -5188,6 +5197,8 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                 } else if (action_acc_manager->value == -20001.f) {
                     ch_group->child_enabled = true;
                 } else {
+                    bool alarm_recurrent = false;
+                    
                     switch (ch_group->acc_type) {
                         case ACC_TYPE_BUTTON:
                         case ACC_TYPE_DOORBELL:
@@ -5336,17 +5347,28 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             break;
                             
                         case ACC_TYPE_SECURITY_SYSTEM:
+                            if (action_acc_manager->value >= 14.f) {
+                                alarm_recurrent = true;
+                                action_acc_manager->value -= 10;
+                            }
+                            
                             if (action_acc_manager->value == 4.f && SEC_SYSTEM_CH_TARGET_STATE->value.int_value != SEC_SYSTEM_OFF) {
                                 SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = 4;
                                 do_actions(ch_group, 4);
                                 homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
                                 save_historical_data(SEC_SYSTEM_CH_CURRENT_STATE);
+                                if (alarm_recurrent) {
+                                    esp_timer_start(SEC_SYSTEM_REC_ALARM_TIMER);
+                                }
                                 
                             } else if (SEC_SYSTEM_CH_TARGET_STATE->value.int_value == (uint8_t) action_acc_manager->value - 5) {
                                 SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = 4;
                                 do_actions(ch_group, (uint8_t) action_acc_manager->value);
                                 homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
                                 save_historical_data(SEC_SYSTEM_CH_CURRENT_STATE);
+                                if (alarm_recurrent) {
+                                    esp_timer_start(SEC_SYSTEM_REC_ALARM_TIMER);
+                                }
                                 
                             } else if (action_acc_manager->value == 8.f) {
                                 SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = SEC_SYSTEM_CH_TARGET_STATE->value.int_value;
@@ -5446,12 +5468,11 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     }
     
     // UART actions
-    const uint32_t free_heap = xPortGetFreeHeapSize();
-    if (free_heap <= MINIMUM_FREE_HEAP &&
+    if (!homekit_is_enough_dram() &&
         (ch_group->action_uart ||
          ch_group->action_network ||
          ch_group->action_ir_tx)) {
-        ERROR("<%i> Creating action tasks. Free HEAP %d", ch_group->accessory, free_heap);
+        ERROR("<%i> Creating action tasks", ch_group->accessory);
         return;
     }
     
@@ -5463,6 +5484,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         if (xTaskCreate(uart_action_task, "uart", UART_ACTION_TASK_SIZE, action_task, UART_ACTION_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("<%i> Creating uart", ch_group->accessory);
             free(action_task);
+            homekit_remove_oldest_client();
         }
     }
     
@@ -5475,6 +5497,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         if (xTaskCreate(net_action_task, "net", NETWORK_ACTION_TASK_SIZE, action_task, NETWORK_ACTION_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("<%i> Creating net", ch_group->accessory);
             free(action_task);
+            homekit_remove_oldest_client();
         }
     }
     
@@ -5487,6 +5510,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         if (xTaskCreate(ir_tx_task, "ir", IR_TX_TASK_SIZE, action_task, IR_TX_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("<%i> Creating ir", ch_group->accessory);
             free(action_task);
+            homekit_remove_oldest_client();
         }
     }
 }
@@ -8558,6 +8582,10 @@ void normal_mode_init() {
         } else {
             ch_group->ch[1]->value.int_value = set_initial_state(ch_group->accessory, 1, init_last_state_json, ch_group->ch[1], CH_TYPE_INT8, 100);
         }
+        
+        if (ch_group->ch[1]->value.int_value == 0) {
+            ch_group->ch[1]->value.int_value = 100;
+        }
 
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, TYPE_LIGHTBULB);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), rgbw_brightness, ch_group, LIGHTBULB_BRIGHTNESS_UP);
@@ -8965,6 +8993,8 @@ void normal_mode_init() {
         SEC_SYSTEM_CH_CURRENT_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_CURRENT_STATE, target_valid_values[valid_values_len - 1], .min_value=(float[]) {current_valid_values[0]}, .valid_values={.count=valid_values_len + 1, .values=current_valid_values});
         SEC_SYSTEM_CH_TARGET_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_TARGET_STATE, target_valid_values[valid_values_len - 1], .min_value=(float[]) {target_valid_values[0]}, .max_value=(float[]) {target_valid_values[valid_values_len - 1]}, .valid_values={.count=valid_values_len, .values=target_valid_values}, .setter_ex=hkc_sec_system);
   
+        SEC_SYSTEM_REC_ALARM_TIMER = esp_timer_create(SEC_SYSTEM_REC_ALARM_PERIOD_MS, true, (void*) ch_group, sec_system_recurrent_alarm);
+        
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         
@@ -9761,7 +9791,6 @@ void normal_mode_init() {
     
     if (xTaskCreate(delayed_sensor_task, "delayed", DELAYED_SENSOR_START_TASK_SIZE, NULL, DELAYED_SENSOR_START_TASK_PRIORITY, NULL) != pdPASS) {
         ERROR("Creating delayed_sensor");
-        FREEHEAP();
     }
 
     int8_t wifi_mode = 0;

@@ -136,7 +136,7 @@ static u16_t mdns_responder_reply_size = 0;
 
 #define MDNS_TTL_MIN                (30)
 #define MDNS_TTL_MULTIPLIER_MS      (1000)  // Set to 1000 to use standard time
-#define MDNS_TTL_SAFE_MARGIN        (5)
+#define MDNS_TTL_SAFE_MARGIN        (7)
 static uint32_t mdns_ttl = 4500;
 
 #define MDNS_STATUS_PROBING         (0)
@@ -755,7 +755,7 @@ static int mdns_add_to_answer(mdns_rsrc* rsrcP, u8_t* resp, int respLen)
 //---------------------------------------------------------------------------
 
 // Send UDP to multicast or unicast address
-static void mdns_send_mcast(const ip_addr_t *addr, u8_t* msgP, int nBytes, const u8_t unicast)
+static void mdns_send_mcast(struct netif* netif, const ip_addr_t *addr, u8_t* msgP, int nBytes, const u8_t unicast)
 {
     struct pbuf* p;
     err_t err;
@@ -777,25 +777,20 @@ static void mdns_send_mcast(const ip_addr_t *addr, u8_t* msgP, int nBytes, const
         } else {
             dest_addr = &gMulticastV4Addr;
         }
-
-        for (uint8_t i = 0; i < 4; i++) {
-            if (i > 0) {
-                vTaskDelay(20 / portTICK_PERIOD_MS);
-            }
-            LOCK_TCPIP_CORE();
-            err = udp_sendto(gMDNS_pcb, p, dest_addr, LWIP_IANA_PORT_MDNS);
-            UNLOCK_TCPIP_CORE();
-            if (err == ERR_OK) {
-#ifdef qDebugLog
-                printf(" - responded to " IPSTR " with %d bytes err %d\n", IP2STR(dest_addr), nBytes, err);
-#endif
-                break;
-            } else {
-                printf(">>> mDNS_send: failed %i/4 (errno %d)\n", i + 1, err);
-            }
-        }
+        
+        LOCK_TCPIP_CORE();
+        err = udp_sendto_if(gMDNS_pcb, p, dest_addr, LWIP_IANA_PORT_MDNS, netif);
+        UNLOCK_TCPIP_CORE();
         
         pbuf_free(p);
+        
+        if (err == ERR_OK) {
+#ifdef qDebugLog
+            printf(" - responded to " IPSTR " with %d bytes err %d\n", IP2STR(dest_addr), nBytes, err);
+#endif
+        } else {
+            printf(">>> mDNS_send failed (errno %d)\n", err);
+        }
     } else {
         printf(">>> mDNS_send: alloc failed[%d]\n", nBytes);
     }
@@ -929,7 +924,8 @@ static void mdns_reply(const ip_addr_t *addr, struct mdns_hdr* hdrP)
 #ifdef qDebugLog
         printf("*** Sending response (unicast: %i)...\n", unicast);
 #endif
-        mdns_send_mcast(addr, mdns_response, respLen, unicast);
+        struct netif* netif = sdk_system_get_netif(STATION_IF);
+        mdns_send_mcast(netif, addr, mdns_response, respLen, unicast);
     }
 }
 
@@ -996,7 +992,7 @@ static void mdns_announce_netif(struct netif *netif, const ip_addr_t *addr)
     }
 
     if (respLen > SIZEOF_DNS_HDR) {
-        mdns_send_mcast(addr, mdns_response, respLen, 0);
+        mdns_send_mcast(netif, addr, mdns_response, respLen, 0);
     }
 }
 

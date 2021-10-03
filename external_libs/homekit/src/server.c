@@ -45,14 +45,18 @@
 #include <homekit/tlv.h>
 
 
-#define PORT                    (5556)
+#define PORT                        (5556)
 
 #ifndef HOMEKIT_MAX_CLIENTS
-#define HOMEKIT_MAX_CLIENTS     (12)
+#define HOMEKIT_MAX_CLIENTS         (20)
 #endif
 
 #ifndef HOMEKIT_MIN_FREEHEAP
-#define HOMEKIT_MIN_FREEHEAP    (8192)
+#define HOMEKIT_MIN_FREEHEAP        (8192)
+#endif
+
+#ifndef HOMEKIT_MIN_FREEHEAP_BLOCK
+#define HOMEKIT_MIN_FREEHEAP_BLOCK  (1100)
 #endif
 
 struct _client_context_t;
@@ -371,19 +375,29 @@ void pairing_context_free(pairing_context_t *context) {
     context = NULL;
 }
 
-void remove_oldest_client() {
-    if (homekit_server->client_count <= 1) {
-        return;
+bool homekit_is_enough_dram() {
+    char* malloc_test = malloc(HOMEKIT_MIN_FREEHEAP_BLOCK);
+    if (malloc_test) {
+        free(malloc_test);
+        if (xPortGetFreeHeapSize() >= HOMEKIT_MIN_FREEHEAP) {
+            return true;
+        }
     }
     
-    client_context_t* context = homekit_server->clients;
-    while (context) {
-        if (!context->next) {
-            CLIENT_INFO(context, "Closing oldest");
-            context->disconnect = true;
+    return false;
+}
+
+void homekit_remove_oldest_client() {
+    if (homekit_server && homekit_server->client_count > 1) {
+        client_context_t* context = homekit_server->clients;
+        while (context) {
+            if (!context->next) {
+                CLIENT_INFO(context, "Closing oldest");
+                context->disconnect = true;
+            }
+            
+            context = context->next;
         }
-        
-        context = context->next;
     }
 }
 
@@ -3191,6 +3205,10 @@ IRAM static void homekit_client_process(client_context_t *context) {
             context->disconnect = true;
         }
     }
+    
+    if (!homekit_is_enough_dram()) {
+        homekit_remove_oldest_client();
+    }
 
     CLIENT_DEBUG(context, "Finished processing");
 }
@@ -3248,19 +3266,15 @@ void homekit_server_accept_client() {
     client_context_t* new_context = client_context_new();
     
     uint32_t free_heap = xPortGetFreeHeapSize();
-    char* malloc_test = malloc(BUFFER_DATA_SIZE);
-    if (malloc_test) {
-        free(malloc_test);
-    }
     
     if (!homekit_server->setup_finish && 0b10 < homekit_server->client_count) {
         HOMEKIT_INFO("[%d] New %s:%d Free HEAP: %d", s, address_buffer, addr.sin_port, free_heap);
         close(s);
         return;
     } else if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS ||
-               ((!malloc_test || free_heap <= HOMEKIT_MIN_FREEHEAP) && homekit_server->is_pairing == false) ||
+               !homekit_is_enough_dram() ||
                !new_context) {
-        remove_oldest_client();
+        homekit_remove_oldest_client();
     }
     
     if (new_context) {

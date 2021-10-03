@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "7.5.0"
+#define FIRMWARE_VERSION                    "7.6.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -57,8 +57,6 @@
 #define WIFI_RECONNECTION_TASK_SIZE         GLOBAL_TASK_SIZE
 #define IR_CAPTURE_TASK_SIZE                (768)
 #define REBOOT_TASK_SIZE                    (384)
-
-#define MINIMUM_FREE_HEAP                   (3600)
 
 // Task Priorities
 #define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
@@ -465,6 +463,8 @@
 #define SEC_SYSTEM_AT_HOME                  (0)
 #define SEC_SYSTEM_OFF                      (3)
 #define SEC_SYSTEM_ALARM                    (4)
+#define SEC_SYSTEM_REC_ALARM_TIMER          ch_group->timer
+#define SEC_SYSTEM_REC_ALARM_PERIOD_MS      (4000)
 
 #define HIST_DATA_ARRAY_SET                 "h"
 #define HIST_READ_ON_CLOCK_READY_SET        "x"
@@ -595,7 +595,7 @@
 #define WIFI_DISCONNECTED_LONG_TIME         (24)    // * WIFI_RECONNECTION_POLL_PERIOD_MS
 
 #define WIFI_WATCHDOG_POLL_PERIOD_MS        (1500)
-#define WIFI_WATCHDOG_ARP_RESEND_PERIOD     (39)    // * WIFI_WATCHDOG_POLL_PERIOD_MS
+#define WIFI_WATCHDOG_ARP_RESEND_PERIOD     (100)    // * WIFI_WATCHDOG_POLL_PERIOD_MS
 #define WIFI_WATCHDOG_ROAMING_PERIOD        (1234)  // * WIFI_WATCHDOG_POLL_PERIOD_MS
 
 #define STATUS_LED_DURATION_ON              (30)

@@ -189,11 +189,8 @@ void wifi_config_resend_arp() {
     struct netif *netif = sdk_system_get_netif(STATION_IF);
     if (netif && (netif->flags & NETIF_FLAG_LINK_UP) && (netif->flags & NETIF_FLAG_UP)) {
         LOCK_TCPIP_CORE();
-        int res = etharp_gratuitous(netif);
+        etharp_gratuitous(netif);
         UNLOCK_TCPIP_CORE();
-        if (res != 0) {
-            ERROR("ARP Gratuitous %i", res);
-        }
     }
 }
 
