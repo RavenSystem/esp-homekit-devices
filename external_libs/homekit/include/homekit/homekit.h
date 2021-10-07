@@ -32,7 +32,7 @@ typedef struct {
     char* setup_id;
     
     uint16_t mdns_ttl;
-    
+    uint8_t max_clients: 5;
     bool insecure: 1;
 
     // Callback for "POST /resource" to get snapshot image from camera
@@ -43,6 +43,11 @@ typedef struct {
 
 // Initialize HomeKit accessory server
 void homekit_server_init(homekit_server_config_t *config);
+
+// Set maximum connected HomeKit clients simultaneously (max 32)
+#ifdef HOMEKIT_CHANGE_MAX_CLIENTS
+void homekit_set_max_clients(const uint8_t clients);
+#endif // HOMEKIT_CHANGE_MAX_CLIENTS
 
 // Check creating of a block into DRAM
 bool homekit_is_enough_dram();

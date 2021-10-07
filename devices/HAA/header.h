@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "7.6.0"
+#define FIRMWARE_VERSION                    "8.0.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -105,6 +105,9 @@
 #define BUTTON_FILTER                       "f"
 #define PWM_FREQ                            "q"
 #define ENABLE_HOMEKIT_SERVER               "h"
+#define HOMEKIT_SERVER_MAX_CLIENTS          "h"
+#define HOMEKIT_SERVER_MAX_CLIENTS_DEFAULT  (8)
+#define HOMEKIT_SERVER_MAX_CLIENTS_MAX      (20)
 #define ALLOW_INSECURE_CONNECTIONS          "u"
 #define UART_CONFIG_ARRAY                   "r"
 #define UART_CONFIG_ENABLE                  "n"
@@ -595,7 +598,7 @@
 #define WIFI_DISCONNECTED_LONG_TIME         (24)    // * WIFI_RECONNECTION_POLL_PERIOD_MS
 
 #define WIFI_WATCHDOG_POLL_PERIOD_MS        (1500)
-#define WIFI_WATCHDOG_ARP_RESEND_PERIOD     (100)    // * WIFI_WATCHDOG_POLL_PERIOD_MS
+#define WIFI_WATCHDOG_ARP_RESEND_PERIOD     (39)    // * WIFI_WATCHDOG_POLL_PERIOD_MS
 #define WIFI_WATCHDOG_ROAMING_PERIOD        (1234)  // * WIFI_WATCHDOG_POLL_PERIOD_MS
 
 #define STATUS_LED_DURATION_ON              (30)

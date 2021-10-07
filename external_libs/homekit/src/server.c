@@ -47,17 +47,28 @@
 
 #define PORT                        (5556)
 
-#ifndef HOMEKIT_MAX_CLIENTS
-#define HOMEKIT_MAX_CLIENTS         (20)
+#ifndef HOMEKIT_MAX_CLIENTS_DEFAULT
+#define HOMEKIT_MAX_CLIENTS_DEFAULT (8)
 #endif
 
 #ifndef HOMEKIT_MIN_FREEHEAP
 #define HOMEKIT_MIN_FREEHEAP        (8192)
 #endif
 
-#ifndef HOMEKIT_MIN_FREEHEAP_BLOCK
-#define HOMEKIT_MIN_FREEHEAP_BLOCK  (1100)
+
+#ifdef HOMEKIT_DEBUG
+#define TLV_DEBUG(values) tlv_debug(values)
+#else
+#define TLV_DEBUG(values)
 #endif
+
+#define HOMEKIT_DEBUG_LOG(message, ...)         DEBUG(message, ##__VA_ARGS__)
+#define HOMEKIT_INFO(message, ...)              INFO(message, ##__VA_ARGS__)
+#define HOMEKIT_ERROR(message, ...)             ERROR(message, ##__VA_ARGS__)
+
+#define CLIENT_DEBUG(client, message, ...)      DEBUG("[%d] " message, client->socket, ##__VA_ARGS__)
+#define CLIENT_INFO(client, message, ...)       INFO("[%d] " message, client->socket, ##__VA_ARGS__)
+#define CLIENT_ERROR(client, message, ...)      ERROR("[%d] " message, client->socket, ##__VA_ARGS__)
 
 struct _client_context_t;
 typedef struct _client_context_t client_context_t;
@@ -102,8 +113,9 @@ typedef struct {
 } pair_verify_context_t;
 
 
-#define BUFFER_DATA_SIZE        (1442 + 18)
-#define DATA_SIZE               (1024 + 18)
+#define BUFFER_DATA_SIZE        (1442)
+#define RECEIVED_DATA_SIZE      (1024 + 18)
+#define ENCRYPTED_DATA_SIZE     (768)
 typedef struct {
     char *accessory_id;
     ed25519_key *accessory_key;
@@ -118,19 +130,17 @@ typedef struct {
     int max_fd;
     
     size_t data_available: 16;
-    int8_t client_count;
+    uint8_t client_count: 6;
     bool paired: 1;
     bool is_pairing: 1;
     bool has_notifications: 1;
     bool setup_finish: 1;
+    bool pending_close: 1;
     
     json_stream json;
-
-#ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
-    TimerHandle_t overclock_timer;
-#endif
     
-    byte data[BUFFER_DATA_SIZE];
+    byte data[BUFFER_DATA_SIZE + 18];
+    byte encrypted[ENCRYPTED_DATA_SIZE + 18];
     
     fd_set fds;
 } homekit_server_t;
@@ -175,13 +185,15 @@ typedef struct {
 void client_context_free(client_context_t *c);
 void pairing_context_free(pairing_context_t *context);
 void homekit_server_on_reset(client_context_t *context);
-IRAM void client_send_chunk(byte *data, size_t size, void *arg);
+IRAM int client_send_chunk(byte *data, size_t size, void *arg);
 
-#ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
-IRAM static void homekit_restoreclock(TimerHandle_t xTimer) {
-    sdk_system_restoreclock();
+#ifdef HOMEKIT_CHANGE_MAX_CLIENTS
+void homekit_set_max_clients(const uint8_t clients) {
+    if (homekit_server && homekit_server->config && clients > 0 && clients <= 32) {
+        homekit_server->config->max_clients = clients;
+    }
 }
-#endif
+#endif // HOMEKIT_CHANGE_MAX_CLIENTS
 
 homekit_server_t *server_new() {
     homekit_server_t* homekit_server = malloc(sizeof(homekit_server_t));
@@ -190,13 +202,9 @@ homekit_server_t *server_new() {
     FD_ZERO(&homekit_server->fds);
     
     json_init(&homekit_server->json, NULL);
-    homekit_server->json.size = BUFFER_DATA_SIZE - 2;   // 2 bytes reserved for client_send_chunk() end
+    homekit_server->json.size = BUFFER_DATA_SIZE + (18 - 2);   // 2 bytes reserved for client_send_chunk() end
     homekit_server->json.buffer = homekit_server->data;
     homekit_server->json.on_flush = client_send_chunk;
-    
-#ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
-    homekit_server->overclock_timer = esp_timer_create(2500, false, NULL, homekit_restoreclock);
-#endif
     
     return homekit_server;
 }
@@ -225,20 +233,6 @@ void server_free() {
     homekit_server = NULL;
 }
  */
-
-#ifdef HOMEKIT_DEBUG
-#define TLV_DEBUG(values) tlv_debug(values)
-#else
-#define TLV_DEBUG(values)
-#endif
-
-#define HOMEKIT_DEBUG_LOG(message, ...)         DEBUG(message, ##__VA_ARGS__)
-#define HOMEKIT_INFO(message, ...)              INFO(message, ##__VA_ARGS__)
-#define HOMEKIT_ERROR(message, ...)             ERROR(message, ##__VA_ARGS__)
-
-#define CLIENT_DEBUG(client, message, ...)      DEBUG("[%d] " message, client->socket, ##__VA_ARGS__)
-#define CLIENT_INFO(client, message, ...)       INFO("[%d] " message, client->socket, ##__VA_ARGS__)
-#define CLIENT_ERROR(client, message, ...)      ERROR("[%d] " message, client->socket, ##__VA_ARGS__)
 
 void tlv_debug(const tlv_values_t *values) {
     HOMEKIT_DEBUG_LOG("Got following TLV Values:");
@@ -376,24 +370,25 @@ void pairing_context_free(pairing_context_t *context) {
 }
 
 bool homekit_is_enough_dram() {
-    char* malloc_test = malloc(HOMEKIT_MIN_FREEHEAP_BLOCK);
-    if (malloc_test) {
-        free(malloc_test);
-        if (xPortGetFreeHeapSize() >= HOMEKIT_MIN_FREEHEAP) {
-            return true;
-        }
+    if (xPortGetFreeHeapSize() >= HOMEKIT_MIN_FREEHEAP) {
+        return true;
     }
     
     return false;
 }
 
+void homekit_disconnect_client(client_context_t* context) {
+    context->disconnect = true;
+    homekit_server->pending_close = true;
+}
+
 void homekit_remove_oldest_client() {
-    if (homekit_server && homekit_server->client_count > 1) {
+    if (homekit_server && homekit_server->client_count > 2) {
         client_context_t* context = homekit_server->clients;
         while (context) {
             if (!context->next) {
                 CLIENT_INFO(context, "Closing oldest");
-                context->disconnect = true;
+                homekit_disconnect_client(context);
             }
             
             context = context->next;
@@ -640,27 +635,23 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
 }
 
 
-int client_send_encrypted(
-    client_context_t *context,
-    byte *payload, size_t size
-) {
+int client_send_encrypted(client_context_t *context, byte *payload, size_t size) {
     if (!context || !context->encrypted)
         return -1;
 
     byte nonce[12];
     memset(nonce, 0, sizeof(nonce));
-
-    byte encrypted[1024 + 18];
+    
     int payload_offset = 0;
 
     while (payload_offset < size) {
         size_t chunk_size = size - payload_offset;
-        if (chunk_size > 1024)
-            chunk_size = 1024;
-
+        if (chunk_size > ENCRYPTED_DATA_SIZE)
+            chunk_size = ENCRYPTED_DATA_SIZE;
+        
         byte aead[2] = {chunk_size % 256, chunk_size / 256};
 
-        memcpy(encrypted, aead, 2);
+        memcpy(homekit_server->encrypted, aead, 2);
 
         byte i = 4;
         int x = context->count_reads++;
@@ -669,20 +660,25 @@ int client_send_encrypted(
             x /= 256;
         }
         
-        size_t available = sizeof(encrypted) - 2;
+        size_t available = ENCRYPTED_DATA_SIZE + (18 - 2);
         int r = crypto_chacha20poly1305_encrypt(
             context->read_key, nonce, aead, 2,
             payload + payload_offset, chunk_size,
-            encrypted + 2, &available
+            homekit_server->encrypted + 2, &available
         );
         if (r) {
-            HOMEKIT_ERROR("Encrypt payload (%d)", r);
+            CLIENT_ERROR(context, "Encrypt payload (%d)", r);
             return -1;
         }
 
         payload_offset += chunk_size;
-
-        write(context->socket, encrypted, available + 2);
+        
+        r = write(context->socket, homekit_server->encrypted, available + 2);
+        
+        if (r < 0) {
+            CLIENT_ERROR(context, "Send payload");
+            return r;
+        }
     }
 
     return 0;
@@ -736,7 +732,7 @@ int client_decrypt(
             decrypted, &decrypted_len
         );
         if (r) {
-            HOMEKIT_ERROR("Decrypt payload (%d)", r);
+            CLIENT_ERROR(context, "Decrypt payload (%d)", r);
             return -1;
         }
 
@@ -775,7 +771,7 @@ void client_notify_characteristic(homekit_characteristic_t *ch, homekit_value_t 
 }
 
 
-void client_send(client_context_t *context, byte *data, size_t data_size) {
+IRAM int client_send(client_context_t *context, byte *data, size_t data_size) {
 #if HOMEKIT_DEBUG
     if (data_size < 4096) {
         char *payload = binary_to_string(data, data_size);
@@ -784,35 +780,46 @@ void client_send(client_context_t *context, byte *data, size_t data_size) {
     }
 #endif
 
+    int r = 0;
+    
     if (context->encrypted) {
-        int r = client_send_encrypted(context, data, data_size);
-        if (r) {
-            CLIENT_ERROR(context, "Encrypt response (%d)", r);
-            return;
-        }
+        r = client_send_encrypted(context, data, data_size);
     } else {
-        write(context->socket, data, data_size);
+        r = write(context->socket, data, data_size);
     }
+    
+    if (r < 0) {
+        CLIENT_ERROR(context, "Send response");
+        return r;
+    }
+    
+    return 0;
 }
 
 
-IRAM void client_send_chunk(byte *data, size_t size, void *arg) {
+IRAM int client_send_chunk(byte *data, size_t size, void *arg) {
     client_context_t* context = arg;
     
     byte header[9];
     header[0] = 0;
     int header_size = snprintf((char*) header, sizeof(header), "%x\r\n", size);
     
-    client_send(context, header, header_size);
+    int r = 0;
     
-    if (size > 0) {
-        data[size] = '\r';
-        data[size + 1] = '\n';
-        client_send(context, data, size + 2);
-    } else {
-        byte end[2] = { '\r', '\n' };
-        client_send(context, end, sizeof(end));
+    r = client_send(context, header, header_size);
+    
+    if (r == 0) {
+        if (size > 0) {
+            data[size] = '\r';
+            data[size + 1] = '\n';
+            r = client_send(context, data, size + 2);
+        } else {
+            byte end[2] = { '\r', '\n' };
+            r = client_send(context, end, sizeof(end));
+        }
     }
+    
+    return r;
     
     /*
     size_t payload_size = size + 8;
@@ -887,6 +894,12 @@ void send_client_events(client_context_t *context, client_event_t *events) {
         json_object_start(json);
         write_characteristic_json(json, context, e->characteristic, 0, &e->value);
         json_object_end(json);
+        
+        if (json->error) {
+            CLIENT_ERROR(context, "JSON");
+            homekit_disconnect_client(context);
+            return;
+        }
 
         e = e->next;
     }
@@ -1070,26 +1083,21 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
     
     HOMEKIT_DEBUG_LOG("Pair Setup");
     DEBUG_HEAP();
-    
-#ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
-    sdk_system_overclock();
-#endif
 
     tlv_values_t *message = tlv_new();
     if (tlv_parse(data, size, message)) {
         CLIENT_ERROR(context, "Parse TLV payload");
         tlv_free(message);
         send_tlv_error_response(context, 2, TLVError_Unknown);
-        
-#ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
-        sdk_system_restoreclock();
-#endif
-        
         homekit_server->is_pairing = false;
         return;
     }
     
     TLV_DEBUG(message);
+    
+#ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
+    sdk_system_overclock();
+#endif // HOMEKIT_OVERCLOCK_PAIR_SETUP
     
     switch(tlv_get_integer_value(message, TLVType_State, -1)) {
         case 1: {
@@ -1588,18 +1596,18 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             
         default: {
             CLIENT_ERROR(context, "Unknown state: %d", tlv_get_integer_value(message, TLVType_State, -1));
-            context->disconnect = true;
+            homekit_disconnect_client(context);
             break;
         }
     }
     
     homekit_server->is_pairing = false;
     
-    tlv_free(message);
-    
 #ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
     sdk_system_restoreclock();
-#endif
+#endif // HOMEKIT_OVERCLOCK_PAIR_SETUP
+    
+    tlv_free(message);
 }
 
 void homekit_server_on_pair_verify(client_context_t *context, const byte *data, size_t size) {
@@ -1616,6 +1624,10 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
 
     TLV_DEBUG(message);
 
+#ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
+    sdk_system_overclock();
+#endif // HOMEKIT_OVERCLOCK_PAIR_VERIFY
+    
     int r;
 
     switch(tlv_get_integer_value(message, TLVType_State, -1)) {
@@ -1914,7 +1926,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             CLIENT_DEBUG(context, "Searching pairing with %s", device_id);
             pairing_t *pairing = homekit_storage_find_pairing(device_id);
             if (!pairing) {
-                CLIENT_ERROR(context, "No pairing for %s found", device_id);
+                CLIENT_ERROR(context, "No pairing for %s", device_id);
 
                 free(device_id);
                 tlv_free(decrypted_message);
@@ -1925,7 +1937,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
                 break;
             }
 
-            CLIENT_INFO(context, "Found pairing with %s", device_id);
+            CLIENT_INFO(context, "Pairing with %s", device_id);
             free(device_id);
 
             byte permissions = pairing->permissions;
@@ -2021,10 +2033,14 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
         }
         default: {
             CLIENT_ERROR(context, "Unknown state: %d", tlv_get_integer_value(message, TLVType_State, -1));
-            context->disconnect = true;
+            homekit_disconnect_client(context);
             break;
         }
     }
+    
+#ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
+    sdk_system_restoreclock();
+#endif // HOMEKIT_OVERCLOCK_PAIR_VERIFY
 
     tlv_free(message);
 }
@@ -2082,14 +2098,32 @@ void homekit_server_on_get_accessories(client_context_t *context) {
                     NULL
                 );
                 json_object_end(json);
+                
+                if (json->error) {
+                    break;
+                }
             }
 
             json_array_end(json);
             json_object_end(json); // service
+            
+            if (json->error) {
+                break;
+            }
         }
 
         json_array_end(json);
         json_object_end(json); // accessory
+        
+        if (json->error) {
+            break;
+        }
+    }
+    
+    if (json->error) {
+        CLIENT_ERROR(context, "JSON");
+        homekit_disconnect_client(context);
+        return;
     }
 
     json_array_end(json);
@@ -2215,6 +2249,13 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
             json_string(json, "status"); json_integer(json, HAPStatus_Success);
         }
         json_object_end(json);
+        
+        if (json->error) {
+            CLIENT_ERROR(context, "JSON");
+            free(id);
+            homekit_disconnect_client(context);
+            return;
+        }
     }
 
     json_array_end(json);
@@ -2690,6 +2731,14 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
             json_string(json1, "iid"); json_integer(json1, cJSON_GetObjectItem(j_ch, "iid")->valueint);
             json_string(json1, "status"); json_integer(json1, statuses[i]);
             json_object_end(json1);
+            
+            if (json1->error) {
+                CLIENT_ERROR(context, "JSON");
+                free(statuses);
+                cJSON_Delete(json);
+                homekit_disconnect_client(context);
+                return;
+            }
         }
 
         json_array_end(json1);
@@ -2888,8 +2937,9 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
 
                 client_context_t *c = homekit_server->clients;
                 while (c) {
-                    if (c->pairing_id == pairing->id)
-                        c->disconnect = true;
+                    if (c->pairing_id == pairing->id) {
+                        homekit_disconnect_client(c);
+                    }
                     c = c->next;
                 }
 
@@ -3153,7 +3203,7 @@ static http_parser_settings homekit_http_parser_settings = {
 IRAM static void homekit_client_process(client_context_t *context) {
     int data_len = read(context->socket,
                         homekit_server->data + homekit_server->data_available,
-                        DATA_SIZE - homekit_server->data_available
+                        RECEIVED_DATA_SIZE - homekit_server->data_available
                         );
     
     if (data_len > 0) {
@@ -3162,7 +3212,7 @@ IRAM static void homekit_client_process(client_context_t *context) {
         size_t payload_size = (size_t) data_len;
         CLIENT_DEBUG(context, "Received Payload:\n%s", (char*) payload);
         
-        size_t decrypted_size = BUFFER_DATA_SIZE - 2 - 18;
+        size_t decrypted_size = BUFFER_DATA_SIZE - 2;
         
         if (context->encrypted) {
             CLIENT_DEBUG(context, "Decrypting data");
@@ -3197,12 +3247,12 @@ IRAM static void homekit_client_process(client_context_t *context) {
         
     } else if (data_len == 0) {
         CLIENT_INFO(context, "Closing");
-        context->disconnect = true;
+        homekit_disconnect_client(context);
         
     } else {    // if (data_len < 0)
         if (errno != EAGAIN) {
-            CLIENT_ERROR(context, "Reading from socket (%d). Closing", errno);
-            context->disconnect = true;
+            CLIENT_ERROR(context, "Socket (%d). Closing", errno);
+            homekit_disconnect_client(context);
         }
     }
     
@@ -3210,17 +3260,19 @@ IRAM static void homekit_client_process(client_context_t *context) {
         homekit_remove_oldest_client();
     }
 
-    CLIENT_DEBUG(context, "Finished processing");
+    CLIENT_INFO(context, "Done");
 }
 
 
 IRAM void homekit_server_close_client(client_context_t *context) {
     FD_CLR(context->socket, &homekit_server->fds);
-    homekit_server->client_count--;
+    if (homekit_server->client_count > 0) {
+        homekit_server->client_count--;
+    }
 
     close(context->socket);
     
-    CLIENT_INFO(context, "Closed (%i/%i)", homekit_server->client_count, HOMEKIT_MAX_CLIENTS);
+    CLIENT_INFO(context, "Closed (%i/%i)", homekit_server->client_count, homekit_server->config->max_clients);
     
     if (homekit_server->pairing_context && homekit_server->pairing_context->client == context) {
         pairing_context_free(homekit_server->pairing_context);
@@ -3239,12 +3291,6 @@ IRAM void homekit_server_close_client(client_context_t *context) {
 
 
 void homekit_server_accept_client() {
-#ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
-    if (homekit_server->paired && esp_timer_start(homekit_server->overclock_timer) == TIMER_HELPER_OK) {
-        sdk_system_overclock();
-    }
-#endif
-    
     int s = accept(homekit_server->listen_fd, (struct sockaddr *)NULL, (socklen_t *)NULL);
     if (s < 0) {
         HOMEKIT_ERROR("New socket");
@@ -3269,9 +3315,8 @@ void homekit_server_accept_client() {
     
     if (!homekit_server->setup_finish && 0b10 < homekit_server->client_count) {
         HOMEKIT_INFO("[%d] New %s:%d Free HEAP: %d", s, address_buffer, addr.sin_port, free_heap);
-        close(s);
         return;
-    } else if (homekit_server->client_count >= HOMEKIT_MAX_CLIENTS ||
+    } else if (homekit_server->client_count >= homekit_server->config->max_clients ||
                !homekit_is_enough_dram() ||
                !new_context) {
         homekit_remove_oldest_client();
@@ -3283,7 +3328,7 @@ void homekit_server_accept_client() {
         setsockopt(s, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
         */
         
-        const struct timeval sndtimeout = { 2, 0 };
+        const struct timeval sndtimeout = { 3, 0 };
         setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
         
         const struct timeval rcvtimeout = { 10, 0 };
@@ -3303,12 +3348,13 @@ void homekit_server_accept_client() {
             homekit_server->max_fd = s;
         }
         
-        HOMEKIT_INFO("[%d] New %s:%d (%i/%i) Free HEAP: %d", s, address_buffer, addr.sin_port, homekit_server->client_count, HOMEKIT_MAX_CLIENTS, free_heap);
+        HOMEKIT_INFO("[%d] New %s:%d (%i/%i) Free HEAP: %d", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
 
         HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_CLIENT_CONNECTED);
         
     } else {
-        HOMEKIT_ERROR("[%d] Not enough memory %s:%d (%i/%i) Free HEAP: %d", s, address_buffer, addr.sin_port, homekit_server->client_count, HOMEKIT_MAX_CLIENTS, free_heap);
+        close(s);
+        HOMEKIT_ERROR("[%d] Not enough memory %s:%d (%i/%i) Free HEAP: %d", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
     }
 }
 
@@ -3386,28 +3432,32 @@ IRAM void homekit_server_process_notifications() {
 
 
 IRAM static void homekit_server_close_clients() {
-    int max_fd = homekit_server->listen_fd;
+    if (homekit_server->pending_close) {
+        homekit_server->pending_close = false;
+        
+        int max_fd = homekit_server->listen_fd;
 
-    client_context_t head;
-    head.next = homekit_server->clients;
+        client_context_t head;
+        head.next = homekit_server->clients;
 
-    client_context_t *context = &head;
-    while (context->next) {
-        client_context_t *tmp = context->next;
+        client_context_t *context = &head;
+        while (context->next) {
+            client_context_t *tmp = context->next;
 
-        if (tmp->disconnect) {
-            context->next = tmp->next;
-            homekit_server_close_client(tmp);
-        } else {
-            if (tmp->socket > max_fd)
-                max_fd = tmp->socket;
+            if (tmp->disconnect) {
+                context->next = tmp->next;
+                homekit_server_close_client(tmp);
+            } else {
+                if (tmp->socket > max_fd)
+                    max_fd = tmp->socket;
 
-            context = tmp;
+                context = tmp;
+            }
         }
+        
+        homekit_server->clients = head.next;
+        homekit_server->max_fd = max_fd;
     }
-    
-    homekit_server->clients = head.next;
-    homekit_server->max_fd = max_fd;
 }
 
 
@@ -3425,7 +3475,6 @@ IRAM static void homekit_run_server() {
     
     FD_SET(homekit_server->listen_fd, &homekit_server->fds);
     homekit_server->max_fd = homekit_server->listen_fd;
-    homekit_server->client_count = 0;
     
     struct timeval timeout = { 0, 150000 }; /* 0.15 seconds timeout (orig: 1s) */
     int triggered_nfds;
@@ -3627,6 +3676,10 @@ void homekit_server_init(homekit_server_config_t *config) {
     
     homekit_server = server_new();
     homekit_server->config = config;
+    
+    if (homekit_server->config->max_clients == 0) {
+        homekit_server->config->max_clients = HOMEKIT_MAX_CLIENTS_DEFAULT;
+    }
     
     if (xTaskCreate(homekit_server_task, "HKServer", SERVER_TASK_STACK, NULL, SERVER_TASK_PRIORITY, NULL) != pdPASS) {
         ERROR("Creating HKServer");

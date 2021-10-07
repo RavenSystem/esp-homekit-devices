@@ -71,7 +71,7 @@ main_config_t main_config = {
     .setup_mode_time = 0,
     
     .network_is_busy = false,
-    .enable_homekit_server = true,
+    .enable_homekit_server = false,
 
     .ir_tx_freq = 13,
     .ir_tx_gpio = MAX_GPIOS,
@@ -827,7 +827,7 @@ inline void save_states_callback() {
 }
 
 void homekit_characteristic_notify_safe(homekit_characteristic_t *ch) {
-    if (main_config.wifi_status == WIFI_STATUS_CONNECTED) {
+    if (main_config.wifi_status == WIFI_STATUS_CONNECTED && main_config.enable_homekit_server) {
         homekit_characteristic_notify(ch);
     }
 }
@@ -1417,7 +1417,7 @@ void set_zones_task(void* args) {
                 case THERMOSTAT_ACTION_HEATER_SOFT_ON:
                     if (IAIRZONING_MAIN_MODE == THERMOSTAT_MODE_COOLER) {
                         THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_TOTAL_OFF;
-                        hkc_setter(ch_group->ch[1], HOMEKIT_UINT8(THERMOSTAT_MODE_OFF));
+                        hkc_setter(ch_group->ch[2], HOMEKIT_UINT8(THERMOSTAT_MODE_OFF));
                     } else {
                         IAIRZONING_MAIN_MODE = THERMOSTAT_MODE_HEATER;
                     }
@@ -1429,7 +1429,7 @@ void set_zones_task(void* args) {
                 case THERMOSTAT_ACTION_COOLER_SOFT_ON:
                     if (IAIRZONING_MAIN_MODE == THERMOSTAT_MODE_HEATER) {
                         THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_TOTAL_OFF;
-                        hkc_setter(ch_group->ch[1], HOMEKIT_UINT8(THERMOSTAT_MODE_OFF));
+                        hkc_setter(ch_group->ch[2], HOMEKIT_UINT8(THERMOSTAT_MODE_OFF));
                     } else {
                         IAIRZONING_MAIN_MODE = THERMOSTAT_MODE_COOLER;
                     }
@@ -2474,7 +2474,7 @@ void temperature_task(void* args) {
         
         if (iairzoning > 0) {
             if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning == (uint8_t) TH_IAIRZONING_CONTROLLER) {
-                vTaskDelay(MS_TO_TICKS(1300));
+                vTaskDelay(MS_TO_TICKS(100));
             }
 
             ch_group = ch_group->next;
@@ -5352,29 +5352,22 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 action_acc_manager->value -= 10;
                             }
                             
-                            if (action_acc_manager->value == 4.f && SEC_SYSTEM_CH_TARGET_STATE->value.int_value != SEC_SYSTEM_OFF) {
-                                SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = 4;
-                                do_actions(ch_group, 4);
+                            if (action_acc_manager->value == 8.f) {
+                                SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = SEC_SYSTEM_CH_TARGET_STATE->value.int_value;
+                                do_actions(ch_group, 8);
                                 homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
                                 save_historical_data(SEC_SYSTEM_CH_CURRENT_STATE);
-                                if (alarm_recurrent) {
-                                    esp_timer_start(SEC_SYSTEM_REC_ALARM_TIMER);
-                                }
                                 
-                            } else if (SEC_SYSTEM_CH_TARGET_STATE->value.int_value == (uint8_t) action_acc_manager->value - 5) {
+                            } else if ((action_acc_manager->value == 4.f && SEC_SYSTEM_CH_TARGET_STATE->value.int_value != SEC_SYSTEM_OFF) ||
+                                       SEC_SYSTEM_CH_TARGET_STATE->value.int_value == (uint8_t) action_acc_manager->value - 5) {
                                 SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = 4;
                                 do_actions(ch_group, (uint8_t) action_acc_manager->value);
                                 homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
                                 save_historical_data(SEC_SYSTEM_CH_CURRENT_STATE);
                                 if (alarm_recurrent) {
+                                    action_acc_manager->value += 10;
                                     esp_timer_start(SEC_SYSTEM_REC_ALARM_TIMER);
                                 }
-                                
-                            } else if (action_acc_manager->value == 8.f) {
-                                SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = SEC_SYSTEM_CH_TARGET_STATE->value.int_value;
-                                do_actions(ch_group, 8);
-                                homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
-                                save_historical_data(SEC_SYSTEM_CH_CURRENT_STATE);
                                 
                             } else if (action_acc_manager->value >= 10.f) {
                                 hkc_sec_system_status(SEC_SYSTEM_CH_TARGET_STATE, HOMEKIT_UINT8((uint8_t) action_acc_manager->value - 10));
@@ -6889,11 +6882,18 @@ void normal_mode_init() {
     }
     INFO("Setup mode time %i secs", main_config.setup_mode_time);
     
-    // Run HomeKit Server
-    if (cJSON_GetObjectItemCaseSensitive(json_config, ENABLE_HOMEKIT_SERVER) != NULL) {
-        main_config.enable_homekit_server = (bool) cJSON_GetObjectItemCaseSensitive(json_config, ENABLE_HOMEKIT_SERVER)->valuedouble;
+    // HomeKit Server Clients
+    config.max_clients = HOMEKIT_SERVER_MAX_CLIENTS_DEFAULT;
+    if (cJSON_GetObjectItemCaseSensitive(json_config, HOMEKIT_SERVER_MAX_CLIENTS) != NULL) {
+        config.max_clients = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, HOMEKIT_SERVER_MAX_CLIENTS)->valuedouble;
+        if (config.max_clients > HOMEKIT_SERVER_MAX_CLIENTS_MAX) {
+            config.max_clients = HOMEKIT_SERVER_MAX_CLIENTS_MAX;
+        }
     }
-    INFO("Run HomeKit Server %i", main_config.enable_homekit_server);
+    if (config.max_clients > 0) {
+        main_config.enable_homekit_server = true;
+    }
+    INFO("HomeKit Server Clients %i", config.max_clients);
     
     // Allow unsecure connections
     if (cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS) != NULL) {

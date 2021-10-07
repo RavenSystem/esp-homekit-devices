@@ -18,6 +18,7 @@
 void json_init(json_stream *json, void *context) {
     json->pos = 0;
     json->state = JSON_STATE_START;
+    json->error = false;
     json->nesting_idx = 0;
     json->context = context;
 }
@@ -51,8 +52,13 @@ void json_flush(json_stream *json) {
     if (!json->pos)
         return;
 
-    if (json->on_flush)
-        json->on_flush(json->buffer, json->pos, json->context);
+    if (json->on_flush) {
+        if (json->on_flush(json->buffer, json->pos, json->context) < 0) {
+            json->state = JSON_STATE_ERROR;
+            json->error = true;
+        }
+    }
+    
     json->pos = 0;
 }
 
@@ -65,6 +71,10 @@ void json_write(json_stream *json, const char *format, ...) {
 
     if (len + json->pos > json->size - 1) {
         json_flush(json);
+        
+        if (json->error) {
+            return;
+        }
 
         va_start(arg_ptr, format);
         int len = vsnprintf((char *)json->buffer + json->pos, json->size - json->pos, format, arg_ptr);
@@ -83,6 +93,8 @@ void json_write(json_stream *json, const char *format, ...) {
 }
 
 void json_object_start(json_stream *json) {
+    if (json->error)
+        json->state = JSON_STATE_ERROR;
     if (json->state == JSON_STATE_ERROR)
         return;
 
@@ -105,6 +117,8 @@ void json_object_start(json_stream *json) {
 }
 
 void json_object_end(json_stream *json) {
+    if (json->error)
+        json->state = JSON_STATE_ERROR;
     if (json->state == JSON_STATE_ERROR)
         return;
 
@@ -135,6 +149,8 @@ void json_object_end(json_stream *json) {
 }
 
 void json_array_start(json_stream *json) {
+    if (json->error)
+        json->state = JSON_STATE_ERROR;
     if (json->state == JSON_STATE_ERROR)
         return;
 
@@ -157,6 +173,8 @@ void json_array_start(json_stream *json) {
 }
 
 void json_array_end(json_stream *json) {
+    if (json->error)
+        json->state = JSON_STATE_ERROR;
     if (json->state == JSON_STATE_ERROR)
         return;
 
@@ -187,6 +205,8 @@ void json_array_end(json_stream *json) {
 }
 
 void json_integer(json_stream *json, long long x) {
+    if (json->error)
+        json->state = JSON_STATE_ERROR;
     if (json->state == JSON_STATE_ERROR)
         return;
 
@@ -217,6 +237,8 @@ void json_integer(json_stream *json, long long x) {
 }
 
 void json_float(json_stream *json, float x) {
+    if (json->error)
+        json->state = JSON_STATE_ERROR;
     if (json->state == JSON_STATE_ERROR)
         return;
 
@@ -248,6 +270,8 @@ void json_float(json_stream *json, float x) {
 }
 
 void json_string(json_stream *json, const char *x) {
+    if (json->error)
+        json->state = JSON_STATE_ERROR;
     if (json->state == JSON_STATE_ERROR)
         return;
 
@@ -286,6 +310,8 @@ void json_string(json_stream *json, const char *x) {
 }
 
 void json_boolean(json_stream *json, bool x) {
+    if (json->error)
+        json->state = JSON_STATE_ERROR;
     if (json->state == JSON_STATE_ERROR)
         return;
 
@@ -316,6 +342,8 @@ void json_boolean(json_stream *json, bool x) {
 }
 
 void json_null(json_stream *json) {
+    if (json->error)
+        json->state = JSON_STATE_ERROR;
     if (json->state == JSON_STATE_ERROR)
         return;
 

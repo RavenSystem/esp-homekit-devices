@@ -13,13 +13,14 @@
 
 #define JSON_MAX_DEPTH              (30)
 
-typedef void (*json_flush_callback)(uint8_t *buffer, size_t size, void *context);
+typedef int (*json_flush_callback)(uint8_t *buffer, size_t size, void *context);
 typedef struct _json_stream {
     uint8_t* buffer;
     size_t size;
     size_t pos;
 
-    uint8_t state;
+    uint8_t state: 7;
+    bool error: 1;
 
     uint8_t nesting_idx;
     uint8_t nesting[JSON_MAX_DEPTH];
