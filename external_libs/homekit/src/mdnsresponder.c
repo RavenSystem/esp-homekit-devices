@@ -139,9 +139,10 @@ static u16_t mdns_responder_reply_size = 0;
 #define MDNS_TTL_SAFE_MARGIN        (7)
 static uint32_t mdns_ttl = 4500;
 
-#define MDNS_STATUS_PROBING         (0)
-#define MDNS_STATUS_PROBE_OK        (1)
-#define MDNS_STATUS_WORKING         (2)
+#define MDNS_STATUS_PROBING_1       (0)
+#define MDNS_STATUS_PROBING_2       (1)
+#define MDNS_STATUS_PROBE_OK        (2)
+#define MDNS_STATUS_WORKING         (3)
 static u8_t mdns_status = MDNS_STATUS_WORKING;
 
 //---------------------- Debug/logging utilities -------------------------
@@ -589,16 +590,18 @@ void mdns_add_AAAA(const char* rKey, u32_t ttl, const ip6_addr_t *addr)
 
 void mdns_announce() {
     if (mdns_status == MDNS_STATUS_WORKING) {
-        mdns_status = MDNS_STATUS_PROBING;
+        mdns_status = MDNS_STATUS_PROBING_1;
         esp_timer_change_period(mdns_announce_timer, MDNS_TTL_SAFE_MARGIN * MDNS_TTL_MULTIPLIER_MS);
-        printf(">>> mDNS_announce: probing\n");
+        printf(">>> mDNS probing 1\n");
+    } else if (mdns_status == MDNS_STATUS_PROBING_2) {
+        mdns_status = MDNS_STATUS_PROBE_OK;
+        printf(">>> mDNS probing 2\n");
     } else if (mdns_status == MDNS_STATUS_PROBE_OK) {
         mdns_status = MDNS_STATUS_WORKING;
-        esp_timer_change_period(mdns_announce_timer, (mdns_ttl - (MDNS_TTL_SAFE_MARGIN + 1)) * MDNS_TTL_MULTIPLIER_MS);
-        printf(">>> mDNS_announce: working with TTL %i\n", mdns_ttl);
+        esp_timer_change_period(mdns_announce_timer, (mdns_ttl - MDNS_TTL_SAFE_MARGIN) * MDNS_TTL_MULTIPLIER_MS);
+        printf(">>> mDNS working TTL %i\n", mdns_ttl);
     }
-
-    printf(">>> mDNS_announce: sent\n");
+    
     struct netif *netif = sdk_system_get_netif(STATION_IF);
     
 #if LWIP_IPV4
@@ -607,7 +610,6 @@ void mdns_announce() {
 #if LWIP_IPV6
     mdns_announce_netif(netif, &gMulticastV6Addr);
 #endif
-    
 }
 
 void mdns_announce_pause() {
@@ -839,8 +841,8 @@ static void mdns_reply(const ip_addr_t *addr, struct mdns_hdr* hdrP)
             if (qClass == DNS_RRCLASS_IN || qClass == DNS_RRCLASS_ANY) {
                 rsrcP = mdns_match(qStr, qType);
                 if (rsrcP) {
-                    if (mdns_status == MDNS_STATUS_PROBING) {
-                        mdns_status = MDNS_STATUS_PROBE_OK;
+                    if (mdns_status == MDNS_STATUS_PROBING_1) {
+                        mdns_status = MDNS_STATUS_PROBING_2;
                     }
 #if LWIP_IPV6
                     if (rsrcP->rType == DNS_RRTYPE_AAAA) {

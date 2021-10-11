@@ -51,8 +51,12 @@
 #define HOMEKIT_MAX_CLIENTS_DEFAULT (8)
 #endif
 
+#ifndef HOMEKIT_MIN_CLIENTS
+#define HOMEKIT_MIN_CLIENTS         (3)
+#endif
+
 #ifndef HOMEKIT_MIN_FREEHEAP
-#define HOMEKIT_MIN_FREEHEAP        (8192)
+#define HOMEKIT_MIN_FREEHEAP        (10240)
 #endif
 
 
@@ -369,8 +373,10 @@ void pairing_context_free(pairing_context_t *context) {
     context = NULL;
 }
 
-bool homekit_is_enough_dram() {
-    if (xPortGetFreeHeapSize() >= HOMEKIT_MIN_FREEHEAP) {
+IRAM static bool homekit_low_dram() {
+    const uint32_t free_heap = xPortGetFreeHeapSize();
+    if (free_heap < HOMEKIT_MIN_FREEHEAP) {
+        HOMEKIT_ERROR("LOW DRAM Free HEAP: %i", free_heap);
         return true;
     }
     
@@ -383,7 +389,7 @@ void homekit_disconnect_client(client_context_t* context) {
 }
 
 void homekit_remove_oldest_client() {
-    if (homekit_server && homekit_server->client_count > 2) {
+    if (homekit_server && homekit_server->client_count > HOMEKIT_MIN_CLIENTS) {
         client_context_t* context = homekit_server->clients;
         while (context) {
             if (!context->next) {
@@ -896,9 +902,7 @@ void send_client_events(client_context_t *context, client_event_t *events) {
         json_object_end(json);
         
         if (json->error) {
-            CLIENT_ERROR(context, "JSON");
-            homekit_disconnect_client(context);
-            return;
+            break;
         }
 
         e = e->next;
@@ -911,7 +915,12 @@ void send_client_events(client_context_t *context, client_event_t *events) {
     //json_buffer_free(json);
     //free(json);
     
-    client_send_chunk(NULL, 0, context);
+    if (json->error) {
+        CLIENT_ERROR(context, "JSON");
+        homekit_disconnect_client(context);
+    } else {
+        client_send_chunk(NULL, 0, context);
+    }
 }
 
 
@@ -1171,7 +1180,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             
             send_tlv_response(context, response);
             
-            CLIENT_INFO(context, "Pair done 1/3");
+            CLIENT_INFO(context, "Done 1/3");
             break;
         }
         
@@ -1251,7 +1260,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             
             send_tlv_response(context, response);
             
-            CLIENT_INFO(context, "Pair done 2/3");
+            CLIENT_INFO(context, "Done 2/3");
             break;
         }
             
@@ -1589,11 +1598,11 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             homekit_mdns_buffer_set(0);
             homekit_setup_mdns();
 
-            CLIENT_INFO(context, "Pair done 3/3");
+            CLIENT_INFO(context, "Done 3/3");
             
             break;
         }
-            
+        
         default: {
             CLIENT_ERROR(context, "Unknown state: %d", tlv_get_integer_value(message, TLVType_State, -1));
             homekit_disconnect_client(context);
@@ -2079,6 +2088,10 @@ void homekit_server_on_get_accessories(client_context_t *context) {
                 json_string(json, "linked"); json_array_start(json);
                 for (homekit_service_t **linked=service->linked; *linked; linked++) {
                     json_integer(json, (*linked)->id);
+                    
+                    if (json->error) {
+                        break;
+                    }
                 }
                 json_array_end(json);
             }
@@ -2120,12 +2133,6 @@ void homekit_server_on_get_accessories(client_context_t *context) {
         }
     }
     
-    if (json->error) {
-        CLIENT_ERROR(context, "JSON");
-        homekit_disconnect_client(context);
-        return;
-    }
-
     json_array_end(json);
     json_object_end(json); // response
     
@@ -2133,7 +2140,12 @@ void homekit_server_on_get_accessories(client_context_t *context) {
     //json_buffer_free(json);
     //free(json);
     
-    client_send_chunk(NULL, 0, context);
+    if (json->error) {
+        CLIENT_ERROR(context, "JSON");
+        homekit_disconnect_client(context);
+    } else {
+        client_send_chunk(NULL, 0, context);
+    }
 }
 
 void homekit_server_on_get_characteristics(client_context_t *context) {
@@ -2251,10 +2263,7 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
         json_object_end(json);
         
         if (json->error) {
-            CLIENT_ERROR(context, "JSON");
-            free(id);
-            homekit_disconnect_client(context);
-            return;
+            break;
         }
     }
 
@@ -2265,7 +2274,12 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
     //json_buffer_free(json);
     //free(json);
 
-    client_send_chunk(NULL, 0, context);
+    if (json->error) {
+        CLIENT_ERROR(context, "JSON");
+        homekit_disconnect_client(context);
+    } else {
+        client_send_chunk(NULL, 0, context);
+    }
     
     free(id);
 }
@@ -2733,11 +2747,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
             json_object_end(json1);
             
             if (json1->error) {
-                CLIENT_ERROR(context, "JSON");
-                free(statuses);
-                cJSON_Delete(json);
-                homekit_disconnect_client(context);
-                return;
+                break;
             }
         }
 
@@ -2748,7 +2758,12 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
         //json_buffer_free(json1);
         //free(json1);
 
-        client_send_chunk(NULL, 0, context);
+        if (json1->error) {
+            CLIENT_ERROR(context, "JSON");
+            homekit_disconnect_client(context);
+        } else {
+            client_send_chunk(NULL, 0, context);
+        }
     }
 
     free(statuses);
@@ -3256,11 +3271,9 @@ IRAM static void homekit_client_process(client_context_t *context) {
         }
     }
     
-    if (!homekit_is_enough_dram()) {
+    if (homekit_low_dram()) {
         homekit_remove_oldest_client();
     }
-
-    CLIENT_INFO(context, "Done");
 }
 
 
@@ -3317,7 +3330,7 @@ void homekit_server_accept_client() {
         HOMEKIT_INFO("[%d] New %s:%d Free HEAP: %d", s, address_buffer, addr.sin_port, free_heap);
         return;
     } else if (homekit_server->client_count >= homekit_server->config->max_clients ||
-               !homekit_is_enough_dram() ||
+               homekit_low_dram() ||
                !new_context) {
         homekit_remove_oldest_client();
     }

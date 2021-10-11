@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "8.0.0"
+#define FIRMWARE_VERSION                    "8.1.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -106,7 +106,7 @@
 #define PWM_FREQ                            "q"
 #define ENABLE_HOMEKIT_SERVER               "h"
 #define HOMEKIT_SERVER_MAX_CLIENTS          "h"
-#define HOMEKIT_SERVER_MAX_CLIENTS_DEFAULT  (8)
+#define HOMEKIT_SERVER_MAX_CLIENTS_DEFAULT  (20)
 #define HOMEKIT_SERVER_MAX_CLIENTS_MAX      (20)
 #define ALLOW_INSECURE_CONNECTIONS          "u"
 #define UART_CONFIG_ARRAY                   "r"
@@ -163,6 +163,8 @@
 #define PIN_GPIO                            "g"
 #define INITIAL_STATE                       "s"
 #define EXEC_ACTIONS_ON_BOOT                "xa"
+#define KILLSWITCH                          "ks"
+#define KILLSWITCH_DEFAULT                  (3)
 
 #define TIMETABLE_ACTION_ARRAY              "tt"
 #define ALL_MONS                            13
@@ -467,7 +469,7 @@
 #define SEC_SYSTEM_OFF                      (3)
 #define SEC_SYSTEM_ALARM                    (4)
 #define SEC_SYSTEM_REC_ALARM_TIMER          ch_group->timer
-#define SEC_SYSTEM_REC_ALARM_PERIOD_MS      (4000)
+#define SEC_SYSTEM_REC_ALARM_PERIOD_MS      (6000)
 
 #define HIST_DATA_ARRAY_SET                 "h"
 #define HIST_READ_ON_CLOCK_READY_SET        "x"

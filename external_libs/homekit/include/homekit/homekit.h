@@ -49,9 +49,6 @@ void homekit_server_init(homekit_server_config_t *config);
 void homekit_set_max_clients(const uint8_t clients);
 #endif // HOMEKIT_CHANGE_MAX_CLIENTS
 
-// Check creating of a block into DRAM
-bool homekit_is_enough_dram();
-
 // Remove oldest client to free some DRAM
 void homekit_remove_oldest_client();
 

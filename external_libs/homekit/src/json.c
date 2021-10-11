@@ -49,9 +49,10 @@ void json_buffer_free(json_stream *json) {
 }
 
 void json_flush(json_stream *json) {
-    if (!json->pos)
+    if (!json->pos || json->error) {
         return;
-
+    }
+    
     if (json->on_flush) {
         if (json->on_flush(json->buffer, json->pos, json->context) < 0) {
             json->state = JSON_STATE_ERROR;
@@ -64,7 +65,7 @@ void json_flush(json_stream *json) {
 
 void json_write(json_stream *json, const char *format, ...) {
     va_list arg_ptr;
-
+    
     va_start(arg_ptr, format);
     int len = vsnprintf((char *)json->buffer + json->pos, json->size - json->pos, format, arg_ptr);
     va_end(arg_ptr);
