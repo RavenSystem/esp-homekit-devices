@@ -38,7 +38,7 @@ typedef struct _adv_hlw_unit {
 
 static adv_hlw_unit_t* adv_hlw_units = NULL;
 
-IRAM static adv_hlw_unit_t* adv_hlw_find_by_gpio(const uint8_t gpio) {
+static adv_hlw_unit_t* IRAM adv_hlw_find_by_gpio(const uint8_t gpio) {
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_units;
     while (adv_hlw_unit &&
            adv_hlw_unit->gpio_cf != gpio &&
@@ -117,7 +117,7 @@ double adv_hlw_get_power_freq(const uint8_t gpio) {
     return 0;
 }
 
-IRAM static void adv_hlw_cf1_callback(const uint8_t gpio) {
+static void IRAM adv_hlw_cf1_callback(const uint8_t gpio) {
     gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, adv_hlw_cf1_callback);
     
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
@@ -152,7 +152,7 @@ IRAM static void adv_hlw_cf1_callback(const uint8_t gpio) {
     gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_NEG, adv_hlw_cf1_callback);
 }
 
-IRAM static void adv_hlw_cf_callback(const uint8_t gpio) {
+static void IRAM adv_hlw_cf_callback(const uint8_t gpio) {
     gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, adv_hlw_cf_callback);
     
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);

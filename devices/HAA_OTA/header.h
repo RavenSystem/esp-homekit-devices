@@ -10,6 +10,6 @@
 
 #include "../common/common_headers.h"
 
-#define OTAVERSION              "5.2.0"
+#define OTAVERSION              "5.2.1"
 
 #endif  // __HAA_OTA_HEADER_H__

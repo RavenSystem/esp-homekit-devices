@@ -158,7 +158,7 @@ static void client_send_redirect(client_t *client, int code, const char *redirec
     client_send(client, buffer, len);
 }
 
-IRAM bool wifi_config_got_ip() {
+bool wifi_config_got_ip() {
     struct ip_info info;
     if (sdk_wifi_get_ip_info(STATION_IF, &info) && ip4_addr1_16(&info.ip) != 0) {
         return true;
@@ -563,7 +563,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         sysparam_get_int32(TOTAL_SERV_SYSPARAM, &hk_total_ac);
         char saved_state_id[5];
         memset(saved_state_id, 0, 5);
-        for (uint32_t int_saved_state_id = 100; int_saved_state_id <= hk_total_ac * 100; int_saved_state_id++) {
+        for (uint32_t int_saved_state_id = 100; int_saved_state_id <= (hk_total_ac + 1) * 100; int_saved_state_id++) {
             itoa(int_saved_state_id, saved_state_id, 10);
             sysparam_set_data(saved_state_id, NULL, 0, false);
         }

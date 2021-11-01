@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "8.1.0"
+#define FIRMWARE_VERSION                    "9.0.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -21,19 +21,6 @@
 #define CH_TYPE_STRING                      (4)
 
 #define FLOAT_FACTOR_SAVE_AS_INT            (100000.00000f)
-
-// Auto-off types (type)
-#define TYPE_ON                             (0)
-#define TYPE_LOCK                           (1)
-#define TYPE_SENSOR                         (2)
-#define TYPE_SENSOR_BOOL                    (3)
-#define TYPE_VALVE                          (4)
-#define TYPE_LIGHTBULB                      (5)
-#define TYPE_GARAGE_DOOR                    (6)
-#define TYPE_WINDOW_COVER                   (7)
-#define TYPE_FAN                            (8)
-#define TYPE_TV                             (9)
-#define TYPE_DOUBLE_LOCK                    (10)
 
 // Task Stack Sizes
 #define GLOBAL_TASK_SIZE                    (612)
@@ -104,7 +91,7 @@
 #define INVERTED                            "i"
 #define BUTTON_FILTER                       "f"
 #define PWM_FREQ                            "q"
-#define ENABLE_HOMEKIT_SERVER               "h"
+#define ENABLE_HOMEKIT                      "h"
 #define HOMEKIT_SERVER_MAX_CLIENTS          "h"
 #define HOMEKIT_SERVER_MAX_CLIENTS_DEFAULT  (20)
 #define HOMEKIT_SERVER_MAX_CLIENTS_MAX      (20)
@@ -304,26 +291,37 @@
 #define HM_HUM_TARGET_FLOAT                 ch_group->ch[5]->value.float_value
 #define HM_DEHUM_TARGET_FLOAT               ch_group->ch[6]->value.float_value
 
-#define LIGHTBULB_TYPE                      ch_group->num[5]
+#define LIGHTBULB_TYPE_SET                  "ty"
+#define LIGHTBULB_TYPE                      lightbulb_group->type
+#define LIGHTBULB_TYPE_VIRTUAL              (0)
+#define LIGHTBULB_TYPE_PWM                  (1)
+#define LIGHTBULB_TYPE_PWM_CWWW             (2)
+#define LIGHTBULB_TYPE_MY92X1               (3)
+#define LIGHTBULB_TYPE_SM16716              (7)
+#define LIGHTBULB_TYPE_NRZ                  (8)
+#define LIGHTBULB_NRZ_TIMES_ARRAY_SET       "nrz"
 #define LIGHTBULB_CHANNELS_SET              "n"
-#define LIGHTBULB_CHANNELS                  ch_group->num[6]
+#define LIGHTBULB_CHANNELS                  lightbulb_group->channels
 #define LIGHTBULB_INITITAL_STATE_ARRAY_SET  "it"
 #define LIGHTBULB_GPIO_ARRAY_SET            "g"
 #define LIGHTBULB_RGB_ARRAY_SET             "rgb"
 #define LIGHTBULB_CMY_ARRAY_SET             "cmy"
 #define LIGHTBULB_MAX_POWER_SET             "mp"
-#define LIGHTBULB_MAX_POWER                 ch_group->num[7]
+#define LIGHTBULB_MAX_POWER                 ch_group->num[0]
 #define LIGHTBULB_CURVE_FACTOR_SET          "cf"
-#define LIGHTBULB_CURVE_FACTOR              ch_group->num[8]
+#define LIGHTBULB_CURVE_FACTOR              ch_group->num[1]
 #define PWM_DITHER_SET                      "di"
-#define LIGHTBULB_PWM_DITHER                ch_group->num[9]
-#define LIGHTBULB_STEP_VALUE                ch_group->num   // From ch_group->num[0] to ch_group->num[4]
+#define LIGHTBULB_COLOR_MAP_SET             "cm"
+#define LIGHTBULB_RANGE_START               lightbulb_group->range_start
+#define LIGHTBULB_RANGE_END                 lightbulb_group->range_end
+#define LIGHTBULB_PWM_DITHER                lightbulb_group->pwm_dither
+#define LIGHTBULB_STEP_VALUE                lightbulb_group->step_value
 #define LIGHTBULB_FLUX_ARRAY_SET            "fa"
 #define LIGHTBULB_COORDINATE_ARRAY_SET      "ca"
 #define LIGHTBULB_WHITE_POINT_SET           "wp"
-#define RGBW_PERIOD                         (10)
+#define RGBW_PERIOD                         (20)
 #define RGBW_STEP_SET                       "st"
-#define RGBW_STEP_DEFAULT                   (1024)
+#define RGBW_STEP_DEFAULT                   (2048)
 #define PWM_SCALE                           (UINT16_MAX)
 #define COLOR_TEMP_MIN                      (71)
 #define COLOR_TEMP_MAX                      (400)
@@ -343,6 +341,8 @@
 #define WP                                  lightbulb_group->wp
 #define myCMY                               lightbulb_group->cmy
 #define myRGB                               lightbulb_group->rgb
+#define LIGHTBULB_AUTODIMMER_TIMER          ch_group->timer
+#define LIGHTBULB_SET_DELAY_TIMER           lightbulb_group->timer
 
 #define GD_CURRENT_DOOR_STATE               ch_group->ch[0]
 #define GD_TARGET_DOOR_STATE                ch_group->ch[1]
@@ -607,7 +607,7 @@
 #define STATUS_LED_DURATION_OFF             (120)
 
 #define SAVE_STATES_DELAY_MS                (5000)
-#define RANDOM_DELAY_MS                     (6000)
+#define RANDOM_DELAY_MS                     (7000)
 
 #define ACCESSORIES_WITHOUT_BRIDGE          (4)     // Max number of accessories before using a bridge
 

@@ -104,7 +104,7 @@ typedef struct _adv_button_main_config {
 
 static adv_button_main_config_t* adv_button_main_config = NULL;
 
-static adv_button_t* button_find_by_gpio(const uint16_t gpio) {
+static adv_button_t* IRAM button_find_by_gpio(const uint16_t gpio) {
     if (adv_button_main_config) {
         adv_button_t* button = adv_button_main_config->buttons;
         
@@ -118,7 +118,7 @@ static adv_button_t* button_find_by_gpio(const uint16_t gpio) {
     return NULL;
 }
 
-static adv_button_mcp_t* mcp_find_by_index(const uint8_t index) {
+static adv_button_mcp_t* IRAM mcp_find_by_index(const uint8_t index) {
     if (adv_button_main_config) {
         adv_button_mcp_t* mcp = adv_button_main_config->mcps;
         
@@ -136,7 +136,7 @@ bool adv_button_read_gpio(const uint16_t gpio) {
     return button_find_by_gpio(gpio)->state;
 }
 
-static bool adv_button_read_mcp_gpio(const uint16_t gpio) {
+static bool IRAM adv_button_read_mcp_gpio(const uint16_t gpio) {
     adv_button_mcp_t* adv_button_mcp = mcp_find_by_index(gpio / 100);
     if (adv_button_mcp) {
         const uint8_t mcp_gpio = gpio % 100;
@@ -149,7 +149,7 @@ static bool adv_button_read_mcp_gpio(const uint16_t gpio) {
     return false;
 }
 
-static void adv_button_run_callback_fn(adv_button_callback_fn_t* callbacks, const uint16_t gpio) {
+static void IRAM adv_button_run_callback_fn(adv_button_callback_fn_t* callbacks, const uint16_t gpio) {
     adv_button_callback_fn_t* adv_button_callback_fn = callbacks;
     
     while (adv_button_callback_fn) {
@@ -158,7 +158,7 @@ static void adv_button_run_callback_fn(adv_button_callback_fn_t* callbacks, cons
     }
 }
 
-IRAM static void push_down(const uint8_t used_gpio) {
+static void IRAM push_down(const uint8_t used_gpio) {
     const uint32_t now = xTaskGetTickCountFromISR();
     
     if (now - adv_button_main_config->disable_time > DISABLE_TIME / portTICK_PERIOD_MS) {
@@ -173,7 +173,7 @@ IRAM static void push_down(const uint8_t used_gpio) {
     }
 }
 
-IRAM static void push_up(const uint8_t used_gpio) {
+static void inline IRAM push_up(const uint8_t used_gpio) {
     const uint32_t now = xTaskGetTickCountFromISR();
     
     if (now - adv_button_main_config->disable_time > DISABLE_TIME / portTICK_PERIOD_MS) {
@@ -220,21 +220,21 @@ IRAM static void push_up(const uint8_t used_gpio) {
     }
 }
 
-static void adv_button_single_callback(TimerHandle_t xTimer) {
+static void inline IRAM adv_button_single_callback(TimerHandle_t xTimer) {
     adv_button_t *button = (adv_button_t*) pvTimerGetTimerID(xTimer);
     // Single button pressed
     button->press_count = 0;
     adv_button_run_callback_fn(button->singlepress_callback_fn, button->gpio);
 }
 
-static void adv_button_hold_callback(TimerHandle_t xTimer) {
+static void inline IRAM adv_button_hold_callback(TimerHandle_t xTimer) {
     adv_button_t* button = (adv_button_t*) pvTimerGetTimerID(xTimer);
     // Hold button pressed
     button->press_count = DISABLE_PRESS_COUNT;
     adv_button_run_callback_fn(button->holdpress_callback_fn, button->gpio);
 }
 
-IRAM static void adv_button_interrupt_pulse(const uint8_t gpio) {
+static void IRAM adv_button_interrupt_pulse(const uint8_t gpio) {
     gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
 
     adv_button_t *button = button_find_by_gpio(gpio);
@@ -243,7 +243,7 @@ IRAM static void adv_button_interrupt_pulse(const uint8_t gpio) {
     gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_NEG, adv_button_interrupt_pulse);
 }
 
-IRAM static void adv_button_interrupt_normal(const uint8_t gpio) {
+static void IRAM adv_button_interrupt_normal(const uint8_t gpio) {
     gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
     
     adv_button_t* button = adv_button_main_config->buttons;
@@ -257,7 +257,7 @@ IRAM static void adv_button_interrupt_normal(const uint8_t gpio) {
     esp_timer_start_from_ISR(adv_button_main_config->button_evaluate_timer);
 }
 
-IRAM static void button_evaluate_fn() {
+static void IRAM button_evaluate_fn() {
     if (!adv_button_main_config->button_evaluate_is_working) {
         adv_button_main_config->button_evaluate_is_working = true;
         

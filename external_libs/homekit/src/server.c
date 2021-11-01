@@ -12,14 +12,11 @@
 #if defined(ESP_IDF)
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-#include <freertos/queue.h>
 #elif defined(ESP_OPEN_RTOS)
 #include <FreeRTOS.h>
 #include <task.h>
-#include <queue.h>
 #include <espressif/esp_common.h>
 #include <esplibs/libmain.h>
-#include <semphr.h>
 #else
 #error "Unknown target platform"
 #endif
@@ -45,23 +42,26 @@
 #include <homekit/tlv.h>
 
 
-#define PORT                        (5556)
+#define PORT                                    (5556)
 
 #ifndef HOMEKIT_MAX_CLIENTS_DEFAULT
-#define HOMEKIT_MAX_CLIENTS_DEFAULT (8)
+#define HOMEKIT_MAX_CLIENTS_DEFAULT             (8)
 #endif
 
 #ifndef HOMEKIT_MIN_CLIENTS
-#define HOMEKIT_MIN_CLIENTS         (3)
+#define HOMEKIT_MIN_CLIENTS                     (3)
 #endif
 
 #ifndef HOMEKIT_MIN_FREEHEAP
-#define HOMEKIT_MIN_FREEHEAP        (10240)
+#define HOMEKIT_MIN_FREEHEAP                    (12288)
 #endif
 
+#ifndef HOMEKIT_NETWORK_MIN_FREEHEAP
+#define HOMEKIT_NETWORK_MIN_FREEHEAP            (14336)
+#endif
 
 #ifdef HOMEKIT_DEBUG
-#define TLV_DEBUG(values) tlv_debug(values)
+#define TLV_DEBUG(values)                       tlv_debug(values)
 #else
 #define TLV_DEBUG(values)
 #endif
@@ -116,19 +116,25 @@ typedef struct {
     size_t accessory_public_key_size;
 } pair_verify_context_t;
 
+typedef struct _notification {
+    homekit_characteristic_t* ch;
+    struct _notification* next;
+} notification_t;
 
 #define BUFFER_DATA_SIZE        (1442)
 #define RECEIVED_DATA_SIZE      (1024 + 18)
 #define ENCRYPTED_DATA_SIZE     (768)
 typedef struct {
     char *accessory_id;
-    ed25519_key *accessory_key;
+    ed25519_key* accessory_key;
     
-    homekit_server_config_t *config;
+    homekit_server_config_t* config;
     
-    pairing_context_t *pairing_context;
+    pairing_context_t* pairing_context;
     
-    client_context_t *clients;
+    client_context_t* clients;
+    
+    notification_t* notifications;
     
     int listen_fd;
     int max_fd;
@@ -137,7 +143,6 @@ typedef struct {
     uint8_t client_count: 6;
     bool paired: 1;
     bool is_pairing: 1;
-    bool has_notifications: 1;
     bool setup_finish: 1;
     bool pending_close: 1;
     
@@ -165,31 +170,21 @@ struct _client_context_t {
     http_parser *parser;
 
     int pairing_id;
-
-    homekit_characteristic_t *current_characteristic;
-    homekit_value_t *current_value;
     
     byte read_key[32];
     byte write_key[32];
     int count_reads;
     int count_writes;
-
-    QueueHandle_t event_queue;
+    
     pair_verify_context_t *verify_context;
 
     struct _client_context_t *next;
 };
 
-
-typedef struct {
-    homekit_characteristic_t *characteristic;
-    homekit_value_t value;
-} characteristic_event_t;
-
 void client_context_free(client_context_t *c);
 void pairing_context_free(pairing_context_t *context);
 void homekit_server_on_reset(client_context_t *context);
-IRAM int client_send_chunk(byte *data, size_t size, void *arg);
+int IRAM client_send_chunk(byte *data, size_t size, void *arg);
 
 #ifdef HOMEKIT_CHANGE_MAX_CLIENTS
 void homekit_set_max_clients(const uint8_t clients) {
@@ -215,14 +210,17 @@ homekit_server_t *server_new() {
 
 /*
 void server_free() {
-    if (homekit_server->accessory_id)
+    if (homekit_server->accessory_id) {
         free(homekit_server->accessory_id);
+    }
 
-    if (homekit_server->accessory_key)
+    if (homekit_server->accessory_key) {
         crypto_ed25519_free(homekit_server->accessory_key);
+    }
 
-    if (homekit_server->pairing_context)
+    if (homekit_server->pairing_context) {
         pairing_context_free(homekit_server->pairing_context);
+    }
 
     if (homekit_server->clients) {
         client_context_t *client = homekit_server->clients;
@@ -325,8 +323,6 @@ client_context_t *client_context_new() {
         c->parser = malloc(sizeof(*c->parser));
         http_parser_init(c->parser, HTTP_REQUEST);
         c->parser->data = c;
-
-        c->event_queue = xQueueCreate(20, sizeof(characteristic_event_t*));
     }
 
     return c;
@@ -336,9 +332,6 @@ client_context_t *client_context_new() {
 void client_context_free(client_context_t *c) {
     if (c->verify_context)
         pair_verify_context_free(c->verify_context);
-
-    if (c->event_queue)
-        vQueueDelete(c->event_queue);
 
     if (c->endpoint_params)
         query_params_free(c->endpoint_params);
@@ -373,7 +366,7 @@ void pairing_context_free(pairing_context_t *context) {
     context = NULL;
 }
 
-IRAM static bool homekit_low_dram() {
+static bool IRAM homekit_low_dram() {
     const uint32_t free_heap = xPortGetFreeHeapSize();
     if (free_heap < HOMEKIT_MIN_FREEHEAP) {
         HOMEKIT_ERROR("LOW DRAM Free HEAP: %i", free_heap);
@@ -401,8 +394,6 @@ void homekit_remove_oldest_client() {
         }
     }
 }
-
-void client_notify_characteristic(homekit_characteristic_t *ch, homekit_value_t value, void *client);
 
 
 typedef enum {
@@ -439,7 +430,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
     }
 
     if ((format & characteristic_format_events) && (ch->permissions & HOMEKIT_PERMISSIONS_NOTIFY)) {
-        bool events = homekit_characteristic_has_notify_callback(ch, client_notify_characteristic, client);
+        bool events = homekit_characteristic_has_notify_subscription(ch, client);
         json_string(json, "ev");
         json_boolean(json, events);
     }
@@ -529,7 +520,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
     
     if (ch->permissions & HOMEKIT_PERMISSIONS_PAIRED_READ) {
         homekit_value_t v = value ? *value : ch->getter_ex ? ch->getter_ex(ch) : ch->value;
-
+        
         if (v.is_null) {
             // json_string(json, "value"); json_null(json);
         } else if (v.format != ch->format) {
@@ -676,8 +667,10 @@ int client_send_encrypted(client_context_t *context, byte *payload, size_t size)
             CLIENT_ERROR(context, "Encrypt payload (%d)", r);
             return -1;
         }
-
+        
         payload_offset += chunk_size;
+        
+        const uint32_t free_heap = xPortGetFreeHeapSize();
         
         r = write(context->socket, homekit_server->encrypted, available + 2);
         
@@ -685,17 +678,21 @@ int client_send_encrypted(client_context_t *context, byte *payload, size_t size)
             CLIENT_ERROR(context, "Send payload");
             return r;
         }
+        
+        if (free_heap < HOMEKIT_NETWORK_MIN_FREEHEAP) {
+            uint8_t count = 0;
+            while (free_heap > xPortGetFreeHeapSize() && count < 5) {
+                count++;
+                vTaskDelay(1);
+            }
+        }
     }
 
     return 0;
 }
 
 
-int client_decrypt(
-    client_context_t *context,
-    byte *payload, size_t payload_size,
-    byte *decrypted, size_t *decrypted_size
-) {
+int client_decrypt(client_context_t *context, byte *payload, size_t payload_size, byte *decrypted, size_t *decrypted_size) {
     if (!context || !context->encrypted)
         return -1;
 
@@ -753,31 +750,7 @@ int client_decrypt(
 void homekit_setup_mdns();
 
 
-void client_notify_characteristic(homekit_characteristic_t *ch, homekit_value_t value, void *context) {
-    client_context_t *client = context;
-
-    if (client->current_characteristic == ch && client->current_value && homekit_value_equal(client->current_value, &value))
-        // This value is set by this client, no need to send notification
-        return;
-
-    HOMEKIT_DEBUG_LOG("Got characteristic %d.%d change event", ch->service->accessory->id, ch->id);
-
-    if (!client->event_queue) {
-        HOMEKIT_ERROR("Client has no event queue. Skipping notification");
-        return;
-    }
-
-    characteristic_event_t *event = malloc(sizeof(characteristic_event_t));
-    event->characteristic = ch;
-    homekit_value_copy(&event->value, &value);
-
-    HOMEKIT_DEBUG_LOG("Sending event to client %d", client->socket);
-
-    xQueueSendToBack(client->event_queue, &event, 10);
-}
-
-
-IRAM int client_send(client_context_t *context, byte *data, size_t data_size) {
+int IRAM client_send(client_context_t *context, byte *data, size_t data_size) {
 #if HOMEKIT_DEBUG
     if (data_size < 4096) {
         char *payload = binary_to_string(data, data_size);
@@ -791,7 +764,17 @@ IRAM int client_send(client_context_t *context, byte *data, size_t data_size) {
     if (context->encrypted) {
         r = client_send_encrypted(context, data, data_size);
     } else {
+        const uint32_t free_heap = xPortGetFreeHeapSize();
+        
         r = write(context->socket, data, data_size);
+        
+        if (free_heap < HOMEKIT_NETWORK_MIN_FREEHEAP) {
+            uint8_t count = 0;
+            while (free_heap > xPortGetFreeHeapSize() && count < 5) {
+                count++;
+                vTaskDelay(1);
+            }
+        }
     }
     
     if (r < 0) {
@@ -803,7 +786,7 @@ IRAM int client_send(client_context_t *context, byte *data, size_t data_size) {
 }
 
 
-IRAM int client_send_chunk(byte *data, size_t size, void *arg) {
+int IRAM client_send_chunk(byte *data, size_t size, void *arg) {
     client_context_t* context = arg;
     
     byte header[9];
@@ -842,7 +825,7 @@ IRAM int client_send_chunk(byte *data, size_t size, void *arg) {
      */
 }
 
-IRAM void send_200_response(client_context_t* context) {
+void IRAM send_200_response(client_context_t* context) {
     byte response[] =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: application/hap+json\r\n"
@@ -867,62 +850,6 @@ void send_404_response(client_context_t* context) {
     byte response[] = "HTTP/1.1 404 Not Found\r\n\r\n";
     client_send(context, response, sizeof(response) - 1);
 }
-
-typedef struct _client_event {
-    const homekit_characteristic_t *characteristic;
-    homekit_value_t value;
-
-    struct _client_event *next;
-} client_event_t;
-
-
-void send_client_events(client_context_t *context, client_event_t *events) {
-    CLIENT_DEBUG(context, "Sending EVENT");
-    DEBUG_HEAP();
-    
-    byte http_headers[] =
-        "EVENT/1.0 200 OK\r\n"
-        "Content-Type: application/hap+json\r\n"
-        "Transfer-Encoding: chunked\r\n\r\n";
-    client_send(context, http_headers, sizeof(http_headers) - 1);
-
-    // ~35 bytes per event JSON
-    // 256 should be enough for ~7 characteristic updates
-    //json_stream *json = json_new(BUFFER_DATA_SIZE, homekit_server->data, client_send_chunk, context);
-    json_stream* json = &homekit_server->json;
-    json_init(json, context);
-    
-    json_object_start(json);
-    json_string(json, "characteristics"); json_array_start(json);
-
-    client_event_t *e = events;
-    while (e) {
-        json_object_start(json);
-        write_characteristic_json(json, context, e->characteristic, 0, &e->value);
-        json_object_end(json);
-        
-        if (json->error) {
-            break;
-        }
-
-        e = e->next;
-    }
-
-    json_array_end(json);
-    json_object_end(json);
-    
-    json_flush(json);
-    //json_buffer_free(json);
-    //free(json);
-    
-    if (json->error) {
-        CLIENT_ERROR(context, "JSON");
-        homekit_disconnect_client(context);
-    } else {
-        client_send_chunk(NULL, 0, context);
-    }
-}
-
 
 void send_tlv_response(client_context_t *context, tlv_values_t *values) {
     CLIENT_DEBUG(context, "Sending TLV response");
@@ -2697,9 +2624,9 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
             }
 
             if (j_events->type == cJSON_True) {
-                homekit_characteristic_add_notify_callback(ch, client_notify_characteristic, context);
+                homekit_characteristic_add_notify_subscription(ch, context);
             } else {
-                homekit_characteristic_remove_notify_callback(ch, client_notify_characteristic, context);
+                homekit_characteristic_remove_notify_subscription(ch, context);
             }
         }
 
@@ -3215,7 +3142,7 @@ static http_parser_settings homekit_http_parser_settings = {
 };
 
 
-IRAM static void homekit_client_process(client_context_t *context) {
+inline static void IRAM homekit_client_process(client_context_t *context) {
     int data_len = read(context->socket,
                         homekit_server->data + homekit_server->data_available,
                         RECEIVED_DATA_SIZE - homekit_server->data_available
@@ -3270,14 +3197,10 @@ IRAM static void homekit_client_process(client_context_t *context) {
             homekit_disconnect_client(context);
         }
     }
-    
-    if (homekit_low_dram()) {
-        homekit_remove_oldest_client();
-    }
 }
 
 
-IRAM void homekit_server_close_client(client_context_t *context) {
+void IRAM homekit_server_close_client(client_context_t *context) {
     FD_CLR(context->socket, &homekit_server->fds);
     if (homekit_server->client_count > 0) {
         homekit_server->client_count--;
@@ -3291,11 +3214,7 @@ IRAM void homekit_server_close_client(client_context_t *context) {
         pairing_context_free(homekit_server->pairing_context);
     }
 
-    homekit_accessories_clear_notify_callbacks(
-        homekit_server->config->accessories,
-        client_notify_characteristic,
-        context
-    );
+    homekit_accessories_clear_notify_subscriptions(homekit_server->config->accessories, context);
     
     HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_CLIENT_DISCONNECTED);
 
@@ -3324,7 +3243,7 @@ void homekit_server_accept_client() {
     
     client_context_t* new_context = client_context_new();
     
-    uint32_t free_heap = xPortGetFreeHeapSize();
+    const uint32_t free_heap = xPortGetFreeHeapSize();
     
     if (!homekit_server->setup_finish && 0b10 < homekit_server->client_count) {
         HOMEKIT_INFO("[%d] New %s:%d Free HEAP: %d", s, address_buffer, addr.sin_port, free_heap);
@@ -3371,80 +3290,98 @@ void homekit_server_accept_client() {
     }
 }
 
-
 void homekit_characteristic_notify(homekit_characteristic_t *ch) {
-    const homekit_value_t value = ch->value;
-    homekit_characteristic_change_callback_t *callback = ch->callback;
-    while (callback) {
-        callback->function(ch, value, callback->context);
-        callback = callback->next;
+    if (homekit_server) {
+        notification_t* notification = homekit_server->notifications;
+        while (notification) {
+            if (ch == notification->ch) {
+                return;
+            }
+            
+            notification = notification->next;
+        }
+        
+        notification = malloc(sizeof(notification_t));
+        memset(notification, 0, sizeof(*notification));
+        
+        notification->ch = ch;
+        notification->next = homekit_server->notifications;
+        homekit_server->notifications = notification;
     }
-    
-    homekit_server->has_notifications = true;
 }
 
-
-IRAM void homekit_server_process_notifications() {
+inline static void homekit_server_process_notifications() {
+    notification_t *notifications = homekit_server->notifications;
+    homekit_server->notifications = NULL;
+    
     client_context_t *context = homekit_server->clients;
     while (context) {
-        characteristic_event_t *event = NULL;
-        if (xQueueReceive(context->event_queue, &event, 0)) {
-            // Get and coalesce all client events
-            client_event_t *events_head = malloc(sizeof(client_event_t));
-            events_head->characteristic = event->characteristic;
-            homekit_value_copy(&events_head->value, &event->value);
-            events_head->next = NULL;
-
-            homekit_value_destruct(&event->value);
-            free(event);
-
-            client_event_t *events_tail = events_head;
-
-            while (xQueueReceive(context->event_queue, &event, 0)) {
-                client_event_t *e = events_head;
-                while (e) {
-                    if (e->characteristic == event->characteristic)
-                        break;
-
-                    e = e->next;
-                }
-
-                if (e) {
-                    homekit_value_destruct(&e->value);
-                } else {
-                    e = malloc(sizeof(client_event_t));
-                    e->characteristic = event->characteristic;
-                    e->next = NULL;
-
-                    events_tail->next = e;
-                    events_tail = e;
-                }
-
-                homekit_value_copy(&e->value, &event->value);
-
-                homekit_value_destruct(&event->value);
-                free(event);
+        bool has_notifications = false;
+        
+        notification_t *notification = notifications;
+        while (notification) {
+            if (homekit_characteristic_has_notify_subscription(notification->ch, context)) {
+                has_notifications = true;
+                break;
             }
 
-            send_client_events(context, events_head);
-
-            client_event_t *e = events_head;
-            while (e) {
-                client_event_t *next = e->next;
-
-                homekit_value_destruct(&e->value);
-                free(e);
-
-                e = next;
+            notification = notification->next;
+        }
+        
+        if (has_notifications) {
+            CLIENT_INFO(context, "Send Ev");
+            DEBUG_HEAP();
+            
+            byte http_headers[] =
+                "EVENT/1.0 200 OK\r\n"
+                "Content-Type: application/hap+json\r\n"
+                "Transfer-Encoding: chunked\r\n\r\n";
+            client_send(context, http_headers, sizeof(http_headers) - 1);
+            
+            json_stream* json = &homekit_server->json;
+            json_init(json, context);
+            
+            json_object_start(json);
+            json_string(json, "characteristics"); json_array_start(json);
+            
+            notification = notifications;
+            while (notification) {
+                json_object_start(json);
+                write_characteristic_json(json, context, notification->ch, 0, &notification->ch->value);
+                json_object_end(json);
+                
+                if (json->error) {
+                    break;
+                }
+                
+                notification = notification->next;
+            }
+            
+            json_array_end(json);
+            json_object_end(json);
+            
+            json_flush(json);
+            
+            if (json->error) {
+                CLIENT_ERROR(context, "JSON");
+                homekit_disconnect_client(context);
+            } else {
+                client_send_chunk(NULL, 0, context);
             }
         }
-
+        
         context = context->next;
+    }
+    
+    // Remove pending notifications
+    while (notifications) {
+        notification_t* notification_old = notifications;
+        notifications = notifications->next;
+        free(notification_old);
     }
 }
 
-
-IRAM static void homekit_server_close_clients() {
+inline static void IRAM homekit_server_close_clients() {
     if (homekit_server->pending_close) {
         homekit_server->pending_close = false;
         
@@ -3473,8 +3410,7 @@ IRAM static void homekit_server_close_clients() {
     }
 }
 
-
-IRAM static void homekit_run_server() {
+static void IRAM homekit_run_server() {
     HOMEKIT_DEBUG_LOG("Staring HTTP server");
     
     struct sockaddr_in serv_addr;
@@ -3489,7 +3425,7 @@ IRAM static void homekit_run_server() {
     FD_SET(homekit_server->listen_fd, &homekit_server->fds);
     homekit_server->max_fd = homekit_server->listen_fd;
     
-    struct timeval timeout = { 0, 150000 }; /* 0.15 seconds timeout (orig: 1s) */
+    struct timeval timeout = { 0, 100000 }; /* 0.1 seconds timeout (orig: 1s) */
     int triggered_nfds;
     fd_set read_fds;
     
@@ -3513,18 +3449,20 @@ IRAM static void homekit_run_server() {
                 context = context->next;
             }
             
+            if (homekit_low_dram()) {
+                homekit_remove_oldest_client();
+            }
+            
             homekit_server_close_clients();
         }
         
-        if (homekit_server->has_notifications) {
-            homekit_server->has_notifications = false;
-            homekit_server_process_notifications(homekit_server);
+        if (homekit_server->notifications) {
+            homekit_server_process_notifications();
         }
     }
     
     //server_free();
 }
-
 
 void homekit_setup_mdns() {
     HOMEKIT_INFO("Configuring mDNS");

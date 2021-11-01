@@ -176,13 +176,13 @@ static void client_send_redirect(client_t *client, int code, const char *redirec
     client_send(client, buffer, len);
 }
 
-IRAM bool wifi_config_got_ip() {
+int wifi_config_get_ip() {
     struct ip_info info;
     if (sdk_wifi_get_ip_info(STATION_IF, &info) && ip4_addr1_16(&info.ip) != 0) {
-        return true;
+        return ip4_addr4_16(&info.ip);
     }
-        
-    return false;
+    
+    return -1;
 }
 
 void wifi_config_resend_arp() {
@@ -238,7 +238,7 @@ static void wifi_smart_connect_task(void* arg) {
 static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
     if (status != SCAN_OK) {
         ERROR("Wifi smart connect scan");
-        if (!wifi_config_got_ip()) {
+        if (wifi_config_get_ip() < 0) {
             sdk_wifi_station_connect();
         }
     }
@@ -290,7 +290,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
         if (wifi_bssid && memcmp(best_bssid, wifi_bssid, 6) == 0) {
             INFO("Best BSSID is the same");
             free(wifi_bssid);
-            if (!wifi_config_got_ip()) {
+            if (wifi_config_get_ip() < 0) {
                 sdk_wifi_station_connect();
             }
             return;
@@ -323,7 +323,7 @@ void wifi_config_smart_connect() {
     sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
     
     if (wifi_mode < 2 || xTaskCreate(wifi_scan_sc_task, "wifi_scan_smart", 384, NULL, (tskIDLE_PRIORITY + 2), NULL) != pdPASS) {
-        if (!wifi_config_got_ip()) {
+        if (wifi_config_get_ip() < 0) {
             sdk_wifi_station_connect();
         }
     }
@@ -627,7 +627,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         sysparam_get_int32(TOTAL_SERV_SYSPARAM, &hk_total_ac);
         char saved_state_id[5];
         memset(saved_state_id, 0, 5);
-        for (uint32_t int_saved_state_id = 100; int_saved_state_id <= hk_total_ac * 100; int_saved_state_id++) {
+        for (uint32_t int_saved_state_id = 100; int_saved_state_id < (hk_total_ac + 1) * 100; int_saved_state_id++) {
             itoa(int_saved_state_id, saved_state_id, 10);
             sysparam_set_data(saved_state_id, NULL, 0, false);
         }

@@ -870,7 +870,7 @@
     .type = HOMEKIT_CHARACTERISTIC_IDENTIFY, \
     .format = HOMETKIT_FORMAT_BOOL, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_WRITE, \
-    .setter = callback \
+    .setter_ex = callback \
     ##__VA_ARGS__
 
 #define HOMEKIT_CHARACTERISTIC_LOCK_CONTROL_POINT HOMEKIT_APPLE_UUID2("19")

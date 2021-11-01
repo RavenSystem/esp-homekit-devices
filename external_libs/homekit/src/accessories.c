@@ -267,10 +267,8 @@ homekit_characteristic_t* homekit_characteristic_clone(homekit_characteristic_t*
 
         p += align_size(sizeof(homekit_valid_values_range_t*) * c);
     }
-
-    clone->getter = ch->getter;
-    clone->setter = ch->setter;
-    clone->callback = ch->callback;
+    
+    clone->subscriptions = ch->subscriptions;
     clone->getter_ex = ch->getter_ex;
     clone->setter_ex = ch->setter_ex;
     clone->context = ch->context;
@@ -366,17 +364,6 @@ homekit_accessory_t* homekit_accessory_clone(homekit_accessory_t* ac) {
     return clone;
 }
 
-
-homekit_value_t homekit_characteristic_ex_old_getter(const homekit_characteristic_t *ch) {
-    return ch->getter();
-}
-
-
-void homekit_characteristic_ex_old_setter(homekit_characteristic_t *ch, homekit_value_t value) {
-    ch->setter(value);
-}
-
-
 void homekit_accessories_init(homekit_accessory_t **accessories) {
     int aid = 1;
     for (homekit_accessory_t **accessory_it = accessories; *accessory_it; accessory_it++) {
@@ -407,14 +394,6 @@ void homekit_accessories_init(homekit_accessory_t **accessories) {
                         iid = ch->id+1;
                 } else {
                     ch->id = iid++;
-                }
-
-                if (!ch->getter_ex && ch->getter) {
-                    ch->getter_ex = homekit_characteristic_ex_old_getter;
-                }
-
-                if (!ch->setter_ex && ch->setter) {
-                    ch->setter_ex = homekit_characteristic_ex_old_setter;
                 }
 
                 ch->value.format = ch->format;
@@ -502,73 +481,69 @@ homekit_characteristic_t *homekit_characteristic_find_by_type(homekit_accessory_
 }
 
 
-void homekit_characteristic_add_notify_callback(
+void homekit_characteristic_add_notify_subscription(
     homekit_characteristic_t *ch,
-    homekit_characteristic_change_callback_fn function,
     void *context
 ) {
-    homekit_characteristic_change_callback_t *new_callback = malloc(sizeof(homekit_characteristic_change_callback_t));
-    new_callback->function = function;
-    new_callback->context = context;
-    new_callback->next = NULL;
+    homekit_characteristic_subscription_t *new_subscription = malloc(sizeof(homekit_characteristic_subscription_t));
+    new_subscription->context = context;
+    new_subscription->next = NULL;
 
-    if (!ch->callback) {
-        ch->callback = new_callback;
+    if (!ch->subscriptions) {
+        ch->subscriptions = new_subscription;
     } else {
-        homekit_characteristic_change_callback_t *callback = ch->callback;
-        if (callback->function == function && callback->context == context) {
-            free(new_callback);
+        homekit_characteristic_subscription_t *subscription = ch->subscriptions;
+        if (subscription->context == context) {
+            free(new_subscription);
             return;
         }
 
-        while (callback->next) {
-            if (callback->next->function == function && callback->next->context == context) {
-                free(new_callback);
+        while (subscription->next) {
+            if (subscription->next->context == context) {
+                free(new_subscription);
                 return;
             }
-            callback = callback->next;
+            subscription = subscription->next;
         }
 
-        callback->next = new_callback;
+        subscription->next = new_subscription;
     }
 }
 
 
-void homekit_characteristic_remove_notify_callback(
+void homekit_characteristic_remove_notify_subscription(
     homekit_characteristic_t *ch,
-    homekit_characteristic_change_callback_fn function,
     void *context
 ) {
-    while (ch->callback) {
-        if (ch->callback->function != function || ch->callback->context != context) {
+    while (ch->subscriptions) {
+        if (ch->subscriptions->context != context) {
             break;
         }
 
-        homekit_characteristic_change_callback_t *c = ch->callback;
-        ch->callback = ch->callback->next;
+        homekit_characteristic_subscription_t *c = ch->subscriptions;
+        ch->subscriptions = ch->subscriptions->next;
         free(c);
     }
 
-    if (!ch->callback)
+    if (!ch->subscriptions)
         return;
 
-    homekit_characteristic_change_callback_t *callback = ch->callback;
-    while (callback->next) {
-        if (callback->next->function == function && callback->next->context == context) {
-            homekit_characteristic_change_callback_t *c = callback->next;
-            callback->next = callback->next->next;
+    homekit_characteristic_subscription_t *subscription = ch->subscriptions;
+    while (subscription->next) {
+        if (subscription->next->context == context) {
+            homekit_characteristic_subscription_t *c = subscription->next;
+            subscription->next = subscription->next->next;
             free(c);
         } else {
-            callback = callback->next;
+            subscription = subscription->next;
         }
     }
 }
 
 
-// Removes particular callback from all characteristics
-void homekit_accessories_clear_notify_callbacks(
+// Removes particular subscription from all characteristics
+void homekit_accessories_clear_notify_subscriptions(
     homekit_accessory_t **accessories,
-    homekit_characteristic_change_callback_fn function,
     void *context
 ) {
     for (homekit_accessory_t **accessory_it = accessories; *accessory_it; accessory_it++) {
@@ -580,24 +555,23 @@ void homekit_accessories_clear_notify_callbacks(
             for (homekit_characteristic_t **ch_it = service->characteristics; *ch_it; ch_it++) {
                 homekit_characteristic_t *ch = *ch_it;
 
-                homekit_characteristic_remove_notify_callback(ch, function, context);
+                homekit_characteristic_remove_notify_subscription(ch, context);
             }
         }
     }
 }
 
 
-bool homekit_characteristic_has_notify_callback(
+bool homekit_characteristic_has_notify_subscription(
     const homekit_characteristic_t *ch,
-    homekit_characteristic_change_callback_fn function,
     void *context
 ) {
-    homekit_characteristic_change_callback_t *callback = ch->callback;
-    while (callback) {
-        if (callback->function == function && callback->context == context)
+    homekit_characteristic_subscription_t *subscription = ch->subscriptions;
+    while (subscription) {
+        if (subscription->context == context)
             return true;
 
-        callback = callback->next;
+        subscription = subscription->next;
     }
 
     return false;

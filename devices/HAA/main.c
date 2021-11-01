@@ -41,6 +41,7 @@
 #include <adv_hlw.h>
 #include <raven_ntp.h>
 #include <adv_pwm.h>
+#include <adv_nrzled.h>
 #include <ping.h>
 #include <adv_logger_ntp.h>
 #include <adv_i2c.h>
@@ -61,6 +62,7 @@
 main_config_t main_config = {
     .wifi_status = WIFI_STATUS_DISCONNECTED,
     .wifi_channel = 0,
+    .wifi_ip = 0,
     .wifi_ping_max_errors = 255,
     .wifi_error_count = 0,
     .wifi_arp_count = 0,
@@ -147,7 +149,7 @@ void set_used_gpio(const uint16_t gpio) {
     }
 }
 
-mcp23017_t* mcp_find_by_index(const uint8_t index) {
+mcp23017_t* IRAM mcp_find_by_index(const uint8_t index) {
     mcp23017_t* mcp23017 = main_config.mcp23017s;
     while (mcp23017 && mcp23017->index != index) {
         mcp23017 = mcp23017->next;
@@ -156,7 +158,7 @@ mcp23017_t* mcp_find_by_index(const uint8_t index) {
     return mcp23017;
 }
 
-void extended_gpio_write(const uint16_t extended_gpio, bool value) {
+void IRAM extended_gpio_write(const uint16_t extended_gpio, bool value) {
     if (extended_gpio < 17) {
         gpio_write(extended_gpio, value);
         
@@ -365,6 +367,49 @@ lightbulb_group_t* lightbulb_group_find(homekit_characteristic_t* ch) {
     return lightbulb_group;
 }
 
+addressled_t* addressled_find(const uint8_t gpio) {
+    addressled_t* addressled = main_config.addressleds;
+    while (addressled &&
+           addressled->gpio != gpio) {
+        addressled = addressled->next;
+    }
+
+    return addressled;
+}
+
+addressled_t* new_addressled(const uint8_t gpio, const uint16_t max_range) {
+    addressled_t* addressled = addressled_find(gpio);
+    
+    if (addressled) {
+        if (max_range > addressled->max_range) {
+            addressled->max_range = max_range;
+        }
+    } else {
+        addressled = malloc(sizeof(addressled_t));
+        memset(addressled, 0, sizeof(*addressled));
+        
+        addressled->gpio = gpio;
+        gpio_enable(gpio, GPIO_OUTPUT);
+        addressled->max_range = max_range;
+        
+        addressled->map[0] = 1;
+        addressled->map[1] = 0;
+        addressled->map[2] = 2;
+        addressled->map[3] = 3;
+        addressled->map[4] = 4;
+        
+        // WS2812B
+        addressled->time_0 = 31;
+        addressled->time_1 = 63;
+        addressled->period = 99;
+        
+        addressled->next = main_config.addressleds;
+        main_config.addressleds = addressled;
+    }
+    
+    return addressled;
+}
+
 void save_historical_data(homekit_characteristic_t* ch_hist) {
     if (!main_config.clock_ready) {
         return;
@@ -433,12 +478,12 @@ void historical_timer_worker(TimerHandle_t xTimer) {
     save_historical_data(ch);
 }
 
-bool ping_host(char* host) {
+int ping_host(char* host) {
     if (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
         return false;
     }
     
-    bool ping_result = false;
+    int ping_result = -1;
     
     ip_addr_t target_ip;
     const struct addrinfo hints = {
@@ -477,7 +522,7 @@ void reboot_task() {
     INFO("\nRebooting...\n");
     esp_timer_stop(WIFI_WATCHDOG_TIMER);
     
-    vTaskDelay(MS_TO_TICKS((hwrand() % RANDOM_DELAY_MS) + 2000));
+    vTaskDelay(MS_TO_TICKS((hwrand() % RANDOM_DELAY_MS) + 1000));
 
     sdk_system_restart();
 }
@@ -504,7 +549,7 @@ void ntp_task() {
         
         main_config.network_is_busy = false;
         
-        INFO("NTP update (%i)", result);
+        INFO("NTP upd (%i)", result);
         
         if (result != 0 && tries < 4) {
             vTaskDelay(MS_TO_TICKS(10000));
@@ -547,23 +592,19 @@ void ntp_timer_worker(TimerHandle_t xTimer) {
 void wifi_ping_gw_task() {
     main_config.network_is_busy = true;
     
-    bool ping_result = true;
-    
     struct ip_info info;
     if (sdk_wifi_get_ip_info(STATION_IF, &info)) {
         char gw_host[16];
         snprintf(gw_host, 16, IPSTR, IP2STR(&info.gw));
 
-        ping_result = ping_host(gw_host);
+        int ping_result = ping_host(gw_host);
 
-        if (!ping_result) {
+        if (ping_result == 0) {
             main_config.wifi_error_count++;
             ERROR("GW %s ping (%i/%i)", gw_host, main_config.wifi_error_count - 1, main_config.wifi_ping_max_errors - 1);
+        } else if (ping_result == 1) {
+            main_config.wifi_error_count = 0;
         }
-    }
-
-    if (ping_result) {
-        main_config.wifi_error_count = 0;
     }
     
     main_config.network_is_busy = false;
@@ -585,17 +626,19 @@ void wifi_reconnection_task(void* args) {
         vTaskDelay(MS_TO_TICKS(500));
         wifi_config_reset();
     }
-
+    
     for (;;) {
         vTaskDelay(MS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
         
-        if (wifi_config_got_ip()) {
+        const int new_ip = wifi_config_get_ip();
+        if (new_ip >= 0) {
             vTaskDelay(MS_TO_TICKS(2000));
             
             main_config.wifi_status = WIFI_STATUS_CONNECTED;
             main_config.wifi_error_count = 0;
             main_config.wifi_arp_count = 0;
             main_config.wifi_channel = sdk_wifi_get_channel();
+            main_config.wifi_ip = new_ip;
             
             homekit_mdns_announce();
 
@@ -635,7 +678,8 @@ void wifi_reconnection_task(void* args) {
 
 void wifi_watchdog() {
     //INFO("Wifi status = %i", main_config.wifi_status);
-    if (wifi_config_got_ip() && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
+    const int current_ip = wifi_config_get_ip();
+    if (current_ip >= 0 && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
         uint8_t current_channel = sdk_wifi_get_channel();
         
         if (main_config.wifi_mode == 3) {
@@ -656,6 +700,13 @@ void wifi_watchdog() {
             main_config.wifi_channel = current_channel;
             INFO("Wifi new Ch: %i", current_channel);
             homekit_mdns_announce();
+            do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 6);
+        }
+        
+        if (main_config.wifi_ip != current_ip) {
+            main_config.wifi_ip = current_ip;
+            homekit_mdns_announce();
+            do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 7);
         }
         
         main_config.wifi_arp_count++;
@@ -706,8 +757,8 @@ void ping_task() {
         
         while (ping_input_callback_fn) {
             if (!ping_input_callback_fn->disable_without_wifi ||
-                (ping_input_callback_fn->disable_without_wifi && wifi_config_got_ip())) {
-                ping_input_callback_fn->callback(0, ping_input_callback_fn->ch_group, ping_input_callback_fn->param);
+                (ping_input_callback_fn->disable_without_wifi && wifi_config_get_ip() >= 0)) {
+                ping_input_callback_fn->callback(88, ping_input_callback_fn->ch_group, ping_input_callback_fn->param);
             }
             ping_input_callback_fn = ping_input_callback_fn->next;
         }
@@ -715,21 +766,20 @@ void ping_task() {
     
     ping_input_t* ping_input = main_config.ping_inputs;
     while (ping_input) {
-        bool ping_result = false;
+        int ping_result;
         
         uint8_t i = 0;
-        do {
+        while (((ping_result = ping_host(ping_input->host)) != 1) && i < PING_RETRIES) {
             i++;
-            ping_result = ping_host(ping_input->host);
-            vTaskDelay(MS_TO_TICKS(100));
-        } while (i < PING_RETRIES && !ping_result);
+            vTaskDelay(MS_TO_TICKS(250));
+        }
         
-        if (ping_result && (!ping_input->last_response || ping_input->ignore_last_response)) {
+        if ((ping_result == 1) && (!ping_input->last_response || ping_input->ignore_last_response)) {
             ping_input->last_response = true;
             INFO("Ping %s OK", ping_input->host);
             ping_input_run_callback_fn(ping_input->callback_1);
 
-        } else if (!ping_result && (ping_input->last_response || ping_input->ignore_last_response)) {
+        } else if ((ping_result == 0) && (ping_input->last_response || ping_input->ignore_last_response)) {
             ping_input->last_response = false;
             INFO("Ping %s FAIL", ping_input->host);
             ping_input_run_callback_fn(ping_input->callback_0);
@@ -859,14 +909,6 @@ void hkc_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     save_states_callback();
 }
 
-/*
-void hkc_setter_with_setup(homekit_characteristic_t* ch, const homekit_value_t value) {
-    hkc_setter(ch, value);
-    
-    setup_mode_toggle_upcount();
-}
-*/
-
 void pm_custom_consumption_reset(ch_group_t* ch_group) {
     if (!main_config.clock_ready) {
         ERROR("<%i> Clock not ready", ch_group->accessory);
@@ -909,11 +951,10 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
             
             ch->value.bool_value = value.bool_value;
             
-            if (ch->value.bool_value && ch_group->num[0] > 0) {
-                autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                autooff_setter_params->ch = ch;
-                autooff_setter_params->type = TYPE_ON;
-                esp_timer_start(esp_timer_create(ch_group->num[0], false, (void*) autooff_setter_params, hkc_autooff_setter_task));
+            if (ch->value.bool_value) {
+                esp_timer_start(ch_group->timer2);
+            } else {
+                esp_timer_stop(ch_group->timer2);
             }
             
             setup_mode_toggle_upcount();
@@ -975,11 +1016,10 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
             
             ch_group->ch[0]->value.int_value = value.int_value;
             
-            if (ch->value.int_value == 0 && ch_group->num[0] > 0) {
-                autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                autooff_setter_params->ch = ch;
-                autooff_setter_params->type = TYPE_LOCK;
-                esp_timer_start(esp_timer_create(ch_group->num[0], false, (void*) autooff_setter_params, hkc_autooff_setter_task));
+            if (ch->value.int_value == 0) {
+                esp_timer_start(ch_group->timer2);
+            } else {
+                esp_timer_stop(ch_group->timer2);
             }
             
             setup_mode_toggle_upcount();
@@ -1044,111 +1084,57 @@ void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
 }
 
 // --- SENSORS
-void sensor_1(const uint16_t gpio, void* args, const uint8_t type) {
+void binary_sensor(const uint16_t gpio, void* args, uint8_t type) {
     ch_group_t* ch_group = args;
-    
-    INFO("<%i> DigI Sensor 1 GPIO %i", ch_group->accessory, gpio);
 
     if (ch_group->main_enabled) {
-        if ((type == TYPE_SENSOR &&
-            ch_group->ch[0]->value.int_value == 0) ||
-            (type == TYPE_SENSOR_BOOL &&
-            ch_group->ch[0]->value.bool_value == false)) {
-            led_blink(1);
-            INFO("<%i> Sensor ON", ch_group->accessory);
-            
-            if (type == TYPE_SENSOR) {
-                ch_group->ch[0]->value.int_value = 1;
+        bool new_value = type;
+        if (type >= 4) {
+            if (ch_group->acc_type == ACC_TYPE_CONTACT_SENSOR) {
+                new_value = !ch_group->ch[0]->value.int_value;
             } else {
-                ch_group->ch[0]->value.bool_value = true;
+                new_value = !ch_group->ch[0]->value.bool_value;
             }
             
-            if (ch_group->num[0] > 0) {
-                autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                autooff_setter_params->ch = ch_group->ch[0];
-                autooff_setter_params->type = type;
-                esp_timer_start(esp_timer_create(ch_group->num[0], false, (void*) autooff_setter_params, hkc_autooff_setter_task));
+            if (type == 4) {
+                type = new_value;
+            } else {    // type == 5
+                type = 2 + new_value;
+            }
+        } else if (type == 2) {
+            new_value = false;
+        }
+        
+        if ((ch_group->acc_type == ACC_TYPE_CONTACT_SENSOR &&
+            ch_group->ch[0]->value.int_value != new_value) ||
+            (ch_group->acc_type == ACC_TYPE_MOTION_SENSOR &&
+            ch_group->ch[0]->value.bool_value != new_value)) {
+            led_blink(1);
+            
+            INFO("<%i> DigI Sensor %i GPIO %i", ch_group->accessory, type, gpio);
+            
+            if (ch_group->acc_type == ACC_TYPE_CONTACT_SENSOR) {
+                ch_group->ch[0]->value.int_value = new_value;
+            } else {
+                ch_group->ch[0]->value.bool_value = new_value;
             }
             
-            save_historical_data(ch_group->ch[0]);
-            
-            do_actions(ch_group, 1);
+            if (type <= 1) {
+                if ((ch_group->acc_type == ACC_TYPE_CONTACT_SENSOR && ch_group->ch[0]->value.int_value == 1) ||
+                    (ch_group->acc_type == ACC_TYPE_MOTION_SENSOR && ch_group->ch[0]->value.bool_value == true)) {
+                    esp_timer_start(ch_group->timer2);
+                } else {
+                    esp_timer_stop(ch_group->timer2);
+                }
+                
+                save_historical_data(ch_group->ch[0]);
+                
+                do_actions(ch_group, type);
+            }
         }
     }
     
     homekit_characteristic_notify_safe(ch_group->ch[0]);
-}
-
-void sensor_status_1(const uint16_t gpio, void* args, const uint8_t type) {
-    ch_group_t* ch_group = args;
-    
-    INFO("<%i> DigI Sensor S1 GPIO %i", ch_group->accessory, gpio);
-
-    if ((type == TYPE_SENSOR &&
-        ch_group->ch[0]->value.int_value == 0) ||
-        (type == TYPE_SENSOR_BOOL &&
-        ch_group->ch[0]->value.bool_value == false)) {
-        led_blink(1);
-        INFO("<%i> Sensor Status ON", ch_group->accessory);
-        
-        if (type == TYPE_SENSOR) {
-            ch_group->ch[0]->value.int_value = 1;
-        } else {
-            ch_group->ch[0]->value.bool_value = true;
-        }
-        
-        homekit_characteristic_notify_safe(ch_group->ch[0]);
-    }
-}
-
-void sensor_0(const uint16_t gpio, void* args, const uint8_t type) {
-    ch_group_t* ch_group = args;
-    
-    INFO("<%i> DigI Sensor 0 GPIO %i", ch_group->accessory, gpio);
-    
-    if (ch_group->main_enabled) {
-        if ((type == TYPE_SENSOR &&
-            ch_group->ch[0]->value.int_value == 1) ||
-            (type == TYPE_SENSOR_BOOL &&
-            ch_group->ch[0]->value.bool_value == true)) {
-            led_blink(1);
-            INFO("<%i> Sensor OFF", ch_group->accessory);
-            
-            if (type == TYPE_SENSOR) {
-                ch_group->ch[0]->value.int_value = 0;
-            } else {
-                ch_group->ch[0]->value.bool_value = false;
-            }
-            
-            save_historical_data(ch_group->ch[0]);
-            
-            do_actions(ch_group, 0);
-        }
-    }
-    
-    homekit_characteristic_notify_safe(ch_group->ch[0]);
-}
-
-void sensor_status_0(const uint16_t gpio, void* args, const uint8_t type) {
-    ch_group_t* ch_group = args;
-    
-    INFO("<%i> DigI Sensor S0 GPIO %i", ch_group->accessory, gpio);
-
-    if ((type == TYPE_SENSOR &&
-        ch_group->ch[0]->value.int_value == 1) ||
-        (type == TYPE_SENSOR_BOOL &&
-        ch_group->ch[0]->value.bool_value == true)) {
-        led_blink(1);
-        INFO("<%i> Sensor Status OFF", ch_group->accessory);
-        
-        if (type == TYPE_SENSOR) {
-            ch_group->ch[0]->value.int_value = 0;
-        } else {
-            ch_group->ch[0]->value.bool_value = false;
-        }
-        
-        homekit_characteristic_notify_safe(ch_group->ch[0]);
-    }
 }
 
 void power_monitor_task(void* args) {
@@ -1339,11 +1325,10 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
             
             homekit_characteristic_notify_safe(ch_group->ch[1]);
             
-            if (ch->value.int_value == 1 && ch_group->num[0] > 0) {
-                autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                autooff_setter_params->ch = ch;
-                autooff_setter_params->type = TYPE_VALVE;
-                esp_timer_start(esp_timer_create(ch_group->num[0], false, (void*) autooff_setter_params, hkc_autooff_setter_task));
+            if (ch->value.int_value == 1) {
+                esp_timer_start(ch_group->timer2);
+            } else {
+                esp_timer_stop(ch_group->timer2);
             }
             
             setup_mode_toggle_upcount();
@@ -1829,6 +1814,10 @@ void update_th(homekit_characteristic_t* ch, const homekit_value_t value) {
         
         ch->value = value;
         
+        if (ch == ch_group->ch[2]) {
+            homekit_characteristic_notify_safe(ch);
+        }
+        
         esp_timer_start(ch_group->timer2);
         
         if (ch != ch_group->ch[0]) {
@@ -2168,6 +2157,10 @@ void update_humidif(homekit_characteristic_t* ch, const homekit_value_t value) {
         INFO("<%i> Setter Humidif", ch_group->accessory);
         
         ch->value = value;
+        
+        if (ch == ch_group->ch[2]) {
+            homekit_characteristic_notify_safe(ch);
+        }
         
         esp_timer_start(ch_group->timer2);
 
@@ -2895,7 +2888,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
             coeffs[i] += coeffs1[i];
         }
         // If WW, then compute RGBW again with WW, add to the main coeff list. Can easlily add support for any LEDs inside the gamut. The only thing I am worried about is that the RGB is always pulling float-duty with two vertexes instead of so
-        if ((uint8_t) LIGHTBULB_CHANNELS == 5) {
+        if (LIGHTBULB_CHANNELS == 5) {
             float coeffs2[4];
             getWeights(coeffs2, p, R, G, B, WW);
             for (uint8_t i = 0; i < 3; i++) {
@@ -3008,7 +3001,7 @@ void white2hsi(uint16_t t, ch_group_t* ch_group) {
     
 }
 */
-void rgbw_set_timer_worker() {
+void IRAM rgbw_set_timer_worker() {
     if (!main_config.setpwm_bool_semaphore) {
         main_config.setpwm_bool_semaphore = true;
         
@@ -3017,21 +3010,75 @@ void rgbw_set_timer_worker() {
         lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
         
         while (main_config.setpwm_is_running && lightbulb_group) {
-            ch_group_t* ch_group = ch_group_find(lightbulb_group->ch0);
-            if ((uint8_t) LIGHTBULB_TYPE != 0) {
-                for (uint8_t i = 0; i < (uint8_t) LIGHTBULB_CHANNELS; i++) {
+            if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL) {
+                lightbulb_group->has_changed = false;
+                for (uint8_t i = 0; i < LIGHTBULB_CHANNELS; i++) {
                     if (abs(lightbulb_group->target[i] - lightbulb_group->current[i]) > abs(LIGHTBULB_STEP_VALUE[i])) {
-                        lightbulb_group->current[i] += LIGHTBULB_STEP_VALUE[i];
-                        adv_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i], (uint16_t) LIGHTBULB_PWM_DITHER);
                         all_channels_ready = false;
+                        lightbulb_group->current[i] += LIGHTBULB_STEP_VALUE[i];
+                        lightbulb_group->has_changed = true;
+                        
+                        if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM) {
+                            adv_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i], LIGHTBULB_PWM_DITHER);
+                        }
                     } else if (lightbulb_group->current[i] != lightbulb_group->target[i]) {
                         lightbulb_group->current[i] = lightbulb_group->target[i];
-                        adv_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i], (uint16_t) LIGHTBULB_PWM_DITHER);
+                        lightbulb_group->has_changed = true;
+                        
+                        if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM) {
+                            adv_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i], LIGHTBULB_PWM_DITHER);
+                        }
                     }
+                }
+                
+                if (lightbulb_group->has_changed && LIGHTBULB_TYPE == LIGHTBULB_TYPE_MY92X1) {
+                    //
+                    // TO-DO
+                    //
                 }
             }
             
             lightbulb_group = lightbulb_group->next;
+        }
+        
+        addressled_t* addressled = main_config.addressleds;
+        while (addressled) {
+            uint8_t* colors = malloc(addressled->max_range);
+            memset(colors, 0, addressled->max_range);
+            if (colors) {
+                bool has_changed = false;
+                
+                lightbulb_group = main_config.lightbulb_groups;
+                while (lightbulb_group) {
+                    if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_NRZ && lightbulb_group->gpio[0] == addressled->gpio) {
+                        if (lightbulb_group->has_changed) {
+                            has_changed = true;
+                        }
+                        
+                        for (uint16_t p = LIGHTBULB_RANGE_START; p < LIGHTBULB_RANGE_END; p = p + LIGHTBULB_CHANNELS) {
+                            for (uint8_t i = 0; i < LIGHTBULB_CHANNELS; i++) {
+                                uint8_t color = lightbulb_group->current[addressled->map[i]] >> 8;
+                                memcpy(colors + p + i, &color, 1);
+                            }
+                        }
+                    }
+                    
+                    lightbulb_group = lightbulb_group->next;
+                }
+                
+                if (has_changed) {
+                    taskENTER_CRITICAL();
+                    nrzled_set(addressled->gpio, addressled->time_0, addressled->time_1, addressled->period, colors, addressled->max_range);
+                    taskEXIT_CRITICAL();
+                }
+                
+                free(colors);
+            } else {
+                homekit_remove_oldest_client();
+                break;
+            }
+            
+            addressled = addressled->next;
         }
         
         if (all_channels_ready) {
@@ -3044,7 +3091,7 @@ void rgbw_set_timer_worker() {
         main_config.setpwm_bool_semaphore = false;
         
     } else {
-        ERROR("MISSED Color set");
+        ERROR("Color set");
     }
 }
 
@@ -3054,9 +3101,9 @@ void lightbulb_task(void* args) {
     
     led_blink(1);
     INFO("<%i> Lightbulb setter ON %i, BRI %i", ch_group->accessory, ch_group->ch[0]->value.bool_value, ch_group->ch[1]->value.int_value);
-    if ((uint8_t) LIGHTBULB_CHANNELS == 2) {
+    if (LIGHTBULB_CHANNELS == 2) {
         INFO("<%i> Lightbulb setter TEMP %i", ch_group->accessory, ch_group->ch[2]->value.int_value);
-    } else if ((uint8_t) LIGHTBULB_CHANNELS >= 3) {
+    } else if (LIGHTBULB_CHANNELS >= 3) {
         /*
         if (lightbulb_group->temp_changed) {
             INFO("<%i> Lightbulb setter TEMP %i", ch_group->accessory, ch_group->ch[4]->value.int_value);
@@ -3076,14 +3123,13 @@ void lightbulb_task(void* args) {
             setup_mode_toggle_upcount();
         }
 
-        if ((uint8_t) LIGHTBULB_CHANNELS >= 3) {
+        if (LIGHTBULB_CHANNELS >= 3) {
             // Channels 3+
             hsi2rgbw(ch_group->ch[2]->value.float_value, ch_group->ch[3]->value.float_value, ch_group->ch[1]->value.int_value, ch_group);
             
-        } else if ((uint8_t) LIGHTBULB_CHANNELS == 2) {
+        } else if (LIGHTBULB_CHANNELS == 2) {
             // Channels 2
             uint16_t target_color = 0;
-            
             if (ch_group->ch[2]->value.int_value >= COLOR_TEMP_MAX - 5) {
                 target_color = PWM_SCALE;
                 
@@ -3091,10 +3137,17 @@ void lightbulb_task(void* args) {
                 target_color = PWM_SCALE * (((0.09 + sqrt(0.18 + (0.1352 * (ch_group->ch[2]->value.int_value - COLOR_TEMP_MIN - 1)))) / 0.0676) - 1) / 100;
             }
             
-            const uint32_t cw = lightbulb_group->flux[0] * target_color * ch_group->ch[1]->value.int_value / 100;
-            const uint32_t ww = lightbulb_group->flux[1] * (PWM_SCALE - target_color) * ch_group->ch[1]->value.int_value / 100;
-            lightbulb_group->target[0] = MIN(LIGHTBULB_MAX_POWER * cw, PWM_SCALE);
-            lightbulb_group->target[1] = MIN(LIGHTBULB_MAX_POWER * ww, PWM_SCALE);
+            if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM_CWWW) {
+                const uint32_t w = PWM_SCALE * ch_group->ch[1]->value.int_value / 100;
+                lightbulb_group->target[0] = MIN(LIGHTBULB_MAX_POWER * w, PWM_SCALE);
+                lightbulb_group->target[1] = target_color;
+                
+            } else {
+                const uint32_t cw = lightbulb_group->flux[0] * target_color * ch_group->ch[1]->value.int_value / 100;
+                const uint32_t ww = lightbulb_group->flux[1] * (PWM_SCALE - target_color) * ch_group->ch[1]->value.int_value / 100;
+                lightbulb_group->target[0] = MIN(LIGHTBULB_MAX_POWER * cw, PWM_SCALE);
+                lightbulb_group->target[1] = MIN(LIGHTBULB_MAX_POWER * ww, PWM_SCALE);
+            }
             
         } else {
             // Channels 1
@@ -3127,7 +3180,7 @@ void lightbulb_task(void* args) {
         lightbulb_group->target[3] != lightbulb_group->current[3] ||
         lightbulb_group->target[4] != lightbulb_group->current[4]
         ) {
-        if ((uint8_t) LIGHTBULB_TYPE != 0) {
+        if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL) {
             uint16_t max_diff = abs(lightbulb_group->current[0] - lightbulb_group->target[0]);
             for (uint8_t i = 1; i < LIGHTBULB_CHANNELS; i++) {
                 const uint16_t diff = abs(lightbulb_group->current[i] - lightbulb_group->target[i]);
@@ -3147,7 +3200,7 @@ void lightbulb_task(void* args) {
             }
         }
         
-        if ((uint8_t) LIGHTBULB_TYPE != 0 && !main_config.setpwm_is_running) {
+        if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL && !main_config.setpwm_is_running) {
             main_config.setpwm_is_running = true;
             rgbw_set_timer_worker(main_config.set_lightbulb_timer);
             esp_timer_start(main_config.set_lightbulb_timer);
@@ -3199,6 +3252,7 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
         ch->value = value;
         
         lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_group->ch[0]);
+        
          /*
         if (ch == ch_group->ch[4]) {
             lightbulb_group->temp_changed = true;
@@ -3206,12 +3260,21 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
             lightbulb_group->temp_changed = false;
         }
         */
+        
+        if (ch == ch_group->ch[0]) {
+            if (ch->value.bool_value) {
+                esp_timer_start(ch_group->timer2);
+            } else {
+                esp_timer_stop(ch_group->timer2);
+            }
+        }
+        
         if (old_on_value == ch_group->ch[0]->value.bool_value && lightbulb_group->autodimmer == 0) {
-            esp_timer_start(ch_group->timer2);
+            esp_timer_start(LIGHTBULB_SET_DELAY_TIMER);
         } else if (!lightbulb_group->lightbulb_task_running) {
             lightbulb_group->lightbulb_task_running = true;
-            esp_timer_stop(ch_group->timer2);
-            lightbulb_task_timer(ch_group->timer2);
+            esp_timer_stop(LIGHTBULB_SET_DELAY_TIMER);
+            lightbulb_task_timer(LIGHTBULB_SET_DELAY_TIMER);
         }
         
         save_historical_data(ch);
@@ -3317,14 +3380,14 @@ void autodimmer_call(homekit_characteristic_t* ch0, const homekit_value_t value)
         ch_group_t* ch_group = ch_group_find(ch0);
         if (lightbulb_group->armed_autodimmer) {
             lightbulb_group->armed_autodimmer = false;
-            esp_timer_stop(ch_group->timer);
+            esp_timer_stop(LIGHTBULB_AUTODIMMER_TIMER);
             
             if (xTaskCreate(autodimmer_task, "autodim", AUTODIMMER_TASK_SIZE, (void*) ch0, AUTODIMMER_TASK_PRIORITY, NULL) != pdPASS) {
                 ERROR("<%i> Creating AUTODim", ch_group->accessory);
                 homekit_remove_oldest_client();
             }
         } else {
-            esp_timer_start(ch_group->timer);
+            esp_timer_start(LIGHTBULB_AUTODIMMER_TIMER);
             lightbulb_group->armed_autodimmer = true;
         }
     }
@@ -3340,7 +3403,7 @@ void garage_door_stop(const uint16_t gpio, void* args, const uint8_t type) {
         
         GD_CURRENT_DOOR_STATE_INT = GARAGE_DOOR_STOPPED;
         
-        esp_timer_stop(ch_group->timer);
+        esp_timer_stop(LIGHTBULB_AUTODIMMER_TIMER);
 
         save_historical_data(ch_group->ch[0]);
         
@@ -3503,7 +3566,7 @@ void window_cover_stop(ch_group_t* ch_group) {
     esp_timer_stop(ch_group->timer);
     
     led_blink(1);
-
+    
     switch (WINDOW_COVER_CH_STATE->value.int_value) {
         case WINDOW_COVER_CLOSING:
             WINDOW_COVER_MOTOR_POSITION -= window_cover_step(ch_group, WINDOW_COVER_TIME_CLOSE);
@@ -3516,7 +3579,7 @@ void window_cover_stop(ch_group_t* ch_group) {
         default:
             break;
     }
-
+    
     INFO("<%i> WC Stopped Motor %f, HomeKit %f", ch_group->accessory, WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_HOMEKIT_POSITION);
     
     normalize_position(ch_group);
@@ -3660,7 +3723,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
             }
             
             check_obstruction();
-
+            
         // STOP
         } else {
             window_cover_stop(ch_group);
@@ -3693,7 +3756,7 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
         } else if (WINDOW_COVER_MOTOR_POSITION > 100) {
             WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = 100;
         } else {
-            if ((WINDOW_COVER_CH_CURRENT_POSITION->value.int_value >> 2) != (uint8_t) WINDOW_COVER_MOTOR_POSITION >> 2) {
+            if (((int16_t) WINDOW_COVER_MOTOR_POSITION % 15) == 0) {
                 INFO("<%i> WC Moving Motor %f, HomeKit %f", ch_group->accessory, WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_HOMEKIT_POSITION);
                 WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_HOMEKIT_POSITION;
                 homekit_characteristic_notify_safe(WINDOW_COVER_CH_CURRENT_POSITION);
@@ -3702,16 +3765,16 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
             }
         }
     }
-
-    float window_cover_motor_position(const float position, const float correction) {
-        return position / (1 + ((100 - position) * correction * 0.00020000f));
+    
+    float window_cover_homekit_position(const float motor_position, const float correction) {
+        return motor_position / (1 + ((100 - motor_position) * correction * 0.00020000f));
     }
     
     switch (WINDOW_COVER_CH_STATE->value.int_value) {
         case WINDOW_COVER_CLOSING:
             WINDOW_COVER_MOTOR_POSITION -= window_cover_step(ch_group, WINDOW_COVER_TIME_CLOSE);
             if (WINDOW_COVER_MOTOR_POSITION > 0) {
-                WINDOW_COVER_HOMEKIT_POSITION = window_cover_motor_position(WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_CORRECTION);
+                WINDOW_COVER_HOMEKIT_POSITION = window_cover_homekit_position(WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_CORRECTION);
             } else {
                 WINDOW_COVER_HOMEKIT_POSITION = WINDOW_COVER_MOTOR_POSITION;
             }
@@ -3726,7 +3789,7 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
         case WINDOW_COVER_OPENING:
             WINDOW_COVER_MOTOR_POSITION += window_cover_step(ch_group, WINDOW_COVER_TIME_OPEN);
             if (WINDOW_COVER_MOTOR_POSITION < 100) {
-                WINDOW_COVER_HOMEKIT_POSITION = window_cover_motor_position(WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_CORRECTION);
+                WINDOW_COVER_HOMEKIT_POSITION = window_cover_homekit_position(WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_CORRECTION);
             } else {
                 WINDOW_COVER_HOMEKIT_POSITION = WINDOW_COVER_MOTOR_POSITION;
             }
@@ -3761,12 +3824,12 @@ void hkc_fan_setter(homekit_characteristic_t* ch0, const homekit_value_t value) 
                 }
                 do_wildcard_actions(ch_group, 0, ch_group->ch[1]->value.float_value);
                 
-                if (ch0->value.int_value && ch_group->num[0] > 0) {
-                    autooff_setter_params_t* autooff_setter_params = malloc(sizeof(autooff_setter_params_t));
-                    autooff_setter_params->ch = ch0;
-                    autooff_setter_params->type = TYPE_FAN;
-                    esp_timer_start(esp_timer_create(ch_group->num[0], false, (void*) autooff_setter_params, hkc_autooff_setter_task));
+                if (ch0->value.int_value == 1) {
+                    esp_timer_start(ch_group->timer2);
+                } else {
+                    esp_timer_stop(ch_group->timer2);
                 }
+                
             } else {
                 ch_group->last_wildcard_action[0] = NO_LAST_WILDCARD_ACTION;
             }
@@ -4078,7 +4141,7 @@ void hkc_tv_input_configured_name(homekit_characteristic_t* ch, const homekit_va
     homekit_characteristic_notify_safe(ch);
 }
 
-// --- DIGITAL INPUTS
+// --- BINARY INPUTS
 void window_cover_diginput(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
@@ -4136,19 +4199,19 @@ void window_cover_diginput(const uint16_t gpio, void* args, const uint8_t type) 
 void diginput(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
-    INFO("<%i> DigI GPIO %i", ch_group->accessory, gpio);
+    INFO("<%i> DigI %i GPIO %i", ch_group->accessory, type, gpio);
 
     if (ch_group->child_enabled) {
-        switch (type) {
-            case TYPE_LOCK:
-                if (ch_group->ch[1]->value.int_value == 1) {
-                    hkc_lock_setter(ch_group->ch[1], HOMEKIT_UINT8(0));
+        switch (ch_group->acc_type) {
+            case ACC_TYPE_LOCK:
+                if (type == 2) {
+                    hkc_lock_setter(ch_group->ch[1], HOMEKIT_UINT8(!ch_group->ch[1]->value.int_value));
                 } else {
-                    hkc_lock_setter(ch_group->ch[1], HOMEKIT_UINT8(1));
+                    hkc_lock_setter(ch_group->ch[1], HOMEKIT_UINT8(type));
                 }
                 break;
                 
-            case TYPE_VALVE:
+            case ACC_TYPE_WATER_VALVE:
                 if (ch_group->ch[0]->value.int_value == 1) {
                     hkc_valve_setter(ch_group->ch[0], HOMEKIT_UINT8(0));
                 } else {
@@ -4156,231 +4219,91 @@ void diginput(const uint16_t gpio, void* args, const uint8_t type) {
                 }
                 break;
                 
-            case TYPE_LIGHTBULB:
-                if (ch_group->ch[1]->value.int_value == 0) {
-                    ch_group->ch[1]->value.int_value = 100;
-                }
-                autodimmer_call(ch_group->ch[0], HOMEKIT_BOOL(!ch_group->ch[0]->value.bool_value));
-                break;
-                
-            case TYPE_GARAGE_DOOR:
-                if (GD_TARGET_DOOR_STATE_INT == GARAGE_DOOR_CLOSED) {
-                    hkc_garage_door_setter(GD_TARGET_DOOR_STATE, HOMEKIT_UINT8(GARAGE_DOOR_OPENED));
+            case ACC_TYPE_LIGHTBULB:
+                if (type == 2) {
+                    if (ch_group->ch[1]->value.int_value == 0) {
+                        ch_group->ch[1]->value.int_value = 100;
+                    }
+                    autodimmer_call(ch_group->ch[0], HOMEKIT_BOOL(!ch_group->ch[0]->value.bool_value));
                 } else {
-                    hkc_garage_door_setter(GD_TARGET_DOOR_STATE, HOMEKIT_UINT8(GARAGE_DOOR_CLOSED));
+                    autodimmer_call(ch_group->ch[0], HOMEKIT_BOOL(type));
                 }
                 break;
                 
-            case TYPE_WINDOW_COVER:
-                if (ch_group->ch[1]->value.int_value == 0) {
+            case ACC_TYPE_GARAGE_DOOR:
+                if (type == 2) {
+                    hkc_garage_door_setter(GD_TARGET_DOOR_STATE, HOMEKIT_UINT8(!GD_TARGET_DOOR_STATE_INT));
+                } else {
+                    hkc_garage_door_setter(GD_TARGET_DOOR_STATE, HOMEKIT_UINT8(type));
+                }
+                break;
+                
+            case ACC_TYPE_WINDOW_COVER:
+                if (type == 2) {
+                    if (ch_group->ch[1]->value.int_value == 0) {
+                        hkc_window_cover_setter(ch_group->ch[1], HOMEKIT_UINT8(100));
+                    } else {
+                        hkc_window_cover_setter(ch_group->ch[1], HOMEKIT_UINT8(0));
+                    }
+                } else if (type == 1) {
                     hkc_window_cover_setter(ch_group->ch[1], HOMEKIT_UINT8(100));
                 } else {
                     hkc_window_cover_setter(ch_group->ch[1], HOMEKIT_UINT8(0));
                 }
                 break;
                 
-            case TYPE_FAN:
-                if (ch_group->ch[0]->value.bool_value == true) {
-                    hkc_fan_setter(ch_group->ch[0], HOMEKIT_BOOL(false));
+            case ACC_TYPE_FAN:
+                if (type == 2) {
+                    hkc_fan_setter(ch_group->ch[0], HOMEKIT_BOOL(!ch_group->ch[0]->value.bool_value));
                 } else {
-                    hkc_fan_setter(ch_group->ch[0], HOMEKIT_BOOL(true));
+                    hkc_fan_setter(ch_group->ch[0], HOMEKIT_BOOL(type));
                 }
                 break;
                 
-            case TYPE_TV:
-                if (ch_group->ch[0]->value.int_value == 1) {
-                    hkc_tv_active(ch_group->ch[0], HOMEKIT_UINT8(0));
+            case ACC_TYPE_TV:
+                if (type == 2) {
+                    hkc_tv_active(ch_group->ch[0], HOMEKIT_UINT8(!ch_group->ch[0]->value.int_value));
                 } else {
-                    hkc_tv_active(ch_group->ch[0], HOMEKIT_UINT8(1));
+                    hkc_tv_active(ch_group->ch[0], HOMEKIT_UINT8(type));
                 }
                 break;
                 
-            default:    // case TYPE_ON:
-                hkc_on_setter(ch_group->ch[0], HOMEKIT_BOOL(!ch_group->ch[0]->value.bool_value));
-                break;
-        }
-    }
-}
-
-void diginput_1(const uint16_t gpio, void* args, const uint8_t type) {
-    ch_group_t* ch_group = args;
-    
-    INFO("<%i> DigI 1 GPIO %i", ch_group->accessory, gpio);
-
-    if (ch_group->child_enabled) {
-        switch (type) {
-            case TYPE_LOCK:
-                if (ch_group->ch[1]->value.int_value == 0) {
-                    hkc_lock_setter(ch_group->ch[1], HOMEKIT_UINT8(1));
-                }
-                break;
-                
-            case TYPE_VALVE:
-                if (ch_group->ch[0]->value.int_value == 0) {
-                    hkc_valve_setter(ch_group->ch[0], HOMEKIT_UINT8(1));
-                }
-                break;
-                
-            case TYPE_LIGHTBULB:
-                if (ch_group->ch[0]->value.bool_value == false) {
-                    autodimmer_call(ch_group->ch[0], HOMEKIT_BOOL(true));
-                }
-                break;
-                
-            case TYPE_GARAGE_DOOR:
-                if (GD_TARGET_DOOR_STATE_INT == GARAGE_DOOR_OPENED) {
-                    hkc_garage_door_setter(GD_TARGET_DOOR_STATE, HOMEKIT_UINT8(GARAGE_DOOR_CLOSED));
-                }
-                break;
-                
-            case TYPE_FAN:
-                if (ch_group->ch[0]->value.bool_value == false) {
-                    hkc_fan_setter(ch_group->ch[0], HOMEKIT_BOOL(true));
-                }
-                break;
-                
-            case TYPE_TV:
-                if (ch_group->ch[0]->value.int_value == 0) {
-                    hkc_tv_active(ch_group->ch[0], HOMEKIT_UINT8(1));
-                }
-                break;
-                
-            default:    // case TYPE_ON:
-                if (ch_group->ch[0]->value.bool_value == false) {
-                    hkc_on_setter(ch_group->ch[0], HOMEKIT_BOOL(true));
+            default:
+                if (type == 2) {
+                    hkc_on_setter(ch_group->ch[0], HOMEKIT_BOOL(!ch_group->ch[0]->value.bool_value));
+                } else {
+                    hkc_on_setter(ch_group->ch[0], HOMEKIT_BOOL(type));
                 }
                 break;
         }
     }
 }
 
-void digstate_1(const uint16_t gpio, void* args, const uint8_t type) {
+void digstate(const uint16_t gpio, void* args, const uint8_t type) {
     ch_group_t* ch_group = args;
     
-    INFO("<%i> DigI S1 GPIO %i", ch_group->accessory, gpio);
+    INFO("<%i> DigI S%i GPIO %i", ch_group->accessory, type, gpio);
 
     if (ch_group->child_enabled) {
-        switch (type) {
-            case TYPE_LOCK:
-                if (ch_group->ch[1]->value.int_value == 0) {
-                    hkc_lock_status_setter(ch_group->ch[1], HOMEKIT_UINT8(1));
-                }
+        switch (ch_group->acc_type) {
+            case ACC_TYPE_LOCK:
+                hkc_lock_status_setter(ch_group->ch[1], HOMEKIT_UINT8(type));
                 break;
                 
-            case TYPE_VALVE:
-                if (ch_group->ch[0]->value.int_value == 0) {
-                    hkc_valve_status_setter(ch_group->ch[0], HOMEKIT_UINT8(1));
-                }
+            case ACC_TYPE_WATER_VALVE:
+                hkc_valve_status_setter(ch_group->ch[0], HOMEKIT_UINT8(type));
                 break;
                 
-            case TYPE_FAN:
-                if (ch_group->ch[0]->value.bool_value == false) {
-                    hkc_fan_status_setter(ch_group->ch[0], HOMEKIT_BOOL(true));
-                }
+            case ACC_TYPE_FAN:
+                hkc_fan_status_setter(ch_group->ch[0], HOMEKIT_BOOL(type));
                 break;
                 
-            case TYPE_TV:
-                if (ch_group->ch[0]->value.int_value == 0) {
-                    hkc_tv_status_active(ch_group->ch[0], HOMEKIT_UINT8(1));
-                }
+            case ACC_TYPE_TV:
+                hkc_tv_status_active(ch_group->ch[0], HOMEKIT_UINT8(type));
                 break;
                 
-            default:    // case TYPE_ON:
-                if (ch_group->ch[0]->value.bool_value == false) {
-                    hkc_on_status_setter(ch_group->ch[0], HOMEKIT_BOOL(true));
-                }
-                break;
-        }
-    }
-}
-
-void diginput_0(const uint16_t gpio, void* args, const uint8_t type) {
-    ch_group_t* ch_group = args;
-    
-    INFO("<%i> DigI 0 GPIO %i", ch_group->accessory, gpio);
-
-    if (ch_group->child_enabled) {
-        switch (type) {
-            case TYPE_LOCK:
-                if (ch_group->ch[1]->value.int_value == 1) {
-                    hkc_lock_setter(ch_group->ch[1], HOMEKIT_UINT8(0));
-                }
-                break;
-                
-            case TYPE_VALVE:
-                if (ch_group->ch[0]->value.int_value == 1) {
-                    hkc_valve_setter(ch_group->ch[0], HOMEKIT_UINT8(0));
-                }
-                break;
-                
-            case TYPE_LIGHTBULB:
-                if (ch_group->ch[0]->value.bool_value == true) {
-                    autodimmer_call(ch_group->ch[0], HOMEKIT_BOOL(false));
-                }
-                break;
-                
-            case TYPE_GARAGE_DOOR:
-                if (GD_TARGET_DOOR_STATE_INT == 1) {
-                    hkc_garage_door_setter(GD_TARGET_DOOR_STATE, HOMEKIT_UINT8(GARAGE_DOOR_OPENED));
-                }
-                break;
-                
-            case TYPE_FAN:
-                if (ch_group->ch[0]->value.bool_value == true) {
-                    hkc_fan_setter(ch_group->ch[0], HOMEKIT_BOOL(false));
-                }
-                break;
-                
-            case TYPE_TV:
-                if (ch_group->ch[0]->value.int_value == 1) {
-                    hkc_tv_active(ch_group->ch[0], HOMEKIT_UINT8(0));
-                }
-                break;
-                
-            default:    // case TYPE_ON:
-                if (ch_group->ch[0]->value.bool_value == true) {
-                    hkc_on_setter(ch_group->ch[0], HOMEKIT_BOOL(false));
-                }
-                break;
-        }
-    }
-}
-
-void digstate_0(const uint16_t gpio, void* args, const uint8_t type) {
-    ch_group_t* ch_group = args;
-    
-    INFO("<%i> DigI S0 GPIO %i", ch_group->accessory, gpio);
-
-    if (ch_group->child_enabled) {
-        switch (type) {
-            case TYPE_LOCK:
-                if (ch_group->ch[1]->value.int_value == 1) {
-                    hkc_lock_status_setter(ch_group->ch[1], HOMEKIT_UINT8(0));
-                }
-                break;
-                
-            case TYPE_VALVE:
-                if (ch_group->ch[0]->value.int_value == 1) {
-                    hkc_valve_status_setter(ch_group->ch[0], HOMEKIT_UINT8(0));
-                }
-                break;
-                
-            case TYPE_FAN:
-                if (ch_group->ch[0]->value.bool_value == true) {
-                    hkc_fan_status_setter(ch_group->ch[0], HOMEKIT_BOOL(false));
-                }
-                break;
-                
-            case TYPE_TV:
-                if (ch_group->ch[0]->value.int_value == 1) {
-                    hkc_tv_status_active(ch_group->ch[0], HOMEKIT_UINT8(0));
-                }
-                break;
-                
-            default:    // case TYPE_ON:
-                if (ch_group->ch[0]->value.bool_value == true) {
-                    hkc_on_status_setter(ch_group->ch[0], HOMEKIT_BOOL(false));
-                }
+            default:
+                hkc_on_status_setter(ch_group->ch[0], HOMEKIT_BOOL(type));
                 break;
         }
     }
@@ -4388,34 +4311,35 @@ void digstate_0(const uint16_t gpio, void* args, const uint8_t type) {
 
 // --- AUTO-OFF
 void hkc_autooff_setter_task(TimerHandle_t xTimer) {
-    autooff_setter_params_t* autooff_setter_params = (autooff_setter_params_t*) pvTimerGetTimerID(xTimer);
-    INFO("AutoOff Setter");
-
-    switch (autooff_setter_params->type) {
-        case TYPE_LOCK:
-            hkc_lock_setter(autooff_setter_params->ch, HOMEKIT_UINT8(1));
+    ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
+    INFO("<%i> AutoOff", ch_group->accessory);
+    
+    switch (ch_group->acc_type) {
+        case ACC_TYPE_LOCK:
+            hkc_lock_setter(ch_group->ch[1], HOMEKIT_UINT8(1));
             break;
             
-        case TYPE_SENSOR:
-        case TYPE_SENSOR_BOOL:
-            sensor_0(99, ch_group_find(autooff_setter_params->ch), autooff_setter_params->type);
+        case ACC_TYPE_CONTACT_SENSOR:
+        case ACC_TYPE_MOTION_SENSOR:
+            binary_sensor(99, ch_group, 0);
             break;
             
-        case TYPE_VALVE:
-            hkc_valve_setter(autooff_setter_params->ch, HOMEKIT_UINT8(0));
+        case ACC_TYPE_WATER_VALVE:
+            hkc_valve_setter(ch_group->ch[0], HOMEKIT_UINT8(0));
             break;
             
-        case TYPE_FAN:
-            hkc_fan_setter(autooff_setter_params->ch, HOMEKIT_BOOL(false));
+        case ACC_TYPE_LIGHTBULB:
+            hkc_rgbw_setter(ch_group->ch[0], HOMEKIT_BOOL(false));
             break;
             
-        default:    // case TYPE_ON:
-            hkc_on_setter(autooff_setter_params->ch, HOMEKIT_BOOL(false));
+        case ACC_TYPE_FAN:
+            hkc_fan_setter(ch_group->ch[0], HOMEKIT_BOOL(false));
+            break;
+            
+        default:    // ACC_TYPE_SWITCH  ACC_TYPE_OUTLET
+            hkc_on_setter(ch_group->ch[0], HOMEKIT_BOOL(false));
             break;
     }
-    
-    free(autooff_setter_params);
-    esp_timer_delete(xTimer);
 }
 
 // --- Network Action task
@@ -5254,35 +5178,34 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             break;
                             
                         case ACC_TYPE_LOCK:
-                            hkc_lock_setter(ch_group->ch[1], HOMEKIT_UINT8(value_int));
-                            break;
-                            
-                        case ACC_TYPE_CONTACT_SENSOR:
-                            if (value_int == 3) {
-                                sensor_status_1(99, ch_group, TYPE_SENSOR);
-                            } else if (value_int == 2) {
-                                sensor_status_0(99, ch_group, TYPE_SENSOR);
-                            } else if (value_int == 1) {
-                                sensor_1(99, ch_group, TYPE_SENSOR);
-                            } else if (value_int == 0) {
-                                sensor_0(99, ch_group, TYPE_SENSOR);
+                            if (value_int == -1) {
+                                esp_timer_start(ch_group->timer2);
+                            } else if (value_int == 4) {
+                                hkc_lock_setter(ch_group->ch[1], HOMEKIT_UINT8(!ch_group->ch[1]->value.int_value));
+                            } else if (value_int == 5) {
+                                hkc_lock_status_setter(ch_group->ch[1], HOMEKIT_UINT8(!ch_group->ch[1]->value.int_value));
+                            } else if (value_int > 1) {
+                                hkc_lock_status_setter(ch_group->ch[1], HOMEKIT_UINT8((value_int - 2)));
+                            } else {
+                                hkc_lock_setter(ch_group->ch[1], HOMEKIT_UINT8(value_int));
                             }
                             break;
                             
+                        case ACC_TYPE_CONTACT_SENSOR:
                         case ACC_TYPE_MOTION_SENSOR:
-                            if (value_int == 3) {
-                                sensor_status_1(99, ch_group, TYPE_SENSOR_BOOL);
-                            } else if (value_int == 2) {
-                                sensor_status_0(99, ch_group, TYPE_SENSOR_BOOL);
-                            } else if (value_int == 1) {
-                                sensor_1(99, ch_group, TYPE_SENSOR_BOOL);
-                            } else if (value_int == 0) {
-                                sensor_0(99, ch_group, TYPE_SENSOR_BOOL);
+                            if (value_int == -1) {
+                                esp_timer_start(ch_group->timer2);
+                            } else {
+                                binary_sensor(99, ch_group, value_int);
                             }
                             break;
                             
                         case ACC_TYPE_WATER_VALVE:
                             if (value_int < 0) {
+                                if (value_int == -1) {
+                                    esp_timer_start(ch_group->timer2);
+                                }
+                                
                                 if (ch_group->chs > 2) {
                                     if (value_int < -1) {
                                         hkc_setter(ch_group->ch[2], HOMEKIT_UINT32(- value_int - 1));
@@ -5335,6 +5258,8 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 hkc_garage_door_setter(GD_TARGET_DOOR_STATE, HOMEKIT_UINT8(value_int));
                             } else if (value_int == 2) {
                                 garage_door_stop(99, ch_group, 0);
+                            } else if (value_int == 5) {
+                                hkc_garage_door_setter(GD_TARGET_DOOR_STATE, HOMEKIT_UINT8(!GD_TARGET_DOOR_STATE_INT));
                             } else {
                                 garage_door_obstruction(99, ch_group, value_int - 3);
                             }
@@ -5384,8 +5309,22 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                         case ACC_TYPE_WINDOW_COVER:
                             if (value_int < 0) {
                                 window_cover_obstruction(0, ch_group, value_int + 2);
-                            } else if (value_int > 100) {
+                                
+                            } else if (value_int == 101) {
                                 hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
+                                
+                            } else if (value_int >= 200) {
+                                WINDOW_COVER_HOMEKIT_POSITION = value_int - 200;
+                                
+                                WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_HOMEKIT_POSITION;
+                                WINDOW_COVER_MOTOR_POSITION = ((100 * WINDOW_COVER_CORRECTION * WINDOW_COVER_HOMEKIT_POSITION) + (5000 * WINDOW_COVER_HOMEKIT_POSITION)) / ((WINDOW_COVER_CORRECTION * WINDOW_COVER_HOMEKIT_POSITION) + 5000);
+                                homekit_characteristic_notify_safe(WINDOW_COVER_CH_CURRENT_POSITION);
+                                
+                                if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
+                                    WINDOW_COVER_CH_TARGET_POSITION->value.int_value = WINDOW_COVER_CH_CURRENT_POSITION->value.int_value;
+                                    homekit_characteristic_notify_safe(WINDOW_COVER_CH_TARGET_POSITION);
+                                }
+                                
                             } else {
                                 hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, HOMEKIT_UINT8(value_int));
                             }
@@ -5394,6 +5333,8 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                         case ACC_TYPE_FAN:
                             if (value_int == 0) {
                                 hkc_fan_setter(ch_group->ch[0], HOMEKIT_BOOL(false));
+                            } else if (value_int == -201) {
+                                esp_timer_start(ch_group->timer2);
                             } else if (value_int < -100) {
                                 const float new_value = ch_group->ch[1]->value.float_value + action_acc_manager->value + 100;
                                 if (new_value < *ch_group->ch[1]->min_value) {
@@ -5447,7 +5388,9 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             break;
                             
                         case ACC_TYPE_TV:
-                            if (value_int < 2 && value_int >= 0) {
+                            if (value_int == -1 || value_int == -2) {
+                                hkc_tv_status_active(ch_group->ch[0], HOMEKIT_UINT8(value_int + 2));
+                            } else if (value_int == 0 || value_int == 1) {
                                 hkc_tv_active(ch_group->ch[0], HOMEKIT_UINT8(value_int));
                             } else if (value_int < 20) {
                                 hkc_tv_key(ch_group->ch[3], HOMEKIT_UINT8(value_int - 2));
@@ -5463,7 +5406,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             break;
                             
                         case ACC_TYPE_POWER_MONITOR:
-                            if (value_int == -1) {
+                            if (value_int == 0) {
                                 pm_custom_consumption_reset(ch_group);
                             }
                             break;
@@ -5476,6 +5419,10 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             
                         default:    // ON Type ch
                             if (value_int < 0) {
+                                if (value_int == -1) {
+                                    esp_timer_start(ch_group->timer2);
+                                }
+                                
                                 if (ch_group->chs > 1) {
                                     if (value_int < -1) {
                                         hkc_setter(ch_group->ch[1], HOMEKIT_UINT32(- value_int - 1));
@@ -5648,7 +5595,7 @@ void timetable_actions_timer_worker(TimerHandle_t xTimer) {
 }
 
 // --- IDENTIFY
-void identify(homekit_value_t _value) {
+void identify(homekit_characteristic_t* ch, const homekit_value_t value) {
     led_blink(6);
     INFO("ID");
 }
@@ -5687,7 +5634,7 @@ void delayed_sensor_task() {
             
             vTaskDelay(MS_TO_TICKS(9500));
         }
-
+        
         ch_group = ch_group->next;
     }
     
@@ -5696,7 +5643,7 @@ void delayed_sensor_task() {
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, NULL);
 homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, "José A. Jiménez Campos");
-homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "RavenSystem HAA");
+homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "RavenSystem HAA Griffon");
 homekit_characteristic_t identify_function = HOMEKIT_CHARACTERISTIC_(IDENTIFY, identify);
 homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, FIRMWARE_VERSION);
 homekit_characteristic_t hap_version = HOMEKIT_CHARACTERISTIC_(VERSION, "1.1.0");
@@ -5708,6 +5655,7 @@ homekit_server_config_t config;
 void run_homekit_server() {
     main_config.wifi_channel = sdk_wifi_get_channel();
     main_config.wifi_status = WIFI_STATUS_CONNECTED;
+    main_config.wifi_ip = wifi_config_get_ip();
     
     FREEHEAP();
     
@@ -6458,17 +6406,20 @@ void normal_mode_init() {
     
     // REGISTER SERVICE CONFIGURATION
     uint8_t acc_homekit_enabled(cJSON* json_accessory) {
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, ENABLE_HOMEKIT_SERVER) != NULL) {
-            return (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, ENABLE_HOMEKIT_SERVER)->valuedouble;
+        if (cJSON_GetObjectItemCaseSensitive(json_accessory, ENABLE_HOMEKIT) != NULL) {
+            return (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, ENABLE_HOMEKIT)->valuedouble;
         }
         return 1;
     }
     
-    float autoswitch_time(cJSON* json_accessory) {
+    TimerHandle_t autoswitch_time(cJSON* json_accessory, ch_group_t* ch_group) {
         if (cJSON_GetObjectItemCaseSensitive(json_accessory, AUTOSWITCH_TIME) != NULL) {
-            return ((float) cJSON_GetObjectItemCaseSensitive(json_accessory, AUTOSWITCH_TIME)->valuedouble) * 1000.f;
+            const uint32_t time = cJSON_GetObjectItemCaseSensitive(json_accessory, AUTOSWITCH_TIME)->valuedouble * 1000.f;
+            if (time > 0) {
+                return esp_timer_create(time, false, (void*) ch_group, hkc_autooff_setter_task);
+            }
         }
-        return 0;
+        return NULL;
     }
     
     int8_t th_sensor_gpio(cJSON* json_accessory) {
@@ -6961,7 +6912,7 @@ void normal_mode_init() {
     if (config.max_clients > 0) {
         main_config.enable_homekit_server = true;
     }
-    INFO("HomeKit Server Clients %i", config.max_clients);
+    INFO("HK Server Clients %i", config.max_clients);
     
     // Allow unsecure connections
     if (cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS) != NULL) {
@@ -7220,7 +7171,7 @@ void normal_mode_init() {
             ch_calloc += 2;
         }
         
-        ch_group_t* ch_group = new_ch_group(ch_calloc - 1, 1, 0);
+        ch_group_t* ch_group = new_ch_group(ch_calloc - 1, 0, 0);
         ch_group->accessory = service_numerator;
         set_killswitch(ch_group, json_context);
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
@@ -7237,7 +7188,7 @@ void normal_mode_init() {
         ch_group->acc_type = acc_type;
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
-        ch_group->num[0] = autoswitch_time(json_context);
+        ch_group->timer2 = autoswitch_time(json_context, ch_group);
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
@@ -7277,20 +7228,20 @@ void normal_mode_init() {
             ch_group->timer = esp_timer_create(1000, true, (void*) ch_group, on_timer_worker);
         }
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, TYPE_ON);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, TYPE_ON);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput_1, ch_group, TYPE_ON);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput_0, ch_group, TYPE_ON);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate_1, ch_group, TYPE_ON);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate_0, ch_group, TYPE_ON);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
         
         const bool exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch_group, TYPE_ON);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch_group, TYPE_ON);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate_1, ch_group, TYPE_ON);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate_0, ch_group, TYPE_ON);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0);
             
             ch_group->ch[0]->value.bool_value = !((bool) set_initial_state(ch_group->accessory, 0, json_context, ch_group->ch[0], CH_TYPE_BOOL, 0));
             if (exec_actions_on_boot) {
@@ -7299,30 +7250,30 @@ void normal_mode_init() {
                 hkc_on_status_setter(ch_group->ch[0], HOMEKIT_BOOL(!ch_group->ch[0]->value.bool_value));
             }
         } else {
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch_group, TYPE_ON)) {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
                 if (exec_actions_on_boot) {
-                    diginput_1(99, ch_group, TYPE_ON);
+                    diginput(99, ch_group, 1);
                 } else {
-                    digstate_1(99, ch_group, TYPE_ON);
+                    digstate(99, ch_group, 1);
                 }
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch_group, TYPE_ON)) {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
                 ch_group->ch[0]->value.bool_value = true;
                 if (exec_actions_on_boot) {
-                    diginput_0(99, ch_group, TYPE_ON);
+                    diginput(99, ch_group, 0);
                 } else {
-                    digstate_0(99, ch_group, TYPE_ON);
+                    digstate(99, ch_group, 0);
                 }
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate_1, ch_group, TYPE_ON)) {
-                digstate_1(99, ch_group, TYPE_ON);
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
+                digstate(99, ch_group, 1);
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate_0, ch_group, TYPE_ON)) {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
                 ch_group->ch[0]->value.bool_value = true;
-                digstate_0(99, ch_group, TYPE_ON);
+                digstate(99, ch_group, 0);
             }
         }
         
@@ -7399,7 +7350,7 @@ void normal_mode_init() {
     
     // *** NEW LOCK
     void new_lock(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
-        ch_group_t* ch_group = new_ch_group(2, 1, 0);
+        ch_group_t* ch_group = new_ch_group(2, 0, 0);
         ch_group->accessory = service_numerator;
         set_killswitch(ch_group, json_context);
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
@@ -7417,7 +7368,7 @@ void normal_mode_init() {
         ch_group->acc_type = ACC_TYPE_LOCK;
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
-        ch_group->num[0] = autoswitch_time(json_context);
+        ch_group->timer2 = autoswitch_time(json_context, ch_group);
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
@@ -7439,20 +7390,20 @@ void normal_mode_init() {
             //service_iid += 3;
         }
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, TYPE_LOCK);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, TYPE_LOCK);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput_1, ch_group, TYPE_LOCK);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput_0, ch_group, TYPE_LOCK);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate_1, ch_group, TYPE_LOCK);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate_0, ch_group, TYPE_LOCK);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
         
         const bool exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch_group, TYPE_LOCK);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch_group, TYPE_LOCK);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate_1, ch_group, TYPE_LOCK);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate_0, ch_group, TYPE_LOCK);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0);
             
             ch_group->ch[1]->value.int_value = !((uint8_t) set_initial_state(ch_group->accessory, 0, json_context, ch_group->ch[1], CH_TYPE_INT8, 1));
             if (exec_actions_on_boot) {
@@ -7461,43 +7412,43 @@ void normal_mode_init() {
                 hkc_lock_status_setter(ch_group->ch[1], HOMEKIT_UINT8(!ch_group->ch[1]->value.int_value));
             }
         } else {
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch_group, TYPE_LOCK)) {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
                 if (exec_actions_on_boot) {
-                    diginput_1(99, ch_group, TYPE_LOCK);
+                    diginput(99, ch_group, 1);
                 } else {
-                    digstate_1(99, ch_group, TYPE_LOCK);
+                    digstate(99, ch_group, 1);
                 }
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch_group, TYPE_LOCK)) {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
                 ch_group->ch[1]->value.int_value = 0;
                 if (exec_actions_on_boot) {
-                    diginput_0(99, ch_group, TYPE_LOCK);
+                    diginput(99, ch_group, 0);
                 } else {
-                    digstate_0(99, ch_group, TYPE_LOCK);
+                    digstate(99, ch_group, 0);
                 }
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate_1, ch_group, TYPE_LOCK)) {
-                digstate_1(99, ch_group, TYPE_LOCK);
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
+                digstate(99, ch_group, 1);
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate_0, ch_group, TYPE_LOCK)) {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
                 ch_group->ch[1]->value.int_value = 0;
-                digstate_0(99, ch_group, TYPE_LOCK);
+                digstate(99, ch_group, 0);
             }
         }
     }
     
     // *** NEW BINARY SENSOR
     void new_binary_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context, uint8_t acc_type) {
-        ch_group_t* ch_group = new_ch_group(1, 1, 0);
+        ch_group_t* ch_group = new_ch_group(1, 0, 0);
         ch_group->acc_type = ACC_TYPE_CONTACT_SENSOR;
         ch_group->accessory = service_numerator;
         set_killswitch(ch_group, json_context);
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
-
+        
         if (service == 0) {
             new_accessory(accessory, total_services, ch_group->homekit_enabled, json_context);
         }
@@ -7573,7 +7524,7 @@ void normal_mode_init() {
         
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
-        ch_group->num[0] = autoswitch_time(json_context);
+        ch_group->timer2 = autoswitch_time(json_context, ch_group);
 
         if (ch_group->homekit_enabled) {
             if (homekit_enabled == 2) {
@@ -7585,71 +7536,50 @@ void normal_mode_init() {
             
             //service_iid += 2;
         }
-
+        
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), binary_sensor, ch_group, 4);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), binary_sensor, ch_group, 4);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), binary_sensor, ch_group, 0);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), binary_sensor, ch_group, 1);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), binary_sensor, ch_group, 2);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), binary_sensor, ch_group, 3);
+        
         const bool exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
-        if (acc_type == ACC_TYPE_MOTION_SENSOR) {
-            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), sensor_0, ch_group, TYPE_SENSOR_BOOL);
-            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), sensor_1, ch_group, TYPE_SENSOR_BOOL);
-            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), sensor_status_1, ch_group, TYPE_SENSOR_BOOL);
-            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), sensor_status_0, ch_group, TYPE_SENSOR_BOOL);
-            
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), sensor_0, ch_group, TYPE_SENSOR_BOOL)) {
-                ch_group->ch[0]->value.bool_value = true;
-                if (exec_actions_on_boot) {
-                    sensor_0(99, ch_group, TYPE_SENSOR_BOOL);
-                } else {
-                    sensor_status_0(99, ch_group, TYPE_SENSOR_BOOL);
-                }
-            }
-            
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), sensor_1, ch_group, TYPE_SENSOR_BOOL)) {
-                if (exec_actions_on_boot) {
-                    sensor_1(99, ch_group, TYPE_SENSOR_BOOL);
-                } else {
-                    sensor_status_1(99, ch_group, TYPE_SENSOR_BOOL);
-                }
-            }
-            
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), sensor_status_0, ch_group, TYPE_SENSOR_BOOL)) {
-                ch_group->ch[0]->value.bool_value = true;
-                sensor_status_0(99, ch_group, TYPE_SENSOR_BOOL);
-            }
-            
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), sensor_status_1, ch_group, TYPE_SENSOR_BOOL)) {
-                sensor_status_1(99, ch_group, TYPE_SENSOR_BOOL);
-            }
-        } else {
-            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), sensor_0, ch_group, TYPE_SENSOR);
-            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), sensor_1, ch_group, TYPE_SENSOR);
-            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), sensor_status_0, ch_group, TYPE_SENSOR);
-            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), sensor_status_1, ch_group, TYPE_SENSOR);
-            
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), sensor_0, ch_group, TYPE_SENSOR)) {
+        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), binary_sensor, ch_group, 0)) {
+            if (acc_type == ACC_TYPE_MOTION_SENSOR) {
                 ch_group->ch[0]->value.int_value = 1;
-                if (exec_actions_on_boot) {
-                    sensor_0(99, ch_group, TYPE_SENSOR);
-                } else {
-                    sensor_status_0(99, ch_group, TYPE_SENSOR);
-                }
+            } else {
+                ch_group->ch[0]->value.bool_value = true;
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), sensor_1, ch_group, TYPE_SENSOR)) {
-                if (exec_actions_on_boot) {
-                    sensor_1(99, ch_group, TYPE_SENSOR);
-                } else {
-                    sensor_status_1(99, ch_group, TYPE_SENSOR);
-                }
+            if (exec_actions_on_boot) {
+                binary_sensor(99, ch_group, 0);
+            } else {
+                binary_sensor(99, ch_group, 2);
             }
-            
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), sensor_status_0, ch_group, TYPE_SENSOR)) {
+        }
+        
+        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), binary_sensor, ch_group, 1)) {
+            if (exec_actions_on_boot) {
+                binary_sensor(99, ch_group, 1);
+            } else {
+                binary_sensor(99, ch_group, 3);
+            }
+        }
+        
+        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), binary_sensor, ch_group, 2)) {
+            if (acc_type == ACC_TYPE_MOTION_SENSOR) {
                 ch_group->ch[0]->value.int_value = 1;
-                sensor_status_0(99, ch_group, TYPE_SENSOR);
+            } else {
+                ch_group->ch[0]->value.bool_value = true;
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), sensor_status_1, ch_group, TYPE_SENSOR)) {
-                sensor_status_1(99, ch_group, TYPE_SENSOR);
-            }
+            binary_sensor(99, ch_group, 2);
+        }
+        
+        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), binary_sensor, ch_group, 3)) {
+            binary_sensor(99, ch_group, 3);
         }
     }
     
@@ -7665,7 +7595,7 @@ void normal_mode_init() {
             calloc_count += 2;
         }
         
-        ch_group_t* ch_group = new_ch_group(calloc_count - 2, 1, 0);
+        ch_group_t* ch_group = new_ch_group(calloc_count - 2, 0, 0);
         ch_group->acc_type = ACC_TYPE_WATER_VALVE;
         ch_group->accessory = service_numerator;
         set_killswitch(ch_group, json_context);
@@ -7688,7 +7618,7 @@ void normal_mode_init() {
 
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
-        ch_group->num[0] = autoswitch_time(json_context);
+        ch_group->timer2 = autoswitch_time(json_context, ch_group);
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
@@ -7734,20 +7664,20 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(VALVE_TYPE, valve_type);
         }
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, TYPE_VALVE);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, TYPE_VALVE);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput_1, ch_group, TYPE_VALVE);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput_0, ch_group, TYPE_VALVE);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate_1, ch_group, TYPE_VALVE);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate_0, ch_group, TYPE_VALVE);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
         
         const bool exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch_group, TYPE_VALVE);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch_group, TYPE_VALVE);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate_1, ch_group, TYPE_VALVE);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate_0, ch_group, TYPE_VALVE);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0);
             
             ch_group->ch[0]->value.int_value = !((uint8_t) set_initial_state(ch_group->accessory, 0, json_context, ch_group->ch[0], CH_TYPE_INT8, 0));
             if (exec_actions_on_boot) {
@@ -7757,30 +7687,30 @@ void normal_mode_init() {
             }
             
         } else {
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch_group, TYPE_VALVE)) {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
                 if (exec_actions_on_boot) {
-                    diginput_1(99, ch_group, TYPE_VALVE);
+                    diginput(99, ch_group, 1);
                 } else {
-                    digstate_1(99, ch_group, TYPE_VALVE);
+                    digstate(99, ch_group, 1);
                 }
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch_group, TYPE_VALVE)) {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
                 ch_group->ch[0]->value.int_value = 1;
                 if (exec_actions_on_boot) {
-                    diginput_0(99, ch_group, TYPE_VALVE);
+                    diginput(99, ch_group, 0);
                 } else {
-                    digstate_0(99, ch_group, TYPE_VALVE);
+                    digstate(99, ch_group, 0);
                 }
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate_1, ch_group, TYPE_VALVE)) {
-                digstate_1(99, ch_group, TYPE_VALVE);
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
+                digstate(99, ch_group, 1);
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate_0, ch_group, TYPE_VALVE)) {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
                 ch_group->ch[0]->value.int_value = 1;
-                digstate_0(99, ch_group, TYPE_VALVE);
+                digstate(99, ch_group, 0);
             }
         }
     }
@@ -8392,7 +8322,7 @@ void normal_mode_init() {
     
     // *** NEW LIGHTBULB
     void new_lightbulb(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
-        ch_group_t* ch_group = new_ch_group(4, 10, 1);
+        ch_group_t* ch_group = new_ch_group(4, 2, 1);
         ch_group->acc_type = ACC_TYPE_LIGHTBULB;
         ch_group->accessory = service_numerator;
         set_killswitch(ch_group, json_context);
@@ -8411,6 +8341,7 @@ void normal_mode_init() {
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
+        ch_group->timer2 = autoswitch_time(json_context, ch_group);
         
         lightbulb_group_t* lightbulb_group = malloc(sizeof(lightbulb_group_t));
         memset(lightbulb_group, 0, sizeof(*lightbulb_group));
@@ -8420,7 +8351,7 @@ void normal_mode_init() {
             lightbulb_group->gpio[i] = MAX_GPIOS;
             lightbulb_group->flux[i] = 1;
         }
-        LIGHTBULB_PWM_DITHER = 0;
+        
         LIGHTBULB_MAX_POWER = 1;
         LIGHTBULB_CURVE_FACTOR = 0;
         lightbulb_group->r[0] = 0.6914;
@@ -8455,45 +8386,84 @@ void normal_mode_init() {
         lightbulb_group->next = main_config.lightbulb_groups;
         main_config.lightbulb_groups = lightbulb_group;
         
-        ch_group->timer2 = esp_timer_create(LIGHTBULB_SET_DELAY_MS, false, (void*) ch_group, lightbulb_task_timer);
+        LIGHTBULB_SET_DELAY_TIMER = esp_timer_create(LIGHTBULB_SET_DELAY_MS, false, (void*) ch_group, lightbulb_task_timer);
         
-        LIGHTBULB_TYPE = 1;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_GPIO_ARRAY_SET) == NULL) {
-            LIGHTBULB_TYPE = 0;
-        }
-
-        INFO("Type %i", (uint8_t) LIGHTBULB_TYPE);
-        
-        if ((uint8_t) LIGHTBULB_TYPE != 0 && !main_config.set_lightbulb_timer) {
-            main_config.set_lightbulb_timer = esp_timer_create(RGBW_PERIOD, true, NULL, rgbw_set_timer_worker);
+        LIGHTBULB_TYPE = LIGHTBULB_TYPE_PWM;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_TYPE_SET) != NULL) {
+            LIGHTBULB_TYPE = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_TYPE_SET)->valuedouble;
         }
         
-        LIGHTBULB_CHANNELS = 1;
+        cJSON* gpio_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_GPIO_ARRAY_SET);
+        if (!gpio_array) {
+            LIGHTBULB_TYPE = LIGHTBULB_TYPE_VIRTUAL;
+            LIGHTBULB_CHANNELS = 1;
+        } else {
+            LIGHTBULB_CHANNELS = 3;
+        }
+        
         if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CHANNELS_SET) != NULL) {
-            LIGHTBULB_CHANNELS = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CHANNELS_SET)->valuedouble;
+            LIGHTBULB_CHANNELS = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CHANNELS_SET)->valuedouble;
         }
         
-        if ((uint8_t) LIGHTBULB_TYPE == 1) {
+        if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL) {
+            if (!main_config.set_lightbulb_timer) {
+                main_config.set_lightbulb_timer = esp_timer_create(RGBW_PERIOD, true, NULL, rgbw_set_timer_worker);
+            }
+        }
+        
+        if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM || LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM_CWWW) {
             if (cJSON_GetObjectItemCaseSensitive(json_context, PWM_DITHER_SET) != NULL) {
-                LIGHTBULB_PWM_DITHER = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_context, PWM_DITHER_SET)->valuedouble;
+                LIGHTBULB_PWM_DITHER = cJSON_GetObjectItemCaseSensitive(json_context, PWM_DITHER_SET)->valuedouble;
             }
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_GPIO_ARRAY_SET) != NULL) {
-                cJSON* gpio_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_GPIO_ARRAY_SET);
-                LIGHTBULB_CHANNELS = cJSON_GetArraySize(gpio_array);
-                for (uint8_t i = 0; i < (uint8_t) LIGHTBULB_CHANNELS; i++) {
-                    uint8_t gpio = (uint8_t) cJSON_GetArrayItem(gpio_array, i)->valuedouble;
-                    set_used_gpio(gpio % 100);
-                    
-                    lightbulb_group->gpio[i] = gpio % 100;
-                    adv_pwm_new_channel(lightbulb_group->gpio[i], gpio / 100);
-                }
+            LIGHTBULB_CHANNELS = cJSON_GetArraySize(gpio_array);
+            for (uint8_t i = 0; i < LIGHTBULB_CHANNELS; i++) {
+                uint8_t gpio = cJSON_GetArrayItem(gpio_array, i)->valuedouble;
+                set_used_gpio(gpio % 100);
                 
-                adv_pwm_start();
+                lightbulb_group->gpio[i] = gpio % 100;
+                adv_pwm_new_channel(lightbulb_group->gpio[i], gpio / 100);
+            }
+            
+            adv_pwm_start();
+            
+        } else if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_MY92X1) {
+            lightbulb_group->gpio[0] = cJSON_GetArrayItem(gpio_array, 0)->valuedouble;
+            lightbulb_group->gpio[1] = cJSON_GetArrayItem(gpio_array, 1)->valuedouble;
+            
+            //
+            // TO-DO
+            //
+            
+        } else if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_NRZ) {
+            lightbulb_group->gpio[0] = cJSON_GetArrayItem(gpio_array, 0)->valuedouble;
+            set_used_gpio(lightbulb_group->gpio[0]);
+            
+            LIGHTBULB_RANGE_START = cJSON_GetArrayItem(gpio_array, 1)->valuedouble;
+            LIGHTBULB_RANGE_START -= 1;
+            LIGHTBULB_RANGE_START = LIGHTBULB_RANGE_START * LIGHTBULB_CHANNELS;
+            LIGHTBULB_RANGE_END = cJSON_GetArrayItem(gpio_array, 2)->valuedouble;
+            LIGHTBULB_RANGE_END = LIGHTBULB_RANGE_END * LIGHTBULB_CHANNELS;
+            
+            addressled_t* addressled = new_addressled(lightbulb_group->gpio[0], LIGHTBULB_RANGE_END);
+            
+            cJSON* nrz_times = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_NRZ_TIMES_ARRAY_SET);
+            if (nrz_times) {
+                addressled->time_0 = cJSON_GetArrayItem(nrz_times, 0)->valuedouble;
+                addressled->time_1 = cJSON_GetArrayItem(nrz_times, 1)->valuedouble;
+                addressled->period = cJSON_GetArrayItem(nrz_times, 2)->valuedouble;
+            }
+            
+            cJSON* color_map = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COLOR_MAP_SET);
+            if (color_map) {
+                const uint8_t size = cJSON_GetArraySize(color_map);
+                for (uint8_t i = 0; i < size; i++) {
+                    addressled->map[i] = cJSON_GetArrayItem(color_map, i)->valuedouble;
+                }
             }
         }
         
-        INFO("Channels %i", (uint8_t) LIGHTBULB_CHANNELS);
+        INFO("Channels %i Type %i", LIGHTBULB_CHANNELS, LIGHTBULB_TYPE);
         
         bool is_custom_initial = false;
         uint16_t custom_initial[3];
@@ -8505,7 +8475,7 @@ void normal_mode_init() {
             }
         }
         
-        if ((uint8_t) LIGHTBULB_TYPE != 0) {
+        if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL) {
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_MAX_POWER_SET) != NULL) {
                 LIGHTBULB_MAX_POWER = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_MAX_POWER_SET)->valuedouble;
             }
@@ -8516,7 +8486,7 @@ void normal_mode_init() {
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FLUX_ARRAY_SET) != NULL) {
                 cJSON* flux_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FLUX_ARRAY_SET);
-                for (uint8_t i = 0; i < (uint8_t) LIGHTBULB_CHANNELS; i++) {
+                for (uint8_t i = 0; i < LIGHTBULB_CHANNELS; i++) {
                     lightbulb_group->flux[i] = (float) cJSON_GetArrayItem(flux_array, i)->valuedouble;
                 }
             }
@@ -8552,12 +8522,12 @@ void normal_mode_init() {
                 lightbulb_group->b[0] = (float) cJSON_GetArrayItem(coordinate_array, 4)->valuedouble;
                 lightbulb_group->b[1] = (float) cJSON_GetArrayItem(coordinate_array, 5)->valuedouble;
                 
-                if ((uint8_t) LIGHTBULB_CHANNELS >= 4) {
+                if (LIGHTBULB_CHANNELS >= 4) {
                     lightbulb_group->cw[0] = (float) cJSON_GetArrayItem(coordinate_array, 6)->valuedouble;
                     lightbulb_group->cw[1] = (float) cJSON_GetArrayItem(coordinate_array, 7)->valuedouble;
                 }
                 
-                if ((uint8_t) LIGHTBULB_CHANNELS == 5) {
+                if (LIGHTBULB_CHANNELS == 5) {
                     lightbulb_group->ww[0] = (float) cJSON_GetArrayItem(coordinate_array, 8)->valuedouble;
                     lightbulb_group->ww[1] = (float) cJSON_GetArrayItem(coordinate_array, 9)->valuedouble;
                 }
@@ -8608,7 +8578,7 @@ void normal_mode_init() {
         
         uint8_t calloc_count = 3;
 
-        if ((uint8_t) LIGHTBULB_CHANNELS >= 3) {
+        if (LIGHTBULB_CHANNELS >= 3) {
             // Channels 3+
             calloc_count += 2;
             
@@ -8633,7 +8603,7 @@ void normal_mode_init() {
                 ch_group->ch[3]->value.float_value = set_initial_state(ch_group->accessory, 3, init_last_state_json, ch_group->ch[3], CH_TYPE_FLOAT, 0);
             }
             
-        } else if ((uint8_t) LIGHTBULB_CHANNELS == 2) {
+        } else if (LIGHTBULB_CHANNELS == 2) {
             // Channels 2
             ch_group->chs = 3;
             calloc_count++;
@@ -8675,35 +8645,35 @@ void normal_mode_init() {
             ch_group->ch[1]->value.int_value = 100;
         }
 
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, TYPE_LIGHTBULB);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), rgbw_brightness, ch_group, LIGHTBULB_BRIGHTNESS_UP);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), rgbw_brightness, ch_group, LIGHTBULB_BRIGHTNESS_DOWN);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, TYPE_LIGHTBULB);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_2), rgbw_brightness, ch_group, LIGHTBULB_BRIGHTNESS_UP);
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_3), rgbw_brightness, ch_group, LIGHTBULB_BRIGHTNESS_DOWN);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput_1, ch_group, TYPE_LIGHTBULB);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput_0, ch_group, TYPE_LIGHTBULB);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
         
         if (lightbulb_group->autodimmer_task_step > 0) {
-            ch_group->timer = esp_timer_create(AUTODIMMER_DELAY, false, (void*) ch_group->ch[0], no_autodimmer_called);
+            LIGHTBULB_AUTODIMMER_TIMER = esp_timer_create(AUTODIMMER_DELAY, false, (void*) ch_group->ch[0], no_autodimmer_called);
         }
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch_group, TYPE_LIGHTBULB);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch_group, TYPE_LIGHTBULB);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
             
             ch_group->ch[0]->value.bool_value = !((bool) set_initial_state(ch_group->accessory, 0, json_context, ch_group->ch[0], CH_TYPE_BOOL, 0));
         } else {
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch_group, TYPE_LIGHTBULB)) {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
                 ch_group->ch[0]->value.bool_value = false;
             }
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch_group, TYPE_LIGHTBULB)) {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
                 ch_group->ch[0]->value.bool_value = true;
             }
         }
         
         lightbulb_group->ch0->value.bool_value = !lightbulb_group->ch0->value.bool_value;
-        lightbulb_task_timer(ch_group->timer2);
+        lightbulb_task_timer(LIGHTBULB_SET_DELAY_TIMER);
         
         if (lightbulb_group->ch0->value.bool_value) {
             vTaskDelay(MS_TO_TICKS(10));
@@ -8774,13 +8744,13 @@ void normal_mode_init() {
         
         GARAGE_DOOR_WORKING_TIME += GARAGE_DOOR_TIME_MARGIN * 2;
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, TYPE_GARAGE_DOOR);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch_group, TYPE_GARAGE_DOOR);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch_group, TYPE_GARAGE_DOOR);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_8), garage_door_stop, ch_group, 0);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, TYPE_GARAGE_DOOR);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput_0, ch_group, TYPE_GARAGE_DOOR);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput_1, ch_group, TYPE_GARAGE_DOOR);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_8), garage_door_stop, ch_group, 0);
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_5), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSING);
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_4), garage_door_sensor, ch_group, GARAGE_DOOR_OPENING);
@@ -8937,13 +8907,13 @@ void normal_mode_init() {
         WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = (uint8_t) WINDOW_COVER_HOMEKIT_POSITION;
         WINDOW_COVER_CH_TARGET_POSITION->value.int_value = WINDOW_COVER_CH_CURRENT_POSITION->value.int_value;
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, TYPE_WINDOW_COVER);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), window_cover_diginput, ch_group, WINDOW_COVER_CLOSING);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), window_cover_diginput, ch_group, WINDOW_COVER_OPENING);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), window_cover_diginput, ch_group, WINDOW_COVER_STOP);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), window_cover_diginput, ch_group, WINDOW_COVER_CLOSING + 3);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), window_cover_diginput, ch_group, WINDOW_COVER_OPENING + 3);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, TYPE_WINDOW_COVER);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), window_cover_diginput, ch_group, WINDOW_COVER_CLOSING);
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), window_cover_diginput, ch_group, WINDOW_COVER_OPENING);
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_2), window_cover_diginput, ch_group, WINDOW_COVER_STOP);
@@ -9258,20 +9228,20 @@ void normal_mode_init() {
             ch_group->ch[1]->value = HOMEKIT_STRING((char*) configured_name);
         }
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, TYPE_TV);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, TYPE_TV);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput_1, ch_group, TYPE_TV);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput_0, ch_group, TYPE_TV);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate_1, ch_group, TYPE_TV);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate_0, ch_group, TYPE_TV);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
         
         const bool exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch_group, TYPE_TV);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch_group, TYPE_TV);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate_1, ch_group, TYPE_TV);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate_0, ch_group, TYPE_TV);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0);
             
             ch_group->ch[0]->value.int_value = !((uint8_t) set_initial_state(ch_group->accessory, 0, json_context, ch_group->ch[0], CH_TYPE_INT8, 0));
             if (exec_actions_on_boot) {
@@ -9281,37 +9251,37 @@ void normal_mode_init() {
             }
             
         } else {
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch_group, TYPE_TV)) {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
                 if (exec_actions_on_boot) {
-                    diginput_1(99, ch_group, TYPE_TV);
+                    diginput(99, ch_group, 1);
                 } else {
-                    digstate_1(99, ch_group, TYPE_TV);
+                    digstate(99, ch_group, 1);
                 }
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch_group, TYPE_TV)) {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
                 ch_group->ch[0]->value.int_value = 1;
                 if (exec_actions_on_boot) {
-                    diginput_0(99, ch_group, TYPE_TV);
+                    diginput(99, ch_group, 0);
                 } else {
-                    digstate_0(99, ch_group, TYPE_TV);
+                    digstate(99, ch_group, 0);
                 }
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate_1, ch_group, TYPE_TV)) {
-                digstate_1(99, ch_group, TYPE_TV);
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
+                digstate(99, ch_group, 1);
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate_0, ch_group, TYPE_TV)) {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
                 ch_group->ch[0]->value.int_value = 1;
-                digstate_0(99, ch_group, TYPE_TV);
+                digstate(99, ch_group, 0);
             }
         }
     }
     
     // *** NEW FAN
     void new_fan(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
-        ch_group_t* ch_group = new_ch_group(2, 1, 1);
+        ch_group_t* ch_group = new_ch_group(2, 0, 1);
         ch_group->accessory = service_numerator;
         set_killswitch(ch_group, json_context);
         uint8_t homekit_enabled = acc_homekit_enabled(json_context);
@@ -9335,7 +9305,7 @@ void normal_mode_init() {
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
-        ch_group->num[0] = autoswitch_time(json_context);
+        ch_group->timer2 = autoswitch_time(json_context, ch_group);
         
         if (ch_group->homekit_enabled) {
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
@@ -9363,20 +9333,20 @@ void normal_mode_init() {
         }
         ch_group->ch[1]->value.float_value = saved_max_speed;
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, TYPE_FAN);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, TYPE_FAN);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput_1, ch_group, TYPE_FAN);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput_0, ch_group, TYPE_FAN);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate_1, ch_group, TYPE_FAN);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate_0, ch_group, TYPE_FAN);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
         
         const bool exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch_group, TYPE_FAN);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch_group, TYPE_FAN);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate_1, ch_group, TYPE_FAN);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate_0, ch_group, TYPE_FAN);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1);
+            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0);
             
             ch_group->ch[0]->value.bool_value = !((uint8_t) set_initial_state(ch_group->accessory, 0, json_context, ch_group->ch[0], CH_TYPE_BOOL, false));
             if (exec_actions_on_boot) {
@@ -9386,30 +9356,30 @@ void normal_mode_init() {
             }
            
         } else {
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput_1, ch_group, TYPE_FAN)) {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
                 if (exec_actions_on_boot) {
-                    diginput_1(99, ch_group, TYPE_FAN);
+                    diginput(99, ch_group, 1);
                 } else {
-                    digstate_1(99, ch_group, TYPE_FAN);
+                    digstate(99, ch_group, 1);
                 }
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput_0, ch_group, TYPE_FAN)) {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
                 ch_group->ch[0]->value.int_value = 1;
                 if (exec_actions_on_boot) {
-                    diginput_0(99, ch_group, TYPE_FAN);
+                    diginput(99, ch_group, 0);
                 } else {
-                    digstate_0(99, ch_group, TYPE_FAN);
+                    digstate(99, ch_group, 0);
                 }
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate_1, ch_group, TYPE_FAN)) {
-                digstate_1(99, ch_group, TYPE_FAN);
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
+                digstate(99, ch_group, 1);
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate_0, ch_group, TYPE_FAN)) {
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
                 ch_group->ch[0]->value.int_value = 1;
-                digstate_0(99, ch_group, TYPE_FAN);
+                digstate(99, ch_group, 0);
             }
         }
     }

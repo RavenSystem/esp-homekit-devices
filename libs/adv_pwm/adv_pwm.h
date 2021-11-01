@@ -18,6 +18,7 @@ void adv_pwm_set_freq(const uint16_t freq);
 void adv_pwm_set_duty(const uint8_t gpio, const uint16_t duty, uint16_t dithering);
 uint16_t adv_pwm_get_duty(const uint8_t gpio);
 void adv_pwm_new_channel(const uint8_t gpio, const bool inverted);
+//void adv_pwm_set_zc_gpio(const uint8_t gpio);
 
 #ifdef __cplusplus
 }

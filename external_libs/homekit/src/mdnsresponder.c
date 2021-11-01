@@ -780,6 +780,8 @@ static void mdns_send_mcast(struct netif* netif, const ip_addr_t *addr, u8_t* ms
             dest_addr = &gMulticastV4Addr;
         }
         
+        //const uint32_t free_heap = xPortGetFreeHeapSize();
+        
         LOCK_TCPIP_CORE();
         err = udp_sendto_if(gMDNS_pcb, p, dest_addr, LWIP_IANA_PORT_MDNS, netif);
         UNLOCK_TCPIP_CORE();
@@ -790,11 +792,21 @@ static void mdns_send_mcast(struct netif* netif, const ip_addr_t *addr, u8_t* ms
 #ifdef qDebugLog
             printf(" - responded to " IPSTR " with %d bytes err %d\n", IP2STR(dest_addr), nBytes, err);
 #endif
+            /*
+            if (free_heap < 10240) {
+                uint8_t count = 0;
+                while (free_heap > xPortGetFreeHeapSize() && count < 2) {
+                    count++;
+                    vTaskDelay(1);
+                }
+            }
+             */
         } else {
-            printf(">>> mDNS_send failed (errno %d)\n", err);
+            mdns_status = MDNS_STATUS_WORKING;
+            printf(">>> mDNS_send failed (%d)\n", err);
         }
     } else {
-        printf(">>> mDNS_send: alloc failed[%d]\n", nBytes);
+        printf(">>> mDNS_send alloc failed [%d]\n", nBytes);
     }
 }
     

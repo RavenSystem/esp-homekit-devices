@@ -161,17 +161,10 @@ typedef struct {
     homekit_valid_values_range_t *ranges;
 } homekit_valid_values_ranges_t;
 
-
-typedef void (*homekit_characteristic_change_callback_fn)(homekit_characteristic_t *ch, homekit_value_t value, void *context);
-
-typedef struct _homekit_characteristic_change_callback {
-    homekit_characteristic_change_callback_fn function;
+typedef struct _homekit_characteristic_subscription {
     void *context;
-    struct _homekit_characteristic_change_callback *next;
-} homekit_characteristic_change_callback_t;
-
-
-#define HOMEKIT_CHARACTERISTIC_CALLBACK(f, ...) &(homekit_characteristic_change_callback_t) { .function = f, ##__VA_ARGS__ }
+    struct _homekit_characteristic_subscription *next;
+} homekit_characteristic_subscription_t;
 
 
 struct _homekit_characteristic {
@@ -199,10 +192,8 @@ struct _homekit_characteristic {
 
     homekit_valid_values_t valid_values;
     homekit_valid_values_ranges_t valid_values_ranges;
-
-    homekit_value_t (*getter)();
-    void (*setter)(const homekit_value_t);
-    homekit_characteristic_change_callback_t *callback;
+    
+    homekit_characteristic_subscription_t* subscriptions;
 
     homekit_value_t (*getter_ex)(const homekit_characteristic_t *ch);
     void (*setter_ex)(homekit_characteristic_t *ch, const homekit_value_t value);
@@ -327,24 +318,20 @@ homekit_characteristic_t *homekit_service_characteristic_by_type(homekit_service
 homekit_characteristic_t *homekit_characteristic_by_aid_and_iid(homekit_accessory_t **accessories, int aid, int iid);
 
 void homekit_characteristic_notify(homekit_characteristic_t *ch);
-void homekit_characteristic_add_notify_callback(
+void homekit_characteristic_add_notify_subscription(
     homekit_characteristic_t *ch,
-    homekit_characteristic_change_callback_fn callback,
     void *context
 );
-void homekit_characteristic_remove_notify_callback(
+void homekit_characteristic_remove_notify_subscription(
     homekit_characteristic_t *ch,
-    homekit_characteristic_change_callback_fn callback,
     void *context
 );
-void homekit_accessories_clear_notify_callbacks(
+void homekit_accessories_clear_notify_subscriptions(
     homekit_accessory_t **accessories,
-    homekit_characteristic_change_callback_fn callback,
     void *context
 );
-bool homekit_characteristic_has_notify_callback(
+bool homekit_characteristic_has_notify_subscription(
     const homekit_characteristic_t *ch,
-    homekit_characteristic_change_callback_fn callback,
     void *context
 );
 

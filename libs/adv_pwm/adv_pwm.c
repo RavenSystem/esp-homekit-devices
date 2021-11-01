@@ -65,7 +65,7 @@ uint16_t adv_pwm_get_duty(const uint8_t gpio) {
     return 0;
 }
 
-IRAM static void adv_pwm_worker() {
+static void IRAM adv_pwm_worker() {
     uint32_t next_load = adv_pwm_config->max_load;
     uint16_t next_duty = UINT16_MAX;
     
@@ -223,4 +223,11 @@ void adv_pwm_new_channel(const uint8_t gpio, const bool inverted) {
         }
     }
 }
-
+/*
+void adv_pwm_set_zc_gpio(const uint8_t gpio) {
+    adv_pwm_init(2);
+    
+    gpio_enable(gpio, GPIO_INPUT);
+    gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_ANY, zero_crossing_interrupt);
+}
+ */

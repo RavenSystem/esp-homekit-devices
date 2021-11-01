@@ -16,11 +16,6 @@
     #error "!!! UNKNOWN PLATFORM: ESP_OPEN_RTOS or ESP_IDF"
 #endif
 
-typedef struct _autooff_setter_params {
-    homekit_characteristic_t* ch;
-    uint8_t type;
-} autooff_setter_params_t;
-
 typedef struct _last_state {
     char *id;
     homekit_characteristic_t* ch;
@@ -168,14 +163,24 @@ typedef struct _action_task {
 
 typedef struct _lightbulb_group {
     uint16_t autodimmer: 10;
+    uint8_t channels:3;
     bool armed_autodimmer: 1;
     bool autodimmer_reverse: 1;
     bool lightbulb_task_running: 1;
-    //bool temp_changed: 1;
     uint8_t autodimmer_task_step;
+    uint8_t type: 6;
+    bool has_changed: 1;
+    //bool temp_changed: 1;
+    
+    uint16_t pwm_dither;
     
     uint16_t step;
     uint16_t autodimmer_task_delay;
+    
+    int32_t step_value[4];
+    
+    uint16_t range_start;
+    uint16_t range_end;
     
     uint8_t gpio[5];
     
@@ -197,8 +202,23 @@ typedef struct _lightbulb_group {
 
     homekit_characteristic_t* ch0;
     
+    TimerHandle_t timer;
+    
     struct _lightbulb_group* next;
 } lightbulb_group_t;
+
+typedef struct _addressled {
+    uint8_t map[5];
+    
+    uint8_t gpio;
+    
+    uint16_t max_range;
+    uint16_t time_0;
+    uint16_t time_1;
+    uint16_t period;
+    
+    struct _addressled* next;
+} addressled_t;
 
 typedef void (*ping_callback_fn)(uint16_t gpio, void* args, uint8_t param);
 
@@ -288,6 +308,7 @@ typedef struct _main_config {
     uint64_t used_gpio: MAX_GPIOS;
     uint8_t wifi_mode: 3;
     bool clock_ready: 1;
+    uint8_t wifi_ip;
     
     char name_value[11];
     char serial_value[13];
@@ -308,6 +329,8 @@ typedef struct _main_config {
     timetable_action_t* timetable_actions;
     
     led_t* status_led;
+    
+    addressled_t* addressleds;
 } main_config_t;
 
 #endif // __HAA_TYPES_H__

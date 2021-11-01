@@ -109,7 +109,7 @@ static err_t ping_send(int s, const ip_addr_t *addr) {
     return (err ? ERR_OK : ERR_VAL);
 }
 
-static bool ping_recv(int s) {
+static int ping_recv(int s) {
     char buf[64];
     int len;
     struct sockaddr_storage from;
@@ -146,7 +146,7 @@ static bool ping_recv(int s) {
                 if (iecho->id == PING_ID &&
                     iecho->seqno == lwip_htons(ping_seq_num) &&
                     ICMPH_TYPE(iecho) == ICMP_ER) {
-                    return true;
+                    return 1;
                 }
             }
 #endif /* LWIP_IPV4 */
@@ -154,13 +154,12 @@ static bool ping_recv(int s) {
         fromlen = sizeof(from);
     }
 
-    return false;
+    return 0;
 }
 
-bool ping(ip_addr_t ping_target) {
+int ping(ip_addr_t ping_target) {
     int s;
-    int ret;
-    err_t err;
+    int result = -1;
 
 #if LWIP_SO_SNDRCVTIMEO_NONSTANDARD
 	int timeout = PING_RCV_TIMEO;
@@ -183,20 +182,14 @@ bool ping(ip_addr_t ping_target) {
 #endif
     if (s < 0) {
         printf("ping error creating socket (%i)\n", s);
-        return false;
+        return s;
     }
     
     const struct timeval sndtimeout = { 3, 0 };
-    ret = lwip_setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
-    LWIP_ASSERT("setting send timeout failed", ret == 0);
-    LWIP_UNUSED_ARG(ret);
+    lwip_setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
+    lwip_setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     
-    ret = lwip_setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-    LWIP_ASSERT("setting receive timeout failed", ret == 0);
-    LWIP_UNUSED_ARG(ret);
-
-    bool result = false;
-    if ((err = ping_send(s, &ping_target)) == ERR_OK) {
+    if (ping_send(s, &ping_target) == ERR_OK) {
         result = ping_recv(s);
     }
     lwip_close(s);

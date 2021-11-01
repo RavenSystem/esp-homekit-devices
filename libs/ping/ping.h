@@ -11,6 +11,6 @@
 
 #include "lwip/ip_addr.h"
 
-bool ping(ip_addr_t ping_addr);
+int ping(ip_addr_t ping_addr);
 
 #endif // __BINARY_PING__
