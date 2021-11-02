@@ -18,9 +18,12 @@
 #include <math.h>
 #include <esplibs/libmain.h>
 
+#define CPU_FREQ_MHZ                        (80)
+
 #elif defined(ESP_IDF)
 
 #define sdk_system_restart()                esp_restart()
+#define CPU_FREQ_MHZ                        (160)
 
 #else
 #error "!!! UNKNOWN PLATFORM: ESP_OPEN_RTOS or ESP_IDF"
@@ -875,7 +878,7 @@ inline void save_states_callback() {
 }
 
 void homekit_characteristic_notify_safe(homekit_characteristic_t *ch) {
-    if (main_config.wifi_status == WIFI_STATUS_CONNECTED && main_config.enable_homekit_server) {
+    if (main_config.wifi_status == WIFI_STATUS_CONNECTED && main_config.enable_homekit_server && ch_group_find(ch)->homekit_enabled) {
         homekit_characteristic_notify(ch);
     }
 }
@@ -8448,10 +8451,18 @@ void normal_mode_init() {
             addressled_t* addressled = new_addressled(lightbulb_group->gpio[0], LIGHTBULB_RANGE_END);
             
             cJSON* nrz_times = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_NRZ_TIMES_ARRAY_SET);
+            
             if (nrz_times) {
-                addressled->time_0 = cJSON_GetArrayItem(nrz_times, 0)->valuedouble;
-                addressled->time_1 = cJSON_GetArrayItem(nrz_times, 1)->valuedouble;
-                addressled->period = cJSON_GetArrayItem(nrz_times, 2)->valuedouble;
+                uint16_t nrz_ticks(float time_us) {
+                    return (CPU_FREQ_MHZ * time_us) - 1;
+                }
+                
+                const float t0h = cJSON_GetArrayItem(nrz_times, 0)->valuedouble;
+                addressled->time_0 = nrz_ticks(t0h);                                                    // T0H
+                addressled->time_1 = nrz_ticks(cJSON_GetArrayItem(nrz_times, 1)->valuedouble);          // T1H
+                addressled->period = nrz_ticks(t0h + cJSON_GetArrayItem(nrz_times, 2)->valuedouble);    // T0H + T0L
+                
+                INFO("NRZ Ticks %i, %i, %i", addressled->time_0, addressled->time_1, addressled->period);
             }
             
             cJSON* color_map = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COLOR_MAP_SET);
