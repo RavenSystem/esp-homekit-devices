@@ -335,7 +335,7 @@ ch_group_t* new_ch_group(const uint8_t chs, const uint8_t nums, const uint8_t la
     return ch_group;
 }
 
-ch_group_t* ch_group_find(homekit_characteristic_t* ch) {
+ch_group_t* IRAM ch_group_find(homekit_characteristic_t* ch) {
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
         for (uint8_t i = 0; i < ch_group->chs; i++) {
@@ -350,7 +350,7 @@ ch_group_t* ch_group_find(homekit_characteristic_t* ch) {
     return NULL;
 }
 
-ch_group_t* ch_group_find_by_acc(uint16_t accessory) {
+ch_group_t* IRAM ch_group_find_by_acc(uint16_t accessory) {
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group &&
            ch_group->accessory != accessory) {
@@ -360,7 +360,7 @@ ch_group_t* ch_group_find_by_acc(uint16_t accessory) {
     return ch_group;
 }
 
-lightbulb_group_t* lightbulb_group_find(homekit_characteristic_t* ch) {
+lightbulb_group_t* IRAM lightbulb_group_find(homekit_characteristic_t* ch) {
     lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
     while (lightbulb_group &&
            lightbulb_group->ch0 != ch) {
@@ -877,8 +877,8 @@ inline void save_states_callback() {
     esp_timer_start(SAVE_STATES_TIMER);
 }
 
-void homekit_characteristic_notify_safe(homekit_characteristic_t *ch) {
-    if (main_config.wifi_status == WIFI_STATUS_CONNECTED && main_config.enable_homekit_server && ch_group_find(ch)->homekit_enabled) {
+void IRAM homekit_characteristic_notify_safe(homekit_characteristic_t *ch) {
+    if (ch_group_find(ch)->homekit_enabled && main_config.wifi_status == WIFI_STATUS_CONNECTED && main_config.enable_homekit_server) {
         homekit_characteristic_notify(ch);
     }
 }
