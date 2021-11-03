@@ -9,13 +9,19 @@
 
 #include "adv_nrzled.h"
 
+#define CPU_FREQ_MHZ                        (80)
+
+uint16_t nrz_ticks(const float time_us) {
+    return (CPU_FREQ_MHZ * time_us) - 4;
+}
+
 static inline IRAM uint32_t get_cycle_count() {
     uint32_t cycles;
     asm volatile("rsr %0,ccount" : "=a" (cycles));
     return cycles;
 }
 
-void IRAM nrzled_set(const uint8_t gpio, const uint16_t time_0, const uint16_t time_1, const uint16_t period, uint8_t *colors, const uint16_t size) {
+void IRAM nrzled_set(const uint8_t gpio, const uint16_t ticks_0, const uint16_t ticks_1, const uint16_t period, uint8_t *colors, const uint16_t size) {
     uint32_t c, t;
     uint32_t start = 0;
     
@@ -23,9 +29,9 @@ void IRAM nrzled_set(const uint8_t gpio, const uint16_t time_0, const uint16_t t
         uint8_t color = *colors++;
         
         for (int8_t p = 7; p >= 0; p--) {
-            t = time_0;
+            t = ticks_0;
             if (color & (1 << p)) {
-                t = time_1;
+                t = ticks_1;
             }
             
             while (((c = get_cycle_count()) - start) < period);

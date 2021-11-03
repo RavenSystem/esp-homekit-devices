@@ -18,12 +18,9 @@
 #include <math.h>
 #include <esplibs/libmain.h>
 
-#define CPU_FREQ_MHZ                        (80)
-
 #elif defined(ESP_IDF)
 
 #define sdk_system_restart()                esp_restart()
-#define CPU_FREQ_MHZ                        (160)
 
 #else
 #error "!!! UNKNOWN PLATFORM: ESP_OPEN_RTOS or ESP_IDF"
@@ -388,11 +385,13 @@ addressled_t* new_addressled(const uint8_t gpio, const uint16_t max_range) {
             addressled->max_range = max_range;
         }
     } else {
+        gpio_enable(gpio, GPIO_OUTPUT);
+        gpio_write(gpio, false);
+        
         addressled = malloc(sizeof(addressled_t));
         memset(addressled, 0, sizeof(*addressled));
         
         addressled->gpio = gpio;
-        gpio_enable(gpio, GPIO_OUTPUT);
         addressled->max_range = max_range;
         
         addressled->map[0] = 1;
@@ -401,10 +400,10 @@ addressled_t* new_addressled(const uint8_t gpio, const uint16_t max_range) {
         addressled->map[3] = 3;
         addressled->map[4] = 4;
         
-        // WS2812B
-        addressled->time_0 = 31;
-        addressled->time_1 = 63;
-        addressled->period = 99;
+        // WS2812B 800MHz
+        addressled->time_0 = nrz_ticks(0.4);
+        addressled->time_1 = nrz_ticks(0.8);
+        addressled->period = nrz_ticks(0.4 + 0.85);
         
         addressled->next = main_config.addressleds;
         main_config.addressleds = addressled;
@@ -525,7 +524,7 @@ void reboot_task() {
     INFO("\nRebooting...\n");
     esp_timer_stop(WIFI_WATCHDOG_TIMER);
     
-    vTaskDelay(MS_TO_TICKS((hwrand() % RANDOM_DELAY_MS) + 1000));
+    vTaskDelay(MS_TO_TICKS((hwrand() % RANDOM_DELAY_MS) + 3000));
 
     sdk_system_restart();
 }
@@ -8453,10 +8452,6 @@ void normal_mode_init() {
             cJSON* nrz_times = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_NRZ_TIMES_ARRAY_SET);
             
             if (nrz_times) {
-                uint16_t nrz_ticks(float time_us) {
-                    return (CPU_FREQ_MHZ * time_us) - 1;
-                }
-                
                 const float t0h = cJSON_GetArrayItem(nrz_times, 0)->valuedouble;
                 addressled->time_0 = nrz_ticks(t0h);                                                    // T0H
                 addressled->time_1 = nrz_ticks(cJSON_GetArrayItem(nrz_times, 1)->valuedouble);          // T1H

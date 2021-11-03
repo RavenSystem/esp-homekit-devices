@@ -122,10 +122,11 @@ void ota_init(char* repo, const bool is_ssl) {
 #endif
         wolfSSL_Init();
 
-        ctx = wolfSSL_CTX_new(wolfTLSv1_2_client_method());
+        ctx = wolfSSL_CTX_new(wolfSSLv23_client_method());
+        //wolfSSL_CTX_SetMinVersion(ctx, WOLFSSL_TLSV1_2);
         wolfSSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
     }
-
+    
     word32 idx = 0;
     wc_ecc_init(&public_key);
     
