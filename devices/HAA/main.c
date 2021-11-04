@@ -524,7 +524,7 @@ void reboot_task() {
     INFO("\nRebooting...\n");
     esp_timer_stop(WIFI_WATCHDOG_TIMER);
     
-    vTaskDelay(MS_TO_TICKS((hwrand() % RANDOM_DELAY_MS) + 3000));
+    vTaskDelay(MS_TO_TICKS((hwrand() % RANDOM_DELAY_MS) + 1000));
 
     sdk_system_restart();
 }
@@ -886,7 +886,7 @@ void hkc_custom_ota_setter(homekit_characteristic_t* ch, const homekit_value_t v
     if (!strcmp(value.string_value, CUSTOM_TRIGGER_COMMAND)) {
         INFO("<0> OTA update");
         rboot_set_temp_rom(1);
-        homekit_characteristic_notify_safe(ch);
+        homekit_characteristic_notify(ch);
         reboot_haa();
     }
 }
@@ -895,7 +895,7 @@ void hkc_custom_setup_setter(homekit_characteristic_t* ch, const homekit_value_t
     if (!strcmp(value.string_value, CUSTOM_TRIGGER_COMMAND)) {
         INFO("<0> Setup mode");
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
-        homekit_characteristic_notify_safe(ch);
+        homekit_characteristic_notify(ch);
         reboot_haa();
     }
 }

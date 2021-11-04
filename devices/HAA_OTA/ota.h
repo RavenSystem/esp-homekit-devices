@@ -35,7 +35,7 @@
 #define HOST_LEN                256
 #define RANGE                   "\r\nRange: bytes="
 
-#define MAX_302_JUMPS           6
+#define MAX_302_JUMPS           8
 
 #define HASHSIZE                48          //SHA-384
 #define SIGNSIZE                104         //ECDSA r+s in ASN1 format secP384r1

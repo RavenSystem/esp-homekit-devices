@@ -229,6 +229,7 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
 static int ota_get_final_location(char* repo, char* file, uint16_t port, const bool is_ssl) {
     int retc;
     int ret = 0;
+    int error = 0;
     uint16_t slash;
     WOLFSSL* ssl;
     int socket;
@@ -274,7 +275,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
 
         retc = ota_connect(last_host, port, &socket, &ssl, is_ssl);  //release socket and ssl when ready
         
-        const struct timeval rcvtimeout = { 1, 200000 };
+        const struct timeval rcvtimeout = { 2, 500000 };
         setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
         
         if (!retc) {
@@ -338,17 +339,17 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
                                 
                             } else {
                                 i = MAX_302_JUMPS;
-                                ret = -1;
+                                error = -1;
                             }
                             
                         } else {
                             i = MAX_302_JUMPS;
-                            ret = -2;
+                            error = -2;
                         }
 
                     } else {
                         i = MAX_302_JUMPS;
-                        ret = -3;
+                        error = -3;
                     }
 
                 } else {
@@ -385,11 +386,15 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
     if (buffer) {
         free(buffer);
     }
-
+    
+    if (error < 0) {
+        return error;
+    }
+    
     if (retc) {
         return retc;
     }
-
+    
     return ret;
 }
 
@@ -434,6 +439,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
     int length = 1;
     int clength = 0;
     int collected = 0;
+    int last_collected;
     int writespace = 0;
     int left, header;
 
@@ -441,14 +447,43 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
         return -5;      // Needs to be either a sector or a signature/version file
     }
     
-    if (ota_get_final_location(repo, file, port, is_ssl) <= 0) {
-        ERROR("SERVER");
+    int connection_tries = 0;
+    while ((retc = ota_get_final_location(repo, file, port, is_ssl)) <= 0 && connection_tries < 5) {
+        connection_tries++;
+        ERROR("Tries %i", connection_tries);
+    }
+    
+    if (retc <= 0) {
+        ERROR("FINAL LOCATION");
         return -1;
     }
     
-    INFO("FINAL location: %s/%s\n", last_host, last_location);
+    INFO("FINAL LOCATION: %s/%s\n", last_host, last_location);
     
-    retc = ota_connect(last_host, port, &socket, &ssl, is_ssl);  //release socket and ssl when ready
+    int new_connection() {
+        int tries = 0;
+        while ((retc = ota_connect(last_host, port, &socket, &ssl, is_ssl)) < 0 && tries < 5) {
+            tries++;
+            ERROR("Tries %i", tries);
+            
+            switch (retc) {
+                case 0:
+                case -1:
+                    if (is_ssl) {
+                        wolfSSL_free(ssl);
+                    }
+                case -2:
+                    lwip_close(socket);
+                case -3:
+                default:
+                ;
+            }
+        }
+        
+        return retc;
+    }
+    
+    new_connection();
     
     if (!retc) {
         const uint16_t getlinestart_len = 38 + strlen(last_location) + strlen(last_host);
@@ -460,7 +495,10 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
 
         char *location;
         
-        while (collected < length) {
+        connection_tries = 0;
+        while (collected < length && connection_tries < 5) {
+            last_collected = collected;
+            
             sprintf(recv_buf, "%s%d-%d%s", getlinestart, collected, collected + 4095, CRLFCRLF);
             
             send_bytes = strlen(recv_buf);
@@ -491,7 +529,13 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                             location = strstr_lc(recv_buf, "\ncontent-length:");
                             if (!location) {
                                 ERROR("No content-length");
-                                length = 0;
+                                collected = last_collected;
+                                connection_tries++;
+                                if (is_ssl) {
+                                    wolfSSL_free(ssl);
+                                }
+                                lwip_close(socket);
+                                retc = new_connection();
                                 break;
                             }
                             strchr(location, '\r')[0] = 0;
@@ -516,7 +560,13 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                                 length = clength;
                             } else {
                                 ERROR("No content-range");
-                                length = 0;
+                                collected = last_collected;
+                                connection_tries++;
+                                if (is_ssl) {
+                                    wolfSSL_free(ssl);
+                                }
+                                lwip_close(socket);
+                                retc = new_connection();
                                 break;
                             }
                             
@@ -537,6 +587,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                         if (!header) {
                             recv_bytes += ret;
                             if (sector) { // Write to flash
+                                connection_tries = 0;
                                 if (writespace < ret) {
                                     printf("Sector 0x%05X ", sector + collected);
                                     if (!spiflash_erase_sector(sector + collected)) return -6; // Erase error
@@ -562,8 +613,9 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                             ERROR("%d", ret);
                         }
                         
-                        if (!ret && collected < length)
-                            retc = ota_connect(last_host, port, &socket, &ssl, is_ssl);
+                        if (!ret && collected < length) {
+                            retc = new_connection();
+                        }
                         
                         break;
                     }
@@ -582,7 +634,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                 }
                 
                 if (ret == -308) {
-                    retc = ota_connect(last_host, port, &socket, &ssl, is_ssl); //dangerous for eternal connecting? memory leak?
+                    retc = new_connection();
                 } else {
                     break;
                 }
@@ -609,6 +661,9 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
         ;
     }
 
+    if (connection_tries >= 5) {
+        return -1;
+    }
     return collected;
 }
 
