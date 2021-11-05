@@ -46,7 +46,7 @@
 static ecc_key public_key;
 static byte file_first_byte[] = { 0xff };
 static const byte magic1[] = "HAP";
-static WOLFSSL_CTX* ctx;
+static WOLFSSL_CTX* ctx = NULL;;
 static char last_host[HOST_LEN];
 static char last_location[RECV_BUF_LEN];
 
@@ -122,8 +122,11 @@ void ota_init(char* repo, const bool is_ssl) {
 #endif
         wolfSSL_Init();
 
+        //ctx = wolfSSL_CTX_new(wolfTLSv1_2_client_method());
+        
         ctx = wolfSSL_CTX_new(wolfSSLv23_client_method());
         //wolfSSL_CTX_SetMinVersion(ctx, WOLFSSL_TLSV1_2);
+        
         wolfSSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
     }
     
@@ -275,7 +278,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
 
         retc = ota_connect(last_host, port, &socket, &ssl, is_ssl);  //release socket and ssl when ready
         
-        const struct timeval rcvtimeout = { 2, 500000 };
+        const struct timeval rcvtimeout = { 1, 500000 };
         setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
         
         if (!retc) {
@@ -284,9 +287,9 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
             } else {
                 ret = lwip_write(socket, recv_buf, send_bytes);
             }
-
+            
             if (ret > 0) {
-                INFO("sent OK");
+                INFO("Sent OK");
 
                 //wolfSSL_shutdown(ssl); //by shutting down the connection before even reading, we reduce the payload to the minimum
                 bool all_ok = false;
@@ -426,7 +429,7 @@ static void sign_check_client(const int set) {
 }
 #endif  // HAABOOT
 
-static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int bufsz, uint16_t port, const bool is_ssl) { //number of bytes
+static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int bufsz, uint16_t port, const bool is_ssl, int* resume) { //number of bytes
     INFO("\nDOWNLOADING FILE\n");
     
     int retc, ret = 0;
@@ -436,9 +439,15 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
     char recv_buf[RECV_BUF_LEN];
     int recv_bytes = 0;
     int send_bytes;     // = sizeof(send_data);
-    int length = 1;
-    int clength = 0;
     int collected = 0;
+    
+    if (resume) {
+        collected = *resume;
+        INFO("RESUMING DOWNLOAD FROM %i\n", collected);
+    }
+    
+    int length = collected + 1;
+    int clength = 0;
     int last_collected;
     int writespace = 0;
     int left, header;
@@ -462,7 +471,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
     
     int new_connection() {
         int tries = 0;
-        while ((retc = ota_connect(last_host, port, &socket, &ssl, is_ssl)) < 0 && tries < 5) {
+        while ((retc = ota_connect(last_host, port, &socket, &ssl, is_ssl)) < 0 && tries < 3) {
             tries++;
             ERROR("Tries %i", tries);
             
@@ -524,11 +533,12 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
 
                     if (ret > 0) {
                         if (header) {
-                            //INFO("%s\n-------- %d", recv_buf, ret);
+                            //INFO("--------\n%s\n-------- %d", recv_buf, ret);
                             // Parse Content-Length: xxxx
                             location = strstr_lc(recv_buf, "\ncontent-length:");
                             if (!location) {
                                 ERROR("No content-length");
+                                INFO("--------\n%s\n-------- %d", recv_buf, ret);
                                 collected = last_collected;
                                 connection_tries++;
                                 if (is_ssl) {
@@ -560,6 +570,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                                 length = clength;
                             } else {
                                 ERROR("No content-range");
+                                INFO("--------\n%s\n-------- %d", recv_buf, ret);
                                 collected = last_collected;
                                 connection_tries++;
                                 if (is_ssl) {
@@ -661,16 +672,27 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
         ;
     }
 
-    if (connection_tries >= 5) {
-        return -1;
+    if (resume) {
+        *resume = collected;
     }
-    return collected;
+    
+    if (connection_tries >= 3) {
+        return -20;
+    }
+    
+    return 0;
+}
+
+int ota_get_file_part(char* repo, char* file, int sector, uint16_t port, const bool is_ssl, int* collected) {
+    INFO("Get file part from %s", repo);
+    
+    return ota_get_file_ex(repo, file, sector, NULL, 0, port, is_ssl, collected);
 }
 
 int ota_get_file(char* repo, char* file, int sector, uint16_t port, const bool is_ssl) {
     INFO("Get file from %s", repo);
     
-    return ota_get_file_ex(repo, file, sector, NULL, 0, port, is_ssl);
+    return ota_get_file_ex(repo, file, sector, NULL, 0, port, is_ssl, NULL);
 }
 
 char* ota_get_version(char* repo, char* version_file, uint16_t port, const bool is_ssl) {
@@ -679,7 +701,7 @@ char* ota_get_version(char* repo, char* version_file, uint16_t port, const bool 
     byte* version = malloc(VERSIONFILESIZE + 1);
     memset(version, 0, VERSIONFILESIZE + 1);
 
-    if (ota_get_file_ex(repo, version_file, 0, version, VERSIONFILESIZE, port, is_ssl)) {
+    if (ota_get_file_ex(repo, version_file, 0, version, VERSIONFILESIZE, port, is_ssl, NULL) == 0) {
         INFO("VERSION of %s: %s", version_file, (char*) version);
     } else {
         free(version);
@@ -697,7 +719,7 @@ int ota_get_sign(char* repo, char* file, byte* signature, uint16_t port, bool is
     strcpy(signame, file);
     strcat(signame, SIGNFILESUFIX);
     memset(signature, 0, SIGNSIZE);
-    ret = ota_get_file_ex(repo, signame, 0, signature, SIGNSIZE, port, is_ssl);
+    ret = ota_get_file_ex(repo, signame, 0, signature, SIGNSIZE, port, is_ssl, NULL);
     free(signame);
     
     return ret;

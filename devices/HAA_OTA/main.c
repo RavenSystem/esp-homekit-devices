@@ -36,11 +36,15 @@ char* user_version = NULL;
 char* new_version = NULL;
 char* ota_version = NULL;
 byte signature[SIGNSIZE];
-int file_size = 0;
+int file_size;
+int result;
 
 uint16_t port = 443;
 bool is_ssl = true;
 uint8_t tries_count = 0;
+uint8_t tries_partial_count;
+
+#define TRIES_PARTIAL_COUNT_MAX         (4)
 
 void ota_task(void *arg) {
     INFO("\n\nHAA Installer v%s\n\n", OTAVERSION);
@@ -85,6 +89,9 @@ void ota_task(void *arg) {
         for (;;) {
             INFO("\n*** STARTING UPDATE PROCESS\n");
             tries_count++;
+            tries_partial_count = 0;
+            file_size = 0;
+            result = 0;
             
 #ifdef HAABOOT
             INFO("\nRunning HAABOOT\n");
@@ -127,22 +134,26 @@ void ota_task(void *arg) {
             }
 */
             static char otamainfile[] = OTAMAINFILE;
-            if (ota_get_sign(user_repo, otamainfile, signature, port, is_ssl) > 0) {
-                file_size = ota_get_file(user_repo, otamainfile, BOOT1SECTOR, port, is_ssl);
-                if (file_size > 0 && ota_verify_sign(BOOT1SECTOR, file_size, signature) == 0) {
-                    ota_finalize_file(BOOT1SECTOR);
-                    INFO("\n*** OTAMAIN installed\n");
-                    sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
-                    rboot_set_temp_rom(1);
-                    ota_reboot();
+            do {
+                tries_partial_count++;
+                if (ota_get_sign(user_repo, otamainfile, signature, port, is_ssl) == 0) {
+                    result = ota_get_file_part(user_repo, otamainfile, BOOT1SECTOR, port, is_ssl, &file_size);
+                    if (result == 0 && ota_verify_sign(BOOT1SECTOR, file_size, signature) == 0) {
+                        ota_finalize_file(BOOT1SECTOR);
+                        INFO("\n*** OTAMAIN installed\n");
+                        sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
+                        rboot_set_temp_rom(1);
+                        ota_reboot();
+                    } else if (file_size < 0) {
+                        ERROR("Installing OTAMAIN");
+                        sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
+                        break;
+                    }
                 } else {
-                    ERROR("Installing OTAMAIN");
+                    ERROR("Downloading OTAMAIN signature");
                     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
                 }
-            } else {
-                ERROR("Downloading OTAMAIN signature");
-                sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
-            }
+            } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
 #else   // HAABOOT
             INFO("\nRunning OTAMAIN\n");
             
@@ -155,19 +166,24 @@ void ota_task(void *arg) {
             
             if (ota_version && strcmp(ota_version, OTAVERSION) != 0) {
                 static char otabootfile[] = OTABOOTFILE;
-                if (ota_get_sign(user_repo, otabootfile, signature, port, is_ssl) > 0) {
-                    file_size = ota_get_file(user_repo, otabootfile, BOOT0SECTOR, port, is_ssl);
-                    if (file_size > 0 && ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
-                        ota_finalize_file(BOOT0SECTOR);
-                        INFO("\n* HAABOOT new version installed\n");
+                do {
+                    tries_partial_count++;
+                    if (ota_get_sign(user_repo, otabootfile, signature, port, is_ssl) == 0) {
+                        result = ota_get_file_part(user_repo, otabootfile, BOOT0SECTOR, port, is_ssl, &file_size);
+                        if (result == 0 && ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
+                            ota_finalize_file(BOOT0SECTOR);
+                            INFO("\n* HAABOOT new version installed\n");
+                            ota_reboot();
+                        } else if (file_size < 0) {
+                            ERROR("Installing HAABOOT new version\n");
+                            break;
+                        }
                     } else {
-                        ERROR("Installing HAABOOT new version\n");
+                        ERROR("Downloading HAABOOT new version signature\n");
                     }
-                    
-                    break;
-                } else {
-                    ERROR("Downloading HAABOOT new version signature\n");
-                }
+                } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
+                
+                break;
             }
             
             if (new_version) {
@@ -179,18 +195,23 @@ void ota_task(void *arg) {
             
             if (new_version && strcmp(new_version, user_version) != 0) {
                 static char haamainfile[] = HAAMAINFILE;
-                if (ota_get_sign(user_repo, haamainfile, signature, port, is_ssl) > 0) {
-                    file_size = ota_get_file(user_repo, haamainfile, BOOT0SECTOR, port, is_ssl);
-                    if (file_size > 0 && ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
-                        ota_finalize_file(BOOT0SECTOR);
-                        sysparam_set_string(USER_VERSION_SYSPARAM, new_version);
-                        INFO("\n* HAAMAIN v%s installed\n", new_version);
+                do {
+                    tries_partial_count++;
+                    if (ota_get_sign(user_repo, haamainfile, signature, port, is_ssl) == 0) {
+                        result = ota_get_file_part(user_repo, haamainfile, BOOT0SECTOR, port, is_ssl, &file_size);
+                        if (result == 0 && ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
+                            ota_finalize_file(BOOT0SECTOR);
+                            sysparam_set_string(USER_VERSION_SYSPARAM, new_version);
+                            INFO("\n* HAAMAIN v%s installed\n", new_version);
+                            ota_reboot();
+                        } else if (file_size < 0) {
+                            ERROR("Installing HAAMAIN\n");
+                            break;
+                        }
                     } else {
-                        ERROR("Installing HAAMAIN\n");
+                        ERROR("Downloading HAAMAIN signature\n");
                     }
-                } else {
-                    ERROR("Downloading HAAMAIN signature\n");
-                }
+                } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
             }
             
             break;
@@ -204,6 +225,7 @@ void ota_task(void *arg) {
         }
     } else {
         ERROR("Reading HAAMAIN Version, fixing\n");
+        sysparam_set_data(USER_VERSION_SYSPARAM, NULL, 0, false);
         sysparam_set_string(USER_VERSION_SYSPARAM, "0.0.0");
     }
     
