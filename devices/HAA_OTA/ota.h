@@ -44,6 +44,7 @@ typedef unsigned char byte;
 
 void ota_init(char* repo, const bool is_ssl);
 char* ota_get_version(char* repo, char* version_file, uint16_t port, const bool is_ssl);
+int ota_get_file_part(char* repo, char* file, int sector, uint16_t port, const bool is_ssl, int *collected);   // Return number of bytes
 int ota_get_file(char* repo, char* file, int sector, uint16_t port, const bool is_ssl);   // Return number of bytes
 void ota_finalize_file(int sector);
 int ota_get_sign(char* repo, char* file, byte* signature, uint16_t port, const bool is_ssl);

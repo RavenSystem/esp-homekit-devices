@@ -194,6 +194,33 @@ void wifi_config_resend_arp() {
     }
 }
 
+static void wifi_config_toggle_phy_mode(const uint8_t phy) {
+    switch (phy) {
+        case 1:
+            sdk_wifi_set_phy_mode(PHY_MODE_11B);
+            break;
+            
+        case 2:
+            sdk_wifi_set_phy_mode(PHY_MODE_11G);
+            break;
+            
+        case 3:
+            sdk_wifi_set_phy_mode(PHY_MODE_11N);
+            break;
+            
+        case 4:
+            if (sdk_wifi_get_phy_mode() == PHY_MODE_11N) {
+                sdk_wifi_set_phy_mode(PHY_MODE_11G);
+            } else {
+                sdk_wifi_set_phy_mode(PHY_MODE_11N);
+            }
+            break;
+            
+        default:
+            break;
+    }
+}
+
 static void wifi_smart_connect_task(void* arg) {
     uint8_t *best_bssid = arg;
     
@@ -223,6 +250,11 @@ static void wifi_smart_connect_task(void* arg) {
     
     sdk_wifi_station_set_config(&sta_config);
     sdk_wifi_station_set_auto_connect(true);
+    
+    int8_t phy_mode = 3;
+    sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
+    wifi_config_toggle_phy_mode(phy_mode);
+    
     sdk_wifi_station_connect();
     
     free(wifi_ssid);
@@ -329,7 +361,7 @@ void wifi_config_smart_connect() {
     }
 }
 
-uint8_t wifi_config_connect(const uint8_t mode);
+uint8_t wifi_config_connect(const uint8_t mode, const uint8_t phy);
 void wifi_config_reset() {
     INFO("Wifi reset");
     sdk_wifi_station_disconnect();
@@ -416,7 +448,7 @@ static void setup_announcer_task() {
     }
 
     uint8_t macaddr[6];
-    sdk_wifi_get_macaddr(SOFTAP_IF, macaddr);
+    sdk_wifi_get_macaddr(STATION_IF, macaddr);
     char message[13];
     snprintf(message, 13, "HAA-%02X%02X%02X\r\n", macaddr[3], macaddr[4], macaddr[5]);
     
@@ -912,7 +944,7 @@ static void wifi_config_softap_start() {
 
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(SOFTAP_IF, macaddr);
-
+    
     struct sdk_softap_config softap_config;
     softap_config.ssid_len = snprintf(
         (char *)softap_config.ssid, sizeof(softap_config.ssid),
@@ -956,7 +988,7 @@ static void wifi_config_softap_start() {
 
 static void wifi_config_sta_connect_timeout_task() {
     if (context->custom_hostname) {
-        struct netif *netif = NULL;
+        struct netif* netif = NULL;
         for (;;) {
             netif = sdk_system_get_netif(STATION_IF);
             if (netif) {
@@ -964,7 +996,7 @@ static void wifi_config_sta_connect_timeout_task() {
             }
             vTaskDelay(MS_TO_TICKS(100));
         }
-        
+         
         netif->hostname = context->custom_hostname;
         INFO("Set hostname");
     }
@@ -973,6 +1005,12 @@ static void wifi_config_sta_connect_timeout_task() {
         vTaskDelay(MS_TO_TICKS(1000));
         
         if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+            int8_t phy_mode = 3;
+            if (sdk_wifi_get_phy_mode() == PHY_MODE_11G) {
+                phy_mode = 2;
+            }
+            sysparam_set_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, phy_mode);
+            
             if (context->on_wifi_ready) {
                 context->on_wifi_ready();
                 
@@ -989,16 +1027,19 @@ static void wifi_config_sta_connect_timeout_task() {
             
             break;
             
-        } else if (sdk_wifi_get_opmode() == STATION_MODE) {
+        } else {
             context->check_counter++;
-            if (context->check_counter > 35) {
+            if (context->check_counter > 32) {
                 context->check_counter = 0;
-                wifi_config_reset();
-                vTaskDelay(MS_TO_TICKS(5000));
-                wifi_config_connect(0);
-                vTaskDelay(MS_TO_TICKS(1000));
                 
-            } else if (context->check_counter % 13 == 0) {
+                if (sdk_wifi_get_opmode() == STATION_MODE) {
+                    wifi_config_reset();
+                    vTaskDelay(MS_TO_TICKS(5000));
+                    wifi_config_connect(0, 4);
+                    vTaskDelay(MS_TO_TICKS(1000));
+                }
+                
+            } else if (context->check_counter % 5 == 0) {
                 wifi_config_resend_arp();
             }
         }
@@ -1035,7 +1076,7 @@ static void auto_reboot_run() {
     sdk_system_restart();
 }
 
-uint8_t wifi_config_connect(const uint8_t mode) {
+uint8_t wifi_config_connect(const uint8_t mode, const uint8_t phy) {
     char *wifi_ssid = NULL;
     sysparam_get_string(WIFI_SSID_SYSPARAM, &wifi_ssid);
     
@@ -1083,6 +1124,9 @@ uint8_t wifi_config_connect(const uint8_t mode) {
             sdk_wifi_set_opmode(STATION_MODE);
             sdk_wifi_station_set_config(&sta_config);
             sdk_wifi_station_set_auto_connect(true);
+
+            wifi_config_toggle_phy_mode(phy);
+            
             sdk_wifi_station_connect();
             
         } else {
@@ -1091,6 +1135,8 @@ uint8_t wifi_config_connect(const uint8_t mode) {
             sdk_wifi_set_opmode(STATION_MODE);
             sdk_wifi_station_set_config(&sta_config);
             sdk_wifi_station_set_auto_connect(true);
+            
+            wifi_config_toggle_phy_mode(phy);
             
             if (wifi_mode == 4) {
                 xTaskCreate(wifi_scan_sc_task, "wifi_scan_smart", 384, NULL, (tskIDLE_PRIORITY + 2), NULL);
@@ -1119,7 +1165,12 @@ uint8_t wifi_config_connect(const uint8_t mode) {
 }
 
 static void wifi_config_station_connect() {
-    if (wifi_config_connect(0) == 1) {
+    int8_t phy_mode = 3;
+    if (!context->on_wifi_ready) {
+        sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
+    }
+    
+    if (wifi_config_connect(0, phy_mode) == 1) {
         xTaskCreate(wifi_config_sta_connect_timeout_task, "sta_connect", 512, NULL, (tskIDLE_PRIORITY + 1), &context->sta_connect_timeout);
         
         if (!context->on_wifi_ready) {

@@ -176,6 +176,33 @@ static void wifi_config_resend_arp() {
     }
 }
 
+static void wifi_config_toggle_phy_mode(const uint8_t phy) {
+    switch (phy) {
+        case 1:
+            sdk_wifi_set_phy_mode(PHY_MODE_11B);
+            break;
+            
+        case 2:
+            sdk_wifi_set_phy_mode(PHY_MODE_11G);
+            break;
+            
+        case 3:
+            sdk_wifi_set_phy_mode(PHY_MODE_11N);
+            break;
+            
+        case 4:
+            if (sdk_wifi_get_phy_mode() == PHY_MODE_11N) {
+                sdk_wifi_set_phy_mode(PHY_MODE_11G);
+            } else {
+                sdk_wifi_set_phy_mode(PHY_MODE_11N);
+            }
+            break;
+            
+        default:
+            break;
+    }
+}
+
 static void wifi_smart_connect_task(void* arg) {
     uint8_t *best_bssid = arg;
     
@@ -205,6 +232,11 @@ static void wifi_smart_connect_task(void* arg) {
     
     sdk_wifi_station_set_config(&sta_config);
     sdk_wifi_station_set_auto_connect(true);
+    
+    int8_t phy_mode = 3;
+    sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
+    wifi_config_toggle_phy_mode(phy_mode);
+    
     sdk_wifi_station_connect();
     
     free(wifi_ssid);
@@ -311,7 +343,7 @@ static void wifi_config_smart_connect() {
     }
 }
 
-static uint8_t wifi_config_connect();
+static uint8_t wifi_config_connect(const uint8_t phy);
 static void wifi_config_reset() {
     INFO("Wifi reset");
     sdk_wifi_station_disconnect();
@@ -870,24 +902,29 @@ static void wifi_config_sta_connect_timeout_task() {
         vTaskDelay(MS_TO_TICKS(1000));
         
         if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
+            int8_t phy_mode = 3;
+            if (sdk_wifi_get_phy_mode() == PHY_MODE_11G) {
+                phy_mode = 2;
+            }
+            sysparam_set_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, phy_mode);
+            
             context->on_wifi_ready();
             
             wifi_config_context_free(context);
             break;
 
-        } else {
+        } else if (sdk_wifi_get_opmode() == STATION_MODE) {
             context->check_counter++;
-            if (context->check_counter % 35 == 0) {
+            if (context->check_counter % 32 == 0) {
                 wifi_config_reset();
                 vTaskDelay(MS_TO_TICKS(5000));
-                wifi_config_connect();
+                wifi_config_connect(4);
                 vTaskDelay(MS_TO_TICKS(1000));
                 
+            } else if (context->check_counter % 5 == 0) {
+                wifi_config_resend_arp();
             } else if (context->check_counter > 240) {
                 auto_reboot_run();
-                
-            } else if (context->check_counter % 13 == 0) {
-                wifi_config_resend_arp();
             }
         }
     }
@@ -895,7 +932,7 @@ static void wifi_config_sta_connect_timeout_task() {
     vTaskDelete(NULL);
 }
 
-static uint8_t wifi_config_connect() {
+static uint8_t wifi_config_connect(const uint8_t phy) {
     char *wifi_ssid = NULL;
     sysparam_set_string(OTA_VERSION_SYSPARAM, OTAVERSION);
     
@@ -945,6 +982,9 @@ static uint8_t wifi_config_connect() {
             sdk_wifi_set_opmode(STATION_MODE);
             sdk_wifi_station_set_config(&sta_config);
             sdk_wifi_station_set_auto_connect(true);
+            
+            wifi_config_toggle_phy_mode(phy);
+            
             sdk_wifi_station_connect();
             
         } else {
@@ -953,6 +993,8 @@ static uint8_t wifi_config_connect() {
             sdk_wifi_set_opmode(STATION_MODE);
             sdk_wifi_station_set_config(&sta_config);
             sdk_wifi_station_set_auto_connect(true);
+            
+            wifi_config_toggle_phy_mode(phy);
             
             if (wifi_mode == 4) {
                 xTaskCreate(wifi_scan_sc_task, "wifi_scan_smart", 384, NULL, (tskIDLE_PRIORITY + 2), NULL);
@@ -984,7 +1026,10 @@ static void wifi_config_station_connect() {
     int8_t setup_mode = 0;
     sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &setup_mode);
     
-    if (wifi_config_connect() == 1 && setup_mode == 0) {
+    int8_t phy_mode = 3;
+    sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
+    
+    if (wifi_config_connect(phy_mode) == 1 && setup_mode == 0) {
         INFO("\nHAA INSTALLER - NORMAL MODE\n");
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
 

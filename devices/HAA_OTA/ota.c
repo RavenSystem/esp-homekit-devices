@@ -133,7 +133,7 @@ void ota_init(char* repo, const bool is_ssl) {
     word32 idx = 0;
     wc_ecc_init(&public_key);
     
-    // Public key to verify signatures
+    // Public key to verify signatures and avoid malware
     const byte raw_public_key[] = {
         0x30, 0x76, 0x30, 0x10, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce,
         0x3d, 0x02, 0x01, 0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x22,
@@ -153,7 +153,7 @@ void ota_init(char* repo, const bool is_ssl) {
 }
 
 static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, const bool is_ssl) {
-    printf("\n*** NEW CONNECTION\nDNS..");
+    printf("*** NEW CONNECTION\nDNS..");
     int ret;
     const struct addrinfo hints = {
         .ai_family = AF_UNSPEC,
@@ -192,7 +192,8 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
     }
     printf("OK ");
 
-    if (is_ssl) {   // SSL mode
+    // SSL mode
+    if (is_ssl) {
         printf("SSL..");
         *ssl = wolfSSL_new(ctx);
         
@@ -204,27 +205,32 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
 
         printf("OK ");
 
-        // wolfSSL_Debugging_ON();
-        wolfSSL_set_fd(*ssl, *socket);
-        printf("set_fd ");
-
+        //wolfSSL_Debugging_ON();
+        
+        ret = wolfSSL_set_fd(*ssl, *socket);
+        printf("FD %s:%d..", host, port);
+        if (ret != SSL_SUCCESS) {
+            freeaddrinfo(res);
+            ERROR("%i", ret);
+            ret = wolfSSL_get_error(*ssl, ret);
+            ERROR("SSL %d", ret);
+            return -1;
+        }
+        
         //wolfSSL_Debugging_OFF();
-
-        printf("to %s port %d..", host, port);
+        
         ret = wolfSSL_connect(*ssl);
         if (ret != SSL_SUCCESS) {
             freeaddrinfo(res);
-            ERROR("Return [-0x%x]", -ret);
+            ERROR("Connect %i", ret);
             ret = wolfSSL_get_error(*ssl, ret);
-            ERROR("wolfSSL_send %d", ret);
+            ERROR("SSL %d", ret);
             return -1;
         }
-        printf("OK");
+        INFO("OK");
     }
     
     freeaddrinfo(res);
-    
-    INFO("");
     
     return 0;
 }
@@ -236,7 +242,6 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
     uint16_t slash;
     WOLFSSL* ssl;
     int socket;
-    char recv_buf[RECV_BUF_LEN];
     
     size_t buffer_len;
     char* buffer = NULL;
@@ -251,18 +256,18 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
         strcat(last_location, file);
     }
     
+    char* recv_buf = malloc(RECV_BUF_LEN);
+    
     uint8_t i = 0;
     while (i < MAX_302_JUMPS) {
-        buffer_len = RECV_BUF_LEN;
+        buffer_len = 0;
         if (buffer) {
             free(buffer);
             buffer = NULL;
         }
-        buffer = malloc(RECV_BUF_LEN);
-        memset(buffer, 0, RECV_BUF_LEN);
         
         i++;
-        INFO("Forwarding: %s/%s", last_host, last_location);
+        INFO("*** FORWARDING: %s:%i/%s", last_host, port, last_location);
         memset(recv_buf, 0, RECV_BUF_LEN);
         strcat(strcat(strcat(strcat(strcat(strcat(strcpy(recv_buf,
                                             REQUESTHEAD),
@@ -272,16 +277,15 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
                                             RANGE),
                                             "0-1"),
                                             CRLFCRLF);
-        
-        uint16_t send_bytes = strlen(recv_buf);
-        INFO("ret = %i", send_bytes);
 
         retc = ota_connect(last_host, port, &socket, &ssl, is_ssl);  //release socket and ssl when ready
         
-        const struct timeval rcvtimeout = { 1, 500000 };
+        const struct timeval rcvtimeout = { 1, 200000 };
         setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
         
         if (!retc) {
+            const uint16_t send_bytes = strlen(recv_buf);
+            
             if (is_ssl) {
                 ret = wolfSSL_write(ssl, recv_buf, send_bytes);
             } else {
@@ -289,8 +293,8 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
             }
             
             if (ret > 0) {
-                INFO("Sent OK");
-
+                INFO("Write..OK");
+                
                 //wolfSSL_shutdown(ssl); //by shutting down the connection before even reading, we reduce the payload to the minimum
                 bool all_ok = false;
                 
@@ -299,25 +303,29 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
                     
                     if (is_ssl) {
                         ret = wolfSSL_read(ssl, recv_buf, RECV_BUF_LEN - 1);
-                        //ret = wolfSSL_peek(ssl, recv_buf, RECV_BUF_LEN - 1);
                     } else {
                         ret = lwip_read(socket, recv_buf, RECV_BUF_LEN - 1);
                     }
                     
                     if (ret > 0) {
                         all_ok = true;
-                        buffer_len += strlen(recv_buf);
-                        buffer = realloc(buffer, buffer_len);
-                        strcat(buffer, recv_buf);
+                        buffer_len += ret;
+                        char* new_buffer = realloc(buffer, buffer_len + 1);
+                        if (!new_buffer) {
+                            ERROR("Buffer");
+                            break;
+                        }
+                        buffer = new_buffer;
+                        memcpy(buffer + buffer_len - ret, recv_buf, ret);
                     }
-                    
                 } while (ret > 0 && buffer_len < HEADER_BUFFER_LEN);
                 
                 if (all_ok) {
                     ret = buffer_len;
-                    INFO("ret = %i", ret);
-                    buffer[ret] = 0; // Error checking, e.g. not result = 206
-                    INFO("\n%s\n", buffer);
+                    buffer[ret] = 0;
+                    
+                    INFO("GOT %i Bytes:\n%s\n", ret, buffer);
+                    
                     location = strstr_lc(buffer, "http/1.1 ");
                     if (location) {
                         location += 9; // Flush "HTTP/1.1 "
@@ -335,7 +343,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
                                 }
                                 
                                 location = strstr_lc(location , "//");
-                                location += 2; // Flush: //
+                                location += 2; // Flush "//"
 
                                 ota_get_host(location);
                                 ota_get_location(location);
@@ -356,17 +364,17 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
                     }
 
                 } else {
-                    ERROR("Return [-0x%x]", -ret);
+                    ERROR("Read %i", ret);
                     if (is_ssl) {
                         ret = wolfSSL_get_error(ssl, ret);
-                        ERROR("wolfSSL_send %d", ret);
+                        ERROR("SSL %d", ret);
                     }
                 }
             } else {
-                ERROR("Return [-0x%x]", -ret);
+                ERROR("Write %i", ret);
                 if (is_ssl) {
                     ret = wolfSSL_get_error(ssl, ret);
-                    ERROR("wolfSSL_send %d", ret);
+                    ERROR("SSL %d", ret);
                 }
             }
         }
@@ -386,6 +394,8 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
     
     }
     
+    free(recv_buf);
+    
     if (buffer) {
         free(buffer);
     }
@@ -403,7 +413,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
 
 #ifndef HAABOOT
 static void sign_check_client(const int set) {
-    byte sector[SPI_FLASH_SECTOR_SIZE];
+    byte* sector = malloc(SPI_FLASH_SECTOR_SIZE);
     
     if (!spiflash_read(SPIFLASH_BASE_ADDR, sector, SPI_FLASH_SECTOR_SIZE)) {
         ERROR("Read sector");
@@ -426,24 +436,24 @@ static void sign_check_client(const int set) {
         write_flash();
         INFO("Ending...");
     }
+    
+    free(sector);
 }
 #endif  // HAABOOT
 
 static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int bufsz, uint16_t port, const bool is_ssl, int* resume) { //number of bytes
-    INFO("\nDOWNLOADING FILE\n");
+    INFO("*** DOWNLOADING FILE");
     
     int retc, ret = 0;
     WOLFSSL* ssl;
     int socket;
     
-    char recv_buf[RECV_BUF_LEN];
     int recv_bytes = 0;
-    int send_bytes;     // = sizeof(send_data);
     int collected = 0;
     
     if (resume) {
         collected = *resume;
-        INFO("RESUMING DOWNLOAD FROM %i\n", collected);
+        INFO("RESUMING from %i", collected);
     }
     
     int length = collected + 1;
@@ -467,15 +477,16 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
         return -1;
     }
     
-    INFO("FINAL LOCATION: %s/%s\n", last_host, last_location);
+    INFO("*** FINAL LOCATION: %s:%i/%s\n", last_host, port, last_location);
     
     int new_connection() {
         int tries = 0;
-        while ((retc = ota_connect(last_host, port, &socket, &ssl, is_ssl)) < 0 && tries < 3) {
+        int result;
+        while ((result = ota_connect(last_host, port, &socket, &ssl, is_ssl)) < 0 && tries < 3) {
             tries++;
             ERROR("Tries %i", tries);
             
-            switch (retc) {
+            switch (result) {
                 case 0:
                 case -1:
                     if (is_ssl) {
@@ -489,20 +500,23 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
             }
         }
         
-        return retc;
+        INFO("");
+        
+        return result;
     }
     
-    new_connection();
+    retc = new_connection();
     
     if (!retc) {
         const uint16_t getlinestart_len = 38 + strlen(last_location) + strlen(last_host);
         
-        char *getlinestart = malloc(getlinestart_len);
+        char* getlinestart = malloc(getlinestart_len);
         snprintf(getlinestart, getlinestart_len, REQUESTHEAD"%s"REQUESTTAIL"%s"RANGE,
                  last_location,
                  last_host);
-
-        char *location;
+        
+        char* location;
+        char* recv_buf = malloc(RECV_BUF_LEN);
         
         connection_tries = 0;
         while (collected < length && connection_tries < 5) {
@@ -510,7 +524,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
             
             sprintf(recv_buf, "%s%d-%d%s", getlinestart, collected, collected + 4095, CRLFCRLF);
             
-            send_bytes = strlen(recv_buf);
+            const uint16_t send_bytes = strlen(recv_buf);
 
             if (is_ssl) {
                 ret = wolfSSL_write(ssl, recv_buf, send_bytes);
@@ -592,6 +606,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                         if (length > MAXFILESIZE) {
                             ERROR("FILE TOO BIG %i / %i", length, MAXFILESIZE);
                             free(getlinestart);
+                            free(recv_buf);
                             return -10;
                         }
                         
@@ -601,30 +616,51 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                                 connection_tries = 0;
                                 if (writespace < ret) {
                                     printf("Sector 0x%05X ", sector + collected);
-                                    if (!spiflash_erase_sector(sector + collected)) return -6; // Erase error
+                                    if (!spiflash_erase_sector(sector + collected)) {
+                                        free(getlinestart);
+                                        free(recv_buf);
+                                        return -6; // Erase error
+                                    }
                                     writespace += SPI_FLASH_SECTOR_SIZE;
                                 }
                                 if (collected) {
-                                    if (!spiflash_write(sector + collected, (byte *)recv_buf, ret)) return -7; // Write error
+                                    if (!spiflash_write(sector + collected, (byte *)recv_buf, ret)) {
+                                        free(getlinestart);
+                                        free(recv_buf);
+                                        return -7; // Write error
+                                    }
                                 } else { // At the very beginning, do not write the first byte yet but store it for later
                                     file_first_byte[0] = (byte)recv_buf[0];
-                                    if (!spiflash_write(sector + 1, (byte *)recv_buf + 1, ret - 1)) return -7; // Write error
+                                    if (!spiflash_write(sector + 1, (byte *)recv_buf + 1, ret - 1)) {
+                                        free(getlinestart);
+                                        free(recv_buf);
+                                        return -7; // Write error
+                                    }
                                 }
                                 writespace -= ret;
                             } else { // Buffer
-                                if (ret > bufsz) return -8; // Too big
+                                if (ret > bufsz) {
+                                    free(getlinestart);
+                                    free(recv_buf);
+                                    return -8; // Too big
+                                }
                                 memcpy(buffer, recv_buf, ret);
                             }
                             collected += ret;
                         }
                         
                     } else {
-                        if (ret && is_ssl) {
+                        ERROR("Read %i", ret);
+                        if (is_ssl) {
                             ret = wolfSSL_get_error(ssl, ret);
-                            ERROR("%d", ret);
+                            ERROR("SSL %d", ret);
                         }
                         
                         if (!ret && collected < length) {
+                            if (is_ssl) {
+                                wolfSSL_free(ssl);
+                            }
+                            lwip_close(socket);
                             retc = new_connection();
                         }
                         
@@ -634,17 +670,20 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                     header = 0; // Move to header section itself
                 } while (recv_bytes < clength);
                 
-                INFO(" Downloaded %d Bytes", collected);
+                INFO("- %d Bytes", collected);
                 
             } else {
-                ERROR("Return [-0x%x]", -ret);
-                
+                ERROR("Write %i", ret);
                 if (is_ssl) {
                     ret = wolfSSL_get_error(ssl, ret);
-                    ERROR("wolfSSL_send %d", ret);
+                    ERROR("SSL %d", ret);
                 }
                 
                 if (ret == -308) {
+                    if (is_ssl) {
+                        wolfSSL_free(ssl);
+                    }
+                    lwip_close(socket);
                     retc = new_connection();
                 } else {
                     break;
@@ -653,8 +692,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
         }
         
         free(getlinestart);
-    } else {
-        INFO("ERROR");
+        free(recv_buf);
     }
     
     INFO("");
@@ -671,7 +709,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
         default:
         ;
     }
-
+    
     if (resume) {
         *resume = collected;
     }
@@ -684,25 +722,25 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
 }
 
 int ota_get_file_part(char* repo, char* file, int sector, uint16_t port, const bool is_ssl, int* collected) {
-    INFO("Get file part from %s", repo);
+    INFO(">>> Get file part from %s", repo);
     
     return ota_get_file_ex(repo, file, sector, NULL, 0, port, is_ssl, collected);
 }
 
 int ota_get_file(char* repo, char* file, int sector, uint16_t port, const bool is_ssl) {
-    INFO("Get file from %s", repo);
+    INFO(">>> Get file from %s", repo);
     
     return ota_get_file_ex(repo, file, sector, NULL, 0, port, is_ssl, NULL);
 }
 
 char* ota_get_version(char* repo, char* version_file, uint16_t port, const bool is_ssl) {
-    INFO("Get version from %s", repo);
+    INFO(">>> Get version from %s", repo);
 
     byte* version = malloc(VERSIONFILESIZE + 1);
     memset(version, 0, VERSIONFILESIZE + 1);
 
     if (ota_get_file_ex(repo, version_file, 0, version, VERSIONFILESIZE, port, is_ssl, NULL) == 0) {
-        INFO("VERSION of %s: %s", version_file, (char*) version);
+        INFO("*** VERSION of %s: %s", version_file, (char*) version);
     } else {
         free(version);
         version = NULL;
@@ -713,7 +751,7 @@ char* ota_get_version(char* repo, char* version_file, uint16_t port, const bool 
 }
 
 int ota_get_sign(char* repo, char* file, byte* signature, uint16_t port, bool is_ssl) {
-    INFO("Get sign");
+    INFO(">>> Get sign");
     int ret;
     char* signame = malloc(strlen(file) + 5);
     strcpy(signame, file);
@@ -726,11 +764,11 @@ int ota_get_sign(char* repo, char* file, byte* signature, uint16_t port, bool is
 }
 
 int ota_verify_sign(int start_sector, int filesize, byte* signature) {
-    INFO("Verifying sign...");
+    INFO(">>> Verifying sign...");
     
     int bytes;
     byte hash[HASHSIZE];
-    byte buffer[1024];
+    byte* buffer = malloc(1024);
     Sha384 sha;
     
     wc_InitSha384(&sha);
@@ -753,12 +791,15 @@ int ota_verify_sign(int start_sector, int filesize, byte* signature) {
     }
     
     wc_Sha384Update(&sha, buffer, filesize - bytes);
+    
+    free(buffer);
+    
     wc_Sha384Final(&sha, hash);
     
     int verify = 0;
     wc_ecc_verify_hash(signature, SIGNSIZE, hash, HASHSIZE, &verify, &public_key);
     
-    INFO("Sign result: %s", verify == 1 ? "OK" : "ERROR");
+    INFO(">>> Sign result: %s", verify == 1 ? "OK" : "ERROR");
     
 #ifndef HAABOOT
     sign_check_client(verify);
@@ -768,16 +809,15 @@ int ota_verify_sign(int start_sector, int filesize, byte* signature) {
 }
 
 void ota_finalize_file(int sector) {
-    INFO("Finalize file");
+    INFO("*** FINISHING");
     
     if (!spiflash_write(sector, file_first_byte, 1))
         ERROR("Writing flash");
 }
 
 void ota_reboot() {
-    INFO("\nRestarting...");
+    INFO("*** REBOOTING\n");
 
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    vTaskDelay(1500 / portTICK_PERIOD_MS);
     sdk_system_restart();
 }
-

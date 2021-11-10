@@ -17,6 +17,7 @@
 #define WIFI_PASSWORD_SYSPARAM              "wifi_password"
 #define WIFI_MODE_SYSPARAM                  "wifi_mode"
 #define WIFI_BSSID_SYSPARAM                 "wifi_bssid"
+#define WIFI_LAST_WORKING_PHY_SYSPARAM      "wifi_phy"
 #define AUTO_OTA_SYSPARAM                   "aota"
 #define TOTAL_SERV_SYSPARAM                 "total_ac"
 #define HAA_JSON_SYSPARAM                   "haa_conf"

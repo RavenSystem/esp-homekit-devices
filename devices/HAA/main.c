@@ -655,7 +655,9 @@ void wifi_reconnection_task(void* args) {
         } else if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
             INFO("Wifi reconnecting...");
             main_config.wifi_status = WIFI_STATUS_CONNECTING;
-            wifi_config_connect(1);
+            int8_t phy_mode = 3;
+            sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
+            wifi_config_connect(1, phy_mode);
 
         } else {
             main_config.wifi_error_count++;
