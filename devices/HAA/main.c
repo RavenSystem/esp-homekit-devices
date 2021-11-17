@@ -521,11 +521,11 @@ int ping_host(char* host) {
 void reboot_task() {
     led_blink(5);
     
-    INFO("\nRebooting...\n");
+    INFO("\nRebooting\n");
     esp_timer_stop(WIFI_WATCHDOG_TIMER);
     
     vTaskDelay(MS_TO_TICKS((hwrand() % RANDOM_DELAY_MS) + 1000));
-
+    
     sdk_system_restart();
 }
 
@@ -572,7 +572,7 @@ void ntp_task() {
             break;
         }
     }
-
+    
     vTaskDelete(NULL);
 }
 
@@ -671,8 +671,6 @@ void wifi_reconnection_task(void* args) {
                 vTaskDelay(MS_TO_TICKS(600));
                 
                 do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 5);
-                
-                wifi_config_reset();
             }
         }
     }
@@ -2355,6 +2353,9 @@ void temperature_task(void* args) {
                     temperature_value = temps[0];
                     humidity_value = 0.0;
                     get_temp = true;
+                    if (temperature_value > 130.f || temperature_value < -60.f) {
+                        get_temp = false;
+                    }
                 }
                 
             } else {
@@ -2399,10 +2400,10 @@ void temperature_task(void* args) {
                 
                 if (ch_group->chs > 0 && ch_group->ch[0]) {
                     temperature_value += TH_SENSOR_TEMP_OFFSET;
-                    if (temperature_value < -100) {
-                        temperature_value = -100;
-                    } else if (temperature_value > 200) {
-                        temperature_value = 200;
+                    if (temperature_value < -100.f) {
+                        temperature_value = -100.f;
+                    } else if (temperature_value > 200.f) {
+                        temperature_value = 200.f;
                     }
                     
                     temperature_value *= 10.f;
@@ -3444,12 +3445,12 @@ void garage_door_sensor(const uint16_t gpio, void* args, const uint8_t type) {
         GD_TARGET_DOOR_STATE_INT = type - 2;
         esp_timer_start(ch_group->timer);
     } else {
-        GD_TARGET_DOOR_STATE_INT = type;
         esp_timer_stop(ch_group->timer);
+        GD_TARGET_DOOR_STATE_INT = type;
         
         if (type == 0) {
             GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN;
-        } else {
+        } else {    // type == 1
             GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_TIME_MARGIN;
         }
         
@@ -8750,7 +8751,7 @@ void normal_mode_init() {
             GARAGE_DOOR_CLOSE_TIME_FACTOR = GARAGE_DOOR_WORKING_TIME / cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_CLOSE_SET)->valuedouble;
         }
         
-        GARAGE_DOOR_WORKING_TIME += GARAGE_DOOR_TIME_MARGIN * 2;
+        GARAGE_DOOR_WORKING_TIME += (GARAGE_DOOR_TIME_MARGIN * 2);
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
@@ -9864,7 +9865,7 @@ void normal_mode_init() {
     if (xTaskCreate(delayed_sensor_task, "delayed", DELAYED_SENSOR_START_TASK_SIZE, NULL, DELAYED_SENSOR_START_TASK_PRIORITY, NULL) != pdPASS) {
         ERROR("Creating delayed_sensor");
     }
-
+    
     int8_t wifi_mode = 0;
     sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
     if (wifi_mode == 4) {
@@ -9872,14 +9873,14 @@ void normal_mode_init() {
     }
     main_config.wifi_mode = (uint8_t) wifi_mode;
     
-    vTaskDelay(MS_TO_TICKS((hwrand() % RANDOM_DELAY_MS) + 10));
+    vTaskDelay(MS_TO_TICKS((hwrand() % RANDOM_DELAY_MS) + 1000));
     
     wifi_config_init("HAA", NULL, run_homekit_server, custom_hostname, 0);
     
     led_blink(2);
     
     do_actions(root_device_ch_group, 1);
-
+    
     vTaskDelete(NULL);
 }
 
@@ -9962,7 +9963,7 @@ void user_init(void) {
         sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
         sysparam_init(SYSPARAMSECTOR, 0);
     }
-
+    
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
     snprintf(main_config.name_value, 11, "HAA-%02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]);

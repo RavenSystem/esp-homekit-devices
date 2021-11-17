@@ -637,8 +637,6 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         }
         
         wifi_config_remove_sys_param();
-        vTaskDelay(MS_TO_TICKS(500));
-        wifi_config_reset();
         
     } else {
         form_param_t *conf_param = form_params_find(form, "conf");
@@ -758,11 +756,6 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             int8_t new_wifi_mode = strtol(wifimode_param->value, NULL, 10);
             sysparam_get_int8(WIFI_MODE_SYSPARAM, &current_wifi_mode);
             sysparam_set_int8(WIFI_MODE_SYSPARAM, new_wifi_mode);
-            
-            if (current_wifi_mode != new_wifi_mode) {
-                vTaskDelay(MS_TO_TICKS(3000));
-                wifi_config_reset();
-            }
         }
     }
 
@@ -1081,6 +1074,9 @@ uint8_t wifi_config_connect(const uint8_t mode, const uint8_t phy) {
     sysparam_get_string(WIFI_SSID_SYSPARAM, &wifi_ssid);
     
     if (wifi_ssid) {
+        wifi_config_reset();
+        vTaskDelay(MS_TO_TICKS(5000));
+        
         sdk_wifi_station_disconnect();
         
         struct sdk_station_config sta_config;

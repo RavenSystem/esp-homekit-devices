@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "9.1.0"
+#define FIRMWARE_VERSION                    "9.1.1"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -607,7 +607,7 @@
 #define STATUS_LED_DURATION_OFF             (120)
 
 #define SAVE_STATES_DELAY_MS                (5000)
-#define RANDOM_DELAY_MS                     (7000)
+#define RANDOM_DELAY_MS                     (4000)
 
 #define ACCESSORIES_WITHOUT_BRIDGE          (4)     // Max number of accessories before using a bridge
 

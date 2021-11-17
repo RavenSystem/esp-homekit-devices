@@ -575,8 +575,6 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     
     if (reset_sys_param) {
         wifi_config_remove_sys_param();
-        vTaskDelay(MS_TO_TICKS(500));
-        wifi_config_reset();
         
     } else {
         form_param_t *conf_param = form_params_find(form, "conf");
@@ -672,11 +670,6 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             int8_t new_wifi_mode = strtol(wifimode_param->value, NULL, 10);
             sysparam_get_int8(WIFI_MODE_SYSPARAM, &current_wifi_mode);
             sysparam_set_int8(WIFI_MODE_SYSPARAM, new_wifi_mode);
-            
-            if (current_wifi_mode != new_wifi_mode) {
-                vTaskDelay(MS_TO_TICKS(3000));
-                wifi_config_reset();
-            }
         }
     }
     
@@ -916,8 +909,6 @@ static void wifi_config_sta_connect_timeout_task() {
         } else if (sdk_wifi_get_opmode() == STATION_MODE) {
             context->check_counter++;
             if (context->check_counter % 32 == 0) {
-                wifi_config_reset();
-                vTaskDelay(MS_TO_TICKS(5000));
                 wifi_config_connect(4);
                 vTaskDelay(MS_TO_TICKS(1000));
                 
@@ -939,6 +930,9 @@ static uint8_t wifi_config_connect(const uint8_t phy) {
     sysparam_get_string(WIFI_SSID_SYSPARAM, &wifi_ssid);
     
     if (wifi_ssid) {
+        wifi_config_reset();
+        vTaskDelay(MS_TO_TICKS(5000));
+        
         sdk_wifi_station_disconnect();
         
         struct sdk_station_config sta_config;
@@ -952,7 +946,7 @@ static uint8_t wifi_config_connect(const uint8_t phy) {
         if (wifi_password) {
            strncpy((char *)sta_config.password, wifi_password, sizeof(sta_config.password));
         }
-
+        
         int8_t wifi_mode = 0;
         sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
         

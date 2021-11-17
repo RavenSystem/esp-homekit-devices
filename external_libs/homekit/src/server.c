@@ -3225,7 +3225,7 @@ void IRAM homekit_server_close_client(client_context_t *context) {
 void homekit_server_accept_client() {
     int s = accept(homekit_server->listen_fd, (struct sockaddr *)NULL, (socklen_t *)NULL);
     if (s < 0) {
-        HOMEKIT_ERROR("New socket");
+        HOMEKIT_ERROR("Socket");
         return;
     }
 
@@ -3246,7 +3246,7 @@ void homekit_server_accept_client() {
     const uint32_t free_heap = xPortGetFreeHeapSize();
     
     if (!homekit_server->setup_finish && 0b10 < homekit_server->client_count) {
-        HOMEKIT_INFO("[%d] New %s:%d Free HEAP: %d", s, address_buffer, addr.sin_port, free_heap);
+        HOMEKIT_INFO("[%d] New %s:%d Free HEAP %d", s, address_buffer, addr.sin_port, free_heap);
         return;
     } else if (homekit_server->client_count >= homekit_server->config->max_clients ||
                homekit_low_dram() ||
@@ -3286,27 +3286,37 @@ void homekit_server_accept_client() {
         
     } else {
         close(s);
-        HOMEKIT_ERROR("[%d] Not enough memory %s:%d (%i/%i) Free HEAP: %d", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
+        HOMEKIT_ERROR("[%d] No DRAM %s:%d (%i/%i) Free HEAP %d", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
     }
 }
 
 void homekit_characteristic_notify(homekit_characteristic_t *ch) {
     if (homekit_server) {
         notification_t* notification = homekit_server->notifications;
-        while (notification) {
-            if (ch == notification->ch) {
-                return;
+        if (notification) {
+            for (;;) {
+                if (notification->ch == ch) {
+                    return;
+                }
+                
+                if (notification->next) {
+                    notification = notification->next;
+                } else {
+                    break;
+                }
             }
-            
-            notification = notification->next;
         }
         
-        notification = malloc(sizeof(notification_t));
-        memset(notification, 0, sizeof(*notification));
+        notification_t* notification_new = malloc(sizeof(notification_t));
+        memset(notification_new, 0, sizeof(*notification_new));
         
-        notification->ch = ch;
-        notification->next = homekit_server->notifications;
-        homekit_server->notifications = notification;
+        notification_new->ch = ch;
+        
+        if (notification) {
+            notification->next = notification_new;
+        } else {
+            homekit_server->notifications = notification_new;
+        }
     }
 }
 

@@ -18,7 +18,7 @@
 
 #include "adv_button.h"
 
-#define ADV_BUTTON_DEFAULT_EVAL     (4)
+#define ADV_BUTTON_DEFAULT_EVAL     (5)
 
 #define DOUBLEPRESS_TIME            (450)
 #define LONGPRESS_TIME              (DOUBLEPRESS_TIME + 10)
@@ -253,7 +253,8 @@ static void IRAM adv_button_interrupt_normal(const uint8_t gpio) {
         }
         button = button->next;
     }
-
+    
+    adv_button_main_config->button_evaluate_sleep_countdown = 0;
     esp_timer_start_from_ISR(adv_button_main_config->button_evaluate_timer);
 }
 
@@ -264,15 +265,16 @@ static void IRAM button_evaluate_fn() {
         if (!adv_button_main_config->continuos_mode) {
             if (adv_button_main_config->button_evaluate_sleep_countdown < adv_button_main_config->button_evaluate_sleep_time) {
                 adv_button_main_config->button_evaluate_sleep_countdown++;
-            } else {
-                esp_timer_stop(adv_button_main_config->button_evaluate_timer);
-                adv_button_main_config->button_evaluate_sleep_countdown = 0;
+            } else if (adv_button_main_config->button_evaluate_sleep_countdown == adv_button_main_config->button_evaluate_sleep_time) {
+                adv_button_main_config->button_evaluate_sleep_countdown++;
                 
                 adv_button_t* button = adv_button_main_config->buttons;
                 while (button) {
                     gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt_normal);
                     button = button->next;
                 }
+            } else {
+                esp_timer_stop(adv_button_main_config->button_evaluate_timer);
             }
         }
         
@@ -347,7 +349,7 @@ static void IRAM button_evaluate_fn() {
     }
 }
 
-void adv_button_init() {
+static void adv_button_init() {
     if (!adv_button_main_config) {
         adv_button_main_config = malloc(sizeof(adv_button_main_config_t));
         memset(adv_button_main_config, 0, sizeof(*adv_button_main_config));

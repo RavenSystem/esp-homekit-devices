@@ -10,9 +10,16 @@
 #include "adv_nrzled.h"
 
 #define CPU_FREQ_MHZ                        (80)
+#define NRZ_TICKS_OFFSET                    (4)
 
 uint16_t nrz_ticks(const float time_us) {
-    return (CPU_FREQ_MHZ * time_us) - 4;
+    uint16_t cycles = CPU_FREQ_MHZ * time_us;
+    
+    if (cycles < NRZ_TICKS_OFFSET) {
+        cycles = NRZ_TICKS_OFFSET;
+    }
+    
+    return cycles - NRZ_TICKS_OFFSET;
 }
 
 static inline IRAM uint32_t get_cycle_count() {
