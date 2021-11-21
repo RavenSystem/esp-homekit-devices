@@ -60,6 +60,10 @@
 #define HOMEKIT_NETWORK_MIN_FREEHEAP            (14336)
 #endif
 
+#ifndef HOMEKIT_NETWORK_PAUSE_COUNT
+#define HOMEKIT_NETWORK_PAUSE_COUNT             (6)
+#endif
+
 #ifdef HOMEKIT_DEBUG
 #define TLV_DEBUG(values)                       tlv_debug(values)
 #else
@@ -359,11 +363,12 @@ void pairing_context_free(pairing_context_t *context) {
     if (context->srp) {
         crypto_srp_free(context->srp);
     }
+    
     if (context->public_key) {
         free(context->public_key);
     }
+    
     free(context);
-    context = NULL;
 }
 
 static bool IRAM homekit_low_dram() {
@@ -681,9 +686,10 @@ int client_send_encrypted(client_context_t *context, byte *payload, size_t size)
         
         if (free_heap < HOMEKIT_NETWORK_MIN_FREEHEAP) {
             uint8_t count = 0;
-            while (free_heap > xPortGetFreeHeapSize() && count < 5) {
+            while (free_heap > xPortGetFreeHeapSize() && count < HOMEKIT_NETWORK_PAUSE_COUNT) {
                 count++;
-                vTaskDelay(1);
+                //CLIENT_INFO(context, "Waiting %i", count);
+                vTaskDelay(count);
             }
         }
     }
@@ -770,9 +776,10 @@ int IRAM client_send(client_context_t *context, byte *data, size_t data_size) {
         
         if (free_heap < HOMEKIT_NETWORK_MIN_FREEHEAP) {
             uint8_t count = 0;
-            while (free_heap > xPortGetFreeHeapSize() && count < 5) {
+            while (free_heap > xPortGetFreeHeapSize() && count < HOMEKIT_NETWORK_PAUSE_COUNT) {
                 count++;
-                vTaskDelay(1);
+                //CLIENT_INFO(context, "Waiting %i", count);
+                vTaskDelay(count);
             }
         }
     }
@@ -1077,6 +1084,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 CLIENT_ERROR(context, "Dump SPR public key (%d)", r);
 
                 pairing_context_free(homekit_server->pairing_context);
+                homekit_server->pairing_context = NULL;
 
                 send_tlv_error_response(context, 2, TLVError_Unknown);
                 break;
@@ -1093,6 +1101,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 
                 free(salt);
                 pairing_context_free(homekit_server->pairing_context);
+                homekit_server->pairing_context = NULL;
 
                 send_tlv_error_response(context, 2, TLVError_Unknown);
                 break;
@@ -1155,6 +1164,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 CLIENT_ERROR(context, "Compute pairing code (%d). No DRAM?", r);
                 send_tlv_error_response(context, 4, TLVError_Authentication);
                 pairing_context_free(homekit_server->pairing_context);
+                homekit_server->pairing_context = NULL;
                 break;
             }
             
@@ -1519,6 +1529,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             send_tlv_response(context, response);
 
             pairing_context_free(homekit_server->pairing_context);
+            homekit_server->pairing_context = NULL;
 
             homekit_server->paired = 1;
             
@@ -3212,6 +3223,7 @@ void IRAM homekit_server_close_client(client_context_t *context) {
     
     if (homekit_server->pairing_context && homekit_server->pairing_context->client == context) {
         pairing_context_free(homekit_server->pairing_context);
+        homekit_server->pairing_context = NULL;
     }
 
     homekit_accessories_clear_notify_subscriptions(homekit_server->config->accessories, context);
@@ -3245,7 +3257,7 @@ void homekit_server_accept_client() {
     
     const uint32_t free_heap = xPortGetFreeHeapSize();
     
-    if (!homekit_server->setup_finish && 0b10 < homekit_server->client_count) {
+    if (!homekit_server->setup_finish && 0b11 < homekit_server->client_count) {
         HOMEKIT_INFO("[%d] New %s:%d Free HEAP %d", s, address_buffer, addr.sin_port, free_heap);
         return;
     } else if (homekit_server->client_count >= homekit_server->config->max_clients ||
@@ -3255,10 +3267,8 @@ void homekit_server_accept_client() {
     }
     
     if (new_context) {
-        /*
         const int nodelay = 1;
         setsockopt(s, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
-        */
         
         const struct timeval sndtimeout = { 3, 0 };
         setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
@@ -3430,6 +3440,15 @@ static void IRAM homekit_run_server() {
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     serv_addr.sin_port = htons(PORT);
     bind(homekit_server->listen_fd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
+    
+    int opt = lwip_fcntl(homekit_server->listen_fd, F_GETFL, 0);
+    if (opt >= 0) {
+        opt |= O_NONBLOCK;
+        if (lwip_fcntl(homekit_server->listen_fd, F_SETFL, opt) == -1) {
+            HOMEKIT_ERROR("NonBlock Socket");
+        }
+    }
+     
     listen(homekit_server->listen_fd, 10);
     
     FD_SET(homekit_server->listen_fd, &homekit_server->fds);

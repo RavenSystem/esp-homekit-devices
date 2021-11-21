@@ -657,8 +657,8 @@ void wifi_reconnection_task(void* args) {
             main_config.wifi_status = WIFI_STATUS_CONNECTING;
             int8_t phy_mode = 3;
             sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
-            wifi_config_connect(1, phy_mode);
-
+            wifi_config_connect(1, phy_mode, true);
+            
         } else {
             main_config.wifi_error_count++;
             if (main_config.wifi_error_count > WIFI_DISCONNECTED_LONG_TIME) {
@@ -5081,7 +5081,7 @@ void ir_tx_task(void* pvParameters) {
 
 // --- UART action task
 void uart_action_task(void* pvParameters) {
-    vTaskDelay(MS_TO_TICKS(10));
+    vTaskDelay(1);
     
     action_task_t* action_task = pvParameters;
     action_uart_t* action_uart = action_task->ch_group->action_uart;
@@ -6610,17 +6610,17 @@ void normal_mode_init() {
     if (cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT) != NULL) {
         log_output_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT)->valuedouble;
         
-        if ((log_output_type == 1 || log_output_type == 4) && !used_uart[0]) {
+        if ((log_output_type == 1 || log_output_type == 4 || log_output_type == 7) && !used_uart[0]) {
             set_used_gpio(1);
             reset_uart();
-        } else if ((log_output_type == 2 || log_output_type == 5) && !used_uart[1]) {
+        } else if ((log_output_type == 2 || log_output_type == 5 || log_output_type == 8) && !used_uart[1]) {
             set_used_gpio(2);
             gpio_disable(2);
             gpio_set_iomux_function(2, IOMUX_GPIO2_FUNC_UART1_TXD);
             uart_set_baud(1, 115200);
         }
     }
-
+    
     char* log_output_target = NULL;
     if (cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT_TARGET) != NULL) {
         log_output_target = strdup(cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT_TARGET)->valuestring);

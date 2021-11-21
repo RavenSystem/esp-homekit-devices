@@ -361,7 +361,7 @@ void wifi_config_smart_connect() {
     }
 }
 
-uint8_t wifi_config_connect(const uint8_t mode, const uint8_t phy);
+uint8_t wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool with_reset);
 void wifi_config_reset() {
     INFO("Wifi reset");
     sdk_wifi_station_disconnect();
@@ -1026,9 +1026,7 @@ static void wifi_config_sta_connect_timeout_task() {
                 context->check_counter = 0;
                 
                 if (sdk_wifi_get_opmode() == STATION_MODE) {
-                    wifi_config_reset();
-                    vTaskDelay(MS_TO_TICKS(5000));
-                    wifi_config_connect(0, 4);
+                    wifi_config_connect(0, 4, true);
                     vTaskDelay(MS_TO_TICKS(1000));
                 }
                 
@@ -1069,13 +1067,15 @@ static void auto_reboot_run() {
     sdk_system_restart();
 }
 
-uint8_t wifi_config_connect(const uint8_t mode, const uint8_t phy) {
+uint8_t wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool with_reset) {
     char *wifi_ssid = NULL;
     sysparam_get_string(WIFI_SSID_SYSPARAM, &wifi_ssid);
     
     if (wifi_ssid) {
-        wifi_config_reset();
-        vTaskDelay(MS_TO_TICKS(5000));
+        if (with_reset) {
+            wifi_config_reset();
+            vTaskDelay(MS_TO_TICKS(5000));
+        }
         
         sdk_wifi_station_disconnect();
         
@@ -1166,7 +1166,7 @@ static void wifi_config_station_connect() {
         sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
     }
     
-    if (wifi_config_connect(0, phy_mode) == 1) {
+    if (wifi_config_connect(0, phy_mode, false) == 1) {
         xTaskCreate(wifi_config_sta_connect_timeout_task, "sta_connect", 512, NULL, (tskIDLE_PRIORITY + 1), &context->sta_connect_timeout);
         
         if (!context->on_wifi_ready) {
