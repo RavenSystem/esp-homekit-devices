@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "9.2.0"
+#define FIRMWARE_VERSION                    "9.3.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)

@@ -2315,7 +2315,8 @@ void temperature_task(void* args) {
     
     ch_group_t* ch_group = args;
     
-    float humidity_value, temperature_value;
+    float temperature_value = 0.0;
+    float humidity_value = 0.0;
     bool get_temp = false;
     uint8_t iairzoning = 0;
     
@@ -2329,7 +2330,7 @@ void temperature_task(void* args) {
         get_temp = false;
         
         if (iairzoning == 0 || (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning == (uint8_t) TH_IAIRZONING_CONTROLLER)) {
-            INFO("<%i> Read TH sensor", ch_group->accessory);
+            INFO("<%i> TH sensor", ch_group->accessory);
             
             if (TH_SENSOR_TYPE != 3 && TH_SENSOR_TYPE < 5) {
                 dht_sensor_type_t current_sensor_type = DHT_TYPE_DHT22; // TH_SENSOR_TYPE == 2
@@ -2343,18 +2344,16 @@ void temperature_task(void* args) {
                 get_temp = dht_read_float_data(current_sensor_type, TH_SENSOR_GPIO, &humidity_value, &temperature_value);
                 
             } else if (TH_SENSOR_TYPE == 3) {
-                ds18b20_addr_t ds18b20_addr[(uint8_t) TH_SENSOR_INDEX];
+                const uint8_t sensor_index = TH_SENSOR_INDEX;
+                ds18b20_addr_t ds18b20_addrs[sensor_index];
                 
-                if (ds18b20_scan_devices(TH_SENSOR_GPIO, ds18b20_addr, (uint8_t) TH_SENSOR_INDEX) >= (uint8_t) TH_SENSOR_INDEX) {
-                    float temps[1];
-                    ds18b20_addr_t ds18b20_addr_single[1];
-                    ds18b20_addr_single[0] = ds18b20_addr[((uint8_t) TH_SENSOR_INDEX) - 1];
-                    ds18b20_measure_and_read_multi(TH_SENSOR_GPIO, ds18b20_addr_single, 1, temps);
-                    temperature_value = temps[0];
-                    humidity_value = 0.0;
-                    get_temp = true;
-                    if (temperature_value > 130.f || temperature_value < -60.f) {
-                        get_temp = false;
+                if (ds18b20_scan_devices(TH_SENSOR_GPIO, ds18b20_addrs, sensor_index) >= sensor_index) {
+                    ds18b20_addr_t ds18b20_addr;
+                    ds18b20_addr = ds18b20_addrs[sensor_index - 1];
+                    ds18b20_measure_and_read_multi(TH_SENSOR_GPIO, &ds18b20_addr, 1, &temperature_value);
+                    
+                    if (temperature_value < 130.f && temperature_value > -60.f) {
+                        get_temp = true;
                     }
                 }
                 
@@ -5151,13 +5150,13 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         action_binary_output = action_binary_output->next;
     }
     
-    // Service Manager
+    // Service Notification Manager
     action_acc_manager_t* action_acc_manager = ch_group->action_acc_manager;
     while(action_acc_manager) {
         if (action_acc_manager->action == action) {
             ch_group_t* ch_group = ch_group_find_by_acc(action_acc_manager->accessory);
             if (ch_group) {
-                INFO("Serv Manag: target %i, val %g", action_acc_manager->accessory, action_acc_manager->value);
+                INFO("Serv Notif: targ %i, val %g", action_acc_manager->accessory, action_acc_manager->value);
                 
                 int value_int = action_acc_manager->value;
                 
@@ -5265,6 +5264,8 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 garage_door_stop(99, ch_group, 0);
                             } else if (value_int == 5) {
                                 hkc_garage_door_setter(GD_TARGET_DOOR_STATE, HOMEKIT_UINT8(!GD_TARGET_DOOR_STATE_INT));
+                            } else if (value_int >= 10) {
+                                garage_door_sensor(99, ch_group, value_int - 10);
                             } else {
                                 garage_door_obstruction(99, ch_group, value_int - 3);
                             }
@@ -5735,18 +5736,11 @@ void normal_mode_init() {
     const uint8_t total_accessories = cJSON_GetArraySize(json_accessories);
     
     if (total_accessories == 0) {
-        reset_uart();
-        printf_header();
-        INFO("JSON:\n%s\n", txt_config ? txt_config : "NONE");
-        ERROR("Invalid JSON\n");
         sysparam_set_int32(TOTAL_SERV_SYSPARAM, 0);
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);
         
-        INFO("Rebooting...\n\n");
         vTaskDelay(MS_TO_TICKS(200));
         sdk_system_restart();
-        
-        vTaskDelete(NULL);
     }
     
     // Buttons GPIO Setup function

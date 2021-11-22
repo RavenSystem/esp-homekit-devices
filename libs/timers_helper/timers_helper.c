@@ -30,7 +30,7 @@ int esp_timer_start(TimerHandle_t xTimer) {
     return TIMER_HELPER_ERR_NO_TIMER;
 }
 
-void esp_timer_start_from_ISR(TimerHandle_t xTimer) {
+void IRAM esp_timer_start_from_ISR(TimerHandle_t xTimer) {
     if (xTimer) {
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         xTimerStartFromISR(xTimer, &xHigherPriorityTaskWoken);
@@ -56,7 +56,7 @@ int esp_timer_stop(TimerHandle_t xTimer) {
     return TIMER_HELPER_ERR_NO_TIMER;
 }
 
-void esp_timer_stop_from_ISR(TimerHandle_t xTimer) {
+void IRAM esp_timer_stop_from_ISR(TimerHandle_t xTimer) {
     if (xTimer) {
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         xTimerStopFromISR(xTimer, &xHigherPriorityTaskWoken);

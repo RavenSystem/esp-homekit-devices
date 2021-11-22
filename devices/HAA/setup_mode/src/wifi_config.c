@@ -1176,11 +1176,13 @@ static void wifi_config_station_connect() {
             sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &setup_mode);
             
             sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
-
+            
             if (setup_mode == 1) {
                 INFO("Enabling auto reboot");
                 context->auto_reboot_timer = esp_timer_create(AUTO_REBOOT_TIMEOUT, false, NULL, auto_reboot_run);
                 esp_timer_start(context->auto_reboot_timer);
+            } else if (setup_mode == 2) {
+                ERROR("Invalid JSON");
             }
             
             wifi_config_softap_start();

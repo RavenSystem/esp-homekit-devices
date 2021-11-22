@@ -118,11 +118,11 @@ double adv_hlw_get_power_freq(const uint8_t gpio) {
 }
 
 static void IRAM adv_hlw_cf1_callback(const uint8_t gpio) {
-    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, adv_hlw_cf1_callback);
-    
-    adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
+    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
     
     const uint32_t now = sdk_system_get_time();
+    
+    adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
 
     if ((now - adv_hlw_unit->first_cf1) > PERIOD_TIMEOUT) {
         uint32_t period = 0;
@@ -153,11 +153,12 @@ static void IRAM adv_hlw_cf1_callback(const uint8_t gpio) {
 }
 
 static void IRAM adv_hlw_cf_callback(const uint8_t gpio) {
-    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, adv_hlw_cf_callback);
+    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
+    
+    const uint32_t now = sdk_system_get_time();
     
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
     
-    const uint32_t now = sdk_system_get_time();
     adv_hlw_unit->period_cf = now - adv_hlw_unit->last_cf;
     adv_hlw_unit->last_cf = now;
     

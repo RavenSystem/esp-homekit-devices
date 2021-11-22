@@ -244,6 +244,11 @@ static void IRAM adv_button_interrupt_pulse(const uint8_t gpio) {
 }
 
 static void IRAM adv_button_interrupt_normal(const uint8_t gpio) {
+    adv_button_main_config->button_evaluate_sleep_countdown = 0;
+    
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    xTimerStartFromISR(adv_button_main_config->button_evaluate_timer, &xHigherPriorityTaskWoken);
+    
     gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
     
     adv_button_t* button = adv_button_main_config->buttons;
@@ -253,9 +258,6 @@ static void IRAM adv_button_interrupt_normal(const uint8_t gpio) {
         }
         button = button->next;
     }
-    
-    adv_button_main_config->button_evaluate_sleep_countdown = 0;
-    esp_timer_start_from_ISR(adv_button_main_config->button_evaluate_timer);
 }
 
 static void IRAM button_evaluate_fn() {
