@@ -63,9 +63,9 @@ bool homekit_is_pairing();
 bool homekit_is_paired();
 
 // Client related stuff
-homekit_client_id_t homekit_get_client_id();
+//homekit_client_id_t homekit_get_client_id();
 
-bool homekit_client_is_admin();
-int  homekit_client_send(unsigned char *data, size_t size);
+//bool homekit_client_is_admin();
+//int  homekit_client_send(unsigned char *data, size_t size);
 
 #endif // __HOMEKIT_H__

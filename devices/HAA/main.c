@@ -5749,11 +5749,6 @@ void normal_mode_init() {
         
         for (uint8_t j = 0; j < cJSON_GetArraySize(json_buttons); j++) {
             const uint16_t gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PIN_GPIO)->valuedouble;
-            bool pullup_resistor = true;
-            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR) != NULL &&
-                cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR)->valuedouble == 0) {
-                pullup_resistor = false;
-            }
             
             bool inverted = false;
             if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), INVERTED) != NULL &&
@@ -5766,23 +5761,24 @@ void normal_mode_init() {
                 button_filter = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_FILTER)->valuedouble;
             }
             
-            uint8_t button_mode = 0;
-            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_MODE) != NULL) {
-                button_mode = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_MODE)->valuedouble;
-            }
-            
-            uint8_t button_type = 1;
-            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE) != NULL) {
-                button_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE)->valuedouble;
-            }
-            
             if (gpio < MAX_GPIOS) {
                 if (!get_used_gpio(gpio)) {
                     set_used_gpio(gpio);
+                    
+                    bool pullup_resistor = true;
+                    if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR) != NULL &&
+                        cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR)->valuedouble == 0) {
+                        pullup_resistor = false;
+                    }
+                    
+                    uint8_t button_mode = 0;
+                    if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_MODE) != NULL) {
+                        button_mode = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_MODE)->valuedouble;
+                    }
+                    
                     adv_button_create(gpio, pullup_resistor, inverted, button_mode);
                     
                     INFO("New Input GPIO %i: inv %i, filter %i, mode %i", gpio, inverted, button_filter, button_mode);
-                    
                 }
                 
             } else {    // MCP23017
@@ -5796,13 +5792,18 @@ void normal_mode_init() {
                 adv_button_set_gpio_probes(gpio, button_filter);
             }
             
+            uint8_t button_type = 1;
+            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE) != NULL) {
+                button_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE)->valuedouble;
+            }
+            
             adv_button_register_callback_fn(gpio, callback, button_type, (void*) ch_group, param);
             
-            if ((adv_button_read_gpio(gpio) ^ inverted) == button_type) {
+            if (adv_button_read_by_gpio(gpio) == button_type) {
                 active = true;
             }
             
-            INFO("New DigI: gpio %i, type %i, active %i", gpio, button_type, active);
+            INFO("New DigI GPIO %i: type %i, status %i", gpio, button_type, active);
         }
         
         return active;
@@ -9930,24 +9931,7 @@ void ir_capture_task(void* args) {
     }
 }
 
-void user_init(void) {
-    gpio_enable(15, GPIO_INPUT);
-    gpio_enable(16, GPIO_INPUT);
-    gpio_enable(3, GPIO_INPUT);
-    gpio_enable(2, GPIO_INPUT);
-    gpio_enable(1, GPIO_INPUT);
-    gpio_enable(0, GPIO_INPUT);
-    gpio_enable(4, GPIO_INPUT);
-    gpio_enable(5, GPIO_INPUT);
-    gpio_enable(12, GPIO_INPUT);
-    gpio_enable(13, GPIO_INPUT);
-    gpio_enable(14, GPIO_INPUT);
-    
-    sdk_wifi_station_set_auto_connect(false);
-    sdk_wifi_set_opmode(STATION_MODE);
-    sdk_wifi_station_disconnect();
-    sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
-    
+void init_task() {
     // Sysparam starter
     sysparam_status_t status;
     status = sysparam_init(SYSPARAMSECTOR, 0);
@@ -10028,5 +10012,28 @@ void user_init(void) {
     if (wifi_ssid) {
         free(wifi_ssid);
     }
+    
+    vTaskDelete(NULL);
+}
+
+void user_init(void) {
+    gpio_enable(15, GPIO_INPUT);
+    gpio_enable(16, GPIO_INPUT);
+    gpio_enable(3, GPIO_INPUT);
+    gpio_enable(2, GPIO_INPUT);
+    gpio_enable(1, GPIO_INPUT);
+    gpio_enable(0, GPIO_INPUT);
+    gpio_enable(4, GPIO_INPUT);
+    gpio_enable(5, GPIO_INPUT);
+    gpio_enable(12, GPIO_INPUT);
+    gpio_enable(13, GPIO_INPUT);
+    gpio_enable(14, GPIO_INPUT);
+    
+    sdk_wifi_station_set_auto_connect(false);
+    sdk_wifi_set_opmode(STATION_MODE);
+    sdk_wifi_station_disconnect();
+    sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
+    
+    xTaskCreate(init_task, "init", 512, NULL, (tskIDLE_PRIORITY + 2), NULL);
 }
 

@@ -233,29 +233,13 @@ void ota_task(void *arg) {
 }
 
 void on_wifi_ready() {
-    xTaskCreate(ota_task, "ota", 2048, NULL, 1, NULL);
+    xTaskCreate(ota_task, "ota", 2048, NULL, (tskIDLE_PRIORITY + 1), NULL);
 }
 
-void user_init(void) {
-    sdk_wifi_station_set_auto_connect(false);
-    sdk_wifi_set_opmode(STATION_MODE);
-    sdk_wifi_station_disconnect();
-    sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
-    
+void init_task() {
     uart_set_baud(0, 115200);
     
     adv_logger_init(ADV_LOGGER_UART0_UDP_BUFFERED, NULL);
-    
-    // GPIO Init
-    for (uint8_t i = 0; i < 17; i++) {
-        if (i < 6 || i > 11) {
-            if (!(i == 1 || i == 3)) {
-                gpio_enable(i, GPIO_INPUT);
-            }
-        }
-    }
-    
-    INFO("\n\n");
     
     sysparam_status_t status;
 
@@ -278,6 +262,26 @@ void user_init(void) {
     } else {
         ERROR("Sysparam %d", status);
     }
-        
+    
     wifi_config_init("HAA", NULL, on_wifi_ready);
+    
+    vTaskDelete(NULL);
+}
+
+void user_init(void) {
+    // GPIO Init
+    for (uint8_t i = 0; i < 17; i++) {
+        if (i < 6 || i > 11) {
+            if (!(i == 1 || i == 3)) {
+                gpio_enable(i, GPIO_INPUT);
+            }
+        }
+    }
+    
+    sdk_wifi_station_set_auto_connect(false);
+    sdk_wifi_set_opmode(STATION_MODE);
+    sdk_wifi_station_disconnect();
+    sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
+    
+    xTaskCreate(init_task, "init", 512, NULL, (tskIDLE_PRIORITY + 2), NULL);
 }

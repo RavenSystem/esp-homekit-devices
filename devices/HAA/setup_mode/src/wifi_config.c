@@ -98,29 +98,33 @@ typedef struct _client {
 static void wifi_config_station_connect();
 static void wifi_config_softap_start();
 
-int wifi_config_remove_sys_param() {
-    unsigned char sector[SPI_FLASH_SECTOR_SIZE];
+void wifi_config_remove_sys_param() {
+    unsigned char* sector = malloc(SPI_FLASH_SECTOR_SIZE);
     
-    for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
-        if (!spiflash_erase_sector(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE))) {
-            ERROR("Erasing sysparam");
-            return -1;
+    if (sector) {
+        for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
+            if (!spiflash_erase_sector(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE))) {
+                ERROR("Erasing sysparam");
+                break;
+            }
+            
+            memset(sector, 0xFF, SPI_FLASH_SECTOR_SIZE);
+            if (!spiflash_write(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE), sector, SPI_FLASH_SECTOR_SIZE)) {
+                ERROR("Format sysparam (1/2)");
+                break;
+            }
+            
+            memset(sector, 0x0, SPI_FLASH_SECTOR_SIZE);
+            if (!spiflash_write(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE), sector, SPI_FLASH_SECTOR_SIZE)) {
+                ERROR("Format sysparam (2/2)");
+                break;
+            }
         }
         
-        memset(sector, 0xFF, sizeof(sector));
-        if (!spiflash_write(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE), sector, sizeof(sector))) {
-            ERROR("Format sysparam (1/2)");
-            return -1;
-        }
-        
-        memset(sector, 0x0, sizeof(sector));
-        if (!spiflash_write(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE), sector, sizeof(sector))) {
-            ERROR("Format sysparam (2/2)");
-            return -1;
-        }
+        free(sector);
+    } else {
+        ERROR("Remove sysparam. No DRAM");
     }
-    
-    return 0;
 }
 
 static void body_malloc(client_t* client) {
@@ -363,7 +367,7 @@ void wifi_config_smart_connect() {
 
 uint8_t wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool with_reset);
 void wifi_config_reset() {
-    INFO("Wifi reset");
+    INFO("Wifi clean");
     sdk_wifi_station_disconnect();
     
     struct sdk_station_config sta_config;
@@ -681,6 +685,9 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         if (nowifi_param) {
             sysparam_set_data(WIFI_SSID_SYSPARAM, NULL, 0, false);
             sysparam_set_data(WIFI_PASSWORD_SYSPARAM, NULL, 0, false);
+            sysparam_set_data(WIFI_BSSID_SYSPARAM, NULL, 0, false);
+            sysparam_set_data(WIFI_MODE_SYSPARAM, NULL, 0, false);
+            sysparam_set_data(WIFI_LAST_WORKING_PHY_SYSPARAM, NULL, 0, false);
         }
         
         if (irrx_param && irrx_param->value) {
@@ -936,7 +943,7 @@ static void wifi_config_softap_start() {
     sdk_wifi_set_opmode(STATIONAP_MODE);
 
     uint8_t macaddr[6];
-    sdk_wifi_get_macaddr(SOFTAP_IF, macaddr);
+    sdk_wifi_get_macaddr(STATION_IF, macaddr);
     
     struct sdk_softap_config softap_config;
     softap_config.ssid_len = snprintf(
@@ -1152,11 +1159,9 @@ uint8_t wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool wi
         }
         
         return 1;
-        
-    } else {
-        INFO("No Wifi config found");
     }
     
+    INFO("No Wifi config found");
     return 0;
 }
 
@@ -1167,7 +1172,7 @@ static void wifi_config_station_connect() {
     }
     
     if (wifi_config_connect(0, phy_mode, false) == 1) {
-        xTaskCreate(wifi_config_sta_connect_timeout_task, "sta_connect", 512, NULL, (tskIDLE_PRIORITY + 1), &context->sta_connect_timeout);
+        xTaskCreate(wifi_config_sta_connect_timeout_task, "sta_con", 512, NULL, (tskIDLE_PRIORITY + 1), &context->sta_connect_timeout);
         
         if (!context->on_wifi_ready) {
             INFO("HAA Setup");

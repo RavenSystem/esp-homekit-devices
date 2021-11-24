@@ -355,7 +355,7 @@ pairing_context_t *pairing_context_new() {
     memset(context, 0, sizeof(*context));
     
     context->srp = crypto_srp_new();
-
+    
     return context;
 }
 
@@ -765,7 +765,7 @@ int IRAM client_send(client_context_t *context, byte *data, size_t data_size) {
     }
 #endif
 
-    int r = 0;
+    int r = -1;
     
     if (context->encrypted) {
         r = client_send_encrypted(context, data, data_size);
@@ -800,9 +800,7 @@ int IRAM client_send_chunk(byte *data, size_t size, void *arg) {
     header[0] = 0;
     int header_size = snprintf((char*) header, sizeof(header), "%x\r\n", size);
     
-    int r = 0;
-    
-    r = client_send(context, header, header_size);
+    int r = client_send(context, header, header_size);
     
     if (r == 0) {
         if (size > 0) {
@@ -832,12 +830,12 @@ int IRAM client_send_chunk(byte *data, size_t size, void *arg) {
      */
 }
 
-void IRAM send_200_response(client_context_t* context) {
+int IRAM send_200_response(client_context_t* context) {
     byte response[] =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: application/hap+json\r\n"
         "Transfer-Encoding: chunked\r\n\r\n";
-    client_send(context, response, sizeof(response) - 1);
+    return client_send(context, response, sizeof(response) - 1);
 }
 
 void send_204_response(client_context_t* context) {
@@ -845,12 +843,12 @@ void send_204_response(client_context_t* context) {
     client_send(context, response, sizeof(response) - 1);
 }
 
-void send_207_response(client_context_t* context) {
+int send_207_response(client_context_t* context) {
     byte response[] =
         "HTTP/1.1 207 Multi-Status\r\n"
         "Content-Type: application/hap+json\r\n"
         "Transfer-Encoding: chunked\r\n\r\n";
-    client_send(context, response, sizeof(response) - 1);
+    return client_send(context, response, sizeof(response) - 1);
 }
 
 void send_404_response(client_context_t* context) {
@@ -962,7 +960,7 @@ void send_json_error_response(client_context_t *context, int status_code, HAPSta
     send_json_response(context, status_code, buffer, size);
 }
 
-
+/*
 static client_context_t *current_client_context = NULL;
 
 homekit_client_id_t homekit_get_client_id() {
@@ -984,7 +982,7 @@ int homekit_client_send(unsigned char *data, size_t size) {
 
     return 0;
 }
-
+*/
 
 void homekit_server_on_identify(client_context_t *context) {
     CLIENT_INFO(context, "Identify");
@@ -1997,10 +1995,12 @@ void homekit_server_on_get_accessories(client_context_t *context) {
     CLIENT_INFO(context, "Get Acc");
     DEBUG_HEAP();
     
-    send_200_response(context);
-    
     json_stream* json = &homekit_server->json;
     json_init(json, context);
+    
+    if (send_200_response(context) < 0) {
+        json->error = true;
+    }
     
     json_object_start(json);
     json_string(json, "accessories"); json_array_start(json);
@@ -2154,14 +2154,20 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
     free(id);
     id = strdup(id_param->value);
 
-    if (success) {
-        send_200_response(context);
-    } else {
-        send_207_response(context);
-    }
-
     json_stream* json = &homekit_server->json;
     json_init(json, context);
+    
+    int resul = -1;
+    
+    if (success) {
+        resul = send_200_response(context);
+    } else {
+        resul = send_207_response(context);
+    }
+    
+    if (resul < 0) {
+        json->error = true;
+    }
     
     json_object_start(json);
     json_string(json, "characteristics"); json_array_start(json);
@@ -2667,10 +2673,13 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
         send_204_response(context);
     } else {
         CLIENT_DEBUG(context, "There were processing errors, sending Multi-Status response");
-        send_207_response(context);
         
         json_stream* json1 = &homekit_server->json;
         json_init(json1, context);
+        
+        if (send_207_response(context) < 0) {
+            json1->error = true;
+        }
         
         json_object_start(json1);
         json_string(json1, "characteristics"); json_array_start(json1);
@@ -2984,7 +2993,7 @@ void homekit_server_on_reset(client_context_t *context) {
     homekit_server_reset();
     send_204_response(context);
 
-    vTaskDelay(3000 / portTICK_PERIOD_MS);
+    vTaskDelay(2600 / portTICK_PERIOD_MS);
 
     sdk_system_restart();
 }
@@ -3018,14 +3027,14 @@ int homekit_server_on_url(http_parser *parser, const char *data, size_t length) 
             context->endpoint = HOMEKIT_ENDPOINT_GET_ACCESSORIES;
         } else {
             const char url[] = "/characteristics";
-            size_t url_len = sizeof(url)-1;
+            size_t url_len = sizeof(url) - 1;
 
             if (length >= url_len && !strncmp(data, url, url_len) &&
                     (data[url_len] == 0 || data[url_len] == '?'))
             {
                 context->endpoint = HOMEKIT_ENDPOINT_GET_CHARACTERISTICS;
                 if (data[url_len] == '?') {
-                    char *query = strndup(data+url_len+1, length-url_len-1);
+                    char *query = strndup(data + url_len + 1, length - url_len - 1);
                     context->endpoint_params = query_params_parse(query);
                     free(query);
                 }
@@ -3190,13 +3199,13 @@ inline static void IRAM homekit_client_process(client_context_t *context) {
             homekit_server->data_available = 0;
         }
         
-        current_client_context = context;
+        //current_client_context = context;
         
         http_parser_execute(context->parser, &homekit_http_parser_settings,
                             (char*) payload, payload_size
                             );
 
-        current_client_context = NULL;
+        //current_client_context = NULL;
         
     } else if (data_len == 0) {
         CLIENT_INFO(context, "Closing");
@@ -3267,10 +3276,12 @@ void homekit_server_accept_client() {
     }
     
     if (new_context) {
+        /*
         const int nodelay = 1;
         setsockopt(s, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
+        */
         
-        const struct timeval sndtimeout = { 3, 0 };
+        const struct timeval sndtimeout = { 2, 500000 };
         setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
         
         const struct timeval rcvtimeout = { 10, 0 };
@@ -3352,14 +3363,17 @@ inline static void homekit_server_process_notifications() {
             CLIENT_INFO(context, "Send Ev");
             DEBUG_HEAP();
             
+            json_stream* json = &homekit_server->json;
+            json_init(json, context);
+            
             byte http_headers[] =
                 "EVENT/1.0 200 OK\r\n"
                 "Content-Type: application/hap+json\r\n"
                 "Transfer-Encoding: chunked\r\n\r\n";
-            client_send(context, http_headers, sizeof(http_headers) - 1);
             
-            json_stream* json = &homekit_server->json;
-            json_init(json, context);
+            if (client_send(context, http_headers, sizeof(http_headers) - 1) < 0) {
+                json->error = true;
+            }
             
             json_object_start(json);
             json_string(json, "characteristics"); json_array_start(json);
@@ -3441,6 +3455,7 @@ static void IRAM homekit_run_server() {
     serv_addr.sin_port = htons(PORT);
     bind(homekit_server->listen_fd, (struct sockaddr*)&serv_addr, sizeof(serv_addr));
     
+    /*
     int opt = lwip_fcntl(homekit_server->listen_fd, F_GETFL, 0);
     if (opt >= 0) {
         opt |= O_NONBLOCK;
@@ -3448,6 +3463,7 @@ static void IRAM homekit_run_server() {
             HOMEKIT_ERROR("NonBlock Socket");
         }
     }
+    */
      
     listen(homekit_server->listen_fd, 10);
     

@@ -132,8 +132,15 @@ static adv_button_mcp_t* IRAM mcp_find_by_index(const uint8_t index) {
     return NULL;
 }
 
-bool adv_button_read_gpio(const uint16_t gpio) {
-    return button_find_by_gpio(gpio)->state;
+bool adv_button_read_by_gpio(const uint16_t gpio) {
+    bool result = false;
+    
+    adv_button_t* button = button_find_by_gpio(gpio);
+    if (button) {
+        result = button->state ^ button->inverted;
+    }
+    
+    return result;
 }
 
 static bool IRAM adv_button_read_mcp_gpio(const uint16_t gpio) {
