@@ -3244,7 +3244,7 @@ void IRAM homekit_server_close_client(client_context_t *context) {
 
 
 void homekit_server_accept_client() {
-    int s = accept(homekit_server->listen_fd, (struct sockaddr *)NULL, (socklen_t *)NULL);
+    int s = accept(homekit_server->listen_fd, (struct sockaddr*) NULL, (socklen_t*) NULL);
     if (s < 0) {
         HOMEKIT_ERROR("Socket");
         return;
@@ -3257,7 +3257,7 @@ void homekit_server_accept_client() {
     if (getpeername(s, (struct sockaddr *)&addr, &addr_len) == 0) {
         inet_ntop(AF_INET, &addr.sin_addr, address_buffer, sizeof(address_buffer));
     } else {
-        HOMEKIT_ERROR("[%d] New ?.?.?.?:%d. Closing", s, addr.sin_port);
+        HOMEKIT_ERROR("[%d] New ?:%d. Closing", s, addr.sin_port);
         close(s);
         return;
     }
@@ -3281,7 +3281,7 @@ void homekit_server_accept_client() {
         setsockopt(s, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
         */
         
-        const struct timeval sndtimeout = { 2, 500000 };
+        const struct timeval sndtimeout = { 3, 0 };
         setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
         
         const struct timeval rcvtimeout = { 10, 0 };
