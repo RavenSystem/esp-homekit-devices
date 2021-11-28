@@ -495,6 +495,11 @@ static void wifi_config_server_on_settings(client_t *client) {
     }
     client_send_chunk(client, html_settings_middle);
     
+    if (context->param >= 100) {
+        context->param -= 100;
+        client_send_chunk(client, "<div style=\"color:red\">Invalid JSON!</div>");
+    }
+    
     if (context->param == 1) {
         client_send_chunk(client, "<div style=\"color:red\">FLASH corrupted! Reset settings recommended</div>");
     }
@@ -1188,6 +1193,7 @@ static void wifi_config_station_connect() {
                 esp_timer_start(context->auto_reboot_timer);
             } else if (setup_mode == 2) {
                 ERROR("Invalid JSON");
+                context->param += 100;
             }
             
             wifi_config_softap_start();

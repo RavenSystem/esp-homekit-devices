@@ -989,9 +989,9 @@ void hkc_on_status_setter(homekit_characteristic_t* ch, const homekit_value_t va
         ch_group_t* ch_group = ch_group_find(ch);
         INFO("<%i> Setter Status ON %i", ch_group->accessory, value.bool_value);
         ch->value.bool_value = value.bool_value;
-        
-        homekit_characteristic_notify_safe(ch);
     }
+    
+    homekit_characteristic_notify_safe(ch);
 }
 
 void on_timer_worker(TimerHandle_t xTimer) {
@@ -1033,24 +1033,24 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
         }
     }
     
-    homekit_characteristic_notify_safe(ch_group->ch[0]);
     homekit_characteristic_notify_safe(ch);
+    homekit_characteristic_notify_safe(ch_group->ch[0]);
 }
 
 void hkc_lock_status_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
+    ch_group_t* ch_group = ch_group_find(ch);
     if (ch->value.int_value != value.int_value) {
         led_blink(1);
-        ch_group_t* ch_group = ch_group_find(ch);
         
         INFO("<%i> Setter Status LOCK %i", ch_group->accessory, value.int_value);
         
         ch->value.int_value = value.int_value;
         
         ch_group->ch[0]->value.int_value = value.int_value;
-
-        homekit_characteristic_notify_safe(ch_group->ch[0]);
-        homekit_characteristic_notify_safe(ch);
     }
+    
+    homekit_characteristic_notify_safe(ch);
+    homekit_characteristic_notify_safe(ch_group->ch[0]);
 }
 
 // --- BUTTON EVENT / DOORBELL
@@ -1292,7 +1292,7 @@ void power_monitor_task(void* args) {
             }
         }
         
-        if (PM_LAST_SAVED_CONSUPTION > 3600) {
+        if (PM_LAST_SAVED_CONSUPTION > 7200) {
             PM_LAST_SAVED_CONSUPTION = 0;
             save_states_callback();
         }
@@ -1325,8 +1325,6 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
             ch->value.int_value = value.int_value;
             ch_group->ch[1]->value.int_value = value.int_value;
             
-            homekit_characteristic_notify_safe(ch_group->ch[1]);
-            
             if (ch->value.int_value == 1) {
                 esp_timer_start(ch_group->timer2);
             } else {
@@ -1355,21 +1353,23 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
     }
     
     homekit_characteristic_notify_safe(ch);
+    homekit_characteristic_notify_safe(ch_group->ch[1]);
 }
 
 void hkc_valve_status_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
+    ch_group_t* ch_group = ch_group_find(ch);
     if (ch->value.int_value != value.int_value) {
         led_blink(1);
         
         ch->value.int_value = value.int_value;
-        ch_group_t* ch_group = ch_group_find(ch);
+        
         ch_group->ch[1]->value.int_value = value.int_value;
         
         INFO("<%i> Setter Status VALVE", ch_group->accessory);
-        
-        homekit_characteristic_notify_safe(ch_group->ch[1]);
-        homekit_characteristic_notify_safe(ch);
     }
+    
+    homekit_characteristic_notify_safe(ch);
+    homekit_characteristic_notify_safe(ch_group->ch[1]);
 }
 
 void valve_timer_worker(TimerHandle_t xTimer) {
@@ -3413,6 +3413,7 @@ void garage_door_stop(const uint16_t gpio, void* args, const uint8_t type) {
         
         do_actions(ch_group, 10);
         
+        homekit_characteristic_notify_safe(GD_TARGET_DOOR_STATE);
         homekit_characteristic_notify_safe(GD_CURRENT_DOOR_STATE);
     }
 }
@@ -3458,8 +3459,8 @@ void garage_door_sensor(const uint16_t gpio, void* args, const uint8_t type) {
         }
     }
     
-    homekit_characteristic_notify_safe(GD_CURRENT_DOOR_STATE);
     homekit_characteristic_notify_safe(GD_TARGET_DOOR_STATE);
+    homekit_characteristic_notify_safe(GD_CURRENT_DOOR_STATE);
     
     save_historical_data(ch_group->ch[0]);
     
@@ -3496,15 +3497,21 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
             } else if ((value.int_value == GARAGE_DOOR_CLOSED && GARAGE_DOOR_HAS_F5 == 0) ||
                        GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_OPENING) {
                 garage_door_sensor(99, ch_group, GARAGE_DOOR_CLOSING);
+            } else {
+                homekit_characteristic_notify_safe(ch1);
             }
             
             setup_mode_toggle_upcount();
+            
+        } else {
+            homekit_characteristic_notify_safe(ch1);
         }
         
         save_historical_data(ch1);
+        
+    } else {
+        homekit_characteristic_notify_safe(ch1);
     }
-    
-    homekit_characteristic_notify_safe(ch1);
 }
 
 void garage_door_timer_worker(TimerHandle_t xTimer) {
@@ -3605,9 +3612,9 @@ void window_cover_stop(ch_group_t* ch_group) {
         WINDOW_COVER_VIRTUAL_STOP = 1;
     }
     
+    homekit_characteristic_notify_safe(WINDOW_COVER_CH_TARGET_POSITION);
     homekit_characteristic_notify_safe(WINDOW_COVER_CH_STATE);
     homekit_characteristic_notify_safe(WINDOW_COVER_CH_CURRENT_POSITION);
-    homekit_characteristic_notify_safe(WINDOW_COVER_CH_TARGET_POSITION);
     
     setup_mode_toggle_upcount();
     
@@ -3742,8 +3749,8 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
         WINDOW_COVER_VIRTUAL_STOP = 1;
     }
     
-    homekit_characteristic_notify_safe(WINDOW_COVER_CH_STATE);
     homekit_characteristic_notify_safe(ch1);
+    homekit_characteristic_notify_safe(WINDOW_COVER_CH_STATE);
 }
 
 void window_cover_timer_worker(TimerHandle_t xTimer) {
@@ -3824,6 +3831,7 @@ void hkc_fan_setter(homekit_characteristic_t* ch0, const homekit_value_t value) 
             if (value.int_value) {
                 if (ch_group->ch[1]->value.float_value == 0) {
                     ch_group->ch[1]->value.float_value = *ch_group->ch[1]->max_value;
+                    homekit_characteristic_notify_safe(ch0);
                     homekit_characteristic_notify_safe(ch_group->ch[1]);
                 }
                 do_wildcard_actions(ch_group, 0, ch_group->ch[1]->value.float_value);
@@ -3881,10 +3889,10 @@ void hkc_fan_status_setter(homekit_characteristic_t* ch0, const homekit_value_t 
         
         ch0->value.int_value = value.int_value;
         
-        homekit_characteristic_notify_safe(ch0);
-        
         save_states_callback();
     }
+    
+    homekit_characteristic_notify_safe(ch0);
 }
 
 // --- LIGHT SENSOR
@@ -4036,12 +4044,12 @@ void hkc_tv_status_active(homekit_characteristic_t* ch0, const homekit_value_t v
         
         ch0->value.int_value = value.int_value;
         
-        homekit_characteristic_notify_safe(ch0);
-        
         save_states_callback();
         
         save_historical_data(ch0);
     }
+    
+    homekit_characteristic_notify_safe(ch0);
 }
 
 void hkc_tv_active_identifier(homekit_characteristic_t* ch, const homekit_value_t value) {
