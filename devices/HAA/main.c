@@ -5332,13 +5332,13 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 
                                 WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_HOMEKIT_POSITION;
                                 WINDOW_COVER_MOTOR_POSITION = ((100 * WINDOW_COVER_CORRECTION * WINDOW_COVER_HOMEKIT_POSITION) + (5000 * WINDOW_COVER_HOMEKIT_POSITION)) / ((WINDOW_COVER_CORRECTION * WINDOW_COVER_HOMEKIT_POSITION) + 5000);
-                                homekit_characteristic_notify_safe(WINDOW_COVER_CH_CURRENT_POSITION);
                                 
                                 if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
                                     WINDOW_COVER_CH_TARGET_POSITION->value.int_value = WINDOW_COVER_CH_CURRENT_POSITION->value.int_value;
                                     homekit_characteristic_notify_safe(WINDOW_COVER_CH_TARGET_POSITION);
                                 }
                                 
+                                homekit_characteristic_notify_safe(WINDOW_COVER_CH_CURRENT_POSITION);
                             } else {
                                 hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, HOMEKIT_UINT8(value_int));
                             }

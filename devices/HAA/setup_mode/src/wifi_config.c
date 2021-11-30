@@ -769,11 +769,15 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             sysparam_get_int8(WIFI_MODE_SYSPARAM, &current_wifi_mode);
             sysparam_set_int8(WIFI_MODE_SYSPARAM, new_wifi_mode);
         }
+        
+        vTaskDelay(MS_TO_TICKS(100));
+        wifi_config_reset();
+        vTaskDelay(MS_TO_TICKS(5000));
     }
 
-    INFO("\nRebooting...\n\n");
+    INFO("\nRebooting");
     
-    vTaskDelay(MS_TO_TICKS(3000));
+    vTaskDelay(MS_TO_TICKS(1000));
     
     sdk_system_restart();
 }

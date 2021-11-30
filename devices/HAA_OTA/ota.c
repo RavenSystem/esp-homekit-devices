@@ -280,7 +280,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
 
         retc = ota_connect(last_host, port, &socket, &ssl, is_ssl);  //release socket and ssl when ready
         
-        const struct timeval rcvtimeout = { 1, 200000 };
+        const struct timeval rcvtimeout = { 1, 250000 };
         setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
         
         if (!retc) {
@@ -430,11 +430,11 @@ static void sign_check_client(const int set) {
     if (set == 0 && sector[2] != magic1[2]) {
         sector[2] = magic1[2];
         write_flash();
-        INFO("Ending ..");
+        INFO("End ..");
     } else if (set == 1 && sector[2] != magic1[1]) {
         sector[2] = magic1[1];
         write_flash();
-        INFO("Ending...");
+        INFO("End...");
     }
     
     free(sector);
@@ -453,7 +453,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
     
     if (resume) {
         collected = *resume;
-        INFO("RESUMING from %i", collected);
+        INFO("RESUMING %i", collected);
     }
     
     int length = collected + 1;
@@ -473,11 +473,11 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
     }
     
     if (retc <= 0) {
-        ERROR("FINAL LOCATION");
+        ERROR("FINAL LOC");
         return -1;
     }
     
-    INFO("*** FINAL LOCATION: %s:%i/%s\n", last_host, port, last_location);
+    INFO("*** FINAL LOC: %s:%i/%s\n", last_host, port, last_location);
     
     int new_connection() {
         int tries = 0;
@@ -552,7 +552,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                             location = strstr_lc(recv_buf, "\ncontent-length:");
                             if (!location) {
                                 ERROR("No content-length");
-                                INFO("--------\n%s\n-------- %d", recv_buf, ret);
+                                INFO("--\n%s\n-- %d", recv_buf, ret);
                                 collected = last_collected;
                                 connection_tries++;
                                 if (is_ssl) {
@@ -584,7 +584,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                                 length = clength;
                             } else {
                                 ERROR("No content-range");
-                                INFO("--------\n%s\n-------- %d", recv_buf, ret);
+                                INFO("--\n%s\n-- %d", recv_buf, ret);
                                 collected = last_collected;
                                 connection_tries++;
                                 if (is_ssl) {
@@ -604,7 +604,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                         }
                         
                         if (length > MAXFILESIZE) {
-                            ERROR("FILE TOO BIG %i / %i", length, MAXFILESIZE);
+                            ERROR("TOO BIG %i/%i", length, MAXFILESIZE);
                             free(getlinestart);
                             free(recv_buf);
                             return -10;
@@ -722,19 +722,19 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
 }
 
 int ota_get_file_part(char* repo, char* file, int sector, uint16_t port, const bool is_ssl, int* collected) {
-    INFO(">>> Get file part from %s", repo);
+    INFO(">>> File part from %s", repo);
     
     return ota_get_file_ex(repo, file, sector, NULL, 0, port, is_ssl, collected);
 }
 
 int ota_get_file(char* repo, char* file, int sector, uint16_t port, const bool is_ssl) {
-    INFO(">>> Get file from %s", repo);
+    INFO(">>> File from %s", repo);
     
     return ota_get_file_ex(repo, file, sector, NULL, 0, port, is_ssl, NULL);
 }
 
 char* ota_get_version(char* repo, char* version_file, uint16_t port, const bool is_ssl) {
-    INFO(">>> Get version from %s", repo);
+    INFO(">>> Version from %s", repo);
 
     byte* version = malloc(VERSIONFILESIZE + 1);
     memset(version, 0, VERSIONFILESIZE + 1);
@@ -764,7 +764,7 @@ int ota_get_sign(char* repo, char* file, byte* signature, uint16_t port, bool is
 }
 
 int ota_verify_sign(int start_sector, int filesize, byte* signature) {
-    INFO(">>> Verifying sign...");
+    INFO(">>> Verifying");
     
     int bytes;
     byte hash[HASHSIZE];
@@ -816,8 +816,8 @@ void ota_finalize_file(int sector) {
 }
 
 void ota_reboot() {
-    INFO("*** REBOOTING\n");
+    INFO("*** REBOOTING");
 
-    vTaskDelay(1500 / portTICK_PERIOD_MS);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
     sdk_system_restart();
 }

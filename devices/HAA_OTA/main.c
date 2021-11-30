@@ -73,8 +73,8 @@ void ota_task(void *arg) {
     }
     
     INFO("- Server %s", user_repo);
-    INFO("- Port   %i", port);
-    INFO("- SSL    %s\n", is_ssl ? "yes" : "no");
+    INFO("- Port %i", port);
+    INFO("- SSL %i\n", is_ssl);
 
     status = sysparam_get_string(USER_VERSION_SYSPARAM, &user_version);
     if (status == SYSPARAM_OK) {
@@ -94,7 +94,7 @@ void ota_task(void *arg) {
             result = 0;
             
 #ifdef HAABOOT
-            INFO("\nRunning HAABOOT\n");
+            INFO("\nHAABOOT\n");
 /*
             printf("HK data migration\n");
             const char magic1[] = "HAP";
@@ -140,7 +140,7 @@ void ota_task(void *arg) {
                     result = ota_get_file_part(user_repo, otamainfile, BOOT1SECTOR, port, is_ssl, &file_size);
                     if (result == 0 && ota_verify_sign(BOOT1SECTOR, file_size, signature) == 0) {
                         ota_finalize_file(BOOT1SECTOR);
-                        INFO("\n*** OTAMAIN installed\n");
+                        INFO("\n* OTAMAIN installed\n");
                         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
                         rboot_set_temp_rom(1);
                         ota_reboot();
@@ -150,12 +150,12 @@ void ota_task(void *arg) {
                         break;
                     }
                 } else {
-                    ERROR("Downloading OTAMAIN signature");
+                    ERROR("OTAMAIN signature");
                     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
                 }
             } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
 #else   // HAABOOT
-            INFO("\nRunning OTAMAIN\n");
+            INFO("\nOTAMAIN\n");
             
             if (ota_version) {
                 free(ota_version);
@@ -172,14 +172,14 @@ void ota_task(void *arg) {
                         result = ota_get_file_part(user_repo, otabootfile, BOOT0SECTOR, port, is_ssl, &file_size);
                         if (result == 0 && ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
                             ota_finalize_file(BOOT0SECTOR);
-                            INFO("\n* HAABOOT new version installed\n");
+                            INFO("\n* HAABOOT installed\n");
                             ota_reboot();
                         } else if (file_size < 0) {
-                            ERROR("Installing HAABOOT new version\n");
+                            ERROR("Installing HAABOOT\n");
                             break;
                         }
                     } else {
-                        ERROR("Downloading HAABOOT new version signature\n");
+                        ERROR("HAABOOT signature\n");
                     }
                 } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
                 
@@ -209,7 +209,7 @@ void ota_task(void *arg) {
                             break;
                         }
                     } else {
-                        ERROR("Downloading HAAMAIN signature\n");
+                        ERROR("HAAMAIN signature\n");
                     }
                 } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
             }
@@ -224,7 +224,7 @@ void ota_task(void *arg) {
             vTaskDelay(MS_TO_TICKS(5000));
         }
     } else {
-        ERROR("Reading HAAMAIN Version, fixing\n");
+        ERROR("HAAMAIN Version, fixing\n");
         sysparam_set_data(USER_VERSION_SYSPARAM, NULL, 0, false);
         sysparam_set_string(USER_VERSION_SYSPARAM, "0.0.0");
     }
@@ -245,11 +245,10 @@ void init_task() {
 
     status = sysparam_init(SYSPARAMSECTOR, 0);
     if (status != SYSPARAM_OK) {
-        INFO("No sysparam, erasing");
+        INFO("No sysparam");
         
         wifi_config_remove_sys_param();
         
-        INFO("Creating new");
         status = sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
         if (status == SYSPARAM_OK) {
             INFO("Sysparam created");

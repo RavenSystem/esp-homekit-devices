@@ -680,9 +680,9 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         }
     }
     
-    INFO("\nRebooting...\n\n");
+    INFO("\nRebooting");
 
-    vTaskDelay(MS_TO_TICKS(3000));
+    vTaskDelay(MS_TO_TICKS(1000));
     
     sdk_system_restart();
 }
