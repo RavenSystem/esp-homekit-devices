@@ -22,6 +22,7 @@
 #include "lwip/dns.h"
 #include "lwip/etharp.h"
 #include <esp8266.h>
+
 #include <wolfssl/ssl.h>
 #include <wolfssl/wolfcrypt/types.h>
 #include <wolfssl/wolfcrypt/logging.h>
@@ -30,7 +31,6 @@
 #include <wolfssl/wolfcrypt/asn_public.h>
 #include <ota.h>
 
-#include <sntp.h>
 #include <spiflash.h>
 #include <sysparam.h>
 #include <rboot-api.h>
@@ -153,7 +153,7 @@ void ota_init(char* repo, const bool is_ssl) {
 }
 
 static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, const bool is_ssl) {
-    printf("*** NEW CONNECTION\nDNS..");
+    printf("*** CONNECTION\nDNS..");
     int ret;
     const struct addrinfo hints = {
         .ai_family = AF_UNSPEC,
@@ -208,7 +208,7 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
         //wolfSSL_Debugging_ON();
         
         ret = wolfSSL_set_fd(*ssl, *socket);
-        printf("FD %s:%d..", host, port);
+        printf("%s:%d..", host, port);
         if (ret != SSL_SUCCESS) {
             freeaddrinfo(res);
             ERROR("%i", ret);
@@ -441,8 +441,8 @@ static void sign_check_client(const int set) {
 }
 #endif  // HAABOOT
 
-static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int bufsz, uint16_t port, const bool is_ssl, int* resume) { //number of bytes
-    INFO("*** DOWNLOADING FILE");
+static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int bufsz, uint16_t port, const bool is_ssl, int* resume) {
+    INFO("*** DOWNLOADING");
     
     int retc, ret = 0;
     WOLFSSL* ssl;
@@ -634,7 +634,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                                     if (!spiflash_write(sector + 1, (byte *)recv_buf + 1, ret - 1)) {
                                         free(getlinestart);
                                         free(recv_buf);
-                                        return -7; // Write error
+                                        return -8; // Write error
                                     }
                                 }
                                 writespace -= ret;
@@ -642,7 +642,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                                 if (ret > bufsz) {
                                     free(getlinestart);
                                     free(recv_buf);
-                                    return -8; // Too big
+                                    return -9; // Too big
                                 }
                                 memcpy(buffer, recv_buf, ret);
                             }
@@ -715,7 +715,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
     }
     
     if (connection_tries >= 3) {
-        return -20;
+        return 1;
     }
     
     return 0;

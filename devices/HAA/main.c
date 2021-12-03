@@ -646,7 +646,7 @@ void wifi_reconnection_task(void* args) {
 
             do_actions(ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE), 3);
             
-            esp_timer_start(WIFI_WATCHDOG_TIMER);
+            esp_timer_start_forced(WIFI_WATCHDOG_TIMER);
             
             INFO("Wifi reconnection OK");
             
@@ -999,10 +999,12 @@ void on_timer_worker(TimerHandle_t xTimer) {
     
     ch_group->ch[2]->value.int_value--;
     
-    if (ch_group->ch[2]->value.int_value == 0) {
+    if (ch_group->ch[2]->value.int_value <= 0) {
         esp_timer_stop(ch_group->timer);
         
-        hkc_on_setter(ch_group->ch[0], HOMEKIT_BOOL(false));
+        if (ch_group->ch[2]->value.int_value == 0) {
+            hkc_on_setter(ch_group->ch[0], HOMEKIT_BOOL(false));
+        }
     }
 }
 
@@ -1070,12 +1072,12 @@ void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
         
         if (ch_group->chs > 1 && event_type == 0) {
             INFO("<%i> Ding-dong", ch_group->accessory);
-            if ((uint8_t) DOORBELL_LAST_STATE == 1) {
-                DOORBELL_LAST_STATE = 0;
-            } else {
-                DOORBELL_LAST_STATE = 1;
-            }
-            ch_group->ch[1]->value.int_value = (uint8_t) DOORBELL_LAST_STATE;
+            
+            bool doorbell_last_state = DOORBELL_LAST_STATE;
+            doorbell_last_state = !doorbell_last_state;
+            DOORBELL_LAST_STATE = doorbell_last_state;
+            
+            ch_group->ch[1]->value.int_value = doorbell_last_state;
             homekit_characteristic_notify_safe(ch_group->ch[1]);
             
             save_historical_data(ch_group->ch[1]);
@@ -1377,10 +1379,12 @@ void valve_timer_worker(TimerHandle_t xTimer) {
     
     ch_group->ch[3]->value.int_value--;
     
-    if (ch_group->ch[3]->value.int_value == 0) {
+    if (ch_group->ch[3]->value.int_value <= 0) {
         esp_timer_stop(ch_group->timer);
         
-        hkc_valve_setter(ch_group->ch[0], HOMEKIT_UINT8(0));
+        if (ch_group->ch[3]->value.int_value == 0) {
+            hkc_valve_setter(ch_group->ch[0], HOMEKIT_UINT8(0));
+        }
     }
 }
 
@@ -2332,25 +2336,28 @@ void temperature_task(void* args) {
         if (iairzoning == 0 || (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning == (uint8_t) TH_IAIRZONING_CONTROLLER)) {
             INFO("<%i> TH sensor", ch_group->accessory);
             
-            if (TH_SENSOR_TYPE != 3 && TH_SENSOR_TYPE < 5) {
-                dht_sensor_type_t current_sensor_type = DHT_TYPE_DHT22; // TH_SENSOR_TYPE == 2
+            const uint8_t sensor_type = TH_SENSOR_TYPE;
+            const int8_t sensor_gpio = TH_SENSOR_GPIO;
+            
+            if (sensor_type != 3 && sensor_type < 5) {
+                dht_sensor_type_t current_sensor_type = DHT_TYPE_DHT22; // sensor_type == 2
                 
-                if (TH_SENSOR_TYPE == 1) {
+                if (sensor_type == 1) {
                     current_sensor_type = DHT_TYPE_DHT11;
-                } else if (TH_SENSOR_TYPE == 4) {
+                } else if (sensor_type == 4) {
                     current_sensor_type = DHT_TYPE_SI7021;
                 }
                 
-                get_temp = dht_read_float_data(current_sensor_type, TH_SENSOR_GPIO, &humidity_value, &temperature_value);
+                get_temp = dht_read_float_data(current_sensor_type, sensor_gpio, &humidity_value, &temperature_value);
                 
-            } else if (TH_SENSOR_TYPE == 3) {
+            } else if (sensor_type == 3) {
                 const uint8_t sensor_index = TH_SENSOR_INDEX;
                 ds18b20_addr_t ds18b20_addrs[sensor_index];
                 
-                if (ds18b20_scan_devices(TH_SENSOR_GPIO, ds18b20_addrs, sensor_index) >= sensor_index) {
+                if (ds18b20_scan_devices(sensor_gpio, ds18b20_addrs, sensor_index) >= sensor_index) {
                     ds18b20_addr_t ds18b20_addr;
                     ds18b20_addr = ds18b20_addrs[sensor_index - 1];
-                    ds18b20_measure_and_read_multi(TH_SENSOR_GPIO, &ds18b20_addr, 1, &temperature_value);
+                    ds18b20_measure_and_read_multi(sensor_gpio, &ds18b20_addr, 1, &temperature_value);
                     
                     if (temperature_value < 130.f && temperature_value > -60.f) {
                         get_temp = true;
@@ -2359,30 +2366,34 @@ void temperature_task(void* args) {
                 
             } else {
                 const float adc = sdk_system_adc_read();
-                if (TH_SENSOR_TYPE == 5) {
+                if (sensor_type == 5) {
                     // https://github.com/arendst/Tasmota/blob/7177c7d8e003bb420d8cae39f544c2b8a9af09fe/tasmota/xsns_02_analog.ino#L201
                     temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 + taylor_log(((32000 * adc) / ((1024 * 3.3) - adc)) / 10000))) - 15;
                     
-                } else if (TH_SENSOR_TYPE == 6) {
+                } else if (sensor_type == 6) {
                     temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 - taylor_log(((32000 * adc) / ((1024 * 3.3) - adc)) / 10000))) + 15;
                     
-                } else if (TH_SENSOR_TYPE == 7) {
+                } else if (sensor_type == 7) {
                     temperature_value = 1024 - adc;
                     
-                } else if (TH_SENSOR_TYPE == 8) {
+                } else if (sensor_type == 8) {
                     temperature_value = adc;
                     
-                } else if (TH_SENSOR_TYPE == 9){
+                } else if (sensor_type == 9){
                     humidity_value = 1024 - adc;
                     
-                } else {    // TH_SENSOR_TYPE == 10
+                } else {    // th_sensor_type == 10
                     humidity_value = adc;
                 }
                 
-                if (TH_SENSOR_HUM_OFFSET != 0.000000f && TH_SENSOR_TYPE < 9) {
+                if (sensor_type >= 9) {
+                    humidity_value *= 0.09765625f;  // (100 / 1024)
+                }
+                
+                if (TH_SENSOR_HUM_OFFSET != 0.000000f && sensor_type < 9) {
                     temperature_value *= TH_SENSOR_HUM_OFFSET;
                     
-                } else if (TH_SENSOR_TEMP_OFFSET != 0.000000f && TH_SENSOR_TYPE >= 9) {
+                } else if (TH_SENSOR_TEMP_OFFSET != 0.000000f && sensor_type >= 9) {
                     humidity_value *= TH_SENSOR_TEMP_OFFSET;
                 }
                 
@@ -2424,10 +2435,10 @@ void temperature_task(void* args) {
                 
                 if (ch_group->chs > 1 && ch_group->ch[1]) {
                     humidity_value += TH_SENSOR_HUM_OFFSET;
-                    if (humidity_value < 0) {
-                        humidity_value = 0;
-                    } else if (humidity_value > 100) {
-                        humidity_value = 100;
+                    if (humidity_value < 0.f) {
+                        humidity_value = 0.f;
+                    } else if (humidity_value > 100.f) {
+                        humidity_value = 100.f;
                     }
 
                     INFO("<%i> HUM %i", ch_group->accessory, (uint8_t) humidity_value);
@@ -3407,8 +3418,8 @@ void garage_door_stop(const uint16_t gpio, void* args, const uint8_t type) {
         
         GD_CURRENT_DOOR_STATE_INT = GARAGE_DOOR_STOPPED;
         
-        esp_timer_stop(LIGHTBULB_AUTODIMMER_TIMER);
-
+        esp_timer_stop(ch_group->timer);
+        
         save_historical_data(ch_group->ch[0]);
         
         do_actions(ch_group, 10);
@@ -3481,15 +3492,15 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
                 current_door_state -= 2;
             }
         }
-
+        
         if (value.int_value != current_door_state && GD_CURRENT_DOOR_STATE_INT != GARAGE_DOOR_STOPPED) {
             led_blink(1);
             INFO("<%i> Setter GD %i", ch_group->accessory, value.int_value);
             
             ch1->value.int_value = value.int_value;
-
+            
             do_actions(ch_group, (uint8_t) GD_CURRENT_DOOR_STATE_INT);
-   
+            
             if ((value.int_value == GARAGE_DOOR_OPENED && GARAGE_DOOR_HAS_F4 == 0) ||
                 GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_CLOSING) {
                 garage_door_sensor(99, ch_group, GARAGE_DOOR_OPENING);
@@ -3519,7 +3530,8 @@ void garage_door_timer_worker(TimerHandle_t xTimer) {
     
     void halt_timer() {
         esp_timer_stop(ch_group->timer);
-        if (GARAGE_DOOR_TIME_MARGIN > 0) {
+        
+        if (GARAGE_DOOR_TIME_MARGIN > 0 && GD_CURRENT_DOOR_STATE_INT > 1) {
             garage_door_obstruction(99, ch_group, 3);
         }
     }
@@ -3528,7 +3540,6 @@ void garage_door_timer_worker(TimerHandle_t xTimer) {
         GARAGE_DOOR_CURRENT_TIME++;
 
         if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN && GARAGE_DOOR_HAS_F2 == 0) {
-            esp_timer_stop(ch_group->timer);
             garage_door_sensor(99, ch_group, GARAGE_DOOR_OPENED);
             
         } else if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME && GARAGE_DOOR_HAS_F2 == 1) {
@@ -3539,7 +3550,6 @@ void garage_door_timer_worker(TimerHandle_t xTimer) {
         GARAGE_DOOR_CURRENT_TIME -= GARAGE_DOOR_CLOSE_TIME_FACTOR;
         
         if (GARAGE_DOOR_CURRENT_TIME <= GARAGE_DOOR_TIME_MARGIN && GARAGE_DOOR_HAS_F3 == 0) {
-            esp_timer_stop(ch_group->timer);
             garage_door_sensor(99, ch_group, GARAGE_DOOR_CLOSED);
             
         } else if (GARAGE_DOOR_CURRENT_TIME <= 0 && GARAGE_DOOR_HAS_F3 == 1) {
@@ -5628,7 +5638,7 @@ void delayed_sensor_task() {
             INFO("<%i> Starting TH sensor", ch_group->accessory);
             
             temperature_timer_worker(ch_group->timer);
-            esp_timer_start(ch_group->timer);
+            esp_timer_start_forced(ch_group->timer);
             
             vTaskDelay(MS_TO_TICKS(4000));
         }
@@ -5644,7 +5654,7 @@ void delayed_sensor_task() {
             INFO("<%i> Starting iAirZoning", ch_group->accessory);
             
             temperature_timer_worker(ch_group->timer);
-            esp_timer_start(ch_group->timer);
+            esp_timer_start_forced(ch_group->timer);
             
             vTaskDelay(MS_TO_TICKS(9500));
         }
@@ -5689,10 +5699,10 @@ void run_homekit_server() {
     
     if (main_config.ntp_host) {
         ntp_timer_worker(NULL);
-        esp_timer_start(esp_timer_create(NTP_POLL_PERIOD_MS, true, NULL, ntp_timer_worker));
+        esp_timer_start_forced(esp_timer_create(NTP_POLL_PERIOD_MS, true, NULL, ntp_timer_worker));
         
         if (main_config.timetable_actions) {
-            esp_timer_start(esp_timer_create(1000, true, NULL, timetable_actions_timer_worker));
+            esp_timer_start_forced(esp_timer_create(1000, true, NULL, timetable_actions_timer_worker));
         }
     }
     
@@ -5705,13 +5715,10 @@ void run_homekit_server() {
     vTaskDelay(MS_TO_TICKS(500));
     
     WIFI_WATCHDOG_TIMER = esp_timer_create(WIFI_WATCHDOG_POLL_PERIOD_MS, true, NULL, wifi_watchdog);
-    
-    while (esp_timer_start(WIFI_WATCHDOG_TIMER) == TIMER_HELPER_ERR_NO_PROCESS) {
-        vTaskDelay(MS_TO_TICKS(1000));
-    }
+    esp_timer_start_forced(WIFI_WATCHDOG_TIMER);
     
     if (main_config.ping_inputs) {
-        esp_timer_start(esp_timer_create(main_config.ping_poll_period * 1000.00f, true, NULL, ping_task_timer_worker));
+        esp_timer_start_forced(esp_timer_create(main_config.ping_poll_period * 1000.00f, true, NULL, ping_task_timer_worker));
     }
 }
 
@@ -5786,7 +5793,7 @@ void normal_mode_init() {
                     
                     adv_button_create(gpio, pullup_resistor, inverted, button_mode);
                     
-                    INFO("New Input GPIO %i: inv %i, filter %i, mode %i", gpio, inverted, button_filter, button_mode);
+                    INFO("New Input GPIO %i: pullup %i, inv %i, filter %i, mode %i", gpio, pullup_resistor, inverted, button_filter, button_mode);
                 }
                 
             } else {    // MCP23017
@@ -6490,11 +6497,12 @@ void normal_mode_init() {
     
     float th_sensor(ch_group_t* ch_group, cJSON* json_accessory) {
         TH_SENSOR_GPIO = th_sensor_gpio(json_accessory);
-        TH_SENSOR_TYPE = th_sensor_type(json_accessory);
+        const uint8_t sensor_type = th_sensor_type(json_accessory);
+        TH_SENSOR_TYPE = sensor_type;
         TH_SENSOR_TEMP_OFFSET = th_sensor_temp_offset(json_accessory);
         TH_SENSOR_HUM_OFFSET = th_sensor_hum_offset(json_accessory);
         TH_SENSOR_ERROR_COUNT = 0;
-        if ((uint8_t) TH_SENSOR_TYPE == 3) {
+        if (sensor_type == 3) {
             TH_SENSOR_INDEX = th_sensor_index(json_accessory);
         }
         
@@ -7134,7 +7142,7 @@ void normal_mode_init() {
         ch_group->main_enabled = killswitch & 0b01;
         ch_group->child_enabled = killswitch & 0b10;
         
-        INFO("Killswitch main %i child %i", ch_group->main_enabled, ch_group->child_enabled);
+        INFO("KS main %i child %i", ch_group->main_enabled, ch_group->child_enabled);
     }
     
     void set_accessory_ir_protocol(ch_group_t* ch_group, cJSON* json_context) {
@@ -7768,10 +7776,12 @@ void normal_mode_init() {
         }
         
         // Thermostat Type
-        TH_TYPE = THERMOSTAT_TYPE_HEATER;
+        uint8_t th_type = THERMOSTAT_TYPE_HEATER;
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TYPE) != NULL) {
-            TH_TYPE = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TYPE)->valuedouble;
+            th_type = cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TYPE)->valuedouble;
         }
+        
+        TH_TYPE = th_type;
         
         // HomeKit Characteristics
         ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0, .min_value=(float[]) {-100}, .max_value=(float[]) {200});
@@ -7783,19 +7793,19 @@ void normal_mode_init() {
             temp_step = cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TARGET_TEMP_STEP)->valuedouble;
         }
         
-        if (TH_TYPE != THERMOSTAT_TYPE_COOLER) {
+        if (th_type != THERMOSTAT_TYPE_COOLER) {
             ch_group->ch[5] = NEW_HOMEKIT_CHARACTERISTIC(HEATING_THRESHOLD_TEMPERATURE, default_target_temp - 1, .min_value=(float[]) {min_temp}, .max_value=(float[]) {max_temp}, .min_step=(float[]) {temp_step}, .setter_ex=update_th);
             ch_group->ch[5]->value.float_value = set_initial_state(ch_group->accessory, 5, init_last_state_json, ch_group->ch[5], CH_TYPE_FLOAT, default_target_temp - 1);
         }
         
-        if (TH_TYPE != THERMOSTAT_TYPE_HEATER) {
+        if (th_type != THERMOSTAT_TYPE_HEATER) {
             ch_group->ch[6] = NEW_HOMEKIT_CHARACTERISTIC(COOLING_THRESHOLD_TEMPERATURE, default_target_temp + 1, .min_value=(float[]) {min_temp}, .max_value=(float[]) {max_temp}, .min_step=(float[]) {temp_step}, .setter_ex=update_th);
             ch_group->ch[6]->value.float_value = set_initial_state(ch_group->accessory, 6, init_last_state_json, ch_group->ch[6], CH_TYPE_FLOAT, default_target_temp + 1);
         }
         
         if (ch_group->homekit_enabled) {
             uint8_t calloc_count = 6;
-            if (TH_TYPE >= THERMOSTAT_TYPE_HEATERCOOLER) {
+            if (th_type >= THERMOSTAT_TYPE_HEATERCOOLER) {
                 calloc_count += 1;
             }
         
@@ -7819,7 +7829,7 @@ void normal_mode_init() {
             //service_iid += 5;
         }
         
-        switch ((uint8_t) TH_TYPE) {
+        switch (th_type) {
             case THERMOSTAT_TYPE_COOLER:
                 ch_group->ch[4] = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HEATER_COOLER_STATE, THERMOSTAT_TARGET_MODE_COOLER, .min_value=(float[]) {THERMOSTAT_TARGET_MODE_COOLER}, .max_value=(float[]) {THERMOSTAT_TARGET_MODE_COOLER}, .valid_values={.count=1, .values=(uint8_t[]) {THERMOSTAT_TARGET_MODE_COOLER}});
                 
@@ -7898,11 +7908,12 @@ void normal_mode_init() {
         
         ch_group->timer2 = esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, process_th_timer);
         
-        if (TH_SENSOR_GPIO != -1) {
-            set_used_gpio((uint8_t) TH_SENSOR_GPIO);
+        const int8_t sensor_gpio = TH_SENSOR_GPIO;
+        if (sensor_gpio != -1) {
+            set_used_gpio(sensor_gpio);
         }
         
-        if ((TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 4) && TH_IAIRZONING_CONTROLLER == 0) {
+        if ((sensor_gpio != -1 || TH_SENSOR_TYPE >= 5) && TH_IAIRZONING_CONTROLLER == 0) {
             th_sensor_starter(ch_group, poll_period);
         }
         
@@ -7915,13 +7926,13 @@ void normal_mode_init() {
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), th_input, ch_group, 1);
         ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), th_input, ch_group, 0);
         
-        if (TH_TYPE >= THERMOSTAT_TYPE_HEATERCOOLER) {
+        if (th_type >= THERMOSTAT_TYPE_HEATERCOOLER) {
             diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), th_input, ch_group, 5);
             diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), th_input, ch_group, 6);
             ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_5), th_input, ch_group, 5);
             ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), th_input, ch_group, 6);
             
-            if (TH_TYPE == THERMOSTAT_TYPE_HEATERCOOLER) {
+            if (th_type == THERMOSTAT_TYPE_HEATERCOOLER) {
                 diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_7), th_input, ch_group, 7);
                 ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_7), th_input, ch_group, 7);
             }
@@ -8004,12 +8015,13 @@ void normal_mode_init() {
             
             //service_iid += 2;
         }
-            
-        if (TH_SENSOR_GPIO != -1) {
-            set_used_gpio((uint8_t) TH_SENSOR_GPIO);
+        
+        const int8_t sensor_gpio = TH_SENSOR_GPIO;
+        if (sensor_gpio != -1) {
+            set_used_gpio(sensor_gpio);
         }
         
-        if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 4) {
+        if (sensor_gpio != -1 || TH_SENSOR_TYPE >= 5) {
             th_sensor_starter(ch_group, poll_period);
         }
     }
@@ -8054,8 +8066,12 @@ void normal_mode_init() {
             //service_iid += 2;
         }
         
-        if (TH_SENSOR_GPIO != -1) {
-            set_used_gpio((uint8_t) TH_SENSOR_GPIO);
+        const int8_t sensor_gpio = TH_SENSOR_GPIO;
+        if (sensor_gpio != -1) {
+            set_used_gpio(sensor_gpio);
+        }
+        
+        if (sensor_gpio != -1 || TH_SENSOR_TYPE >= 9) {
             th_sensor_starter(ch_group, poll_period);
         }
     }
@@ -8120,8 +8136,9 @@ void normal_mode_init() {
             //service_iid += 2;
         }
         
-        if (TH_SENSOR_GPIO != -1) {
-            set_used_gpio((uint8_t) TH_SENSOR_GPIO);
+        const int8_t sensor_gpio = TH_SENSOR_GPIO;
+        if (sensor_gpio != -1) {
+            set_used_gpio(sensor_gpio);
             th_sensor_starter(ch_group, poll_period);
         }
     }
@@ -8158,22 +8175,24 @@ void normal_mode_init() {
         }
         
         // Humidifier Type
-        HM_TYPE = HUMIDIF_TYPE_HUM;
+        uint8_t hm_type = HUMIDIF_TYPE_HUM;
         if (cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_TYPE) != NULL) {
-            HM_TYPE = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_TYPE)->valuedouble;
+            hm_type = cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_TYPE)->valuedouble;
         }
+        
+        HM_TYPE = hm_type;
         
         // HomeKit Characteristics
         ch_group->ch[1] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0);
         ch_group->ch[2] = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_humidif_target_setter);
         ch_group->ch[3] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_HUMIDIFIER_DEHUMIDIFIER_STATE, 0);
         
-        if (HM_TYPE != HUMIDIF_TYPE_DEHUM) {
+        if (hm_type != HUMIDIF_TYPE_DEHUM) {
             ch_group->ch[5] = NEW_HOMEKIT_CHARACTERISTIC(RELATIVE_HUMIDITY_HUMIDIFIER_THRESHOLD, 40, .setter_ex=update_humidif);
             ch_group->ch[5]->value.float_value = set_initial_state(ch_group->accessory, 5, init_last_state_json, ch_group->ch[5], CH_TYPE_FLOAT, 40);
         }
         
-        if (HM_TYPE != HUMIDIF_TYPE_HUM) {
+        if (hm_type != HUMIDIF_TYPE_HUM) {
             ch_group->ch[6] = NEW_HOMEKIT_CHARACTERISTIC(RELATIVE_HUMIDITY_DEHUMIDIFIER_THRESHOLD, 60, .setter_ex=update_humidif);
             ch_group->ch[6]->value.float_value = set_initial_state(ch_group->accessory, 6, init_last_state_json, ch_group->ch[6], CH_TYPE_FLOAT, 60);
         }
@@ -8181,7 +8200,7 @@ void normal_mode_init() {
         
         if (ch_group->homekit_enabled) {
             uint8_t calloc_count = 6;
-            if (HM_TYPE >= HUMIDIF_TYPE_HUMDEHUM) {
+            if (hm_type >= HUMIDIF_TYPE_HUMDEHUM) {
                 calloc_count += 1;
             }
         
@@ -8205,7 +8224,7 @@ void normal_mode_init() {
             //service_iid += 5;
         }
         
-        switch ((uint8_t) HM_TYPE) {
+        switch (hm_type) {
             case HUMIDIF_TYPE_DEHUM:
                 ch_group->ch[4] = NEW_HOMEKIT_CHARACTERISTIC(TARGET_HUMIDIFIER_DEHUMIDIFIER_STATE, HUMIDIF_TARGET_MODE_DEHUM, .min_value=(float[]) {HUMIDIF_TARGET_MODE_DEHUM}, .max_value=(float[]) {HUMIDIF_TARGET_MODE_DEHUM}, .valid_values={.count=1, .values=(uint8_t[]) {HUMIDIF_TARGET_MODE_DEHUM}});
                 
@@ -8279,11 +8298,12 @@ void normal_mode_init() {
         
         ch_group->timer2 = esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, process_humidif_timer);
         
-        if (TH_SENSOR_GPIO != -1) {
-            set_used_gpio((uint8_t) TH_SENSOR_GPIO);
+        const int8_t sensor_gpio = TH_SENSOR_GPIO;
+        if (sensor_gpio != -1) {
+            set_used_gpio(sensor_gpio);
         }
         
-        if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE > 4) {
+        if (sensor_gpio != -1 || TH_SENSOR_TYPE >= 9) {
             th_sensor_starter(ch_group, poll_period);
         }
         
@@ -8985,10 +9005,12 @@ void normal_mode_init() {
             //service_iid += 2;
         }
         
-        LIGHT_SENSOR_TYPE = LIGHT_SENSOR_TYPE_DEFAULT;
+        uint8_t light_sensor_type = LIGHT_SENSOR_TYPE_DEFAULT;
         if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_TYPE_SET) != NULL) {
-            LIGHT_SENSOR_TYPE = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_TYPE_SET)->valuedouble;
+            light_sensor_type = cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_TYPE_SET)->valuedouble;
         }
+        
+        LIGHT_SENSOR_TYPE = light_sensor_type;
         
         LIGHT_SENSOR_FACTOR = LIGHT_SENSOR_FACTOR_DEFAULT;
         if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_FACTOR_SET) != NULL) {
@@ -9000,7 +9022,7 @@ void normal_mode_init() {
             LIGHT_SENSOR_OFFSET = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_OFFSET_SET)->valuedouble;
         }
         
-        if (LIGHT_SENSOR_TYPE < 2) {
+        if (light_sensor_type < 2) {
             LIGHT_SENSOR_RESISTOR = LIGHT_SENSOR_RESISTOR_DEFAULT;
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_RESISTOR_SET) != NULL) {
                 LIGHT_SENSOR_RESISTOR = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_RESISTOR_SET)->valuedouble * 1000;
@@ -9010,7 +9032,7 @@ void normal_mode_init() {
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_POW_SET) != NULL) {
                 LIGHT_SENSOR_POW = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_POW_SET)->valuedouble;
             }
-        } else if (LIGHT_SENSOR_TYPE == 2.f) {
+        } else if (light_sensor_type == 2) {
             cJSON* data_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_I2C_DATA_ARRAY_SET);
             LIGHT_SENSOR_I2C_BUS = (float) cJSON_GetArrayItem(data_array, 0)->valuedouble;
             LIGHT_SENSOR_I2C_ADDR = (float) cJSON_GetArrayItem(data_array, 1)->valuedouble;
@@ -9020,7 +9042,7 @@ void normal_mode_init() {
         }
         
         const float poll_period = sensor_poll_period(json_context, LIGHT_SENSOR_POLL_PERIOD_DEFAULT);
-        esp_timer_start(esp_timer_create(poll_period * 1000, true, (void*) ch_group, light_sensor_timer_worker));
+        esp_timer_start_forced(esp_timer_create(poll_period * 1000, true, (void*) ch_group, light_sensor_timer_worker));
     }
     
     // *** NEW SECURITY SYSTEM
@@ -9482,10 +9504,12 @@ void normal_mode_init() {
             PM_POWER_OFFSET = (float) cJSON_GetObjectItemCaseSensitive(json_context, PM_POWER_OFFSET_SET)->valuedouble;
         }
         
-        PM_SENSOR_TYPE = PM_SENSOR_TYPE_DEFAULT;
+        uint8_t pm_sensor_type = PM_SENSOR_TYPE_DEFAULT;
         if (cJSON_GetObjectItemCaseSensitive(json_context, PM_SENSOR_TYPE_SET) != NULL) {
-            PM_SENSOR_TYPE = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, PM_SENSOR_TYPE_SET)->valuedouble;
+            pm_sensor_type = cJSON_GetObjectItemCaseSensitive(json_context, PM_SENSOR_TYPE_SET)->valuedouble;
         }
+        
+        PM_SENSOR_TYPE = pm_sensor_type;
         
         int16_t data[3] = { PM_SENSOR_DATA_DEFAULT, PM_SENSOR_DATA_DEFAULT, PM_SENSOR_DATA_DEFAULT };
         
@@ -9494,13 +9518,13 @@ void normal_mode_init() {
             for (uint8_t i = 0; i < cJSON_GetArraySize(gpio_array); i++) {
                 data[i] = (int16_t) cJSON_GetArrayItem(gpio_array, i)->valuedouble;
                 
-                if (PM_SENSOR_TYPE < 2 && data[i] >= 0) {
+                if (pm_sensor_type < 2 && data[i] >= 0) {
                     set_used_gpio(data[i]);
                 }
             }
         }
         
-        if (PM_SENSOR_TYPE >= 2) {  // ADE7953 chip
+        if (pm_sensor_type >= 2) {  // ADE7953 chip
             PM_SENSOR_ADE_BUS = data[0];
             PM_SENSOR_ADE_ADDR = data[1];
             
@@ -9532,11 +9556,11 @@ void normal_mode_init() {
                 PM_SENSOR_HLW_GPIO = data[1];
             }
             
-            adv_hlw_unit_create(data[0], data[1], data[2], (uint8_t) PM_SENSOR_TYPE);
+            adv_hlw_unit_create(data[0], data[1], data[2], pm_sensor_type);
         }
 
         PM_POLL_PERIOD = sensor_poll_period(json_context, PM_POLL_PERIOD_DEFAULT);
-        esp_timer_start(esp_timer_create(PM_POLL_PERIOD * 1000, true, (void*) ch_group, power_monitor_timer_worker));
+        esp_timer_start_forced(esp_timer_create(PM_POLL_PERIOD * 1000, true, (void*) ch_group, power_monitor_timer_worker));
     }
     
     // *** HISTORICAL
@@ -9601,7 +9625,7 @@ void normal_mode_init() {
         
         const float poll_period = sensor_poll_period(json_context, 0);
         if (poll_period > 0.00f) {
-            esp_timer_start(esp_timer_create(poll_period * 1000, true, (void*) ch_group->ch_hist, historical_timer_worker));
+            esp_timer_start_forced(esp_timer_create(poll_period * 1000, true, (void*) ch_group->ch_hist, historical_timer_worker));
         }
     }
     
@@ -9935,8 +9959,14 @@ void ir_capture_task(void* args) {
 
                 c = 0;
             }
+            
+            vTaskDelay(1);
         }
     }
+}
+
+void wifi_done() {
+    // Do nothing
 }
 
 void init_task() {
@@ -9975,8 +10005,13 @@ void init_task() {
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
         
         reset_uart();
+        
+        adv_logger_init(ADV_LOGGER_UART0_UDP_BUFFERED, NULL);
+        wifi_config_init("HAA", NULL, wifi_done, main_config.name_value, 0);
+        
         printf_header();
         INFO("IR CAPTURE MODE\n");
+        
         const int ir_capture_gpio = haa_setup;
         xTaskCreate(ir_capture_task, "ir_cap", IR_CAPTURE_TASK_SIZE, (void*) ir_capture_gpio, IR_CAPTURE_TASK_PRIORITY, NULL);
         
@@ -10002,11 +10037,11 @@ void init_task() {
         if (haa_setup == 1) {
 #ifdef HAA_DEBUG
             free_heap_watchdog();
-            esp_timer_start(esp_timer_create(1000, true, NULL, free_heap_watchdog));
+            esp_timer_start_forced(esp_timer_create(1000, true, NULL, free_heap_watchdog));
 #endif // HAA_DEBUG
             
             // Arming emergency Setup Mode
-            esp_timer_start(esp_timer_create(EXIT_EMERGENCY_SETUP_MODE_TIME, false, NULL, disable_emergency_setup));
+            esp_timer_start_forced(esp_timer_create(EXIT_EMERGENCY_SETUP_MODE_TIME, false, NULL, disable_emergency_setup));
             
             name.value = HOMEKIT_STRING(main_config.name_value);
             

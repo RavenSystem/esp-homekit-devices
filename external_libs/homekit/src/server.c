@@ -830,7 +830,7 @@ int IRAM client_send_chunk(byte *data, size_t size, void *arg) {
      */
 }
 
-int IRAM send_200_response(client_context_t* context) {
+int send_200_response(client_context_t* context) {
     byte response[] =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: application/hap+json\r\n"

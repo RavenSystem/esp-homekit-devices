@@ -136,22 +136,33 @@ void ota_task(void *arg) {
             static char otamainfile[] = OTAMAINFILE;
             do {
                 tries_partial_count++;
-                if (ota_get_sign(user_repo, otamainfile, signature, port, is_ssl) == 0) {
+                
+                void enable_setup_mode() {
+                    sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
+                }
+                
+                result = ota_get_sign(user_repo, otamainfile, signature, port, is_ssl);
+                if (result == 0) {
                     result = ota_get_file_part(user_repo, otamainfile, BOOT1SECTOR, port, is_ssl, &file_size);
-                    if (result == 0 && ota_verify_sign(BOOT1SECTOR, file_size, signature) == 0) {
-                        ota_finalize_file(BOOT1SECTOR);
-                        INFO("\n* OTAMAIN installed\n");
-                        sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
-                        rboot_set_temp_rom(1);
+                    if (result == 0) {
+                        if (ota_verify_sign(BOOT1SECTOR, file_size, signature) == 0) {
+                            ota_finalize_file(BOOT1SECTOR);
+                            INFO("\n* OTAMAIN installed");
+                            sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
+                            rboot_set_temp_rom(1);
+                        } else {
+                            enable_setup_mode();
+                        }
+                        
                         ota_reboot();
-                    } else if (file_size < 0) {
-                        ERROR("Installing OTAMAIN");
-                        sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
+                    } else if (result < 0) {
+                        ERROR("Installing OTAMAIN %i", result);
+                        enable_setup_mode();
                         break;
                     }
                 } else {
-                    ERROR("OTAMAIN signature");
-                    sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
+                    ERROR("OTAMAIN signature %i", result);
+                    enable_setup_mode();
                 }
             } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
 #else   // HAABOOT
@@ -168,18 +179,22 @@ void ota_task(void *arg) {
                 static char otabootfile[] = OTABOOTFILE;
                 do {
                     tries_partial_count++;
-                    if (ota_get_sign(user_repo, otabootfile, signature, port, is_ssl) == 0) {
+                    result = ota_get_sign(user_repo, otabootfile, signature, port, is_ssl);
+                    if (result == 0) {
                         result = ota_get_file_part(user_repo, otabootfile, BOOT0SECTOR, port, is_ssl, &file_size);
-                        if (result == 0 && ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
-                            ota_finalize_file(BOOT0SECTOR);
-                            INFO("\n* HAABOOT installed\n");
+                        if (result == 0) {
+                            if (ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
+                                ota_finalize_file(BOOT0SECTOR);
+                                INFO("\n* HAABOOT installed");
+                            }
+                            
                             ota_reboot();
-                        } else if (file_size < 0) {
-                            ERROR("Installing HAABOOT\n");
+                        } else if (result < 0) {
+                            ERROR("Installing HAABOOT %i", result);
                             break;
                         }
                     } else {
-                        ERROR("HAABOOT signature\n");
+                        ERROR("HAABOOT signature %i", result);
                     }
                 } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
                 
@@ -197,19 +212,23 @@ void ota_task(void *arg) {
                 static char haamainfile[] = HAAMAINFILE;
                 do {
                     tries_partial_count++;
-                    if (ota_get_sign(user_repo, haamainfile, signature, port, is_ssl) == 0) {
+                    result = ota_get_sign(user_repo, haamainfile, signature, port, is_ssl);
+                    if (result == 0) {
                         result = ota_get_file_part(user_repo, haamainfile, BOOT0SECTOR, port, is_ssl, &file_size);
-                        if (result == 0 && ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
-                            ota_finalize_file(BOOT0SECTOR);
-                            sysparam_set_string(USER_VERSION_SYSPARAM, new_version);
-                            INFO("\n* HAAMAIN v%s installed\n", new_version);
+                        if (result == 0) {
+                            if (ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
+                                ota_finalize_file(BOOT0SECTOR);
+                                sysparam_set_string(USER_VERSION_SYSPARAM, new_version);
+                                INFO("\n* HAAMAIN v%s installed", new_version);
+                            }
+                            
                             ota_reboot();
-                        } else if (file_size < 0) {
-                            ERROR("Installing HAAMAIN\n");
+                        } else if (result < 0) {
+                            ERROR("Installing HAAMAIN %i", result);
                             break;
                         }
                     } else {
-                        ERROR("HAAMAIN signature\n");
+                        ERROR("HAAMAIN signature %i", result);
                     }
                 } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
             }

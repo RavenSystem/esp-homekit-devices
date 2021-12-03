@@ -425,7 +425,7 @@ static void wifi_scan_task(void *arg) {
 #include "index.html.h"
 
 static void wifi_config_server_on_settings(client_t *client) {
-    esp_timer_change_period(context->auto_reboot_timer, AUTO_REBOOT_LONG_TIMEOUT);
+    esp_timer_change_period_forced(context->auto_reboot_timer, AUTO_REBOOT_LONG_TIMEOUT);
     
     xTaskCreate(wifi_scan_task, "wifi_scan", 384, NULL, (tskIDLE_PRIORITY + 0), NULL);
     
@@ -737,7 +737,7 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
         }
             
         case ENDPOINT_SETTINGS_UPDATE: {
-            esp_timer_change_period(context->auto_reboot_timer, AUTO_REBOOT_LONG_TIMEOUT);
+            esp_timer_change_period_forced(context->auto_reboot_timer, AUTO_REBOOT_LONG_TIMEOUT);
             if (context->sta_connect_timeout) {
                 vTaskDelete(context->sta_connect_timeout);
             }
@@ -1042,7 +1042,7 @@ static void wifi_config_station_connect() {
         
         if (setup_mode == 1) {
             context->auto_reboot_timer = esp_timer_create(AUTO_REBOOT_TIMEOUT, false, NULL, auto_reboot_run);
-            esp_timer_start(context->auto_reboot_timer);
+            esp_timer_start_forced(context->auto_reboot_timer);
         }
         
         wifi_config_softap_start();
