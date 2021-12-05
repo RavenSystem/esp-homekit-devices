@@ -828,6 +828,7 @@ static void http_task(void *arg) {
         if (context->end_setup) {
             static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<center>OK</center>";
             client_send(client, payload, sizeof(payload) - 1);
+            vTaskDelay(MS_TO_TICKS(100));
             lwip_close(client->fd);
             break;
         }
@@ -1031,13 +1032,13 @@ static void wifi_config_station_connect() {
     INFO("\nHAA INSTALLER");
     
     if (wifi_config_connect(phy_mode) == 1 && setup_mode == 0) {
-        INFO("* NORMAL\n");
+        INFO("\n* NORMAL\n");
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
         
         xTaskCreate(wifi_config_sta_connect_timeout_task, "sta_con", 512, NULL, (tskIDLE_PRIORITY + 1), &context->sta_connect_timeout);
         
     } else {
-        INFO("* SETUP\n");
+        INFO("\n* SETUP\n");
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
         
         if (setup_mode == 1) {

@@ -252,7 +252,7 @@ void ota_task(void *arg) {
 }
 
 void on_wifi_ready() {
-    xTaskCreate(ota_task, "ota", 2048, NULL, (tskIDLE_PRIORITY + 1), NULL);
+    xTaskCreate(ota_task, "ota", 1920, NULL, (tskIDLE_PRIORITY + 1), NULL);
 }
 
 void init_task() {

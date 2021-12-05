@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "9.5.0"
+#define FIRMWARE_VERSION                    "9.5.1"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -42,7 +42,7 @@
 #define LIGHT_SENSOR_TASK_SIZE              GLOBAL_TASK_SIZE
 #define WIFI_PING_GW_TASK_SIZE              (384)
 #define WIFI_RECONNECTION_TASK_SIZE         GLOBAL_TASK_SIZE
-#define IR_CAPTURE_TASK_SIZE                (768)
+#define IR_CAPTURE_TASK_SIZE                (384)
 #define REBOOT_TASK_SIZE                    (384)
 
 // Task Priorities

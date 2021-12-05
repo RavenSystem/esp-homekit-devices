@@ -9917,7 +9917,8 @@ void ir_capture_task(void* args) {
     gpio_enable(ir_capture_gpio, GPIO_INPUT);
     
     bool read, last = true;
-    uint16_t buffer[1024], i, c = 0;
+    uint16_t i, c = 0;
+    uint16_t* buffer = malloc(1024 * sizeof(uint16_t));
     uint32_t now, new_time, current_time = sdk_system_get_time();
     
     for (;;) {
@@ -9960,13 +9961,13 @@ void ir_capture_task(void* args) {
                 c = 0;
             }
             
-            vTaskDelay(1);
+            vTaskDelay(2);
         }
     }
 }
 
 void wifi_done() {
-    // Do nothing
+    adv_logger_init(ADV_LOGGER_UART0_UDP_BUFFERED, NULL);
 }
 
 void init_task() {
@@ -10006,8 +10007,9 @@ void init_task() {
         
         reset_uart();
         
-        adv_logger_init(ADV_LOGGER_UART0_UDP_BUFFERED, NULL);
-        wifi_config_init("HAA", NULL, wifi_done, main_config.name_value, 0);
+        if (wifi_ssid) {
+            wifi_config_init("HAA", NULL, wifi_done, main_config.name_value, 0);
+        }
         
         printf_header();
         INFO("IR CAPTURE MODE\n");

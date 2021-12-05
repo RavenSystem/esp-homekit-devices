@@ -932,6 +932,7 @@ static void http_task(void *arg) {
         if (context->end_setup) {
             static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<center>OK</center>";
             client_send(client, payload, sizeof(payload) - 1);
+            vTaskDelay(MS_TO_TICKS(100));
             lwip_close(client->fd);
             break;
         }

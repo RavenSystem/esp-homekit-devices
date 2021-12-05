@@ -236,15 +236,16 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
 }
 
 static int ota_get_final_location(char* repo, char* file, uint16_t port, const bool is_ssl) {
-    int retc;
+    int ota_conn_result;
     int ret = 0;
     int error = 0;
     uint16_t slash;
     WOLFSSL* ssl;
     int socket;
     
-    size_t buffer_len;
+    size_t buffer_len = 0;
     char* buffer = NULL;
+    char* recv_buf = NULL;
     char* location = NULL;
 
     ota_get_host(repo);
@@ -256,19 +257,19 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
         strcat(last_location, file);
     }
     
-    char* recv_buf = malloc(RECV_BUF_LEN);
-    
     uint8_t i = 0;
     while (i < MAX_302_JUMPS) {
-        buffer_len = 0;
-        if (buffer) {
-            free(buffer);
-            buffer = NULL;
-        }
-        
         i++;
         INFO("*** FORWARDING: %s:%i/%s", last_host, port, last_location);
+        
+        ota_conn_result = ota_connect(last_host, port, &socket, &ssl, is_ssl);  //release socket and ssl when ready
+        
+        const struct timeval rcvtimeout = { 1, 250000 };
+        setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
+        
+        recv_buf = malloc(RECV_BUF_LEN);
         memset(recv_buf, 0, RECV_BUF_LEN);
+        
         strcat(strcat(strcat(strcat(strcat(strcat(strcpy(recv_buf,
                                             REQUESTHEAD),
                                             last_location),
@@ -277,13 +278,8 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
                                             RANGE),
                                             "0-1"),
                                             CRLFCRLF);
-
-        retc = ota_connect(last_host, port, &socket, &ssl, is_ssl);  //release socket and ssl when ready
         
-        const struct timeval rcvtimeout = { 1, 250000 };
-        setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
-        
-        if (!retc) {
+        if (ota_conn_result == 0) {
             const uint16_t send_bytes = strlen(recv_buf);
             
             if (is_ssl) {
@@ -292,8 +288,9 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
                 ret = lwip_write(socket, recv_buf, send_bytes);
             }
             
+            printf("Write ");
             if (ret > 0) {
-                INFO("Write..OK");
+                INFO("OK");
                 
                 //wolfSSL_shutdown(ssl); //by shutting down the connection before even reading, we reduce the payload to the minimum
                 bool all_ok = false;
@@ -371,15 +368,23 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
                     }
                 }
             } else {
-                ERROR("Write %i", ret);
+                ERROR("%i", ret);
                 if (is_ssl) {
                     ret = wolfSSL_get_error(ssl, ret);
                     ERROR("SSL %d", ret);
                 }
             }
         }
+        
+        free(recv_buf);
+        
+        buffer_len = 0;
+        if (buffer) {
+            free(buffer);
+            buffer = NULL;
+        }
 
-        switch (retc) {
+        switch (ota_conn_result) {
             case  0:
             case -1:
                 if (is_ssl) {
@@ -391,21 +396,14 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
             default:
             ;
         }
-    
-    }
-    
-    free(recv_buf);
-    
-    if (buffer) {
-        free(buffer);
     }
     
     if (error < 0) {
         return error;
     }
     
-    if (retc) {
-        return retc;
+    if (ota_conn_result < 0) {
+        return ota_conn_result;
     }
     
     return ret;
@@ -444,7 +442,7 @@ static void sign_check_client(const int set) {
 static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int bufsz, uint16_t port, const bool is_ssl, int* resume) {
     INFO("*** DOWNLOADING");
     
-    int retc, ret = 0;
+    int ota_conn_result, ret = 0;
     WOLFSSL* ssl;
     int socket;
     
@@ -453,7 +451,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
     
     if (resume) {
         collected = *resume;
-        INFO("RESUMING %i", collected);
+        INFO("Resuming %i", collected);
     }
     
     int length = collected + 1;
@@ -467,12 +465,13 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
     }
     
     int connection_tries = 0;
-    while ((retc = ota_get_final_location(repo, file, port, is_ssl)) <= 0 && connection_tries < 5) {
+    while ((ota_conn_result = ota_get_final_location(repo, file, port, is_ssl)) <= 0 && connection_tries < 5) {
         connection_tries++;
         ERROR("Tries %i", connection_tries);
+        vTaskDelay(2000 / portTICK_PERIOD_MS);
     }
     
-    if (retc <= 0) {
+    if (ota_conn_result <= 0) {
         ERROR("FINAL LOC");
         return -1;
     }
@@ -498,6 +497,8 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                 default:
                 ;
             }
+            
+            vTaskDelay(2000 / portTICK_PERIOD_MS);
         }
         
         INFO("");
@@ -505,27 +506,20 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
         return result;
     }
     
-    retc = new_connection();
+    ota_conn_result = new_connection();
     
-    if (!retc) {
-        const uint16_t getlinestart_len = 38 + strlen(last_location) + strlen(last_host);
-        
-        char* getlinestart = malloc(getlinestart_len);
-        snprintf(getlinestart, getlinestart_len, REQUESTHEAD"%s"REQUESTTAIL"%s"RANGE,
-                 last_location,
-                 last_host);
-        
+    if (ota_conn_result == 0) {
         char* location;
         char* recv_buf = malloc(RECV_BUF_LEN);
         
         connection_tries = 0;
-        while (collected < length && connection_tries < 5) {
+        while (collected < length && connection_tries < 4) {
             last_collected = collected;
             
-            sprintf(recv_buf, "%s%d-%d%s", getlinestart, collected, collected + 4095, CRLFCRLF);
+            snprintf(recv_buf, RECV_BUF_LEN, REQUESTHEAD"%s"REQUESTTAIL"%s"RANGE"%d-%d%s", last_location, last_host, collected, collected + 4095, CRLFCRLF);
             
             const uint16_t send_bytes = strlen(recv_buf);
-
+            
             if (is_ssl) {
                 ret = wolfSSL_write(ssl, recv_buf, send_bytes);
             } else {
@@ -549,33 +543,41 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                         if (header) {
                             //INFO("--------\n%s\n-------- %d", recv_buf, ret);
                             // Parse Content-Length: xxxx
-                            location = strstr_lc(recv_buf, "\ncontent-length:");
-                            if (!location) {
-                                ERROR("No content-length");
+                            
+                            void try_new_conn() {
                                 INFO("--\n%s\n-- %d", recv_buf, ret);
+                                free(recv_buf);
                                 collected = last_collected;
                                 connection_tries++;
                                 if (is_ssl) {
                                     wolfSSL_free(ssl);
                                 }
                                 lwip_close(socket);
-                                retc = new_connection();
+                                vTaskDelay(2000 / portTICK_PERIOD_MS);
+                                ota_conn_result = new_connection();
+                                recv_buf = malloc(RECV_BUF_LEN);
+                            }
+                            
+                            location = strstr_lc(recv_buf, "\ncontent-length:");
+                            if (!location) {
+                                ERROR("No CL");
+                                try_new_conn();
                                 break;
                             }
                             strchr(location, '\r')[0] = 0;
-                            location += 16; // Flush Content-Length:
+                            location += 16; // Flush "Content-Length:"
                             clength = atoi(location);
                             location[strlen(location)] = '\r'; // In case the order changes
                             // Parse Content-Range: bytes xxxx-yyyy/zzzz
                             location = strstr_lc(recv_buf, "\ncontent-range:");
                             if (location) {
                                 strchr(location,'\r')[0] = 0;
-                                location += 15; // Flush Content-Range:
+                                location += 15; // Flush "Content-Range: "
                                 location = strstr_lc(recv_buf, "bytes ");
-                                location += 6; // bytes
+                                location += 6; // Flush "bytes "
                                 
                                 location = strstr_lc(location, "/");
-                                location++; // Flush /
+                                location++; // Flush "/"
                                 
                                 length = atoi(location);
                                 
@@ -583,15 +585,8 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                             } else if (buffer) {
                                 length = clength;
                             } else {
-                                ERROR("No content-range");
-                                INFO("--\n%s\n-- %d", recv_buf, ret);
-                                collected = last_collected;
-                                connection_tries++;
-                                if (is_ssl) {
-                                    wolfSSL_free(ssl);
-                                }
-                                lwip_close(socket);
-                                retc = new_connection();
+                                ERROR("No CR");
+                                try_new_conn();
                                 break;
                             }
                             
@@ -605,7 +600,6 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                         
                         if (length > MAXFILESIZE) {
                             ERROR("TOO BIG %i/%i", length, MAXFILESIZE);
-                            free(getlinestart);
                             free(recv_buf);
                             return -10;
                         }
@@ -617,7 +611,6 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                                 if (writespace < ret) {
                                     printf("Sector 0x%05X ", sector + collected);
                                     if (!spiflash_erase_sector(sector + collected)) {
-                                        free(getlinestart);
                                         free(recv_buf);
                                         return -6; // Erase error
                                     }
@@ -625,14 +618,12 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                                 }
                                 if (collected) {
                                     if (!spiflash_write(sector + collected, (byte *)recv_buf, ret)) {
-                                        free(getlinestart);
                                         free(recv_buf);
                                         return -7; // Write error
                                     }
                                 } else { // At the very beginning, do not write the first byte yet but store it for later
                                     file_first_byte[0] = (byte)recv_buf[0];
                                     if (!spiflash_write(sector + 1, (byte *)recv_buf + 1, ret - 1)) {
-                                        free(getlinestart);
                                         free(recv_buf);
                                         return -8; // Write error
                                     }
@@ -640,7 +631,6 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                                 writespace -= ret;
                             } else { // Buffer
                                 if (ret > bufsz) {
-                                    free(getlinestart);
                                     free(recv_buf);
                                     return -9; // Too big
                                 }
@@ -657,11 +647,14 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                         }
                         
                         if (!ret && collected < length) {
+                            free(recv_buf);
                             if (is_ssl) {
                                 wolfSSL_free(ssl);
                             }
                             lwip_close(socket);
-                            retc = new_connection();
+                            vTaskDelay(2000 / portTICK_PERIOD_MS);
+                            ota_conn_result = new_connection();
+                            recv_buf = malloc(RECV_BUF_LEN);
                         }
                         
                         break;
@@ -680,24 +673,26 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                 }
                 
                 if (ret == -308) {
+                    free(recv_buf);
                     if (is_ssl) {
                         wolfSSL_free(ssl);
                     }
                     lwip_close(socket);
-                    retc = new_connection();
+                    vTaskDelay(2000 / portTICK_PERIOD_MS);
+                    ota_conn_result = new_connection();
+                    recv_buf = malloc(RECV_BUF_LEN);
                 } else {
                     break;
                 }
             }
         }
         
-        free(getlinestart);
         free(recv_buf);
     }
     
     INFO("");
     
-    switch (retc) {
+    switch (ota_conn_result) {
         case 0:
         case -1:
             if (is_ssl) {
