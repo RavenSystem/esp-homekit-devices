@@ -670,6 +670,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                             recv_buf = malloc(RECV_BUF_LEN);
                         }
                         
+                        collected = last_collected;
                         break;
                     }
                     
