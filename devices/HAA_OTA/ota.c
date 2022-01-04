@@ -272,7 +272,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
         
         ota_conn_result = ota_connect(last_host, port, &socket, &ssl, is_ssl);  //release socket and ssl when ready
         
-        const struct timeval rcvtimeout = { 3, 0 };
+        const struct timeval rcvtimeout = { 2, 0 };
         setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
         
         recv_buf = malloc(RECV_BUF_LEN);
