@@ -1,7 +1,7 @@
 /*
 * Home Accessory Architect OTA Installer
 *
-* Copyright 2020-2021 José Antonio Jiménez Campos (@RavenSystem)
+* Copyright 2020-2022 José Antonio Jiménez Campos (@RavenSystem)
 *
 */
 
@@ -224,7 +224,7 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
         }
         
         //wolfSSL_Debugging_OFF();
-        /*
+        
         ret = wolfSSL_connect(*ssl);
         printf("OK\nSSLConnect..");
         if (ret != SSL_SUCCESS) {
@@ -234,7 +234,7 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
             ERROR("SSL %d", ret);
             return -1;
         }
-        */
+        
         INFO("OK");
     }
     
@@ -272,7 +272,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
         
         ota_conn_result = ota_connect(last_host, port, &socket, &ssl, is_ssl);  //release socket and ssl when ready
         
-        const struct timeval rcvtimeout = { 1, 250000 };
+        const struct timeval rcvtimeout = { 3, 0 };
         setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
         
         recv_buf = malloc(RECV_BUF_LEN);
@@ -476,7 +476,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
     while ((ota_conn_result = ota_get_final_location(repo, file, port, is_ssl)) <= 0 && connection_tries < 5) {
         connection_tries++;
         ERROR("Tries %i", connection_tries);
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
     
     if (ota_conn_result <= 0) {
