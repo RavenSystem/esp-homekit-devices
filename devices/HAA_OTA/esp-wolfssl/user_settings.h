@@ -1,7 +1,7 @@
 #ifndef wolfcrypt_user_settings_h
 #define wolfcrypt_user_settings_h
 
-#ifdef ESP_IDF
+#ifdef ESP_PLATFORM
 
 #include <esp_system.h>
 
@@ -23,7 +23,7 @@ static inline int hwrand_generate_block(uint8_t *buf, size_t len) {
     return 0;
 }
 
-#else
+#else   // ESP_OPEN_RTOS
 
 #include <esp/hwrand.h>
 

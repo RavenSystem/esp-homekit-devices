@@ -44,11 +44,17 @@ bool is_ssl = true;
 uint8_t tries_count = 0;
 uint8_t tries_partial_count;
 
+TaskHandle_t xHandle = NULL;
+
 #define TRIES_PARTIAL_COUNT_MAX         (4)
 
 void ota_task(void *arg) {
+    vTaskSuspend(NULL);
+    
+    vTaskDelay(MS_TO_TICKS(100));
+    
     INFO("\n\nHAA Installer v%s\n\n", OTAVERSION);
-
+    
 #ifdef HAABOOT
     sysparam_set_string(USER_VERSION_SYSPARAM, "0.0.0");
 #endif  // HAABOOT
@@ -72,13 +78,11 @@ void ota_task(void *arg) {
         }
     }
     
-    INFO("- Server %s", user_repo);
-    INFO("- Port %i", port);
-    INFO("- SSL %i\n", is_ssl);
+    INFO("REPO http%s://%s:%i", is_ssl ? "s" : "", user_repo, port);
 
     status = sysparam_get_string(USER_VERSION_SYSPARAM, &user_version);
     if (status == SYSPARAM_OK) {
-        INFO("Current HAAMAIN installed v%s\n", user_version);
+        INFO("Installed HAA v%s\n", user_version);
 
         ota_init(user_repo, is_ssl);
         
@@ -87,7 +91,7 @@ void ota_task(void *arg) {
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
         
         for (;;) {
-            INFO("\n*** STARTING UPDATE PROCESS\n");
+            INFO("\n*** STARTING\n");
             tries_count++;
             tries_partial_count = 0;
             file_size = 0;
@@ -243,16 +247,12 @@ void ota_task(void *arg) {
             vTaskDelay(MS_TO_TICKS(5000));
         }
     } else {
-        ERROR("HAAMAIN Version, fixing\n");
+        ERROR("HAAMAIN, fixing\n");
         sysparam_set_data(USER_VERSION_SYSPARAM, NULL, 0, false);
         sysparam_set_string(USER_VERSION_SYSPARAM, "0.0.0");
     }
     
     ota_reboot();
-}
-
-void on_wifi_ready() {
-    xTaskCreate(ota_task, "ota", 1920, NULL, (tskIDLE_PRIORITY + 1), NULL);
 }
 
 void init_task() {
@@ -281,7 +281,7 @@ void init_task() {
         ERROR("Sysparam %d", status);
     }
     
-    wifi_config_init("HAA", NULL, on_wifi_ready);
+    wifi_config_init("HAA", xHandle);
     
     vTaskDelete(NULL);
 }
@@ -301,5 +301,6 @@ void user_init(void) {
     sdk_wifi_station_disconnect();
     sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
     
+    xTaskCreate(ota_task, "ota", 1920, NULL, (tskIDLE_PRIORITY + 1), &xHandle);
     xTaskCreate(init_task, "init", 512, NULL, (tskIDLE_PRIORITY + 2), NULL);
 }

@@ -46,11 +46,11 @@
 static ecc_key public_key;
 static byte file_first_byte[] = { 0xff };
 static const byte magic1[] = "HAP";
-static WOLFSSL_CTX* ctx = NULL;;
+static WOLFSSL_CTX* ctx = NULL;
 static char last_host[HOST_LEN];
 static char last_location[RECV_BUF_LEN];
 
-#ifdef DEBUG_WOLFSSL    
+#ifdef DEBUG_WOLFSSL
 void MyLoggingCallback(const int logLevel, const char* const logMessage) {
     /*custom logging function*/
     INFO("loglevel: %d - %s", logLevel, logMessage);
@@ -122,9 +122,9 @@ void ota_init(char* repo, const bool is_ssl) {
 #endif
         wolfSSL_Init();
 
-        //ctx = wolfSSL_CTX_new(wolfTLSv1_2_client_method());
+        ctx = wolfSSL_CTX_new(wolfTLSv1_2_client_method());
         
-        ctx = wolfSSL_CTX_new(wolfSSLv23_client_method());
+        //ctx = wolfSSL_CTX_new(wolfSSLv23_client_method());
         //wolfSSL_CTX_SetMinVersion(ctx, WOLFSSL_TLSV1_2);
         
         wolfSSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, NULL);
@@ -153,7 +153,7 @@ void ota_init(char* repo, const bool is_ssl) {
 }
 
 static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, const bool is_ssl) {
-    printf("*** CONNECTION\nDNS..");
+    printf("*** CONNECT\nDNS..");
     int ret;
     const struct addrinfo hints = {
         .ai_family = AF_UNSPEC,
@@ -162,7 +162,8 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
     struct addrinfo* res;
 
     void print_error() {
-        INFO("ERROR");
+        freeaddrinfo(res);
+        INFO("!");
     }
     
     char port_s[6];
@@ -170,27 +171,24 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
     itoa(port, port_s, 10);
     ret = getaddrinfo(host, port_s, &hints, &res);
     if (ret) {
-        freeaddrinfo(res);
         print_error();
         return -2;
     }
     
-    printf("OK Socket..");
+    printf("OK\nSocket..");
     *socket = socket(res->ai_family, res->ai_socktype, 0);
     if (*socket < 0) {
-        freeaddrinfo(res);
         print_error();
         return -3;
     }
 
-    printf("OK Connect..");
+    printf("OK\nConnect..");
     ret = connect(*socket, res->ai_addr, res->ai_addrlen);
     if (ret) {
-        freeaddrinfo(res);
         print_error();
         return -2;
     }
-    printf("OK ");
+    printf("OK\n");
 
     // SSL mode
     if (is_ssl) {
@@ -198,17 +196,25 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
         *ssl = wolfSSL_new(ctx);
         
         if (!*ssl) {
-            freeaddrinfo(res);
             print_error();
             return -2;
         }
 
-        printf("OK ");
-
+        printf("OK\nFD..");
+        
         //wolfSSL_Debugging_ON();
         
         ret = wolfSSL_set_fd(*ssl, *socket);
-        printf("%s:%d..", host, port);
+        if (ret != SSL_SUCCESS) {
+            freeaddrinfo(res);
+            ERROR("%i", ret);
+            ret = wolfSSL_get_error(*ssl, ret);
+            ERROR("SSL %d", ret);
+            return -1;
+        }
+        
+        printf("OK\nSNI..");
+        ret = wolfSSL_UseSNI(*ssl, WOLFSSL_SNI_HOST_NAME, host, strlen(host));
         if (ret != SSL_SUCCESS) {
             freeaddrinfo(res);
             ERROR("%i", ret);
@@ -218,15 +224,17 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
         }
         
         //wolfSSL_Debugging_OFF();
-        
+        /*
         ret = wolfSSL_connect(*ssl);
+        printf("OK\nSSLConnect..");
         if (ret != SSL_SUCCESS) {
             freeaddrinfo(res);
-            ERROR("Connect %i", ret);
+            ERROR("%i", ret);
             ret = wolfSSL_get_error(*ssl, ret);
             ERROR("SSL %d", ret);
             return -1;
         }
+        */
         INFO("OK");
     }
     
@@ -288,7 +296,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
                 ret = lwip_write(socket, recv_buf, send_bytes);
             }
             
-            printf("Write ");
+            printf("Write..");
             if (ret > 0) {
                 INFO("OK");
                 
@@ -502,6 +510,11 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
         }
         
         INFO("");
+        
+        if (result >= 0) {
+            const struct timeval rcvtimeout = { 10, 0 };
+            setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
+        }
         
         return result;
     }

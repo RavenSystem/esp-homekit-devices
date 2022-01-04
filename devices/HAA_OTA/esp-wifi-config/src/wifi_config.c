@@ -55,12 +55,12 @@ typedef struct _wifi_network_info {
 
 typedef struct {
     char* ssid_prefix;
-    char* password;
-    void (*on_wifi_ready)();
 
     TimerHandle_t auto_reboot_timer;
     
     TaskHandle_t sta_connect_timeout;
+    
+    TaskHandle_t ota_task;
     
     wifi_network_info_t* wifi_networks;
     SemaphoreHandle_t wifi_networks_mutex;
@@ -449,6 +449,10 @@ static void wifi_config_server_on_settings(client_t *client) {
     }
     client_send_chunk(client, html_settings_middle);
     
+    void send_selected() {
+        client_send_chunk(client, "selected");
+    }
+    
     bool auto_ota = false;
     status = sysparam_get_bool(AUTO_OTA_SYSPARAM, &auto_ota);
     if (status == SYSPARAM_OK && auto_ota) {
@@ -459,27 +463,27 @@ static void wifi_config_server_on_settings(client_t *client) {
     int8_t int8_value = 0;
     sysparam_get_int8(WIFI_MODE_SYSPARAM, &int8_value);
     if (int8_value == 0) {
-        client_send_chunk(client, "selected");
+        send_selected();
     }
     client_send_chunk(client, html_wifi_mode_0);
     
     if (int8_value == 1) {
-        client_send_chunk(client, "selected");
+        send_selected();
     }
     client_send_chunk(client, html_wifi_mode_1);
     
     if (int8_value == 2) {
-        client_send_chunk(client, "selected");
+        send_selected();
     }
     client_send_chunk(client, html_wifi_mode_2);
     
     if (int8_value == 3) {
-        client_send_chunk(client, "selected");
+        send_selected();
     }
     client_send_chunk(client, html_wifi_mode_3);
     
     if (int8_value == 4) {
-        client_send_chunk(client, "selected");
+        send_selected();
     }
     client_send_chunk(client, html_wifi_mode_4);
 
@@ -539,10 +543,6 @@ static void wifi_config_context_free(wifi_config_context_t *context) {
     if (context->ssid_prefix) {
         free(context->ssid_prefix);
     }
-
-    if (context->password) {
-        free(context->password);
-    }
     
     wifi_networks_free();
 
@@ -568,7 +568,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     free(client->body);
     
     if (!form) {
-        ERROR("No enough memory");
+        ERROR("No memory");
         body_malloc(client);
         client->body_length = 0;
         client_send_redirect(client, 302, "/settings");
@@ -858,13 +858,7 @@ static void wifi_config_softap_start() {
     );
     softap_config.ssid_hidden = 0;
     softap_config.channel = 6;
-    if (context->password) {
-        softap_config.authmode = AUTH_WPA_WPA2_PSK;
-        strncpy((char *)softap_config.password,
-                context->password, sizeof(softap_config.password));
-    } else {
-        softap_config.authmode = AUTH_OPEN;
-    }
+    softap_config.authmode = AUTH_OPEN;
     softap_config.max_connection = 2;
     softap_config.beacon_interval = 100;
 
@@ -909,7 +903,7 @@ static void wifi_config_sta_connect_timeout_task() {
             }
             sysparam_set_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, phy_mode);
             
-            context->on_wifi_ready();
+            vTaskResume(context->ota_task);
             
             wifi_config_context_free(context);
             break;
@@ -1039,6 +1033,7 @@ static void wifi_config_station_connect() {
         
     } else {
         INFO("\n* SETUP\n");
+        vTaskDelete(context->ota_task);
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
         
         if (setup_mode == 1) {
@@ -1052,22 +1047,13 @@ static void wifi_config_station_connect() {
     vTaskDelete(NULL);
 }
 
-void wifi_config_init(const char *ssid_prefix, const char *password, void (*on_wifi_ready)()) {
-    INFO("Wifi Init");
-    if (password && strlen(password) < 8) {
-        ERROR("Password must be at least 8 characters");
-        return;
-    }
-    
+void wifi_config_init(const char *ssid_prefix, TaskHandle_t xHandle) {
     context = malloc(sizeof(wifi_config_context_t));
     memset(context, 0, sizeof(*context));
 
     context->ssid_prefix = strndup(ssid_prefix, 33 - 7);
-    if (password) {
-        context->password = strdup(password);
-    }
-
-    context->on_wifi_ready = on_wifi_ready;
+    
+    context->ota_task = xHandle;
     
     xTaskCreate(wifi_config_station_connect, "wifi_config", 512, NULL, (tskIDLE_PRIORITY + 1), NULL);
 }
