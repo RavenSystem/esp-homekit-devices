@@ -46,7 +46,7 @@ uint8_t tries_partial_count;
 
 TaskHandle_t xHandle = NULL;
 
-#define TRIES_PARTIAL_COUNT_MAX         (4)
+#define TRIES_PARTIAL_COUNT_MAX         (5)
 
 void ota_task(void *arg) {
     vTaskSuspend(NULL);

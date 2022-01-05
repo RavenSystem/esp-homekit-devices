@@ -473,7 +473,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
     }
     
     int connection_tries = 0;
-    while ((ota_conn_result = ota_get_final_location(repo, file, port, is_ssl)) <= 0 && connection_tries < 5) {
+    while ((ota_conn_result = ota_get_final_location(repo, file, port, is_ssl)) <= 0 && connection_tries < 3) {
         connection_tries++;
         ERROR("Tries %i", connection_tries);
         vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -506,13 +506,13 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                 ;
             }
             
-            vTaskDelay(2000 / portTICK_PERIOD_MS);
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
         
         INFO("");
         
         if (result >= 0) {
-            const struct timeval rcvtimeout = { 10, 0 };
+            const struct timeval rcvtimeout = { 60, 0 };
             setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
         }
         
@@ -566,7 +566,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                                     wolfSSL_free(ssl);
                                 }
                                 lwip_close(socket);
-                                vTaskDelay(2000 / portTICK_PERIOD_MS);
+                                vTaskDelay(1000 / portTICK_PERIOD_MS);
                                 ota_conn_result = new_connection();
                                 recv_buf = malloc(RECV_BUF_LEN);
                             }
@@ -665,7 +665,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                                 wolfSSL_free(ssl);
                             }
                             lwip_close(socket);
-                            vTaskDelay(2000 / portTICK_PERIOD_MS);
+                            vTaskDelay(1000 / portTICK_PERIOD_MS);
                             ota_conn_result = new_connection();
                             recv_buf = malloc(RECV_BUF_LEN);
                         }
@@ -675,6 +675,11 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                     }
                     
                     header = 0; // Move to header section itself
+                    
+                    if (ota_conn_result != 0) {
+                        collected = last_collected;
+                        break;
+                    }
                 } while (recv_bytes < clength);
                 
                 INFO("- %d Bytes", collected);
@@ -692,12 +697,16 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                         wolfSSL_free(ssl);
                     }
                     lwip_close(socket);
-                    vTaskDelay(2000 / portTICK_PERIOD_MS);
+                    vTaskDelay(1000 / portTICK_PERIOD_MS);
                     ota_conn_result = new_connection();
                     recv_buf = malloc(RECV_BUF_LEN);
                 } else {
                     break;
                 }
+            }
+            
+            if (ota_conn_result != 0) {
+                break;
             }
         }
         
