@@ -9,7 +9,7 @@
 [![Chat](https://img.shields.io/discord/594630635696553994?style=social)](https://discord.gg/v8hyxj2)
 
 
-Firmware to bring native Apple HomeKit support to any device based on an ESP8266/ESP8285 microcontroller.
+Firmware to bring native Apple HomeKit support to any device based on an ESP8266 microcontroller (ESP8266EX and ESP8285 chips).
 
 HAA supports many different [HomeKit service types](https://github.com/RavenSystem/esp-homekit-devices/wiki/Service-Types), with a lot of possibilities and customizations.
 
