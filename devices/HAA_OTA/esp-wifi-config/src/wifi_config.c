@@ -89,7 +89,7 @@ void wifi_config_remove_sys_param() {
     unsigned char* sector = malloc(SPI_FLASH_SECTOR_SIZE);
     
     if (sector) {
-        for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
+        for (int i = 0; i < SYSPARAMSIZE; i++) {
             if (!spiflash_erase_sector(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE))) {
                 ERROR("Erasing sysparam");
                 break;
@@ -488,19 +488,19 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send_chunk(client, html_wifi_mode_4);
 
     // Wifi Networks
-    char buffer[125];
+    char buffer[150];
     char bssid[13];
     if (xSemaphoreTake(context->wifi_networks_mutex, MS_TO_TICKS(5000))) {
         wifi_network_info_t* net = context->wifi_networks;
         while (net) {
-            snprintf(bssid, 13, "%02x%02x%02x%02x%02x%02x", net->bssid[0], net->bssid[1], net->bssid[2], net->bssid[3], net->bssid[4], net->bssid[5]);
+            snprintf(bssid, sizeof(bssid), "%02x%02x%02x%02x%02x%02x", net->bssid[0], net->bssid[1], net->bssid[2], net->bssid[3], net->bssid[4], net->bssid[5]);
             snprintf(
                 buffer, sizeof(buffer),
                 html_network_item,
                 net->secure ? "secure" : "unsecure", bssid, net->ssid, net->ssid, net->rssi, net->channel, bssid
             );
             client_send_chunk(client, buffer);
-
+            
             net = net->next;
         }
 
@@ -651,7 +651,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                 char hex[3];
                 memset(hex, 0, 3);
                 
-                for (uint8_t i = 0; i < 6; i++) {
+                for (int i = 0; i < 6; i++) {
                     hex[0] = bssid_param->value[(i * 2)];
                     hex[1] = bssid_param->value[(i * 2) + 1];
                     bssid[i] = (uint8_t) strtol(hex, NULL, 16);
@@ -828,7 +828,7 @@ static void http_task(void *arg) {
         if (context->end_setup) {
             static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<center>OK</center>";
             client_send(client, payload, sizeof(payload) - 1);
-            vTaskDelay(MS_TO_TICKS(100));
+            vTaskDelay(MS_TO_TICKS(300));
             lwip_close(client->fd);
             break;
         }

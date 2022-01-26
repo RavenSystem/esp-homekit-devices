@@ -64,9 +64,9 @@ typedef struct i2c_bus_description
   uint8_t delay_80;
   uint8_t delay_160;
   uint8_t delay;
-  bool started;
-  bool flag;
-  bool force;
+  bool started: 1;
+  bool flag: 1;
+  bool force: 1;
   TickType_t clk_stretch;
 } i2c_bus_description_t;
 
@@ -375,21 +375,17 @@ static bool i2c_read_bit(uint8_t bus)
 
 bool i2c_write(uint8_t bus, uint8_t byte)
 {
-    bool nack;
-    uint8_t bit;
-    for (bit = 0; bit < 8; bit++) {
+    for (int bit = 0; bit < 8; bit++) {
         i2c_write_bit(bus, (byte & 0x80) != 0);
         byte <<= 1;
     }
-    nack = i2c_read_bit(bus);
-    return !nack;
+    return !i2c_read_bit(bus);
 }
 
 uint8_t i2c_read(uint8_t bus, bool ack)
 {
     uint8_t byte = 0;
-    uint8_t bit;
-    for (bit = 0; bit < 8; bit++) {
+    for (int bit = 0; bit < 8; bit++) {
         byte = ((byte << 1)) | (i2c_read_bit(bus));
     }
     i2c_write_bit(bus, ack);
@@ -434,7 +430,7 @@ int i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const 
     if (!i2c_write(bus, slave_addr << 1))
         goto error;
     if (data != NULL) {
-        for (uint8_t i = 0; i < data_len; i++) {
+        for (int i = 0; i < data_len; i++) {
             if (!i2c_write(bus, data[i]))
                 goto error;
         }
@@ -463,7 +459,7 @@ int i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const u
         i2c_start(bus);
         if (!i2c_write(bus, slave_addr << 1))
             goto error;
-        for (uint8_t i = 0; i < data_len; i++) {
+        for (int i = 0; i < data_len; i++) {
             if (!i2c_write(bus, data[i]))
                 goto error;
         }

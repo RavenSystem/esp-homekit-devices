@@ -815,8 +815,8 @@
     .unit = HOMETKIT_UNIT_CELSIUS, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                  | HOMEKIT_PERMISSIONS_NOTIFY, \
-    .min_value = (float[]) {0}, \
-    .max_value = (float[]) {100}, \
+    .min_value = (float[]) {-100}, \
+    .max_value = (float[]) {200}, \
     .min_step = (float[]) {0.1}, \
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__

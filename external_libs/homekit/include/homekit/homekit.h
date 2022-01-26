@@ -24,7 +24,7 @@ typedef struct {
     homekit_accessory_t **accessories;
 
     homekit_accessory_category_t category;
-
+    
     int config_number;
 
     // Setup ID in format "XXXX" (where X is digit or latin capital letter)
@@ -46,7 +46,7 @@ void homekit_server_init(homekit_server_config_t *config);
 
 // Set maximum connected HomeKit clients simultaneously (max 32)
 #ifdef HOMEKIT_CHANGE_MAX_CLIENTS
-void homekit_set_max_clients(const uint8_t clients);
+void homekit_set_max_clients(const unsigned int clients);
 #endif // HOMEKIT_CHANGE_MAX_CLIENTS
 
 // Remove oldest client to free some DRAM
@@ -58,9 +58,9 @@ void homekit_server_reset();
 void homekit_mdns_announce();
 void homekit_mdns_announce_pause();
 
-int  homekit_get_accessory_id(char *buffer, size_t size);
-bool homekit_is_pairing();
-bool homekit_is_paired();
+int homekit_get_accessory_id(char *buffer, size_t size);
+int homekit_is_pairing();
+int homekit_is_paired();
 
 // Client related stuff
 //homekit_client_id_t homekit_get_client_id();

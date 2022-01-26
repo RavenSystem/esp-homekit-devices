@@ -92,7 +92,7 @@ typedef struct _client {
     http_parser parser;
     endpoint_t endpoint;
     uint8_t* body;
-    size_t body_length;
+    unsigned int body_length;
 } client_t;
 
 static void wifi_config_station_connect();
@@ -102,7 +102,7 @@ void wifi_config_remove_sys_param() {
     unsigned char* sector = malloc(SPI_FLASH_SECTOR_SIZE);
     
     if (sector) {
-        for (uint8_t i = 0; i < SYSPARAMSIZE; i++) {
+        for (int i = 0; i < SYSPARAMSIZE; i++) {
             if (!spiflash_erase_sector(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE))) {
                 ERROR("Erasing sysparam");
                 break;
@@ -160,7 +160,7 @@ static void client_free(client_t* client) {
     client = NULL;
 }
 
-static void client_send(client_t *client, const char *payload, size_t payload_size) {
+static void client_send(client_t *client, const char *payload, unsigned int payload_size) {
     lwip_write(client->fd, payload, payload_size);
 }
 
@@ -176,7 +176,7 @@ static void client_send_chunk(client_t *client, const char *payload) {
 static void client_send_redirect(client_t *client, int code, const char *redirect_url) {
     INFO("Redirecting to %s", redirect_url);
     char buffer[128];
-    size_t len = snprintf(buffer, sizeof(buffer), "HTTP/1.1 %d \r\nLocation: %s\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", code, redirect_url);
+    unsigned int len = snprintf(buffer, sizeof(buffer), "HTTP/1.1 %d \r\nLocation: %s\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", code, redirect_url);
     client_send(client, buffer, len);
 }
 
@@ -230,7 +230,7 @@ static void wifi_smart_connect_task(void* arg) {
     
     INFO("Best BSSID: %02x%02x%02x%02x%02x%02x", best_bssid[0], best_bssid[1], best_bssid[2], best_bssid[3], best_bssid[4], best_bssid[5]);
     
-    sysparam_set_data(WIFI_BSSID_SYSPARAM, best_bssid, (size_t) 6, true);
+    sysparam_set_data(WIFI_BSSID_SYSPARAM, best_bssid, (unsigned int) 6, true);
     
     sdk_wifi_station_disconnect();
     
@@ -316,7 +316,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
     }
     
     uint8_t *wifi_bssid = NULL;
-    size_t len = 6;
+    unsigned int len = 6;
     bool is_binary = true;
     sysparam_get_data(WIFI_BSSID_SYSPARAM, &wifi_bssid, &len, &is_binary);
     
@@ -548,19 +548,19 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send_chunk(client, html_wifi_mode_4);
     
     // Wifi Networks
-    char buffer[125];
+    char buffer[150];
     char bssid[13];
     if (xSemaphoreTake(context->wifi_networks_mutex, MS_TO_TICKS(5000))) {
         wifi_network_info_t* net = context->wifi_networks;
         while (net) {
-            snprintf(bssid, 13, "%02x%02x%02x%02x%02x%02x", net->bssid[0], net->bssid[1], net->bssid[2], net->bssid[3], net->bssid[4], net->bssid[5]);
+            snprintf(bssid, sizeof(bssid), "%02x%02x%02x%02x%02x%02x", net->bssid[0], net->bssid[1], net->bssid[2], net->bssid[3], net->bssid[4], net->bssid[5]);
             snprintf(
                 buffer, sizeof(buffer),
                 html_network_item,
                 net->secure ? "secure" : "unsecure", bssid, net->ssid, net->ssid, net->rssi, net->channel, bssid
             );
             client_send_chunk(client, buffer);
-
+            
             net = net->next;
         }
 
@@ -742,13 +742,13 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                 char hex[3];
                 memset(hex, 0, 3);
                 
-                for (uint8_t i = 0; i < 6; i++) {
+                for (int i = 0; i < 6; i++) {
                     hex[0] = bssid_param->value[(i * 2)];
                     hex[1] = bssid_param->value[(i * 2) + 1];
                     bssid[i] = (uint8_t) strtol(hex, NULL, 16);
                 }
 
-                sysparam_set_data(WIFI_BSSID_SYSPARAM, bssid, (size_t) 6, true);
+                sysparam_set_data(WIFI_BSSID_SYSPARAM, bssid, (unsigned int) 6, true);
                 
             } else {
                 sysparam_set_data(WIFI_BSSID_SYSPARAM, NULL, 0, true);
@@ -782,7 +782,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     sdk_system_restart();
 }
 
-static int wifi_config_server_on_url(http_parser *parser, const char *data, size_t length) {
+static int wifi_config_server_on_url(http_parser *parser, const char *data, unsigned int length) {
     client_t *client = (client_t*) parser->data;
 
     client->endpoint = ENDPOINT_UNKNOWN;
@@ -807,7 +807,7 @@ static int wifi_config_server_on_url(http_parser *parser, const char *data, size
     return 0;
 }
 
-static int wifi_config_server_on_body(http_parser *parser, const char *data, size_t length) {
+static int wifi_config_server_on_body(http_parser *parser, const char *data, unsigned int length) {
     client_t *client = parser->data;
     //client->body = realloc(client->body, client->body_length + length + 1);
     memcpy(client->body + client->body_length, data, length);
@@ -932,7 +932,7 @@ static void http_task(void *arg) {
         if (context->end_setup) {
             static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<center>OK</center>";
             client_send(client, payload, sizeof(payload) - 1);
-            vTaskDelay(MS_TO_TICKS(100));
+            vTaskDelay(MS_TO_TICKS(300));
             lwip_close(client->fd);
             break;
         }
@@ -1112,7 +1112,7 @@ uint8_t wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool wi
         sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
         
         uint8_t *wifi_bssid = NULL;
-        size_t len = 6;
+        unsigned int len = 6;
         bool is_binary = true;
         sysparam_get_data(WIFI_BSSID_SYSPARAM, &wifi_bssid, &len, &is_binary);
         if (wifi_bssid) {

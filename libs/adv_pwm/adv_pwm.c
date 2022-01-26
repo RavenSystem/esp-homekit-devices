@@ -1,7 +1,7 @@
 /*
  * Advanced PWM Driver
  *
- * Copyright 2021 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2021-2022 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -35,7 +35,7 @@ typedef struct _adv_pwm_config {
 
 static adv_pwm_config_t* adv_pwm_config = NULL;
 
-static adv_pwm_channel_t* adv_pwm_channel_find_by_gpio(const uint8_t gpio) {
+static adv_pwm_channel_t* adv_pwm_channel_find_by_gpio(const unsigned int gpio) {
     if (adv_pwm_config) {
         adv_pwm_channel_t* adv_pwm_channel = adv_pwm_config->adv_pwm_channels;
         
@@ -49,7 +49,7 @@ static adv_pwm_channel_t* adv_pwm_channel_find_by_gpio(const uint8_t gpio) {
     return NULL;
 }
 
-uint16_t adv_pwm_get_duty(const uint8_t gpio) {
+int adv_pwm_get_duty(const unsigned int gpio) {
     if (adv_pwm_config) {
         adv_pwm_channel_t* adv_pwm_channel = adv_pwm_config->adv_pwm_channels;
         
@@ -67,7 +67,7 @@ uint16_t adv_pwm_get_duty(const uint8_t gpio) {
 
 static void IRAM adv_pwm_worker() {
     uint32_t next_load = adv_pwm_config->max_load;
-    uint16_t next_duty = UINT16_MAX;
+    uint32_t next_duty = UINT16_MAX;
     
     adv_pwm_channel_t* adv_pwm_channel = adv_pwm_config->adv_pwm_channels;
     if (adv_pwm_config->current_duty == 0) {
@@ -141,7 +141,7 @@ void adv_pwm_stop() {
     }
 }
 
-static void adv_pwm_init(const uint8_t mode) {
+static void adv_pwm_init(const unsigned int mode) {
     if (!adv_pwm_config) {
         adv_pwm_config = malloc(sizeof(adv_pwm_config_t));
         memset(adv_pwm_config, 0, sizeof(*adv_pwm_config));
@@ -154,7 +154,7 @@ static void adv_pwm_init(const uint8_t mode) {
     }
 }
 
-void adv_pwm_set_freq(const uint16_t freq) {
+void adv_pwm_set_freq(const unsigned int freq) {
     adv_pwm_init(1);
     
     if (adv_pwm_config->is_running) {
@@ -169,11 +169,11 @@ void adv_pwm_set_freq(const uint16_t freq) {
     }
 }
 
-void adv_pwm_set_duty(const uint8_t gpio, const uint16_t duty, uint16_t dithering) {
+void adv_pwm_set_duty(const unsigned int gpio, const unsigned int duty, unsigned int dithering) {
     adv_pwm_channel_t* adv_pwm_channel = adv_pwm_channel_find_by_gpio(gpio);
     if (adv_pwm_channel) {
         if (dithering == 0 || duty == 0 || duty == UINT16_MAX) {
-            for (uint8_t i = 0; i < 8; i++) {
+            for (int i = 0; i < 8; i++) {
                 adv_pwm_channel->duty[i] = duty;
             }
         } else {
@@ -191,14 +191,14 @@ void adv_pwm_set_duty(const uint8_t gpio, const uint16_t duty, uint16_t ditherin
             adv_pwm_channel->duty[3] = duty - (dithering >> 1);
             adv_pwm_channel->duty[4] = duty - dithering;
             
-            for (uint8_t i = 5; i < 8; i++) {
+            for (int i = 5; i < 8; i++) {
                 adv_pwm_channel->duty[i] = adv_pwm_channel->duty[8 - i];
             }
         }
     }
 }
 
-void adv_pwm_new_channel(const uint8_t gpio, const bool inverted) {
+void adv_pwm_new_channel(const unsigned int gpio, const bool inverted) {
     adv_pwm_init(0);
     
     if (!adv_pwm_channel_find_by_gpio(gpio)) {
@@ -224,7 +224,7 @@ void adv_pwm_new_channel(const uint8_t gpio, const bool inverted) {
     }
 }
 /*
-void adv_pwm_set_zc_gpio(const uint8_t gpio) {
+void adv_pwm_set_zc_gpio(const unsigned int gpio) {
     adv_pwm_init(2);
     
     gpio_enable(gpio, GPIO_INPUT);

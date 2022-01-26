@@ -52,7 +52,7 @@ int homekit_storage_init() {
         
         byte blank[64];
         memset(blank, 0, sizeof(blank));
-        for (uint16_t i = 0; i < SPI_FLASH_SECTOR_SIZE; i += sizeof(blank)) {
+        for (int i = 0; i < SPI_FLASH_SECTOR_SIZE; i += sizeof(blank)) {
             if (!spiflash_write(SPIFLASH_BASE_ADDR + i, blank, sizeof(blank))) {
                 ERROR("Format flash");
                 return -1;

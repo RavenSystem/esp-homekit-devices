@@ -19,7 +19,7 @@ typedef unsigned char byte;
 #define INFO(message, ...) printf(message "\n", ##__VA_ARGS__)
 #define ERROR(message, ...) printf("! " message "\n", ##__VA_ARGS__)
 
-#ifdef ESP_IDF
+#ifdef ESP_PLATFORM
 
 #define DEBUG_HEAP() DEBUG("Free heap: %d", esp_get_free_heap_size());
 

@@ -169,7 +169,7 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
         return false;
     }
 
-    for (uint8_t i = 0; i < DHT_DATA_BITS; i++) {
+    for (int i = 0; i < DHT_DATA_BITS; i++) {
         // Read each bit into 'result' byte array...
         data[i/8] <<= 1;
         data[i/8] |= bits[i];

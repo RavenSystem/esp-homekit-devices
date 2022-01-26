@@ -1,7 +1,7 @@
 /*
  * LED Codes Library
  * 
- * Copyright 2018-2020 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2018-2022 José Antonio Jiménez Campos (@RavenSystem)
  *  
  */
 
@@ -45,7 +45,7 @@ static led_t* led_find_by_gpio(const uint8_t gpio) {
 
 static void led_code_run(TimerHandle_t xTimer) {
     led_t* led = (led_t*) pvTimerGetTimerID(xTimer);
-    uint16_t delay = DURATION_OFF;
+    int delay = DURATION_OFF;
     
     led->status = !led->status;
     gpio_write(led->gpio, led->status);
@@ -61,7 +61,7 @@ static void led_code_run(TimerHandle_t xTimer) {
     }
 }
 
-void led_code(const uint8_t gpio, blinking_params_t blinking_params) {
+void led_code(const int gpio, blinking_params_t blinking_params) {
     led_t* led = led_find_by_gpio(gpio);
     
     if (led) {
@@ -75,7 +75,7 @@ void led_code(const uint8_t gpio, blinking_params_t blinking_params) {
     }
 }
 
-int led_create(const uint8_t gpio, const bool inverted) {
+int led_create(const int gpio, const bool inverted) {
     led_t* led = led_find_by_gpio(gpio);
     
     if (!led) {
@@ -100,7 +100,7 @@ int led_create(const uint8_t gpio, const bool inverted) {
     return -1;
 }
 
-void led_destroy(const uint8_t gpio) {
+void led_destroy(const int gpio) {
     if (leds) {
         led_t* led = NULL;
         if (leds->gpio == gpio) {

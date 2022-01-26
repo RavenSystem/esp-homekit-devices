@@ -1,7 +1,7 @@
 /*
  * LED Codes Library
  * 
- * Copyright 2018-2020 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2018-2022 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -28,7 +28,7 @@ typedef struct blinking_params_t {
 #define FUNCTION_7                  (blinking_params_t){7,0}
 #define FUNCTION_8                  (blinking_params_t){8,0}
 
-int led_create(const uint8_t gpio, const bool inverted);
-void led_destroy(const uint8_t gpio);
+int led_create(const int gpio, const bool inverted);
+void led_destroy(const int gpio);
 
-void led_code(const uint8_t gpio, blinking_params_t blinking_params);
+void led_code(const int gpio, blinking_params_t blinking_params);

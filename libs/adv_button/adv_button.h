@@ -1,7 +1,7 @@
 /*
  * Advanced Button Manager
  *
- * Copyright 2019-2020 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2022 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -25,12 +25,12 @@
 
 typedef void (*button_callback_fn)(uint16_t gpio, void *args, uint8_t param);
 
-void adv_button_set_evaluate_delay(const uint8_t new_delay);
-void adv_button_set_gpio_probes(const uint16_t gpio, const uint8_t max_eval);
+void adv_button_set_evaluate_delay(const unsigned int new_delay);
+void adv_button_set_gpio_probes(const unsigned int gpio, const unsigned int max_eval);
 int adv_button_create(const uint16_t gpio, const uint8_t pullup_resistor, const bool inverted, const uint8_t mode);
-int adv_button_destroy(const uint16_t gpio);
+//int adv_button_destroy(const int gpio);
 void adv_button_set_disable_time();
-bool adv_button_read_by_gpio(const uint16_t gpio);
+int adv_button_read_by_gpio(const unsigned int gpio);
 
 /*
  * Button callback types:

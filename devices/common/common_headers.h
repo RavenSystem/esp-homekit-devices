@@ -43,5 +43,7 @@
 
 #define FREEHEAP()                          printf("Free Heap %d\n", xPortGetFreeHeapSize())
 
+#define CHAR_IS_NUMBER(c)                   ((c) >= '0' && (c) <= '9')
+
 #endif  // __HAA_COMMON_HEADER_H__
 

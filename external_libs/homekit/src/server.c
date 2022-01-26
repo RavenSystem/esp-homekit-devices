@@ -9,16 +9,18 @@
 
 #include <unistd.h>
 
-#if defined(ESP_IDF)
+#ifdef ESP_PLATFORM
+
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
-#elif defined(ESP_OPEN_RTOS)
+
+#else
+
 #include <FreeRTOS.h>
 #include <task.h>
 #include <espressif/esp_common.h>
 #include <esplibs/libmain.h>
-#else
-#error "Unknown target platform"
+
 #endif
 
 #include <http-parser/http_parser.h>
@@ -188,10 +190,10 @@ struct _client_context_t {
 void client_context_free(client_context_t *c);
 void pairing_context_free(pairing_context_t *context);
 void homekit_server_on_reset(client_context_t *context);
-int IRAM client_send_chunk(byte *data, size_t size, void *arg);
+int client_send_chunk(byte *data, size_t size, void *arg);
 
 #ifdef HOMEKIT_CHANGE_MAX_CLIENTS
-void homekit_set_max_clients(const uint8_t clients) {
+void homekit_set_max_clients(const unsigned int clients) {
     if (homekit_server && homekit_server->config && clients > 0 && clients <= 32) {
         homekit_server->config->max_clients = clients;
     }
@@ -371,7 +373,7 @@ void pairing_context_free(pairing_context_t *context) {
     free(context);
 }
 
-static bool IRAM homekit_low_dram() {
+static inline int IRAM homekit_low_dram() {
     const uint32_t free_heap = xPortGetFreeHeapSize();
     if (free_heap < HOMEKIT_MIN_FREEHEAP) {
         HOMEKIT_ERROR("LOW DRAM Free HEAP: %i", free_heap);
@@ -435,7 +437,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
     }
 
     if ((format & characteristic_format_events) && (ch->permissions & HOMEKIT_PERMISSIONS_NOTIFY)) {
-        bool events = homekit_characteristic_has_notify_subscription(ch, client);
+        int events = homekit_characteristic_has_notify_subscription(ch, client);
         json_string(json, "ev");
         json_boolean(json, events);
     }
@@ -685,7 +687,7 @@ int client_send_encrypted(client_context_t *context, byte *payload, size_t size)
         }
         
         if (free_heap < HOMEKIT_NETWORK_MIN_FREEHEAP) {
-            uint8_t count = 0;
+            unsigned int count = 0;
             while (free_heap > xPortGetFreeHeapSize() && count < HOMEKIT_NETWORK_PAUSE_COUNT) {
                 count++;
                 //CLIENT_INFO(context, "Waiting %i", count);
@@ -756,7 +758,7 @@ int client_decrypt(client_context_t *context, byte *payload, size_t payload_size
 void homekit_setup_mdns();
 
 
-int IRAM client_send(client_context_t *context, byte *data, size_t data_size) {
+int client_send(client_context_t *context, byte *data, size_t data_size) {
 #if HOMEKIT_DEBUG
     if (data_size < 4096) {
         char *payload = binary_to_string(data, data_size);
@@ -775,7 +777,7 @@ int IRAM client_send(client_context_t *context, byte *data, size_t data_size) {
         r = write(context->socket, data, data_size);
         
         if (free_heap < HOMEKIT_NETWORK_MIN_FREEHEAP) {
-            uint8_t count = 0;
+            unsigned int count = 0;
             while (free_heap > xPortGetFreeHeapSize() && count < HOMEKIT_NETWORK_PAUSE_COUNT) {
                 count++;
                 //CLIENT_INFO(context, "Waiting %i", count);
@@ -793,7 +795,7 @@ int IRAM client_send(client_context_t *context, byte *data, size_t data_size) {
 }
 
 
-int IRAM client_send_chunk(byte *data, size_t size, void *arg) {
+int client_send_chunk(byte *data, size_t size, void *arg) {
     client_context_t* context = arg;
     
     byte header[9];
@@ -1136,7 +1138,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             }
 
 #ifdef ESP_OPEN_RTOS
-            bool low_mdns_buffer = false;
+            int low_mdns_buffer = false;
             if (xPortGetFreeHeapSize() < 25000) {
                 homekit_mdns_buffer_set(500);
                 low_mdns_buffer = true;
@@ -2103,7 +2105,7 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
         return;
     }
 
-    bool bool_endpoint_param(const char *name) {
+    int bool_endpoint_param(const char *name) {
         query_param_t *param = query_params_find(context->endpoint_params, name);
         return param && param->value && !strcmp(param->value, "1");
     }
@@ -2121,7 +2123,7 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
     if (bool_endpoint_param("ev"))
         format |= characteristic_format_events;
 
-    bool success = true;
+    int success = true;
 
     char *id = strdup(id_param->value);
     char *ch_id;
@@ -2298,7 +2300,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 
             switch (ch->format) {
                 case HOMETKIT_FORMAT_BOOL: {
-                    bool value = false;
+                    int value = false;
                     if (j_value->type == cJSON_True) {
                         value = true;
                     } else if (j_value->type == cJSON_False) {
@@ -2406,7 +2408,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 
                     
                     if (ch->valid_values.count) {
-                        bool matches = false;
+                        int matches = false;
                         for (int i = 0; i < ch->valid_values.count; i++) {
                             if (value == ch->valid_values.values[i]) {
                                 matches = true;
@@ -2421,7 +2423,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     }
 
                     if (ch->valid_values_ranges.count) {
-                        bool matches = false;
+                        int matches = false;
                         for (int i = 0; i < ch->valid_values_ranges.count; i++) {
                             if (value >= ch->valid_values_ranges.ranges[i].start &&
                                     value <= ch->valid_values_ranges.ranges[i].end) {
@@ -2651,8 +2653,8 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
     }
 
     HAPStatus *statuses = malloc(sizeof(HAPStatus) * cJSON_GetArraySize(characteristics));
-    bool has_errors = false;
-    for (int i=0; i < cJSON_GetArraySize(characteristics); i++) {
+    int has_errors = false;
+    for (int i = 0; i < cJSON_GetArraySize(characteristics); i++) {
         cJSON *j_ch = cJSON_GetArrayItem(characteristics, i);
 
 #ifdef HOMEKIT_DEBUG
@@ -2882,7 +2884,7 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
             pairing_t *pairing = homekit_storage_find_pairing(device_identifier);
 
             if (pairing) {
-                bool is_admin = pairing->permissions & pairing_permissions_admin;
+                int is_admin = pairing->permissions & pairing_permissions_admin;
                 pairing_free(pairing);
 
                 r = homekit_storage_remove_pairing(device_identifier);
@@ -2949,7 +2951,7 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
             tlv_values_t *response = tlv_new();
             tlv_add_integer_value(response, TLVType_State, 1, 2);
 
-            bool first = true;
+            int first = true;
 
             pairing_iterator_t *it = homekit_storage_pairing_iterator();
             pairing_t *pairing = NULL;
@@ -3341,73 +3343,68 @@ void homekit_characteristic_notify(homekit_characteristic_t *ch) {
     }
 }
 
-inline static void homekit_server_process_notifications() {
+static void homekit_server_process_notifications() {
     notification_t *notifications = homekit_server->notifications;
     homekit_server->notifications = NULL;
     
     client_context_t *context = homekit_server->clients;
     while (context) {
-        bool has_notifications = false;
-        
         notification_t *notification = notifications;
         while (notification) {
             if (homekit_characteristic_has_notify_subscription(notification->ch, context)) {
-                has_notifications = true;
+                CLIENT_INFO(context, "Send Ev");
+                DEBUG_HEAP();
+                
+                json_stream* json = &homekit_server->json;
+                json_init(json, context);
+                
+                byte http_headers[] =
+                    "EVENT/1.0 200 OK\r\n"
+                    "Content-Type: application/hap+json\r\n"
+                    "Transfer-Encoding: chunked\r\n\r\n";
+                
+                if (client_send(context, http_headers, sizeof(http_headers) - 1) < 0) {
+                    json->error = true;
+                }
+                
+                json_object_start(json);
+                json_string(json, "characteristics"); json_array_start(json);
+                
+                notification = notifications;
+                while (notification) {
+                    json_object_start(json);
+                    write_characteristic_json(json, context, notification->ch, 0, &notification->ch->value);
+                    json_object_end(json);
+                    
+                    if (json->error) {
+                        break;
+                    }
+                    
+                    notification = notification->next;
+                }
+                
+                json_array_end(json);
+                json_object_end(json);
+                
+                json_flush(json);
+                
+                if (json->error) {
+                    CLIENT_ERROR(context, "JSON");
+                    homekit_disconnect_client(context);
+                } else {
+                    client_send_chunk(NULL, 0, context);
+                }
+                
                 break;
             }
 
             notification = notification->next;
         }
         
-        if (has_notifications) {
-            CLIENT_INFO(context, "Send Ev");
-            DEBUG_HEAP();
-            
-            json_stream* json = &homekit_server->json;
-            json_init(json, context);
-            
-            byte http_headers[] =
-                "EVENT/1.0 200 OK\r\n"
-                "Content-Type: application/hap+json\r\n"
-                "Transfer-Encoding: chunked\r\n\r\n";
-            
-            if (client_send(context, http_headers, sizeof(http_headers) - 1) < 0) {
-                json->error = true;
-            }
-            
-            json_object_start(json);
-            json_string(json, "characteristics"); json_array_start(json);
-            
-            notification = notifications;
-            while (notification) {
-                json_object_start(json);
-                write_characteristic_json(json, context, notification->ch, 0, &notification->ch->value);
-                json_object_end(json);
-                
-                if (json->error) {
-                    break;
-                }
-                
-                notification = notification->next;
-            }
-            
-            json_array_end(json);
-            json_object_end(json);
-            
-            json_flush(json);
-            
-            if (json->error) {
-                CLIENT_ERROR(context, "JSON");
-                homekit_disconnect_client(context);
-            } else {
-                client_send_chunk(NULL, 0, context);
-            }
-        }
-        
         context = context->next;
     }
     
-    // Remove pending notifications
+    // Remove sent notifications
     while (notifications) {
         notification_t* notification_old = notifications;
         notifications = notifications->next;
@@ -3415,7 +3412,7 @@ inline static void homekit_server_process_notifications() {
     }
 }
 
-inline static void IRAM homekit_server_close_clients() {
+static inline void homekit_server_close_clients() {
     if (homekit_server->pending_close) {
         homekit_server->pending_close = false;
         
@@ -3694,7 +3691,7 @@ void homekit_mdns_announce_pause() {
     homekit_port_mdns_announce_pause();
 }
 
-bool homekit_is_paired() {
+int homekit_is_paired() {
     pairing_iterator_t *pairing_it = homekit_storage_pairing_iterator();
     pairing_t *pairing;
     while ((pairing = homekit_storage_next_pairing(pairing_it))) {
@@ -3705,7 +3702,7 @@ bool homekit_is_paired() {
     };
     homekit_storage_pairing_iterator_free(pairing_it);
 
-    bool paired = false;
+    int paired = false;
     if (pairing) {
         paired = true;
         pairing_free(pairing);
@@ -3729,7 +3726,7 @@ int homekit_get_accessory_id(char *buffer, size_t size) {
     return 0;
 }
 
-bool homekit_is_pairing() {
+int homekit_is_pairing() {
     if (homekit_server) {
         return homekit_server->is_pairing;
     }

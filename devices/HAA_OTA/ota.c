@@ -44,8 +44,8 @@
 #endif  //HAABOOT
 
 static ecc_key public_key;
-static byte file_first_byte[] = { 0xff };
-static const byte magic1[] = "HAP";
+static uint8_t file_first_byte[] = { 0xff };
+static const uint8_t magic1[] = "HAP";
 static WOLFSSL_CTX* ctx = NULL;
 static char last_host[HOST_LEN];
 static char last_location[RECV_BUF_LEN];
@@ -134,7 +134,7 @@ void ota_init(char* repo, const bool is_ssl) {
     wc_ecc_init(&public_key);
     
     // Public key to verify signatures and avoid malware
-    const byte raw_public_key[] = {
+    const uint8_t raw_public_key[] = {
         0x30, 0x76, 0x30, 0x10, 0x06, 0x07, 0x2a, 0x86, 0x48, 0xce,
         0x3d, 0x02, 0x01, 0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x22,
         0x03, 0x62, 0x00, 0x04, 0x98, 0xe0, 0x54, 0xc4, 0x9b, 0x8a,
@@ -247,7 +247,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
     int ota_conn_result;
     int ret = 0;
     int error = 0;
-    uint16_t slash;
+    int slash;
     WOLFSSL* ssl;
     int socket;
     
@@ -265,7 +265,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
         strcat(last_location, file);
     }
     
-    uint8_t i = 0;
+    int i = 0;
     while (i < MAX_302_JUMPS) {
         i++;
         INFO("*** FORWARDING: %s:%i/%s", last_host, port, last_location);
@@ -288,7 +288,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
                                             CRLFCRLF);
         
         if (ota_conn_result == 0) {
-            const uint16_t send_bytes = strlen(recv_buf);
+            const int send_bytes = strlen(recv_buf);
             
             if (is_ssl) {
                 ret = wolfSSL_write(ssl, recv_buf, send_bytes);
@@ -419,7 +419,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
 
 #ifndef HAABOOT
 static void sign_check_client(const int set) {
-    byte* sector = malloc(SPI_FLASH_SECTOR_SIZE);
+    uint8_t* sector = malloc(SPI_FLASH_SECTOR_SIZE);
     
     if (!spiflash_read(SPIFLASH_BASE_ADDR, sector, SPI_FLASH_SECTOR_SIZE)) {
         ERROR("Read sector");
@@ -447,7 +447,7 @@ static void sign_check_client(const int set) {
 }
 #endif  // HAABOOT
 
-static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int bufsz, uint16_t port, const bool is_ssl, int* resume) {
+static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, int bufsz, uint16_t port, const bool is_ssl, int* resume) {
     INFO("*** DOWNLOADING");
     
     int ota_conn_result, ret = 0;
@@ -526,12 +526,12 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
         char* recv_buf = malloc(RECV_BUF_LEN);
         
         connection_tries = 0;
-        while (collected < length && connection_tries < 4) {
+        while (collected < length && connection_tries < MAX_DOWNLOAD_FILE_TRIES) {
             last_collected = collected;
             
             snprintf(recv_buf, RECV_BUF_LEN, REQUESTHEAD"%s"REQUESTTAIL"%s"RANGE"%d-%d%s", last_location, last_host, collected, collected + 4095, CRLFCRLF);
             
-            const uint16_t send_bytes = strlen(recv_buf);
+            const int send_bytes = strlen(recv_buf);
             
             if (is_ssl) {
                 ret = wolfSSL_write(ssl, recv_buf, send_bytes);
@@ -630,13 +630,13 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                                     writespace += SPI_FLASH_SECTOR_SIZE;
                                 }
                                 if (collected) {
-                                    if (!spiflash_write(sector + collected, (byte *)recv_buf, ret)) {
+                                    if (!spiflash_write(sector + collected, (uint8_t*) recv_buf, ret)) {
                                         free(recv_buf);
                                         return -7; // Write error
                                     }
                                 } else { // At the very beginning, do not write the first byte yet but store it for later
-                                    file_first_byte[0] = (byte)recv_buf[0];
-                                    if (!spiflash_write(sector + 1, (byte *)recv_buf + 1, ret - 1)) {
+                                    file_first_byte[0] = (uint8_t) recv_buf[0];
+                                    if (!spiflash_write(sector + 1, (uint8_t*) recv_buf + 1, ret - 1)) {
                                         free(recv_buf);
                                         return -8; // Write error
                                     }
@@ -701,11 +701,13 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
                     ota_conn_result = new_connection();
                     recv_buf = malloc(RECV_BUF_LEN);
                 } else {
+                    connection_tries = MAX_DOWNLOAD_FILE_TRIES;
                     break;
                 }
             }
             
             if (ota_conn_result != 0) {
+                connection_tries = MAX_DOWNLOAD_FILE_TRIES;
                 break;
             }
         }
@@ -732,7 +734,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, byte* buffer, int
         *resume = collected;
     }
     
-    if (connection_tries >= 3) {
+    if (connection_tries >= MAX_DOWNLOAD_FILE_TRIES) {
         return 1;
     }
     
@@ -754,7 +756,7 @@ int ota_get_file(char* repo, char* file, int sector, uint16_t port, const bool i
 char* ota_get_version(char* repo, char* version_file, uint16_t port, const bool is_ssl) {
     INFO(">>> Version from %s", repo);
 
-    byte* version = malloc(VERSIONFILESIZE + 1);
+    uint8_t* version = malloc(VERSIONFILESIZE + 1);
     memset(version, 0, VERSIONFILESIZE + 1);
 
     if (ota_get_file_ex(repo, version_file, 0, version, VERSIONFILESIZE, port, is_ssl, NULL) == 0) {
@@ -768,7 +770,7 @@ char* ota_get_version(char* repo, char* version_file, uint16_t port, const bool 
     return (char*) version;
 }
 
-int ota_get_sign(char* repo, char* file, byte* signature, uint16_t port, bool is_ssl) {
+int ota_get_sign(char* repo, char* file, uint8_t* signature, uint16_t port, bool is_ssl) {
     INFO(">>> Get sign");
     int ret;
     char* signame = malloc(strlen(file) + 5);
@@ -781,18 +783,18 @@ int ota_get_sign(char* repo, char* file, byte* signature, uint16_t port, bool is
     return ret;
 }
 
-int ota_verify_sign(int start_sector, int filesize, byte* signature) {
+int ota_verify_sign(int start_sector, int filesize, uint8_t* signature) {
     INFO(">>> Verifying");
     
     int bytes;
-    byte hash[HASHSIZE];
-    byte* buffer = malloc(1024);
+    uint8_t hash[HASHSIZE];
+    uint8_t* buffer = malloc(1024);
     Sha384 sha;
     
     wc_InitSha384(&sha);
 
     for (bytes = 0; bytes < filesize - 1024; bytes += 1024) {
-        if (!spiflash_read(start_sector + bytes, (byte*) buffer, 1024)) {
+        if (!spiflash_read(start_sector + bytes, (uint8_t*) buffer, 1024)) {
             ERROR("Reading flash");
             break;
         }
@@ -804,7 +806,7 @@ int ota_verify_sign(int start_sector, int filesize, byte* signature) {
         wc_Sha384Update(&sha, buffer, 1024);
     }
 
-    if (!spiflash_read(start_sector + bytes, (byte*) buffer, filesize - bytes)) {
+    if (!spiflash_read(start_sector + bytes, (uint8_t*) buffer, filesize - bytes)) {
         ERROR("Reading flash");
     }
     

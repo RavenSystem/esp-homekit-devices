@@ -1,7 +1,7 @@
 /*
  * Advanced ESP Logger
  *
- * Copyright 2020-2021 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2020-2022 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -66,7 +66,7 @@ static ssize_t adv_logger_none(struct _reent* r, int fd, const void* ptr, size_t
 }
 
 static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_t len) {
-    bool is_adv_logger_data = false;
+    int is_adv_logger_data = false;
     if (adv_logger_data->ready_to_send) {
         if (adv_logger_data->is_buffered) {
             is_adv_logger_data = true;
@@ -147,7 +147,7 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
         }
     }
     
-    if (!adv_logger_data->is_buffered && adv_logger_data->ready_to_send && adv_logger_data->udplogstring_len > 0 && xSemaphoreTake(adv_logger_data->log_sender_semaphore, pdMS_TO_TICKS(10)) == pdTRUE) {
+    if (!adv_logger_data->is_buffered && adv_logger_data->ready_to_send && adv_logger_data->udplogstring_len > 0 && xSemaphoreTake(adv_logger_data->log_sender_semaphore, 0) == pdTRUE) {
         lwip_sendto(adv_logger_data->socket, adv_logger_data->udplogstring, adv_logger_data->udplogstring_len, 0, adv_logger_data->res->ai_addr, adv_logger_data->res->ai_addrlen);
         free(adv_logger_data->udplogstring);
         adv_logger_data->udplogstring = NULL;
@@ -160,7 +160,7 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
 }
 
 static void adv_logger_buffered_task() {
-    uint8_t i = 0;
+    int i = 0;
     
     for (;;) {
         i++;
@@ -264,7 +264,7 @@ int adv_logger_remove() {
     return -1;
 }
 
-void adv_logger_init(const uint8_t log_type, char* dest_addr) {
+void adv_logger_init(const int log_type, char* dest_addr) {
     adv_logger_remove();
     
     adv_logger_original_write_function = get_write_stdout();

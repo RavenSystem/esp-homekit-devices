@@ -35,7 +35,7 @@ typedef struct _action_binary_output {
     bool value: 1;
     uint16_t gpio;
     
-    float inching;
+    uint32_t inching;
     
     struct _action_binary_output* next;
 } action_binary_output_t;
@@ -82,7 +82,7 @@ typedef struct _action_network {
     struct _action_network* next;
 } action_network_t;
 
-typedef struct _action_ir_tx {
+typedef struct _action_irrf_tx {
     uint8_t action;
     uint8_t freq;
     uint8_t repeats;
@@ -97,8 +97,8 @@ typedef struct _action_ir_tx {
         };
     };
     
-    struct _action_ir_tx* next;
-} action_ir_tx_t;
+    struct _action_irrf_tx* next;
+} action_irrf_tx_t;
 
 typedef struct _action_uart {
     uint8_t action;
@@ -121,6 +121,15 @@ typedef struct _wildcard_action {
     struct _wildcard_action* next;
 } wildcard_action_t;
 
+typedef struct _pattern {
+    uint8_t* pattern;
+    
+    uint8_t len;
+    uint16_t offset;
+    
+    struct _pattern* next;
+} pattern_t;
+
 typedef struct _ch_group {
     uint16_t accessory: 10;
     bool main_enabled: 1;
@@ -132,7 +141,8 @@ typedef struct _ch_group {
     
     homekit_characteristic_t** ch;
     
-    float* num;
+    int8_t* num_i;
+    float* num_f;
     float* last_wildcard_action;
     
     TimerHandle_t timer;
@@ -148,7 +158,7 @@ typedef struct _ch_group {
     action_acc_manager_t* action_acc_manager;
     action_system_t* action_system;
     action_network_t* action_network;
-    action_ir_tx_t* action_ir_tx;
+    action_irrf_tx_t* action_irrf_tx;
     action_uart_t* action_uart;
     
     wildcard_action_t* wildcard_action;
@@ -306,9 +316,16 @@ typedef struct _main_config {
     uint16_t wifi_roaming_count;
     
     uint64_t used_gpio: MAX_GPIOS;
-    uint8_t wifi_mode: 3;
+    
+    uint8_t rf_tx_gpio: 6;
+    bool rf_tx_inv: 1;
     bool clock_ready: 1;
     uint8_t wifi_ip;
+    uint8_t uart_buffer_len;
+    uint8_t wifi_mode: 3;
+    
+    uint8_t uart_min_len;
+    uint8_t uart_max_len;
     
     char name_value[11];
     char serial_value[13];
@@ -329,6 +346,8 @@ typedef struct _main_config {
     timetable_action_t* timetable_actions;
     
     led_t* status_led;
+    
+    uint8_t* uart_buffer;
     
     addressled_t* addressleds;
 } main_config_t;

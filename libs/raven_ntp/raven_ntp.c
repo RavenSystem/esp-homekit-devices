@@ -1,7 +1,7 @@
 /*
  * RavenSystem NTP
  *
- * Copyright 2021 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2021-2022 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -50,7 +50,7 @@ time_t raven_ntp_get_time_t() {
     return raven_ntp_config->time + diff;
 }
 
-void raven_ntp_get_log_time(char* buffer, const size_t buffer_size) {
+void raven_ntp_get_log_time(char* buffer, const unsigned int buffer_size) {
     struct tm* timeinfo;
     time_t utc_time = raven_ntp_get_time_t();
     timeinfo = localtime(&utc_time);

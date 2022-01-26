@@ -35,18 +35,16 @@ char* user_version = NULL;
 
 char* new_version = NULL;
 char* ota_version = NULL;
-byte signature[SIGNSIZE];
+uint8_t signature[SIGNSIZE];
 int file_size;
 int result;
 
-uint16_t port = 443;
+uint_fast16_t port = 443;
 bool is_ssl = true;
-uint8_t tries_count = 0;
-uint8_t tries_partial_count;
+int tries_count = 0;
+int tries_partial_count;
 
 TaskHandle_t xHandle = NULL;
-
-#define TRIES_PARTIAL_COUNT_MAX         (5)
 
 void ota_task(void *arg) {
     vTaskSuspend(NULL);
@@ -82,7 +80,7 @@ void ota_task(void *arg) {
 
     status = sysparam_get_string(USER_VERSION_SYSPARAM, &user_version);
     if (status == SYSPARAM_OK) {
-        INFO("Installed HAA v%s\n", user_version);
+        INFO("Current HAA v%s\n", user_version);
 
         ota_init(user_repo, is_ssl);
         
@@ -240,7 +238,7 @@ void ota_task(void *arg) {
             break;
 #endif  // HAABOOT
             
-            if (tries_count == MAX_TRIES) {
+            if (tries_count == MAX_GLOBAL_TRIES) {
                 break;
             }
             
@@ -288,7 +286,7 @@ void init_task() {
 
 void user_init(void) {
     // GPIO Init
-    for (uint8_t i = 0; i < 17; i++) {
+    for (int i = 0; i < 17; i++) {
         if (i < 6 || i > 11) {
             if (!(i == 1 || i == 3)) {
                 gpio_enable(i, GPIO_INPUT);

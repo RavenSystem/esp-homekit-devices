@@ -47,7 +47,10 @@ ifdef component_compile_rules
         -DNO_SESSION_CACHE \
         -DRSA_LOW_MEM \
         -DGCM_SMALL \
-        -DUSE_SLOW_SHA512 \
+		-DUSE_SLOW_SHA \
+		-DUSE_SLOW_SHA2 \
+		-DUSE_SLOW_SHA256 \
+		-DUSE_SLOW_SHA512 \
         -DWOLFCRYPT_ONLY \
         -DTFM_TIMING_RESISTANT
 
@@ -59,7 +62,6 @@ ifdef component_compile_rules
 
     wolfssl_CFLAGS += $(EXTRA_WOLFSSL_CFLAGS)
     homekit_CFLAGS += $(EXTRA_WOLFSSL_CFLAGS) \
-        -DESP_OPEN_RTOS \
         -DSPIFLASH_BASE_ADDR=$(HOMEKIT_SPI_FLASH_BASE_ADDR)
 
 else
