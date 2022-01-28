@@ -125,7 +125,7 @@ typedef struct _pattern {
     uint8_t* pattern;
     
     uint8_t len;
-    uint16_t offset;
+    int16_t offset;
     
     struct _pattern* next;
 } pattern_t;
@@ -140,6 +140,7 @@ typedef struct _ch_group {
     uint8_t acc_type: 7;
     
     homekit_characteristic_t** ch;
+    homekit_characteristic_t* ch_target;
     
     int8_t* num_i;
     float* num_f;
@@ -148,10 +149,7 @@ typedef struct _ch_group {
     TimerHandle_t timer;
     TimerHandle_t timer2;
     
-    union {
-        char* ir_protocol;
-        homekit_characteristic_t* ch_hist;
-    };
+    char* ir_protocol;
     
     action_copy_t* action_copy;
     action_binary_output_t* action_binary_output;

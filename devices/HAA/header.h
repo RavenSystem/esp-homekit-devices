@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "10.0.0"
+#define FIRMWARE_VERSION                    "10.1.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -481,6 +481,9 @@
 #define FM_LIMIT_UPPER                      ch_group->num_f[4]
 #define FM_VAL_LEN                          ch_group->num_i[1]
 #define FM_VAL_TYPE                         ch_group->num_i[2]
+#define FM_BUFFER_LEN_ARRAY_SET             "bl"
+#define FM_BUFFER_LEN_MIN                   ch_group->num_i[3]
+#define FM_BUFFER_LEN_MAX                   ch_group->num_i[4]
 #define FM_TARGET_CH_ARRAY_SET              "tg"
 #define FM_POLL_PERIOD_DEFAULT              (30.f)
 #define FM_PATTERN_ARRAY_SET                "pt"

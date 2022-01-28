@@ -16,7 +16,7 @@ extern "C" {
 
 int raven_ntp_update(char* ntp_server);
 time_t raven_ntp_get_time_t();
-void raven_ntp_get_log_time(char* buffer, const unsigned int buffer_size);
+void raven_ntp_get_log_time(char* buffer, const size_t buffer_size);
 
 #ifdef __cplusplus
 }

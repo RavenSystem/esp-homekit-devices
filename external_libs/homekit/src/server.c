@@ -3701,7 +3701,7 @@ int homekit_is_paired() {
         pairing_free(pairing);
     };
     homekit_storage_pairing_iterator_free(pairing_it);
-
+    
     int paired = false;
     if (pairing) {
         paired = true;
