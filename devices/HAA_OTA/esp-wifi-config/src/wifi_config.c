@@ -147,9 +147,9 @@ static void client_send(client_t *client, const char *payload, size_t payload_si
 }
 
 static void client_send_chunk(client_t *client, const char *payload) {
-    int len = strlen(payload);
+    size_t len = strlen(payload);
     char buffer[10];
-    int buffer_len = snprintf(buffer, sizeof(buffer), "%x\r\n", len);
+    size_t buffer_len = snprintf(buffer, sizeof(buffer), "%x\r\n", len);
     client_send(client, buffer, buffer_len);
     client_send(client, payload, len);
     client_send(client, "\r\n", 2);
@@ -276,7 +276,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
 
     int8_t best_rssi = INT8_MIN;
     uint8_t* best_bssid = malloc(6);
-    bool found = false;
+    int found = false;
     while (bss) {
         if (strcmp(wifi_ssid, (char*) bss->ssid) == 0) {
             INFO("RSSI %i, Ch %i - %02x%02x%02x%02x%02x%02x", bss->rssi, bss->channel, bss->bssid[0], bss->bssid[1], bss->bssid[2], bss->bssid[3], bss->bssid[4], bss->bssid[5]);
@@ -593,7 +593,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         form_param_t *repossl_param = form_params_find(form, "repossl");
         
         // Remove saved states
-        int hk_total_ac = 0;
+        int32_t hk_total_ac = 0;
         sysparam_get_int32(TOTAL_SERV_SYSPARAM, &hk_total_ac);
         char saved_state_id[5];
         memset(saved_state_id, 0, 5);

@@ -26,7 +26,7 @@
 
 #define MAX_GLOBAL_TRIES        (2)
 #define TRIES_PARTIAL_COUNT_MAX (5)
-#define MAX_DOWNLOAD_FILE_TRIES (3)
+#define MAX_DOWNLOAD_FILE_TRIES (4)
 
 #define HTTPS_PORT              (443)
 #define REQUESTHEAD             "GET /"

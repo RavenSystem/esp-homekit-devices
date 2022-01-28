@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "10.1.0"
+#define FIRMWARE_VERSION                    "10.1.1"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -487,7 +487,7 @@
 #define FM_TARGET_CH_ARRAY_SET              "tg"
 #define FM_POLL_PERIOD_DEFAULT              (30.f)
 #define FM_PATTERN_ARRAY_SET                "pt"
-#define FM_PATTERN_CH_WRITE                 ch_group->ch[ch_group->chs - 1]
+#define FM_PATTERN_CH_WRITE                 ch_group->ch[1]
 #define FM_PATTERN_CH_READ                  (pattern_t*) FM_PATTERN_CH_WRITE
 #define FM_I2C_DEVICE_DATA_ARRAY            "ic"
 #define FM_I2C_START_COMMANDS_ARRAY         "in"

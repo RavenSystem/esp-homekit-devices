@@ -4337,7 +4337,7 @@ void free_monitor_task(void* args) {
             float value = 0;
             int get_value = false;
             
-            const unsigned int fm_sensor_type = abs(FM_SENSOR_TYPE);
+            const int fm_sensor_type = abs(FM_SENSOR_TYPE);
             
             if (args) {
                 if (fm_sensor_type == FM_SENSOR_TYPE_FREE) {
@@ -4357,7 +4357,7 @@ void free_monitor_task(void* args) {
                     }
                     get_value = true;
                     
-                } else if (fm_sensor_type >= FM_SENSOR_TYPE_NETWORK ||
+                } else if (fm_sensor_type >= FM_SENSOR_TYPE_NETWORK &&
                            fm_sensor_type <= FM_SENSOR_TYPE_NETWORK_PATTERN_HEX) {
                     if (ch_group->action_network && main_config.wifi_status == WIFI_STATUS_CONNECTED) {
                         
@@ -4624,47 +4624,53 @@ void free_monitor_task(void* args) {
                     
                     if (old_value != ((int) (value * 1000))) {
                         homekit_characteristic_notify_safe(ch_group->ch[0]);
+                    }
+                    
+                    // Target Characteristic
+                    if (ch_group->ch_target) {
+                        int has_changed = false;
                         
-                        // Target Characteristic
-                        if (ch_group->chs > (1 + ((fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN ||
-                                                   fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_HEX ||
-                                                   fm_sensor_type == FM_SENSOR_TYPE_UART_PATTERN_HEX) ? 1 : 0))) {
-                            int supported = true;
-                            
-                            switch (ch_group->ch[1]->value.format) {
-                                case HOMETKIT_FORMAT_BOOL:
-                                    ch_group->ch[1]->value.bool_value = value;
-                                    break;
-                                    
-                                case HOMETKIT_FORMAT_UINT8:
-                                case HOMETKIT_FORMAT_UINT16:
-                                case HOMETKIT_FORMAT_UINT32:
-                                case HOMETKIT_FORMAT_UINT64:
-                                case HOMETKIT_FORMAT_INT:
-                                    ch_group->ch[1]->value.int_value = value;
-                                    break;
-                                    
-                                case HOMETKIT_FORMAT_FLOAT:
-                                    ch_group->ch[1]->value.float_value = value;
-                                    break;
-                                    
-                                default:
-                                    supported = false;
-                                    ERROR("<%i> Target Ch", ch_group->accessory);
-                                    break;
-                            }
-                            
-                            if (supported) {
-                                homekit_characteristic_notify_safe(ch_group->ch_target);
-                                
-                                ch_group_t* ch_target_group = ch_group_find(ch_group->ch_target);
-                                
-                                if (ch_target_group->acc_type == ACC_TYPE_THERMOSTAT) {
-                                    hkc_th_setter(ch_target_group->ch_target, ch_target_group->ch_target->value);
-                                    
-                                } else if (ch_target_group->acc_type == ACC_TYPE_HUMIDIFIER) {
-                                    hkc_humidif_setter(ch_target_group->ch_target, ch_target_group->ch_target->value);
+                        switch (ch_group->ch_target->value.format) {
+                            case HOMETKIT_FORMAT_BOOL:
+                                if (ch_group->ch_target->value.bool_value != ((bool) ((int) value))) {
+                                    ch_group->ch_target->value.bool_value = (bool) ((int) value);
+                                    has_changed = true;
                                 }
+                                break;
+                                
+                            case HOMETKIT_FORMAT_UINT8:
+                            case HOMETKIT_FORMAT_UINT16:
+                            case HOMETKIT_FORMAT_UINT32:
+                            case HOMETKIT_FORMAT_UINT64:
+                            case HOMETKIT_FORMAT_INT:
+                                if (ch_group->ch_target->value.int_value != ((int) value)) {
+                                    ch_group->ch_target->value.int_value = value;
+                                    has_changed = true;
+                                }
+                                break;
+                                
+                            case HOMETKIT_FORMAT_FLOAT:
+                                if (((int) (ch_group->ch_target->value.float_value * 1000)) != ((int) (value * 1000))) {
+                                    ch_group->ch_target->value.float_value = value;
+                                    has_changed = true;
+                                }
+                                break;
+                                
+                            default:
+                                ERROR("<%i> Target Ch", ch_group->accessory);
+                                break;
+                        }
+                        
+                        if (has_changed) {
+                            homekit_characteristic_notify_safe(ch_group->ch_target);
+                            
+                            ch_group_t* ch_target_group = ch_group_find(ch_group->ch_target);
+                            
+                            if (ch_target_group->acc_type == ACC_TYPE_THERMOSTAT) {
+                                hkc_th_setter(ch_target_group->ch_target, ch_target_group->ch_target->value);
+                                
+                            } else if (ch_target_group->acc_type == ACC_TYPE_HUMIDIFIER) {
+                                hkc_humidif_setter(ch_target_group->ch_target, ch_target_group->ch_target->value);
                             }
                         }
                     }
@@ -10236,7 +10242,8 @@ void normal_mode_init() {
         unsigned int i2c_bus = 0;
         unsigned int i2c_addr = 0;
         unsigned int i2c_read_len = 0;
-        uint8_t i2c_read_register[4];
+        uint8_t i2c_read_register[32];
+        
         if (cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_DEVICE_DATA_ARRAY) != NULL) {
             cJSON* i2c_array = cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_DEVICE_DATA_ARRAY);
             i2c_bus = (uint8_t) cJSON_GetArrayItem(i2c_array, 0)->valuedouble;
@@ -10300,7 +10307,7 @@ void normal_mode_init() {
             is_val_data = 2;
         }
         
-        ch_group_t* ch_group = new_ch_group(1 + ( (tg_serv != 0) ? 1 : 0 ) + ( (pattern_base != NULL) ? 1 : 0 ),
+        ch_group_t* ch_group = new_ch_group(1 + ( pattern_base ? 1 : 0 ),
                                             1 +
                                             ( fm_sensor_type == FM_SENSOR_TYPE_PULSE ) +
                                             is_val_data +
@@ -10403,11 +10410,13 @@ void normal_mode_init() {
                 for (int i = 0; i < cJSON_GetArraySize(i2c_inits); i++) {
                     cJSON* i2c_init = cJSON_GetArrayItem(i2c_inits, i);
                     
-                    const unsigned int reg_size = (uint8_t) cJSON_GetArrayItem(i2c_init, 0)->valuedouble;
-                    uint8_t reg[reg_size];
+                    uint8_t reg[32];
                     
-                    for (int j = 0; j < reg_size; j++) {
-                        reg[j] = cJSON_GetArrayItem(i2c_init, j + 1)->valuedouble;
+                    const unsigned int reg_size = (uint8_t) cJSON_GetArrayItem(i2c_init, 0)->valuedouble;
+                    if (reg_size > 0) {
+                        for (int j = 0; j < reg_size; j++) {
+                            reg[j] = cJSON_GetArrayItem(i2c_init, j + 1)->valuedouble;
+                        }
                     }
                     
                     const unsigned int val_offset = reg_size + 1;
@@ -10418,13 +10427,15 @@ void normal_mode_init() {
                         val[j] = cJSON_GetArrayItem(i2c_init, j + val_offset)->valuedouble;
                     }
                     
-                    i2c_slave_write(i2c_bus, i2c_addr, reg, reg_size, val, val_size);
+                    INFO("I2C Init %i: %i", i, i2c_slave_write(i2c_bus, i2c_addr, reg, reg_size, val, val_size));
                 }
             }
             
             // Save data to read register
             FM_I2C_REG_LEN = i2c_read_len;
-            memcpy(&FM_I2C_REG[FM_I2C_REG_FIRST], i2c_read_register, i2c_read_len);
+            if (i2c_read_len > 0) {
+                memcpy(&FM_I2C_REG[FM_I2C_REG_FIRST], i2c_read_register, i2c_read_len);
+            }
             
             FM_I2C_VAL_OFFSET = FM_I2C_VAL_OFFSET_DEFAULT;
             if (cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_VAL_OFFSET_SET) != NULL) {

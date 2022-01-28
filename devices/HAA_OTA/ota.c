@@ -301,7 +301,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
                 INFO("OK");
                 
                 //wolfSSL_shutdown(ssl); //by shutting down the connection before even reading, we reduce the payload to the minimum
-                bool all_ok = false;
+                int all_ok = false;
                 
                 do {
                     memset(recv_buf, 0, RECV_BUF_LEN);
