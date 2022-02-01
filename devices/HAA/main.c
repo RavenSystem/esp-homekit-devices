@@ -4318,7 +4318,54 @@ void reset_uart_buffer() {
     main_config.uart_buffer_len = 0;
 }
 
+void IRAM fm_pulse_interrupt(const uint8_t gpio) {
+    uint32_t time = sdk_system_get_time();
+    
+    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
+    
+    ch_group_t* ch_group = main_config.ch_groups;
+    while (ch_group) {
+        if (ch_group->acc_type == ACC_TYPE_FREE_MONITOR &&
+            abs(FM_SENSOR_TYPE) == FM_SENSOR_TYPE_PULSE_US_TIME &&
+            FM_SENSOR_GPIO == gpio) {
+            if (FM_NEW_VALUE == 0) {
+                FM_NEW_VALUE = time;
+                gpio_set_interrupt(gpio, FM_SENSOR_GPIO_INT_TYPE, fm_pulse_interrupt);
+            } else {
+                FM_FINAL_VALUE = time;
+            }
+            
+            break;
+        }
+        
+        ch_group = ch_group->next;
+    }
+}
+
 void free_monitor_task(void* args) {
+    int str_to_float(char* found, char* str, float* value) {
+        if (found < str + strlen(str)) {
+            while (found[0] && !(CHAR_IS_NUMBER(found[0]))) {
+                found++;
+            }
+            
+            if (found[0]) {
+                if (found > str) {
+                    found--;
+                    
+                    if (found[0] != '-') {
+                        found++;
+                    }
+                }
+                
+                *value = atof(found);
+                return true;
+            }
+        }
+        
+        return false;
+    }
+    
     ch_group_t* ch_group = main_config.ch_groups;
     
     if (args) {
@@ -4344,9 +4391,32 @@ void free_monitor_task(void* args) {
                     value = FM_NEW_VALUE;
                     get_value = true;
                     
-                } else if (fm_sensor_type == FM_SENSOR_TYPE_PULSE) {
+                } else if (fm_sensor_type == FM_SENSOR_TYPE_PULSE_FREQ) {
                     value = adv_hlw_get_power_freq((uint8_t) FM_SENSOR_GPIO);
                     get_value = true;
+                    
+                } else if (fm_sensor_type == FM_SENSOR_TYPE_PULSE_US_TIME) {
+                    const float old_final_value = FM_FINAL_VALUE;
+                    FM_NEW_VALUE = 0;
+                    
+                    gpio_set_interrupt(FM_SENSOR_GPIO, FM_SENSOR_GPIO_INT_TYPE, fm_pulse_interrupt);
+                    
+                    if (((uint8_t) FM_SENSOR_GPIO_TRIGGER) < 255) {
+                        const int inverted = ((uint8_t) FM_SENSOR_GPIO_TRIGGER) / 100;
+                        const unsigned int gpio_final = ((uint8_t) FM_SENSOR_GPIO_TRIGGER) % 100;
+                        gpio_write(gpio_final, inverted);
+                        sdk_os_delay_us(20);
+                        gpio_write(gpio_final, !inverted);
+                    }
+                    
+                    vTaskDelay(MS_TO_TICKS(90));
+                    
+                    gpio_set_interrupt(FM_SENSOR_GPIO, GPIO_INTTYPE_NONE, NULL);
+                    
+                    if (old_final_value != FM_FINAL_VALUE) {
+                        value = FM_FINAL_VALUE - FM_NEW_VALUE;
+                        get_value = true;
+                    }
                     
                 } else if (fm_sensor_type == FM_SENSOR_TYPE_ADC ||
                          fm_sensor_type == FM_SENSOR_TYPE_ADC_INV) {
@@ -4495,7 +4565,7 @@ void free_monitor_task(void* args) {
                                     uint8_t recv_buffer[64];
                                     memset(recv_buffer, 0, 64);
                                     read_byte = lwip_read(socket, recv_buffer, 64);
-                                    if (fm_sensor_type == FM_SENSOR_TYPE_NETWORK || fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN) {
+                                    if (fm_sensor_type == FM_SENSOR_TYPE_NETWORK || fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_TEXT) {
                                         printf("%s", recv_buffer);
                                     }
                                     str = realloc(str, total_recv + read_byte + 1);
@@ -4513,7 +4583,7 @@ void free_monitor_task(void* args) {
                                 uint8_t* found = str;
                                 if (action_network->method_n <= 3 &&
                                     (fm_sensor_type == FM_SENSOR_TYPE_NETWORK ||
-                                     fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN)) {
+                                     fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_TEXT)) {
                                     found = (uint8_t*) strstr((char*) str, "\r\n\r\n");
                                     if (found) {
                                         found += 4;
@@ -4525,34 +4595,17 @@ void free_monitor_task(void* args) {
                                         (total_recv >= (uint8_t) FM_BUFFER_LEN_MIN &&
                                          total_recv <= (uint8_t) FM_BUFFER_LEN_MAX)) {
                                         int is_pattern_found = false;
-                                        if (fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN) {
+                                        if (fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_TEXT) {
                                             is_pattern_found = find_patterns(FM_PATTERN_CH_READ, &found, 0);
                                         } else if (fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_HEX) {
                                             is_pattern_found = find_patterns(FM_PATTERN_CH_READ, &found, total_recv);
                                         }
                                         
                                         if (fm_sensor_type == FM_SENSOR_TYPE_NETWORK ||
-                                            (fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN &&
+                                            (fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_TEXT &&
                                              is_pattern_found)) {
                                             
-                                            if (found < str + strlen((char*) str)) {
-                                                while (found[0] && !(CHAR_IS_NUMBER((char) found[0]))) {
-                                                    found++;
-                                                }
-                                                
-                                                if (found[0]) {
-                                                    if (found > str) {
-                                                        found--;
-                                                        
-                                                        if ((char) found[0] != '-') {
-                                                            found++;
-                                                        }
-                                                    }
-                                                    
-                                                    value = atof((char*) found);
-                                                    get_value = true;
-                                                }
-                                            }
+                                            get_value = str_to_float((char*) found, (char*) str, &value);
                                             
                                         } else if (fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_HEX &&
                                                    is_pattern_found) {
@@ -4568,7 +4621,7 @@ void free_monitor_task(void* args) {
                                     free(str);
                                 }
                                 
-                                INFO("-> %i", total_recv);
+                                INFO("<%i> -> %i", ch_group->accessory, total_recv);
                             }
                             
                             action_network = action_network->next;
@@ -4584,8 +4637,7 @@ void free_monitor_task(void* args) {
                         get_value = true;
                     }
                 }
-            } else if (fm_sensor_type == FM_SENSOR_TYPE_UART ||
-                       fm_sensor_type == FM_SENSOR_TYPE_UART_PATTERN_HEX) {
+            } else if (fm_sensor_type >= FM_SENSOR_TYPE_UART) {
                 if (FM_BUFFER_LEN_MIN == 0 ||
                     (main_config.uart_buffer_len >= (uint8_t) FM_BUFFER_LEN_MIN &&
                      main_config.uart_buffer_len <= (uint8_t) FM_BUFFER_LEN_MAX)) {
@@ -4593,6 +4645,11 @@ void free_monitor_task(void* args) {
                     int is_pattern_found = false;
                     if (fm_sensor_type == FM_SENSOR_TYPE_UART_PATTERN_HEX) {
                         is_pattern_found = find_patterns(FM_PATTERN_CH_READ, &found, main_config.uart_buffer_len);
+                        
+                    } else if (fm_sensor_type == FM_SENSOR_TYPE_UART_PATTERN_TEXT) {
+                        found[main_config.uart_buffer_len] = 0;
+                        INFO("<%i> UART Text: %s", ch_group->accessory, (char*) found);
+                        is_pattern_found = find_patterns(FM_PATTERN_CH_READ, &found, 0);
                     }
                     
                     if (fm_sensor_type == FM_SENSOR_TYPE_UART ||
@@ -4603,13 +4660,18 @@ void free_monitor_task(void* args) {
                             value = byte_array_to_num(found, FM_VAL_LEN, FM_VAL_TYPE);
                             get_value = true;
                         }
+                        
+                    } else if (fm_sensor_type == FM_SENSOR_TYPE_UART_PATTERN_TEXT &&
+                               is_pattern_found) {
+                        
+                        get_value = str_to_float((char*) found, (char*) main_config.uart_buffer, &value);
                     }
                 }
             }
             
             if (get_value) {
                 value = (FM_FACTOR * value) + FM_OFFSET;
-
+                
                 INFO("<%i> FM: %g", ch_group->accessory, value);
                 
                 if (FM_SENSOR_TYPE > 0 ||
@@ -4709,10 +4771,10 @@ void recv_uart_task() {
     int ch;
     int count = 0;
     
-    main_config.uart_buffer = malloc(main_config.uart_max_len);
+    main_config.uart_buffer = malloc(main_config.uart_max_len + 1);
     
     for (;;) {
-        if ((ch = uart_getc_nowait(0)) > 0) {
+        if ((ch = uart_getc_nowait(0)) >= 0) {
             count = 0;
             main_config.uart_buffer[main_config.uart_buffer_len] = ch;
             main_config.uart_buffer_len++;
@@ -10272,7 +10334,8 @@ void normal_mode_init() {
                 cJSON* pattern_data = cJSON_GetArrayItem(pattern_array, i);
                 
                 if (strlen(cJSON_GetArrayItem(pattern_data, 0)->valuestring) > 0) {
-                    if (fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN) {
+                    if (fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_TEXT ||
+                        fm_sensor_type == FM_SENSOR_TYPE_UART_PATTERN_TEXT) {
                         new_pattern->pattern = (uint8_t*) strdup(cJSON_GetArrayItem(pattern_data, 0)->valuestring);
                         new_pattern->len = strlen((char*) new_pattern->pattern);
                     } else {
@@ -10295,8 +10358,7 @@ void normal_mode_init() {
         }
         
         int is_type_uart = false;
-        if (fm_sensor_type == FM_SENSOR_TYPE_UART ||
-            fm_sensor_type == FM_SENSOR_TYPE_UART_PATTERN_HEX) {
+        if (fm_sensor_type >= FM_SENSOR_TYPE_UART) {
             is_type_uart = true;
         }
         
@@ -10309,12 +10371,13 @@ void normal_mode_init() {
         
         ch_group_t* ch_group = new_ch_group(1 + ( pattern_base ? 1 : 0 ),
                                             1 +
-                                            ( fm_sensor_type == FM_SENSOR_TYPE_PULSE ) +
+                                            ( fm_sensor_type == FM_SENSOR_TYPE_PULSE_FREQ ) +
+                                            ( fm_sensor_type == FM_SENSOR_TYPE_PULSE_US_TIME ? 3 : 0 ) +
                                             is_val_data +
                                             ( fm_sensor_type >= FM_SENSOR_TYPE_NETWORK ? 2 : 0 ) +
                                             ( fm_sensor_type == FM_SENSOR_TYPE_I2C ? 2 : 0 ) +
                                             i2c_read_len,
-                                            3 + has_limits,
+                                            4 + has_limits,
                                             1);
         
         if (has_limits > 0) {
@@ -10391,14 +10454,36 @@ void normal_mode_init() {
             FM_BUFFER_LEN_MAX = (uint8_t) cJSON_GetArrayItem(buffer_len_array, 1)->valuedouble;
         }
         
-        if (fm_sensor_type == FM_SENSOR_TYPE_PULSE) {
+        if (fm_sensor_type == FM_SENSOR_TYPE_PULSE_FREQ ||
+            fm_sensor_type == FM_SENSOR_TYPE_PULSE_US_TIME) {
             cJSON* gpio_array = cJSON_GetObjectItemCaseSensitive(json_context, FM_SENSOR_GPIO_ARRAY_SET);
             const unsigned int gpio = (uint8_t) cJSON_GetArrayItem(gpio_array, 0)->valuedouble;
             const unsigned int interrupt_type = (uint8_t) cJSON_GetArrayItem(gpio_array, 1)->valuedouble;
             const int pullup = (bool) cJSON_GetArrayItem(gpio_array, 2)->valuedouble;
             FM_SENSOR_GPIO = gpio;
             set_used_gpio(gpio);
-            adv_hlw_unit_create(gpio, -1, -1, 0, interrupt_type, pullup);
+            
+            if (fm_sensor_type == FM_SENSOR_TYPE_PULSE_FREQ) {
+                adv_hlw_unit_create(gpio, -1, -1, 0, interrupt_type, pullup);
+                
+            } else {    // FM_SENSOR_TYPE_PULSE_US_TIME
+                FM_SENSOR_GPIO_INT_TYPE = interrupt_type;
+                gpio_enable(gpio, GPIO_INPUT);
+                gpio_set_pullup(gpio, pullup, pullup);
+                
+                FM_SENSOR_GPIO_TRIGGER = 255;
+                if (cJSON_GetArraySize(gpio_array) > 3) {
+                    const int gpio_trigger = (uint8_t) cJSON_GetArrayItem(gpio_array, 3)->valuedouble;
+                    FM_SENSOR_GPIO_TRIGGER = (uint8_t) gpio_trigger;
+                    
+                    const int inverted = gpio_trigger / 100;
+                    const unsigned int gpio_final = gpio_trigger % 100;
+                    
+                    gpio_enable(gpio_final, GPIO_OUTPUT);
+                    gpio_write(gpio_final, !inverted);
+                    set_used_gpio(gpio_final);
+                }
+            }
             
         } else if (fm_sensor_type == FM_SENSOR_TYPE_I2C) {
             FM_I2C_BUS = i2c_bus;

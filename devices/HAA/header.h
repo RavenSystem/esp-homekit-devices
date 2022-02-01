@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "10.1.1"
+#define FIRMWARE_VERSION                    "10.2.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -456,20 +456,25 @@
 
 #define FM_SENSOR_TYPE_SET                  "n"
 #define FM_SENSOR_TYPE_FREE                 (1)
-#define FM_SENSOR_TYPE_PULSE                (2)
-#define FM_SENSOR_TYPE_ADC                  (3)
-#define FM_SENSOR_TYPE_ADC_INV              (4)
-#define FM_SENSOR_TYPE_NETWORK              (5)
-#define FM_SENSOR_TYPE_NETWORK_PATTERN      (6)
-#define FM_SENSOR_TYPE_NETWORK_PATTERN_HEX  (7)
-#define FM_SENSOR_TYPE_I2C                  (8)
-#define FM_SENSOR_TYPE_UART                 (9)
-#define FM_SENSOR_TYPE_UART_PATTERN_HEX     (10)
+#define FM_SENSOR_TYPE_PULSE_FREQ           (2)
+#define FM_SENSOR_TYPE_PULSE_US_TIME        (3)
+#define FM_SENSOR_TYPE_ADC                  (10)
+#define FM_SENSOR_TYPE_ADC_INV              (11)
+#define FM_SENSOR_TYPE_NETWORK              (15)
+#define FM_SENSOR_TYPE_NETWORK_PATTERN_TEXT (16)
+#define FM_SENSOR_TYPE_NETWORK_PATTERN_HEX  (17)
+#define FM_SENSOR_TYPE_I2C                  (20)
+#define FM_SENSOR_TYPE_UART                 (23)
+#define FM_SENSOR_TYPE_UART_PATTERN_HEX     (24)
+#define FM_SENSOR_TYPE_UART_PATTERN_TEXT    (25)
 #define FM_SENSOR_TYPE_DEFAULT              FM_SENSOR_TYPE_FREE
 #define FM_SENSOR_TYPE                      ch_group->num_i[0]
 #define FM_SENSOR_GPIO_ARRAY_SET            "g"
 #define FM_SENSOR_GPIO                      ch_group->num_i[1]
+#define FM_SENSOR_GPIO_INT_TYPE             ch_group->num_i[2]
+#define FM_SENSOR_GPIO_TRIGGER              ch_group->num_i[3]
 #define FM_NEW_VALUE                        ch_group->num_f[2]
+#define FM_FINAL_VALUE                      ch_group->num_f[3]
 #define FM_FACTOR_SET                       "ff"
 #define FM_FACTOR_DEFAULT                   (1)
 #define FM_FACTOR                           ch_group->num_f[0]
@@ -477,8 +482,8 @@
 #define FM_OFFSET_DEFAULT                   (0)
 #define FM_OFFSET                           ch_group->num_f[1]
 #define FM_LIMIT_ARRAY_SET                  "l"
-#define FM_LIMIT_LOWER                      ch_group->num_f[3]
-#define FM_LIMIT_UPPER                      ch_group->num_f[4]
+#define FM_LIMIT_LOWER                      ch_group->num_f[4]
+#define FM_LIMIT_UPPER                      ch_group->num_f[5]
 #define FM_VAL_LEN                          ch_group->num_i[1]
 #define FM_VAL_TYPE                         ch_group->num_i[2]
 #define FM_BUFFER_LEN_ARRAY_SET             "bl"

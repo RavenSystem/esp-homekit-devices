@@ -3222,7 +3222,7 @@ inline static void IRAM homekit_client_process(client_context_t *context) {
 }
 
 
-void IRAM homekit_server_close_client(client_context_t *context) {
+void homekit_server_close_client(client_context_t *context) {
     FD_CLR(context->socket, &homekit_server->fds);
     if (homekit_server->client_count > 0) {
         homekit_server->client_count--;
