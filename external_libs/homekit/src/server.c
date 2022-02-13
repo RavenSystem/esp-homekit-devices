@@ -55,11 +55,11 @@
 #endif
 
 #ifndef HOMEKIT_MIN_FREEHEAP
-#define HOMEKIT_MIN_FREEHEAP                    (12288)
+#define HOMEKIT_MIN_FREEHEAP                    (13312)
 #endif
 
 #ifndef HOMEKIT_NETWORK_MIN_FREEHEAP
-#define HOMEKIT_NETWORK_MIN_FREEHEAP            (14336)
+#define HOMEKIT_NETWORK_MIN_FREEHEAP            (15360)
 #endif
 
 #ifndef HOMEKIT_NETWORK_PAUSE_COUNT

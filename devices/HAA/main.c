@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * Copyright 2019-2021 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2022 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -248,7 +248,7 @@ const char http_header1[] = " HTTP/1.1\r\nHost: ";
 const char http_header2[] = "\r\nUser-Agent: HAA/"FIRMWARE_VERSION" esp8266\r\nConnection: close\r\n";
 const char http_header_len[] = "Content-length: ";
 
-int new_net_con(char* host, uint16_t port_n, bool is_udp, uint8_t* payload, uint16_t payload_len, int* s) {
+int new_net_con(char* host, uint16_t port_n, bool is_udp, uint8_t* payload, size_t payload_len, int* s) {
     struct addrinfo* res;
     struct addrinfo hints;
     int result = -1;
@@ -258,7 +258,7 @@ int new_net_con(char* host, uint16_t port_n, bool is_udp, uint8_t* payload, uint
     
     hints.ai_family = AF_UNSPEC;
     
-    if (is_udp == false) {
+    if (!is_udp) {
         hints.ai_socktype = SOCK_STREAM;
     } else {
         hints.ai_socktype = SOCK_DGRAM;
@@ -277,16 +277,18 @@ int new_net_con(char* host, uint16_t port_n, bool is_udp, uint8_t* payload, uint
     
     const struct timeval sndtimeout = { 3, 0 };
     setsockopt(*s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
-    const struct timeval rcvtimeout = { 1, 0 };
-    setsockopt(*s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
     
-    if (connect(*s, res->ai_addr, res->ai_addrlen) != 0) {
-        free(res);
-        return -1;
-    }
-
-    if (is_udp == false) {
+    if (!is_udp) {
+        const struct timeval rcvtimeout = { 1, 0 };
+        setsockopt(*s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
+        
+        if (connect(*s, res->ai_addr, res->ai_addrlen) != 0) {
+            free(res);
+            return -1;
+        }
+        
         result = lwip_write(*s, payload, payload_len);
+        
     } else {
         result = lwip_sendto(*s, payload, payload_len, 0, res->ai_addr, res->ai_addrlen);
     }
@@ -359,20 +361,20 @@ ch_group_t* new_ch_group(const uint8_t chs, const uint8_t nums_i, const uint8_t 
     memset(ch_group, 0, sizeof(*ch_group));
     
     if (chs > 0) {
-        size_t size = chs * sizeof(homekit_characteristic_t*);
+        const size_t size = chs * sizeof(homekit_characteristic_t*);
         ch_group->chs = chs;
         ch_group->ch = (homekit_characteristic_t**) malloc(size);
         memset(ch_group->ch, 0, size);
     }
     
     if (nums_i > 0) {
-        size_t size = nums_i * sizeof(int8_t);
+        const size_t size = nums_i * sizeof(int8_t);
         ch_group->num_i = (int8_t*) malloc(size);
         memset(ch_group->num_i, 0, size);
     }
     
     if (nums_f > 0) {
-        size_t size = nums_f * sizeof(float);
+        const size_t size = nums_f * sizeof(float);
         ch_group->num_f = (float*) malloc(size);
         memset(ch_group->num_f, 0, size);
     }
@@ -552,9 +554,9 @@ int ping_host(char* host) {
         .ai_socktype = SOCK_RAW
     };
     struct addrinfo* res;
-
+    
     int err = getaddrinfo(host, NULL, &hints, &res);
-
+    
     if (err == 0 && res != NULL) {
         struct sockaddr* sa = res->ai_addr;
         if (sa->sa_family == AF_INET) {
@@ -3323,7 +3325,9 @@ void lightbulb_no_task(ch_group_t* ch_group) {
         }
     }
     
-    do_actions(ch_group, (uint8_t) ch_group->ch[0]->value.bool_value);
+    if (lightbulb_group->old_on_value != ch_group->ch[0]->value.bool_value) {
+        do_actions(ch_group, (uint8_t) ch_group->ch[0]->value.bool_value);
+    }
     
     if (ch_group->ch[0]->value.bool_value) {
         do_wildcard_actions(ch_group, 0, ch_group->ch[1]->value.int_value);
@@ -3360,12 +3364,13 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
         homekit_characteristic_notify_safe(ch);
         
     } else if (ch != ch_group->ch[0] || value.bool_value != ch_group->ch[0]->value.bool_value) {
-        int old_on_value = ch_group->ch[0]->value.bool_value;
-        ch->value = value;
-        
         lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_group->ch[0]);
         
-         /*
+        lightbulb_group->old_on_value = ch_group->ch[0]->value.bool_value;
+        
+        ch->value = value;
+        
+        /*
         if (ch == ch_group->ch[4]) {
             lightbulb_group->temp_changed = true;
         } else {
@@ -3381,7 +3386,7 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
             }
         }
         
-        if (old_on_value == ch_group->ch[0]->value.bool_value && lightbulb_group->autodimmer == 0) {
+        if (lightbulb_group->old_on_value == ch_group->ch[0]->value.bool_value && lightbulb_group->autodimmer == 0) {
             esp_timer_start(LIGHTBULB_SET_DELAY_TIMER);
         } else if (!lightbulb_group->lightbulb_task_running) {
             lightbulb_group->lightbulb_task_running = true;
@@ -4325,14 +4330,15 @@ void IRAM fm_pulse_interrupt(const uint8_t gpio) {
     
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
-        if (ch_group->acc_type == ACC_TYPE_FREE_MONITOR &&
+        if ((ch_group->acc_type == ACC_TYPE_FREE_MONITOR ||
+             ch_group->acc_type == ACC_TYPE_FREE_MONITOR_ACCUMULATVE) &&
             abs(FM_SENSOR_TYPE) == FM_SENSOR_TYPE_PULSE_US_TIME &&
             FM_SENSOR_GPIO == gpio) {
             if (FM_NEW_VALUE == 0) {
                 FM_NEW_VALUE = time;
                 gpio_set_interrupt(gpio, FM_SENSOR_GPIO_INT_TYPE, fm_pulse_interrupt);
             } else {
-                FM_FINAL_VALUE = time;
+                FM_OVERRIDE_VALUE = time;
             }
             
             break;
@@ -4380,15 +4386,17 @@ void free_monitor_task(void* args) {
     }
     
     while (ch_group) {
-        if (ch_group->acc_type == ACC_TYPE_FREE_MONITOR) {
+        if (ch_group->acc_type == ACC_TYPE_FREE_MONITOR ||
+            ch_group->acc_type == ACC_TYPE_FREE_MONITOR_ACCUMULATVE) {
             float value = 0;
             int get_value = false;
             
             const int fm_sensor_type = abs(FM_SENSOR_TYPE);
             
             if (args) {
-                if (fm_sensor_type == FM_SENSOR_TYPE_FREE) {
-                    value = FM_NEW_VALUE;
+                if (fm_sensor_type == FM_SENSOR_TYPE_FREE || FM_OVERRIDE_VALUE != NO_LAST_WILDCARD_ACTION) {
+                    value = FM_OVERRIDE_VALUE;
+                    FM_OVERRIDE_VALUE = NO_LAST_WILDCARD_ACTION;
                     get_value = true;
                     
                 } else if (fm_sensor_type == FM_SENSOR_TYPE_PULSE_FREQ) {
@@ -4396,7 +4404,7 @@ void free_monitor_task(void* args) {
                     get_value = true;
                     
                 } else if (fm_sensor_type == FM_SENSOR_TYPE_PULSE_US_TIME) {
-                    const float old_final_value = FM_FINAL_VALUE;
+                    const float old_final_value = FM_OVERRIDE_VALUE;
                     FM_NEW_VALUE = 0;
                     
                     gpio_set_interrupt(FM_SENSOR_GPIO, FM_SENSOR_GPIO_INT_TYPE, fm_pulse_interrupt);
@@ -4413,10 +4421,12 @@ void free_monitor_task(void* args) {
                     
                     gpio_set_interrupt(FM_SENSOR_GPIO, GPIO_INTTYPE_NONE, NULL);
                     
-                    if (old_final_value != FM_FINAL_VALUE) {
-                        value = FM_FINAL_VALUE - FM_NEW_VALUE;
+                    if (old_final_value != FM_OVERRIDE_VALUE) {
+                        value = FM_OVERRIDE_VALUE - FM_NEW_VALUE;
                         get_value = true;
                     }
+                    
+                    FM_OVERRIDE_VALUE = NO_LAST_WILDCARD_ACTION;
                     
                 } else if (fm_sensor_type == FM_SENSOR_TYPE_ADC ||
                          fm_sensor_type == FM_SENSOR_TYPE_ADC_INV) {
@@ -4449,7 +4459,8 @@ void free_monitor_task(void* args) {
                                     
                                     char* method = strdup("GET");
                                     char* method_req = NULL;
-                                    if (action_network->method_n <= 3) {
+                                    if (action_network->method_n <= 3 &&
+                                        action_network->method_n > 0) {
                                         content_len_n = strlen(action_network->content);
                                         
                                         char content_len[4];
@@ -4628,7 +4639,20 @@ void free_monitor_task(void* args) {
                         }
                     }
                     
-                } else if (fm_sensor_type == FM_SENSOR_TYPE_I2C) {
+                } else if (fm_sensor_type == FM_SENSOR_TYPE_I2C ||
+                           fm_sensor_type == FM_SENSOR_TYPE_I2C_TRIGGER) {
+                    if (fm_sensor_type == FM_SENSOR_TYPE_I2C_TRIGGER) {
+                        i2c_slave_write(FM_I2C_BUS, (uint8_t) FM_I2C_ADDR,
+                                        (uint8_t*) &FM_I2C_TRIGGER_REG[FM_I2C_TRIGGER_REG_FIRST],
+                                        FM_I2C_TRIGGER_REG_LEN,
+                                        (uint8_t*) &FM_I2C_TRIGGER_VAL[FM_I2C_TRIGGER_VAL_FIRST],
+                                        FM_I2C_TRIGGER_VAL_LEN);
+                        
+                        if (FM_NEW_VALUE > 0) {
+                            vTaskDelay(FM_NEW_VALUE);
+                        }
+                    }
+                    
                     size_t i2c_value_len = FM_VAL_LEN + FM_I2C_VAL_OFFSET;
                     uint8_t i2c_value[i2c_value_len];
                     
@@ -4671,6 +4695,14 @@ void free_monitor_task(void* args) {
             
             if (get_value) {
                 value = (FM_FACTOR * value) + FM_OFFSET;
+                
+                if (ch_group->acc_type == ACC_TYPE_FREE_MONITOR_ACCUMULATVE) {
+                    if ((int) value == -2182017) {
+                        value = 0;
+                    } else {
+                        value += ch_group->ch[0]->value.float_value;
+                    }
+                }
                 
                 INFO("<%i> FM: %g", ch_group->accessory, value);
                 
@@ -5042,7 +5074,8 @@ void net_action_task(void* pvParameters) {
                 
                 char* method = strdup("GET");
                 char* method_req = NULL;
-                if (action_network->method_n <= 3) {
+                if (action_network->method_n <= 3 &&
+                    action_network->method_n > 0) {
                     content_len_n = strlen(action_network->content);
                     
                     char* content_search = action_network->content;
@@ -6076,9 +6109,10 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             break;
                             
                         case ACC_TYPE_FREE_MONITOR:
+                        case ACC_TYPE_FREE_MONITOR_ACCUMULATVE:
                             if (ch_group->main_enabled) {
-                                FM_NEW_VALUE = action_acc_manager->value;
-                                if (xTaskCreate(free_monitor_task, "fmm", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
+                                FM_OVERRIDE_VALUE = action_acc_manager->value;
+                                if (xTaskCreate(free_monitor_task, "fm", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
                                     ERROR("Creating FM");
                                     homekit_remove_oldest_client();
                                 }
@@ -6482,7 +6516,6 @@ void normal_mode_init() {
                 memset(ping_input, 0, sizeof(*ping_input));
                 
                 ping_input->host = strdup(cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_HOST)->valuestring);
-                ping_input->last_response = false;
                 
                 ping_input->next = main_config.ping_inputs;
                 main_config.ping_inputs = ping_input;
@@ -6502,7 +6535,6 @@ void normal_mode_init() {
             ping_input_callback_fn = malloc(sizeof(ping_input_callback_fn_t));
             memset(ping_input_callback_fn, 0, sizeof(*ping_input_callback_fn));
             
-            ping_input_callback_fn->disable_without_wifi = false;
             if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_DISABLE_WITHOUT_WIFI) != NULL) {
                 ping_input_callback_fn->disable_without_wifi = (bool) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_DISABLE_WITHOUT_WIFI)->valuedouble;
             }
@@ -6666,7 +6698,6 @@ void normal_mode_init() {
                         
                         action_binary_output->action = new_int_action;
                         
-                        action_binary_output->value = false;
                         if (cJSON_GetObjectItemCaseSensitive(json_relay, VALUE) != NULL) {
                             action_binary_output->value = (bool) cJSON_GetObjectItemCaseSensitive(json_relay, VALUE)->valuedouble;
                         }
@@ -6685,8 +6716,7 @@ void normal_mode_init() {
                             
                             INFO("New Binary Output GPIO %i", action_binary_output->gpio);
                         }
-
-                        action_binary_output->inching = 0;
+                        
                         if (cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME) != NULL) {
                             action_binary_output->inching = cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME)->valuedouble * 1000;
                         }
@@ -6919,12 +6949,11 @@ void normal_mode_init() {
                         if (cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_PROTOCOL_CODE) != NULL) {
                             action_irrf_tx->prot_code = strdup(cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_PROTOCOL_CODE)->valuestring);
                         }
-
+                        
                         if (cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_RAW_CODE) != NULL) {
                             action_irrf_tx->raw_code = strdup(cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_RAW_CODE)->valuestring);
                         }
                         
-                        action_irrf_tx->freq = 0;
                         if (cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_FREQ) != NULL) {
                             unsigned int freq = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_FREQ)->valuedouble;
                             if (freq == 1) {    // RF
@@ -6982,18 +7011,25 @@ void normal_mode_init() {
                         
                         action_uart->action = new_int_action;
                         
-                        action_uart->uart = 0;
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_UART) != NULL) {
-                            action_uart->uart = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_UART)->valuedouble;
-                        }
-                        
-                        action_uart->pause = 0;
                         if (cJSON_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_PAUSE) != NULL) {
                             action_uart->pause = MS_TO_TICKS(cJSON_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_PAUSE)->valuedouble);
                         }
                         
+                        int uart = 0;
+                        if (cJSON_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_UART) != NULL) {
+                            uart = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_UART)->valuedouble;
+                        }
+                        
+                        action_uart->uart = uart % 10;
+                        int is_text = uart / 10;
+                        
                         if (cJSON_GetObjectItemCaseSensitive(json_action_uart, VALUE) != NULL) {
-                            action_uart->len = process_hexstr(cJSON_GetObjectItemCaseSensitive(json_action_uart, VALUE)->valuestring, &action_uart->command);
+                            if (is_text) {
+                                action_uart->command = (uint8_t*) strdup(cJSON_GetObjectItemCaseSensitive(json_action_uart, VALUE)->valuestring);
+                                action_uart->len = strlen((char*) action_uart->command);
+                            } else {
+                                action_uart->len = process_hexstr(cJSON_GetObjectItemCaseSensitive(json_action_uart, VALUE)->valuestring, &action_uart->command);
+                            }
                         }
                         
                         action_uart->next = last_action;
@@ -7047,7 +7083,6 @@ void normal_mode_init() {
                 wildcard_action->index = int_index;
                 wildcard_action->value = (float) cJSON_GetObjectItemCaseSensitive(json_wilcard_action, VALUE)->valuedouble;
                 
-                wildcard_action->repeat = false;
                 if (cJSON_GetObjectItemCaseSensitive(json_wilcard_action, WILDCARD_ACTION_REPEAT) != NULL) {
                     wildcard_action->repeat = (bool) cJSON_GetObjectItemCaseSensitive(json_wilcard_action, WILDCARD_ACTION_REPEAT)->valuedouble;
                 }
@@ -7510,7 +7545,7 @@ void normal_mode_init() {
                 }
             }
             
-            INFO("New Timetable Action %i: %ih %im, %i wday, %i mday, %i month", timetable_action->action, timetable_action->hour, timetable_action->min, timetable_action->wday, timetable_action->mday, timetable_action->mon);
+            INFO("New TT %i: %ih %im, %i wday, %i mday, %i month", timetable_action->action, timetable_action->hour, timetable_action->min, timetable_action->wday, timetable_action->mday, timetable_action->mon);
         }
     }
     
@@ -7525,19 +7560,16 @@ void normal_mode_init() {
         
         set_used_gpio(led_gpio);
         led_create(led_gpio, led_inverted);
-        INFO("Status LED GPIO %i, inv %i", led_gpio, led_inverted);
     }
     
     // IR TX LED Frequency
     if (cJSON_GetObjectItemCaseSensitive(json_config, IRRF_ACTION_FREQ) != NULL) {
         main_config.ir_tx_freq = 1000 / cJSON_GetObjectItemCaseSensitive(json_config, IRRF_ACTION_FREQ)->valuedouble / 2;
-        INFO("IR TX Freq %i", main_config.ir_tx_freq);
     }
     
     // IR TX LED Inverted
     if (cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO_INVERTED) != NULL) {
         main_config.ir_tx_inv = (bool) cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO_INVERTED)->valuedouble;
-        INFO("IR TX Inv %i", main_config.ir_tx_inv);
     }
     
     // IR TX LED GPIO
@@ -7546,13 +7578,11 @@ void normal_mode_init() {
         set_used_gpio(main_config.ir_tx_gpio);
         gpio_enable(main_config.ir_tx_gpio, GPIO_OUTPUT);
         gpio_write(main_config.ir_tx_gpio, false ^ main_config.ir_tx_inv);
-        INFO("IR TX GPIO %i", main_config.ir_tx_gpio);
     }
     
     // RF TX Inverted
     if (cJSON_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO_INVERTED) != NULL) {
         main_config.rf_tx_inv = (bool) cJSON_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO_INVERTED)->valuedouble;
-        INFO("RF TX Inv %i", main_config.rf_tx_inv);
     }
     
     // RF TX GPIO
@@ -7561,7 +7591,6 @@ void normal_mode_init() {
         set_used_gpio(main_config.rf_tx_gpio);
         gpio_enable(main_config.rf_tx_gpio, GPIO_OUTPUT);
         gpio_write(main_config.rf_tx_gpio, false ^ main_config.rf_tx_inv);
-        INFO("RF TX GPIO %i", main_config.rf_tx_gpio);
     }
     
     // UART Receiver Len
@@ -7577,7 +7606,6 @@ void normal_mode_init() {
     if (cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER) != NULL) {
         unsigned int button_filter_value = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER)->valuedouble;
         adv_button_set_evaluate_delay(button_filter_value);
-        INFO("Button filter %i", button_filter_value);
     }
     
     // PWM frequency
@@ -7585,17 +7613,24 @@ void normal_mode_init() {
         adv_pwm_set_freq((uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ)->valuedouble);
     }
     
+    // PWM Zero-Crossing GPIO
+    if (cJSON_GetObjectItemCaseSensitive(json_config, PWM_ZEROCROSSING_ARRAY_SET) != NULL) {
+        cJSON* zc_array = cJSON_GetObjectItemCaseSensitive(json_config, PWM_ZEROCROSSING_ARRAY_SET);
+        const unsigned int zc_gpio = (uint8_t) cJSON_GetArrayItem(zc_array, 0)->valuedouble;
+        set_used_gpio(zc_gpio);
+        
+        adv_pwm_set_zc_gpio(zc_gpio, (uint8_t) cJSON_GetArrayItem(zc_array, 1)->valuedouble, (bool) cJSON_GetArrayItem(zc_array, 2)->valuedouble);
+    }
+    
     // Ping poll period
     if (cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD) != NULL) {
         main_config.ping_poll_period = (float) cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD)->valuedouble;
     }
-    INFO("Ping period %g secs", main_config.ping_poll_period);
     
     // Allowed Setup Mode Time
     if (cJSON_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME) != NULL) {
         main_config.setup_mode_time = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME)->valuedouble;
     }
-    INFO("Setup mode time %i secs", main_config.setup_mode_time);
     
     // HomeKit Server Clients
     config.max_clients = HOMEKIT_SERVER_MAX_CLIENTS_DEFAULT;
@@ -7608,25 +7643,21 @@ void normal_mode_init() {
     if (config.max_clients > 0) {
         main_config.enable_homekit_server = true;
     }
-    INFO("HK Server Clients %i", config.max_clients);
     
     // Allow unsecure connections
     if (cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS) != NULL) {
         config.insecure = (bool) cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS)->valuedouble;
     }
-    INFO("Unsecure connections %i", config.insecure);
     
     // mDNS TTL
     config.mdns_ttl = MDNS_TTL_DEFAULT;
     if (cJSON_GetObjectItemCaseSensitive(json_config, MDNS_TTL) != NULL) {
         config.mdns_ttl = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, MDNS_TTL)->valuedouble;
     }
-    INFO("mDNS TTL %i", config.mdns_ttl);
     
     // Gateway Ping
     if (cJSON_GetObjectItemCaseSensitive(json_config, WIFI_PING_ERRORS) != NULL) {
         main_config.wifi_ping_max_errors = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, WIFI_PING_ERRORS)->valuedouble;
-        INFO("Gateway Ping %i", main_config.wifi_ping_max_errors);
         main_config.wifi_ping_max_errors++;
     }
     
@@ -7634,14 +7665,12 @@ void normal_mode_init() {
     char* common_serial_prefix = NULL;
     if (cJSON_GetObjectItemCaseSensitive(json_config, SERIAL_STRING) != NULL) {
         common_serial_prefix = cJSON_GetObjectItemCaseSensitive(json_config, SERIAL_STRING)->valuestring;
-        INFO("Common serial prefix %s", common_serial_prefix);
     }
     
     // Times to toggle quickly an accessory status to enter setup mode
     if (cJSON_GetObjectItemCaseSensitive(json_config, SETUP_MODE_ACTIVATE_COUNT) != NULL) {
         main_config.setup_mode_toggle_counter_max = (int8_t) cJSON_GetObjectItemCaseSensitive(json_config, SETUP_MODE_ACTIVATE_COUNT)->valuedouble;
     }
-    INFO("Toggles to enter setup %i", main_config.setup_mode_toggle_counter_max);
     
     if (main_config.setup_mode_toggle_counter_max > 0) {
         main_config.setup_mode_toggle_timer = esp_timer_create(SETUP_MODE_TOGGLE_TIME_MS, false, NULL, setup_mode_toggle);
@@ -9166,13 +9195,24 @@ void normal_mode_init() {
                 LIGHTBULB_PWM_DITHER = cJSON_GetObjectItemCaseSensitive(json_context, PWM_DITHER_SET)->valuedouble;
             }
             
+            cJSON* leading_array = NULL;
+            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_LEADING_ARRAY_SET) != NULL) {
+                leading_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_LEADING_ARRAY_SET);
+            }
+            
             LIGHTBULB_CHANNELS = cJSON_GetArraySize(gpio_array);
             for (int i = 0; i < LIGHTBULB_CHANNELS; i++) {
                 int gpio = cJSON_GetArrayItem(gpio_array, i)->valuedouble;
                 set_used_gpio(gpio % 100);
                 
                 lightbulb_group->gpio[i] = gpio % 100;
-                adv_pwm_new_channel(lightbulb_group->gpio[i], gpio / 100);
+                
+                int is_leading = false;
+                if (leading_array) {
+                    is_leading = (bool) cJSON_GetArrayItem(leading_array, i)->valuedouble;
+                }
+                
+                adv_pwm_new_channel(lightbulb_group->gpio[i], gpio / 100, is_leading);
             }
             
             adv_pwm_start();
@@ -9426,6 +9466,7 @@ void normal_mode_init() {
             }
         }
         
+        lightbulb_group->old_on_value = lightbulb_group->ch0->value.bool_value;
         lightbulb_group->ch0->value.bool_value = !lightbulb_group->ch0->value.bool_value;
         
         lightbulb_group->lightbulb_task_running = true;
@@ -10289,7 +10330,7 @@ void normal_mode_init() {
     }
     
     // *** FREE MONITOR
-    void new_free_monitor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+    void new_free_monitor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context, const uint8_t acc_type) {
         int fm_sensor_type = FM_SENSOR_TYPE_DEFAULT;
         
         int tg_serv = 0;
@@ -10301,23 +10342,6 @@ void normal_mode_init() {
             tg_ch = (uint8_t) cJSON_GetArrayItem(target_array, 1)->valuedouble;
         }
         
-        unsigned int i2c_bus = 0;
-        unsigned int i2c_addr = 0;
-        unsigned int i2c_read_len = 0;
-        uint8_t i2c_read_register[32];
-        
-        if (cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_DEVICE_DATA_ARRAY) != NULL) {
-            cJSON* i2c_array = cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_DEVICE_DATA_ARRAY);
-            i2c_bus = (uint8_t) cJSON_GetArrayItem(i2c_array, 0)->valuedouble;
-            i2c_addr = (uint8_t) cJSON_GetArrayItem(i2c_array, 1)->valuedouble;
-            i2c_read_len = cJSON_GetArraySize(i2c_array) - 2;
-            
-            for (int i = 0; i < i2c_read_len; i++) {
-                i2c_read_register[i] = (uint8_t) cJSON_GetArrayItem(i2c_array, i + 2)->valuedouble;
-            }
-            
-            fm_sensor_type = FM_SENSOR_TYPE_I2C;
-        }
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, FM_SENSOR_TYPE_SET) != NULL) {
             fm_sensor_type = cJSON_GetObjectItemCaseSensitive(json_context, FM_SENSOR_TYPE_SET)->valuedouble;
@@ -10375,8 +10399,8 @@ void normal_mode_init() {
                                             ( fm_sensor_type == FM_SENSOR_TYPE_PULSE_US_TIME ? 3 : 0 ) +
                                             is_val_data +
                                             ( fm_sensor_type >= FM_SENSOR_TYPE_NETWORK ? 2 : 0 ) +
-                                            ( fm_sensor_type == FM_SENSOR_TYPE_I2C ? 2 : 0 ) +
-                                            i2c_read_len,
+                                            ( fm_sensor_type == FM_SENSOR_TYPE_I2C ? 8 : 0 ) +
+                                            ( fm_sensor_type == FM_SENSOR_TYPE_I2C_TRIGGER ? 18 : 0 ),
                                             4 + has_limits,
                                             1);
         
@@ -10390,7 +10414,7 @@ void normal_mode_init() {
             FM_SENSOR_TYPE = fm_sensor_type;
         }
         
-        ch_group->acc_type = ACC_TYPE_FREE_MONITOR;
+        ch_group->acc_type = acc_type;
         ch_group->accessory = service_numerator;
         set_killswitch(ch_group, json_context);
         int homekit_enabled = acc_homekit_enabled(json_context);
@@ -10485,13 +10509,29 @@ void normal_mode_init() {
                 }
             }
             
-        } else if (fm_sensor_type == FM_SENSOR_TYPE_I2C) {
+        } else if (fm_sensor_type == FM_SENSOR_TYPE_I2C ||
+                   fm_sensor_type == FM_SENSOR_TYPE_I2C_TRIGGER) {
+            cJSON* i2c_array = cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_DEVICE_DATA_ARRAY_SET);
+            unsigned int i2c_bus = (uint8_t) cJSON_GetArrayItem(i2c_array, 0)->valuedouble;
+            unsigned int i2c_addr = (uint8_t) cJSON_GetArrayItem(i2c_array, 1)->valuedouble;
+            size_t i2c_read_len = cJSON_GetArraySize(i2c_array) - 2;
+            
+            for (int i = 0; i < i2c_read_len; i++) {
+                FM_I2C_REG[FM_I2C_REG_FIRST + i] = (uint8_t) cJSON_GetArrayItem(i2c_array, i + 2)->valuedouble;
+            }
+            
             FM_I2C_BUS = i2c_bus;
             FM_I2C_ADDR = i2c_addr;
+            FM_I2C_REG_LEN = i2c_read_len;
+            
+            FM_I2C_VAL_OFFSET = FM_I2C_VAL_OFFSET_DEFAULT;
+            if (cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_VAL_OFFSET_SET) != NULL) {
+                FM_I2C_VAL_OFFSET = cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_VAL_OFFSET_SET)->valuedouble;
+            }
             
             // Commands sent at beginning
-            if (cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_START_COMMANDS_ARRAY) != NULL) {
-                cJSON* i2c_inits = cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_START_COMMANDS_ARRAY);
+            if (cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_START_COMMANDS_ARRAY_SET) != NULL) {
+                cJSON* i2c_inits = cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_START_COMMANDS_ARRAY_SET);
                 for (int i = 0; i < cJSON_GetArraySize(i2c_inits); i++) {
                     cJSON* i2c_init = cJSON_GetArrayItem(i2c_inits, i);
                     
@@ -10516,15 +10556,22 @@ void normal_mode_init() {
                 }
             }
             
-            // Save data to read register
-            FM_I2C_REG_LEN = i2c_read_len;
-            if (i2c_read_len > 0) {
-                memcpy(&FM_I2C_REG[FM_I2C_REG_FIRST], i2c_read_register, i2c_read_len);
-            }
-            
-            FM_I2C_VAL_OFFSET = FM_I2C_VAL_OFFSET_DEFAULT;
-            if (cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_VAL_OFFSET_SET) != NULL) {
-                FM_I2C_VAL_OFFSET = cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_VAL_OFFSET_SET)->valuedouble;
+            // Trigger
+            if (fm_sensor_type == FM_SENSOR_TYPE_I2C_TRIGGER) {
+                cJSON* i2c_trigger_array = cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_TRIGGER_COMMAND_ARRAY_SET);
+                size_t i2c_trigger_array_len = (uint8_t) cJSON_GetArraySize(i2c_trigger_array);
+                
+                FM_NEW_VALUE = cJSON_GetArrayItem(i2c_trigger_array, 0)->valuedouble * MS_TO_TICKS(1000);
+                
+                size_t trigger_reg_len = (uint8_t) cJSON_GetArrayItem(i2c_trigger_array, 1)->valuedouble;
+                for (int i = 0; i < trigger_reg_len; i++) {
+                    FM_I2C_TRIGGER_REG[FM_I2C_TRIGGER_REG_FIRST + i] = (uint8_t) cJSON_GetArrayItem(i2c_trigger_array, i + 2)->valuedouble;
+                }
+                
+                size_t trigger_val_len = i2c_trigger_array_len - trigger_reg_len - 2;
+                for (int i = 0; i < trigger_val_len; i++) {
+                    FM_I2C_TRIGGER_VAL[FM_I2C_TRIGGER_VAL_FIRST + i] = (uint8_t) cJSON_GetArrayItem(i2c_trigger_array, i + trigger_reg_len + 2)->valuedouble;
+                }
             }
             
         } else if (is_type_uart) {
@@ -10727,9 +10774,10 @@ void normal_mode_init() {
             INFO("POWER MONITOR");
             new_power_monitor(acc_count, serv_count, total_services, json_accessory);
             
-        } else if (acc_type == ACC_TYPE_FREE_MONITOR) {
+        } else if (acc_type == ACC_TYPE_FREE_MONITOR ||
+                   acc_type == ACC_TYPE_FREE_MONITOR_ACCUMULATVE) {
             INFO("FREE MONITOR");
-            new_free_monitor(acc_count, serv_count, total_services, json_accessory);
+            new_free_monitor(acc_count, serv_count, total_services, json_accessory, acc_type);
             
         } else if (acc_type == ACC_TYPE_HISTORICAL) {
             INFO("HISTORICAL");

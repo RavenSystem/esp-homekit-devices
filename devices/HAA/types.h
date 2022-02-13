@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * Copyright 2019-2021 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2022 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -178,7 +178,7 @@ typedef struct _lightbulb_group {
     uint8_t autodimmer_task_step;
     uint8_t type: 6;
     bool has_changed: 1;
-    //bool temp_changed: 1;
+    bool old_on_value: 1;
     
     uint16_t pwm_dither;
     

@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "10.2.0"
+#define FIRMWARE_VERSION                    "10.3.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -97,6 +97,7 @@
 #define INVERTED                            "i"
 #define BUTTON_FILTER                       "f"
 #define PWM_FREQ                            "q"
+#define PWM_ZEROCROSSING_ARRAY_SET          "zc"
 #define ENABLE_HOMEKIT                      "h"
 #define HOMEKIT_SERVER_MAX_CLIENTS          "h"
 #define HOMEKIT_SERVER_MAX_CLIENTS_DEFAULT  (20)
@@ -307,6 +308,7 @@
 #define LIGHTBULB_TYPE_SM16716              (7)
 #define LIGHTBULB_TYPE_NRZ                  (8)
 #define LIGHTBULB_NRZ_TIMES_ARRAY_SET       "nrz"
+#define LIGHTBULB_PWM_LEADING_ARRAY_SET     "ld"
 #define LIGHTBULB_CHANNELS_SET              "n"
 #define LIGHTBULB_CHANNELS                  lightbulb_group->channels
 #define LIGHTBULB_INITITAL_STATE_ARRAY_SET  "it"
@@ -464,6 +466,7 @@
 #define FM_SENSOR_TYPE_NETWORK_PATTERN_TEXT (16)
 #define FM_SENSOR_TYPE_NETWORK_PATTERN_HEX  (17)
 #define FM_SENSOR_TYPE_I2C                  (20)
+#define FM_SENSOR_TYPE_I2C_TRIGGER          (21)
 #define FM_SENSOR_TYPE_UART                 (23)
 #define FM_SENSOR_TYPE_UART_PATTERN_HEX     (24)
 #define FM_SENSOR_TYPE_UART_PATTERN_TEXT    (25)
@@ -474,7 +477,7 @@
 #define FM_SENSOR_GPIO_INT_TYPE             ch_group->num_i[2]
 #define FM_SENSOR_GPIO_TRIGGER              ch_group->num_i[3]
 #define FM_NEW_VALUE                        ch_group->num_f[2]
-#define FM_FINAL_VALUE                      ch_group->num_f[3]
+#define FM_OVERRIDE_VALUE                   ch_group->num_f[3]
 #define FM_FACTOR_SET                       "ff"
 #define FM_FACTOR_DEFAULT                   (1)
 #define FM_FACTOR                           ch_group->num_f[0]
@@ -494,8 +497,9 @@
 #define FM_PATTERN_ARRAY_SET                "pt"
 #define FM_PATTERN_CH_WRITE                 ch_group->ch[1]
 #define FM_PATTERN_CH_READ                  (pattern_t*) FM_PATTERN_CH_WRITE
-#define FM_I2C_DEVICE_DATA_ARRAY            "ic"
-#define FM_I2C_START_COMMANDS_ARRAY         "in"
+#define FM_I2C_DEVICE_DATA_ARRAY_SET        "ic"
+#define FM_I2C_START_COMMANDS_ARRAY_SET     "in"
+#define FM_I2C_TRIGGER_COMMAND_ARRAY_SET    "it"
 #define FM_READ_COMMAND_DATA_ARRAY          "dt"
 #define FM_I2C_VAL_OFFSET_SET               "io"
 #define FM_I2C_VAL_OFFSET_DEFAULT           (0)
@@ -505,6 +509,12 @@
 #define FM_I2C_VAL_OFFSET                   ch_group->num_i[6]
 #define FM_I2C_REG_FIRST                    (7)
 #define FM_I2C_REG                          ch_group->num_i     // from num_i[FM_I2C_REG_FIRST] to num_i[FM_I2C_REG_FIRST + 3]
+#define FM_I2C_TRIGGER_REG_LEN              ch_group->num_i[11]
+#define FM_I2C_TRIGGER_VAL_LEN              ch_group->num_i[12]
+#define FM_I2C_TRIGGER_REG_FIRST            (13)
+#define FM_I2C_TRIGGER_REG                  ch_group->num_i     // from num_i[FM_I2C_TRIGGER_REG_FIRST] to num_i[FM_I2C_TRIGGER_REG_FIRST + 3]
+#define FM_I2C_TRIGGER_VAL_FIRST            (17)
+#define FM_I2C_TRIGGER_VAL                  ch_group->num_i     // from num_i[FM_I2C_TRIGGER_VAL_FIRST] to num_i[FM_I2C_TRIGGER_VAL_FIRST + 3]
 
 #define RECV_UART_POLL_PERIOD_MS            (50)
 
@@ -549,7 +559,7 @@
 #define MAX_ACTIONS                         (51)    // from 0 to (MAX_ACTIONS - 1)
 #define MAX_WILDCARD_ACTIONS                (4)     // from 0 to (MAX_WILDCARD_ACTIONS - 1)
 #define WILDCARD_ACTIONS_ARRAY_HEADER       "y"
-#define NO_LAST_WILDCARD_ACTION             (-10000)
+#define NO_LAST_WILDCARD_ACTION             (-1000000.f)
 #define WILDCARD_ACTIONS                    "0"
 #define WILDCARD_ACTION_REPEAT              "r"
 #define COPY_ACTIONS                        "a"
@@ -643,6 +653,7 @@
 #define ACC_TYPE_FAN                        (65)
 #define ACC_TYPE_POWER_MONITOR              (75)
 #define ACC_TYPE_FREE_MONITOR               (80)
+#define ACC_TYPE_FREE_MONITOR_ACCUMULATVE   (81)
 #define ACC_TYPE_HISTORICAL                 (95)
 #define ACC_TYPE_IAIRZONING                 (99)
 
