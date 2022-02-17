@@ -8727,6 +8727,7 @@ void normal_mode_init() {
         ch_group->accessory = service_numerator;
         ch_group->acc_type = ACC_TYPE_IAIRZONING;
         ch_group->num_i[0] = -1;    // IAIRZONING_LAST_ACTION
+        ch_group->num_i[1] = -1;    // IAIRZONING_MAIN_MODE
         
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
