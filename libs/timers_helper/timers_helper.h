@@ -1,7 +1,7 @@
 /*
  * ESP Timers Helper
  *
- * Copyright 2020 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2020-2022 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 

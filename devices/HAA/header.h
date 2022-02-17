@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "10.3.0"
+#define FIRMWARE_VERSION                    "10.3.1"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -673,6 +673,11 @@
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
 #define CUSTOM_TRIGGER_COMMAND              "#HAA@trcmd"
+
+#define ACTION_TASK_TYPE_UART               (0)
+#define ACTION_TASK_TYPE_NETWORK            (1)
+#define ACTION_TASK_TYPE_IRRF               (2)
+#define ACTION_TASK_MAX_ERRORS              (10)
 
 #define SAVE_STATES_TIMER                   ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE)->timer
 #define WIFI_WATCHDOG_TIMER                 ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE)->timer2

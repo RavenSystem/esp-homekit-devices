@@ -166,6 +166,9 @@ typedef struct _ch_group {
 
 typedef struct _action_task {
     uint8_t action;
+    uint8_t errors;
+    uint8_t type;
+    
     ch_group_t* ch_group;
 } action_task_t;
 

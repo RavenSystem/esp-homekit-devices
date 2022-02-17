@@ -1495,7 +1495,7 @@ void set_zones_task(void* args) {
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
         if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == (uint8_t) TH_IAIRZONING_CONTROLLER) {
-            const unsigned int th_current_action = THERMOSTAT_CURRENT_ACTION;
+            const int th_current_action = THERMOSTAT_CURRENT_ACTION;
             switch (th_current_action) {
                 case THERMOSTAT_ACTION_HEATER_ON:
                 case THERMOSTAT_ACTION_HEATER_IDLE:
@@ -1538,7 +1538,7 @@ void set_zones_task(void* args) {
     ch_group = main_config.ch_groups;
     while (ch_group && thermostat_all_idle) {
         if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == (uint8_t) TH_IAIRZONING_CONTROLLER) {
-            const unsigned int th_current_action = THERMOSTAT_CURRENT_ACTION;
+            const int th_current_action = THERMOSTAT_CURRENT_ACTION;
             if (th_current_action != THERMOSTAT_ACTION_TOTAL_OFF) {
                 thermostat_all_off = false;
                 
@@ -1578,7 +1578,7 @@ void set_zones_task(void* args) {
             ch_group = main_config.ch_groups;
             while (ch_group) {
                 if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == (uint8_t) TH_IAIRZONING_CONTROLLER) {
-                    if ((uint8_t) TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_OPEN) {
+                    if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_OPEN) {
                         TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_OPEN;
                         do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
                         vTaskDelay(IAIRZONING_DELAY_ACTION);
@@ -1621,8 +1621,8 @@ void set_zones_task(void* args) {
         ch_group = main_config.ch_groups;
         while (ch_group) {
             if (ch_group->acc_type == ACC_TYPE_THERMOSTAT && iairzoning_group->accessory == (uint8_t) TH_IAIRZONING_CONTROLLER) {
-                const unsigned int th_current_action = THERMOSTAT_CURRENT_ACTION;
-                const unsigned int th_gate_current_state = TH_IAIRZONING_GATE_CURRENT_STATE;
+                const int th_current_action = THERMOSTAT_CURRENT_ACTION;
+                const int th_gate_current_state = TH_IAIRZONING_GATE_CURRENT_STATE;
                 switch (th_current_action) {
                     case THERMOSTAT_ACTION_HEATER_ON:
                     case THERMOSTAT_ACTION_COOLER_ON:
@@ -1693,7 +1693,7 @@ void process_th_task(void* args) {
     
     INFO("<%i> TH Process", ch_group->accessory);
     
-    const unsigned int th_current_action = THERMOSTAT_CURRENT_ACTION;
+    const int th_current_action = THERMOSTAT_CURRENT_ACTION;
     int mode_has_changed = false;
     
     void heating(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
@@ -1933,7 +1933,7 @@ void hkc_th_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
         if (ch != ch_group->ch[0]) {
             save_historical_data(ch);
         }
-
+        
     } else {
         homekit_characteristic_notify_safe(ch);
     }
@@ -2055,18 +2055,20 @@ void process_hum_task(void* args) {
     
     INFO("<%i> Hum Process", ch_group->accessory);
     
+    const int humidif_current_action = HUMIDIF_CURRENT_ACTION;
+    
     void hum(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
         INFO("<%i> Hum", ch_group->accessory);
         if (SENSOR_HUMIDITY_FLOAT < (HM_HUM_TARGET_FLOAT - deadband - deadband_soft_on)) {
             HM_MODE_INT = HUMIDIF_MODE_HUM;
-            if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_HUM_ON) {
+            if (humidif_current_action != HUMIDIF_ACTION_HUM_ON) {
                 HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_ON;
                 do_actions(ch_group, HUMIDIF_ACTION_HUM_ON);
             }
             
         } else if (SENSOR_HUMIDITY_FLOAT < (HM_HUM_TARGET_FLOAT - deadband)) {
             HM_MODE_INT = HUMIDIF_MODE_HUM;
-            if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_HUM_SOFT_ON) {
+            if (humidif_current_action != HUMIDIF_ACTION_HUM_SOFT_ON) {
                 HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_SOFT_ON;
                 do_actions(ch_group, HUMIDIF_ACTION_HUM_SOFT_ON);
             }
@@ -2074,12 +2076,12 @@ void process_hum_task(void* args) {
         } else if (SENSOR_HUMIDITY_FLOAT < (HM_HUM_TARGET_FLOAT + deadband)) {
             if (HM_MODE_INT == HUMIDIF_MODE_HUM) {
                 if (HM_DEADBAND_SOFT_ON > 0.000f) {
-                    if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_HUM_SOFT_ON) {
+                    if (humidif_current_action != HUMIDIF_ACTION_HUM_SOFT_ON) {
                         HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_SOFT_ON;
                         do_actions(ch_group, HUMIDIF_ACTION_HUM_SOFT_ON);
                     }
                 } else {
-                    if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_HUM_ON) {
+                    if (humidif_current_action != HUMIDIF_ACTION_HUM_ON) {
                         HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_ON;
                         do_actions(ch_group, HUMIDIF_ACTION_HUM_ON);
                     }
@@ -2087,7 +2089,7 @@ void process_hum_task(void* args) {
                 
             } else {
                 HM_MODE_INT = HUMIDIF_MODE_IDLE;
-                if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_HUM_IDLE) {
+                if (humidif_current_action != HUMIDIF_ACTION_HUM_IDLE) {
                     HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_IDLE;
                     do_actions(ch_group, HUMIDIF_ACTION_HUM_IDLE);
                 }
@@ -2097,7 +2099,7 @@ void process_hum_task(void* args) {
                     SENSOR_HUMIDITY_FLOAT == 100.f ) &&
                    HM_DEADBAND_FORCE_IDLE > 0.000f) {
             HM_MODE_INT = HUMIDIF_MODE_IDLE;
-            if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_HUM_FORCE_IDLE) {
+            if (humidif_current_action != HUMIDIF_ACTION_HUM_FORCE_IDLE) {
                 HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_FORCE_IDLE;
                 do_actions(ch_group, HUMIDIF_ACTION_HUM_FORCE_IDLE);
             }
@@ -2105,8 +2107,8 @@ void process_hum_task(void* args) {
         } else {
             HM_MODE_INT = HUMIDIF_MODE_IDLE;
             if (HM_DEADBAND_FORCE_IDLE == 0.000f ||
-                HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_HUM_FORCE_IDLE) {
-                if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_HUM_IDLE) {
+                humidif_current_action != HUMIDIF_ACTION_HUM_FORCE_IDLE) {
+                if (humidif_current_action != HUMIDIF_ACTION_HUM_IDLE) {
                     HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_IDLE;
                     do_actions(ch_group, HUMIDIF_ACTION_HUM_IDLE);
                 }
@@ -2118,14 +2120,14 @@ void process_hum_task(void* args) {
         INFO("<%i> Dehum", ch_group->accessory);
         if (SENSOR_HUMIDITY_FLOAT > (HM_DEHUM_TARGET_FLOAT + deadband + deadband_soft_on)) {
             HM_MODE_INT = HUMIDIF_MODE_DEHUM;
-            if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_DEHUM_ON) {
+            if (humidif_current_action != HUMIDIF_ACTION_DEHUM_ON) {
                 HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_ON;
                 do_actions(ch_group, HUMIDIF_ACTION_DEHUM_ON);
             }
             
         } else if (SENSOR_HUMIDITY_FLOAT > (HM_DEHUM_TARGET_FLOAT + deadband)) {
             HM_MODE_INT = HUMIDIF_MODE_DEHUM;
-            if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_DEHUM_SOFT_ON) {
+            if (humidif_current_action != HUMIDIF_ACTION_DEHUM_SOFT_ON) {
                 HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_SOFT_ON;
                 do_actions(ch_group, HUMIDIF_ACTION_DEHUM_SOFT_ON);
             }
@@ -2133,12 +2135,12 @@ void process_hum_task(void* args) {
         } else if (SENSOR_HUMIDITY_FLOAT > (HM_DEHUM_TARGET_FLOAT - deadband)) {
             if (HM_MODE_INT == HUMIDIF_MODE_DEHUM) {
                 if (HM_DEADBAND_SOFT_ON > 0.000f) {
-                    if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_DEHUM_SOFT_ON) {
+                    if (humidif_current_action != HUMIDIF_ACTION_DEHUM_SOFT_ON) {
                         HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_SOFT_ON;
                         do_actions(ch_group, HUMIDIF_ACTION_DEHUM_SOFT_ON);
                     }
                 } else {
-                    if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_DEHUM_ON) {
+                    if (humidif_current_action != HUMIDIF_ACTION_DEHUM_ON) {
                         HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_ON;
                         do_actions(ch_group, HUMIDIF_ACTION_DEHUM_ON);
                     }
@@ -2146,7 +2148,7 @@ void process_hum_task(void* args) {
                 
             } else {
                 HM_MODE_INT = HUMIDIF_MODE_IDLE;
-                if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_DEHUM_IDLE) {
+                if (humidif_current_action != HUMIDIF_ACTION_DEHUM_IDLE) {
                     HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_IDLE;
                     do_actions(ch_group, HUMIDIF_ACTION_DEHUM_IDLE);
                 }
@@ -2156,7 +2158,7 @@ void process_hum_task(void* args) {
                     SENSOR_HUMIDITY_FLOAT == 0.f) &&
                    HM_DEADBAND_FORCE_IDLE > 0.000f) {
             HM_MODE_INT = HUMIDIF_MODE_IDLE;
-            if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_DEHUM_FORCE_IDLE) {
+            if (humidif_current_action != HUMIDIF_ACTION_DEHUM_FORCE_IDLE) {
                 HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_FORCE_IDLE;
                 do_actions(ch_group, HUMIDIF_ACTION_DEHUM_FORCE_IDLE);
             }
@@ -2164,8 +2166,8 @@ void process_hum_task(void* args) {
         } else {
             HM_MODE_INT = HUMIDIF_MODE_IDLE;
             if (HM_DEADBAND_FORCE_IDLE == 0.000f ||
-                HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_DEHUM_FORCE_IDLE) {
-                if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_DEHUM_IDLE) {
+                humidif_current_action != HUMIDIF_ACTION_DEHUM_FORCE_IDLE) {
+                if (humidif_current_action != HUMIDIF_ACTION_DEHUM_IDLE) {
                     HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_IDLE;
                     do_actions(ch_group, HUMIDIF_ACTION_DEHUM_IDLE);
                 }
@@ -2193,10 +2195,10 @@ void process_hum_task(void* args) {
             } else if (SENSOR_HUMIDITY_FLOAT <= HM_HUM_TARGET_FLOAT) {
                 is_hum = true;
             } else if (SENSOR_HUMIDITY_FLOAT < (HM_DEHUM_TARGET_FLOAT + 8) &&
-                       (HUMIDIF_CURRENT_ACTION == HUMIDIF_ACTION_HUM_IDLE ||
-                        HUMIDIF_CURRENT_ACTION == HUMIDIF_ACTION_HUM_ON ||
-                        HUMIDIF_CURRENT_ACTION == HUMIDIF_ACTION_HUM_FORCE_IDLE ||
-                        HUMIDIF_CURRENT_ACTION == HUMIDIF_ACTION_HUM_SOFT_ON)) {
+                       (humidif_current_action == HUMIDIF_ACTION_HUM_IDLE ||
+                        humidif_current_action == HUMIDIF_ACTION_HUM_ON ||
+                        humidif_current_action == HUMIDIF_ACTION_HUM_FORCE_IDLE ||
+                        humidif_current_action == HUMIDIF_ACTION_HUM_SOFT_ON)) {
                 is_hum = true;
             }
             
@@ -2216,7 +2218,7 @@ void process_hum_task(void* args) {
     } else {
         INFO("<%i> Off", ch_group->accessory);
         HM_MODE_INT = HUMIDIF_MODE_OFF;
-        if (HUMIDIF_CURRENT_ACTION != HUMIDIF_ACTION_TOTAL_OFF) {
+        if (humidif_current_action != HUMIDIF_ACTION_TOTAL_OFF) {
             HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_TOTAL_OFF;
             do_actions(ch_group, HUMIDIF_ACTION_TOTAL_OFF);
         }
@@ -3499,8 +3501,8 @@ void autodimmer_call(homekit_characteristic_t* ch0, const homekit_value_t value)
             lightbulb_group->armed_autodimmer = false;
             esp_timer_stop(LIGHTBULB_AUTODIMMER_TIMER);
             
-            if (xTaskCreate(autodimmer_task, "ADIM", AUTODIMMER_TASK_SIZE, (void*) ch0, AUTODIMMER_TASK_PRIORITY, NULL) != pdPASS) {
-                ERROR("<%i> Creating ADIM", ch_group->accessory);
+            if (xTaskCreate(autodimmer_task, "ADim", AUTODIMMER_TASK_SIZE, (void*) ch0, AUTODIMMER_TASK_PRIORITY, NULL) != pdPASS) {
+                ERROR("<%i> Creating ADim", ch_group->accessory);
                 homekit_remove_oldest_client();
             }
         } else {
@@ -3705,7 +3707,7 @@ void window_cover_stop(ch_group_t* ch_group) {
             break;
     }
     
-    INFO("<%i> WC Stopped Motor %f, HomeKit %f", ch_group->accessory, WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_HOMEKIT_POSITION);
+    INFO("<%i> WC Motor %f, HomeKit %f", ch_group->accessory, WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_HOMEKIT_POSITION);
     
     normalize_position(ch_group);
     
@@ -3876,18 +3878,13 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
     }
     
     void normalize_current_position() {
-        if (WINDOW_COVER_MOTOR_POSITION < 0) {
+        const int wc_homekit_position = WINDOW_COVER_HOMEKIT_POSITION;
+        if (wc_homekit_position < 0) {
             WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = 0;
-        } else if (WINDOW_COVER_MOTOR_POSITION > 100) {
+        } else if (wc_homekit_position > 100) {
             WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = 100;
         } else {
-            if (((int16_t) WINDOW_COVER_MOTOR_POSITION % 15) == 0) {
-                INFO("<%i> WC Moving Motor %f, HomeKit %f", ch_group->accessory, WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_HOMEKIT_POSITION);
-                WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_HOMEKIT_POSITION;
-                homekit_characteristic_notify_safe(WINDOW_COVER_CH_CURRENT_POSITION);
-            } else {
-                WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_MOTOR_POSITION;
-            }
+            WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = wc_homekit_position;
         }
     }
     
@@ -3918,7 +3915,7 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
             } else {
                 WINDOW_COVER_HOMEKIT_POSITION = WINDOW_COVER_MOTOR_POSITION;
             }
-        
+            
             normalize_current_position();
             
             if ((WINDOW_COVER_CH_TARGET_POSITION->value.int_value + margin) <= WINDOW_COVER_HOMEKIT_POSITION) {
@@ -3962,8 +3959,8 @@ void process_fan_task(void* args) {
 }
 
 void process_fan_timer(TimerHandle_t xTimer) {
-    if (xTaskCreate(process_fan_task, "FAN", PROCESS_FAN_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_FAN_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("Creating FAN");
+    if (xTaskCreate(process_fan_task, "Fan", PROCESS_FAN_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_FAN_TASK_PRIORITY, NULL) != pdPASS) {
+        ERROR("Creating Fan");
         homekit_remove_oldest_client();
         esp_timer_start(xTimer);
     }
@@ -4061,8 +4058,8 @@ void light_sensor_task(void* args) {
 
 void light_sensor_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
-        if (xTaskCreate(light_sensor_task, "LUX", LIGHT_SENSOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), LIGHT_SENSOR_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating LUX");
+        if (xTaskCreate(light_sensor_task, "Lux", LIGHT_SENSOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), LIGHT_SENSOR_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("Creating Lux");
             homekit_remove_oldest_client();
         }
     } else {
@@ -5396,7 +5393,7 @@ void irrf_tx_task(void* pvParameters) {
     action_task_t* action_task = pvParameters;
     action_irrf_tx_t* action_irrf_tx = action_task->ch_group->action_irrf_tx;
     
-    unsigned int errors = 0;
+    int errors = 0;
     
     while (action_irrf_tx) {
         if (action_irrf_tx->action == action_task->action) {
@@ -5493,15 +5490,15 @@ void irrf_tx_task(void* pvParameters) {
                     homekit_remove_oldest_client();
                     errors++;
                     
-                    if (errors < 5) {
-                        vTaskDelay(MS_TO_TICKS(200));
+                    if (errors < ACTION_TASK_MAX_ERRORS) {
+                        vTaskDelay(MS_TO_TICKS(110));
                         continue;
                     } else {
                         break;
                     }
                 }
                 
-                INFO("<%i> IR Code Len: %i\nIR Protocol: %s", action_task->ch_group->accessory, ir_code_len, prot);
+                INFO("<%i> IR Len: %i, Prot: %s", action_task->ch_group->accessory, ir_code_len, prot);
                 
                 unsigned int bit0_mark = 0, bit0_space = 0, bit1_mark = 0, bit1_space = 0;
                 unsigned int bit2_mark = 0, bit2_space = 0, bit3_mark = 0, bit3_space = 0;
@@ -5760,8 +5757,6 @@ void irrf_tx_task(void* pvParameters) {
 
 // --- UART action task
 void uart_action_task(void* pvParameters) {
-    vTaskDelay(1);
-    
     action_task_t* action_task = pvParameters;
     action_uart_t* action_uart = action_task->ch_group->action_uart;
 
@@ -5794,15 +5789,40 @@ void uart_action_task(void* pvParameters) {
 // --- ACTIONS
 void autoswitch_timer(TimerHandle_t xTimer) {
     action_binary_output_t* action_binary_output = (action_binary_output_t*) pvTimerGetTimerID(xTimer);
-
+    
     extended_gpio_write(action_binary_output->gpio, !action_binary_output->value);
     INFO("AutoSw digO GPIO %i -> %i", action_binary_output->gpio, !action_binary_output->value);
     
     esp_timer_delete(xTimer);
 }
 
+void action_task_timer(TimerHandle_t xTimer) {
+    action_task_t* action_task = (action_task_t*) pvTimerGetTimerID(xTimer);
+    
+    if ((action_task->type == ACTION_TASK_TYPE_UART &&
+         xTaskCreate(uart_action_task, "UA", UART_ACTION_TASK_SIZE, action_task, UART_ACTION_TASK_PRIORITY, NULL) != pdPASS) ||
+        (action_task->type == ACTION_TASK_TYPE_IRRF &&
+            xTaskCreate(irrf_tx_task, "IR", IRRF_TX_TASK_SIZE, action_task, IRRF_TX_TASK_PRIORITY, NULL) != pdPASS) ||
+        (action_task->type == ACTION_TASK_TYPE_NETWORK &&
+            xTaskCreate(net_action_task, "NET", NETWORK_ACTION_TASK_SIZE, action_task, NETWORK_ACTION_TASK_PRIORITY, NULL) != pdPASS)) {
+        action_task->errors++;
+        homekit_remove_oldest_client();
+        
+        ERROR("<%i> Creating AT %i", action_task->ch_group->accessory, action_task->type);
+        
+        if (action_task->errors < ACTION_TASK_MAX_ERRORS) {
+            esp_timer_change_period(xTimer, 110);
+        } else {
+            free(action_task);
+            esp_timer_delete(xTimer);
+        }
+    } else {
+        esp_timer_delete(xTimer);
+    }
+}
+
 void do_actions(ch_group_t* ch_group, uint8_t action) {
-    INFO("<%i> Exec Action %i", ch_group->accessory, action);
+    INFO("<%i> Exec Act %i", ch_group->accessory, action);
     
     // Copy actions
     action_copy_t* action_copy = ch_group->action_copy;
@@ -5820,7 +5840,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     while(action_binary_output) {
         if (action_binary_output->action == action) {
             extended_gpio_write(action_binary_output->gpio, action_binary_output->value);
-            INFO("<%i> Binary Output: gpio %i, val %i, inch %i", ch_group->accessory, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
+            INFO("<%i> Bin Out: gpio %i, val %i, inch %i", ch_group->accessory, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
             
             if (action_binary_output->inching > 0) {
                 esp_timer_start(esp_timer_create(action_binary_output->inching, false, (void*) action_binary_output, autoswitch_timer));
@@ -6072,7 +6092,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
                                 save_historical_data(SEC_SYSTEM_CH_CURRENT_STATE);
                                 if (alarm_recurrent) {
-                                    INFO("<%i> Recurrent alarm", ch_group->accessory);
+                                    INFO("<%i> Rec alarm", ch_group->accessory);
                                     esp_timer_start(SEC_SYSTEM_REC_ALARM_TIMER);
                                 }
                                 
@@ -6112,7 +6132,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                         case ACC_TYPE_FREE_MONITOR_ACCUMULATVE:
                             if (ch_group->main_enabled) {
                                 FM_OVERRIDE_VALUE = action_acc_manager->value;
-                                if (xTaskCreate(free_monitor_task, "fm", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
+                                if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
                                     ERROR("Creating FM");
                                     homekit_remove_oldest_client();
                                 }
@@ -6152,7 +6172,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                     }
                 }
             } else {
-                ERROR("Target not found");
+                ERROR("Target");
             }
         }
 
@@ -6163,7 +6183,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     action_system_t* action_system = ch_group->action_system;
     while(action_system) {
         if (action_system->action == action) {
-            INFO("<%i> System Action %i", ch_group->accessory, action_system->value);
+            INFO("<%i> Sys Act %i", ch_group->accessory, action_system->value);
             switch (action_system->value) {
                 case SYSTEM_ACTION_SETUP_MODE:
                     setup_mode_call(99, NULL, 0);
@@ -6191,43 +6211,37 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         action_system = action_system->next;
     }
     
+    int timer_delay = 0;
     // UART actions
     if (ch_group->action_uart) {
         action_task_t* action_task = new_action_task();
         action_task->action = action;
+        action_task->type = ACTION_TASK_TYPE_UART;
         action_task->ch_group = ch_group;
         
-        if (xTaskCreate(uart_action_task, "UA", UART_ACTION_TASK_SIZE, action_task, UART_ACTION_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("<%i> Creating UA", ch_group->accessory);
-            free(action_task);
-            homekit_remove_oldest_client();
-        }
+        esp_timer_start(esp_timer_create(portTICK_PERIOD_MS, false, action_task, action_task_timer));
+        timer_delay += portTICK_PERIOD_MS;
     }
     
     // Network actions
     if (ch_group->action_network && main_config.wifi_status == WIFI_STATUS_CONNECTED) {
         action_task_t* action_task = new_action_task();
         action_task->action = action;
+        action_task->type = ACTION_TASK_TYPE_NETWORK;
         action_task->ch_group = ch_group;
         
-        if (xTaskCreate(net_action_task, "NET", NETWORK_ACTION_TASK_SIZE, action_task, NETWORK_ACTION_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("<%i> Creating NET", ch_group->accessory);
-            free(action_task);
-            homekit_remove_oldest_client();
-        }
+        esp_timer_start(esp_timer_create(portTICK_PERIOD_MS + timer_delay, false, action_task, action_task_timer));
+        timer_delay += portTICK_PERIOD_MS;
     }
     
-    // IR TX actions
+    // IRRF TX actions
     if (ch_group->action_irrf_tx) {
         action_task_t* action_task = new_action_task();
         action_task->action = action;
+        action_task->type = ACTION_TASK_TYPE_IRRF;
         action_task->ch_group = ch_group;
         
-        if (xTaskCreate(irrf_tx_task, "IRRF", IRRF_TX_TASK_SIZE, action_task, IRRF_TX_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("<%i> Creating IRRF", ch_group->accessory);
-            free(action_task);
-            homekit_remove_oldest_client();
-        }
+        esp_timer_start(esp_timer_create(portTICK_PERIOD_MS + timer_delay, false, action_task, action_task_timer));
     }
 }
 
@@ -8487,6 +8501,8 @@ void normal_mode_init() {
         set_killswitch(ch_group, json_context);
         int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
+        THERMOSTAT_CURRENT_ACTION = -1;
+        TH_IAIRZONING_GATE_CURRENT_STATE = -1;
         
         if (service == 0) {
             new_accessory(accessory, total_services, ch_group->homekit_enabled, json_context);
@@ -8900,6 +8916,7 @@ void normal_mode_init() {
         set_killswitch(ch_group, json_context);
         int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
+        HUMIDIF_CURRENT_ACTION = -1;
         
         if (service == 0) {
             new_accessory(accessory, total_services, ch_group->homekit_enabled, json_context);
