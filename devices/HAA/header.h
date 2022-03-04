@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "10.3.2"
+#define FIRMWARE_VERSION                    "10.4.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -291,6 +291,7 @@
 #define HUMIDIF_ACTION_DEHUM_FORCE_IDLE     (9)
 #define HUMIDIF_ACTION_HUM_SOFT_ON          (10)
 #define HUMIDIF_ACTION_DEHUM_SOFT_ON        (11)
+#define HUMIDIF_ACTION_ON                   (14)
 #define HUMIDIF_UP                          (0)
 #define HUMIDIF_DOWN                        (1)
 #define HM_ACTIVE_INT                       ch_group->ch[2]->value.int_value
@@ -370,6 +371,7 @@
 #define GARAGE_DOOR_TIME_CLOSE_SET          "c"
 #define GARAGE_DOOR_TIME_MARGIN_SET         "e"
 #define GARAGE_DOOR_TIME_MARGIN_DEFAULT     (0)
+#define GARAGE_DOOR_AUTOCLOSE_TIME_SET      "k"
 #define GARAGE_DOOR_CURRENT_TIME            ch_group->num_f[0]
 #define GARAGE_DOOR_WORKING_TIME            ch_group->num_f[1]
 #define GARAGE_DOOR_CLOSE_TIME_FACTOR       ch_group->num_f[2]
@@ -379,6 +381,7 @@
 #define GARAGE_DOOR_HAS_F4                  ch_group->num_i[3]
 #define GARAGE_DOOR_HAS_F5                  ch_group->num_i[4]
 #define GARAGE_DOOR_VIRTUAL_STOP            ch_group->num_i[5]
+#define GARAGE_DOOR_WORKER_TIMER            ch_group->timer
 
 #define VIRTUAL_STOP_SET                    "vs"
 #define VIRTUAL_STOP_DEFAULT                (0)
@@ -547,6 +550,14 @@
 #define SEC_SYSTEM_REC_ALARM_TIMER          ch_group->timer
 #define SEC_SYSTEM_REC_ALARM_PERIOD_MS      (6000)
 
+#define AQ_EXTRA_DATA_ARRAY_SET             "dt"
+#define AQ_OZONE_DENSITY                    (1)
+#define AQ_NITROGEN_DIOXIDE_DENSITY         (2)
+#define AQ_SULPHUR_DIOXIDE_DENSITY          (3)
+#define AQ_PM25_DENSITY                     (4)
+#define AQ_PM10_DENSITY                     (5)
+#define AQ_VOC_DENSITY                      (6)
+
 #define HIST_DATA_ARRAY_SET                 "h"
 #define HIST_READ_ON_CLOCK_READY_SET        "x"
 #define HIST_LAST_REGISTER                  ch_group->num_f[0]
@@ -555,6 +566,8 @@
 #define HIST_REGISTER_SIZE                  (HIST_TIME_SIZE + HIST_DATA_SIZE)
 #define HIST_REGISTERS_BY_BLOCK             (100)
 #define HIST_BLOCK_SIZE                     (HIST_REGISTERS_BY_BLOCK * HIST_REGISTER_SIZE)
+
+#define AUTOOFF_TIMER                       ch_group->timer2
 
 #define MAX_ACTIONS                         (51)    // from 0 to (MAX_ACTIONS - 1)
 #define MAX_WILDCARD_ACTIONS                (4)     // from 0 to (MAX_WILDCARD_ACTIONS - 1)
@@ -620,42 +633,42 @@
 
 #define MCP23017_ARRAY                      "mc"
 
-#define ACCESSORY_TYPE                      "t"
-#define ACC_TYPE_ROOT_DEVICE                (0)
-#define ACC_TYPE_SWITCH                     (1)
-#define ACC_TYPE_OUTLET                     (2)
-#define ACC_TYPE_BUTTON                     (3)
-#define ACC_TYPE_LOCK                       (4)
-#define ACC_TYPE_CONTACT_SENSOR             (5)
-#define ACC_TYPE_OCCUPANCY_SENSOR           (6)
-#define ACC_TYPE_LEAK_SENSOR                (7)
-#define ACC_TYPE_SMOKE_SENSOR               (8)
-#define ACC_TYPE_CARBON_MONOXIDE_SENSOR     (9)
-#define ACC_TYPE_CARBON_DIOXIDE_SENSOR      (10)
-#define ACC_TYPE_FILTER_CHANGE_SENSOR       (11)
-#define ACC_TYPE_MOTION_SENSOR              (12)
-#define ACC_TYPE_DOORBELL                   (13)
-#define ACC_TYPE_AIR_QUALITY                (15)
-#define ACC_TYPE_WATER_VALVE                (20)
-#define ACC_TYPE_THERMOSTAT                 (21)
-#define ACC_TYPE_TEMP_SENSOR                (22)
-#define ACC_TYPE_HUM_SENSOR                 (23)
-#define ACC_TYPE_TH_SENSOR                  (24)
-#define ACC_TYPE_THERMOSTAT_WITH_HUM        (25)
-#define ACC_TYPE_HUMIDIFIER                 (26)
-#define ACC_TYPE_HUMIDIFIER_WITH_TEMP       (27)
-#define ACC_TYPE_LIGHTBULB                  (30)
-#define ACC_TYPE_GARAGE_DOOR                (40)
-#define ACC_TYPE_WINDOW_COVER               (45)
-#define ACC_TYPE_LIGHT_SENSOR               (50)
-#define ACC_TYPE_SECURITY_SYSTEM            (55)
-#define ACC_TYPE_TV                         (60)
-#define ACC_TYPE_FAN                        (65)
-#define ACC_TYPE_POWER_MONITOR              (75)
-#define ACC_TYPE_FREE_MONITOR               (80)
-#define ACC_TYPE_FREE_MONITOR_ACCUMULATVE   (81)
-#define ACC_TYPE_HISTORICAL                 (95)
-#define ACC_TYPE_IAIRZONING                 (99)
+#define SERVICE_TYPE_SET                    "t"
+#define SERV_TYPE_ROOT_DEVICE               (0)
+#define SERV_TYPE_SWITCH                    (1)
+#define SERV_TYPE_OUTLET                    (2)
+#define SERV_TYPE_BUTTON                    (3)
+#define SERV_TYPE_LOCK                      (4)
+#define SERV_TYPE_CONTACT_SENSOR            (5)
+#define SERV_TYPE_OCCUPANCY_SENSOR          (6)
+#define SERV_TYPE_LEAK_SENSOR               (7)
+#define SERV_TYPE_SMOKE_SENSOR              (8)
+#define SERV_TYPE_CARBON_MONOXIDE_SENSOR    (9)
+#define SERV_TYPE_CARBON_DIOXIDE_SENSOR     (10)
+#define SERV_TYPE_FILTER_CHANGE_SENSOR      (11)
+#define SERV_TYPE_MOTION_SENSOR             (12)
+#define SERV_TYPE_DOORBELL                  (13)
+#define SERV_TYPE_AIR_QUALITY               (15)
+#define SERV_TYPE_WATER_VALVE               (20)
+#define SERV_TYPE_THERMOSTAT                (21)
+#define SERV_TYPE_TEMP_SENSOR               (22)
+#define SERV_TYPE_HUM_SENSOR                (23)
+#define SERV_TYPE_TH_SENSOR                 (24)
+#define SERV_TYPE_THERMOSTAT_WITH_HUM       (25)
+#define SERV_TYPE_HUMIDIFIER                (26)
+#define SERV_TYPE_HUMIDIFIER_WITH_TEMP      (27)
+#define SERV_TYPE_LIGHTBULB                 (30)
+#define SERV_TYPE_GARAGE_DOOR               (40)
+#define SERV_TYPE_WINDOW_COVER              (45)
+#define SERV_TYPE_LIGHT_SENSOR              (50)
+#define SERV_TYPE_SECURITY_SYSTEM           (55)
+#define SERV_TYPE_TV                        (60)
+#define SERV_TYPE_FAN                       (65)
+#define SERV_TYPE_POWER_MONITOR             (75)
+#define SERV_TYPE_FREE_MONITOR              (80)
+#define SERV_TYPE_FREE_MONITOR_ACCUMULATVE  (81)
+#define SERV_TYPE_HISTORICAL                (95)
+#define SERV_TYPE_IAIRZONING                (99)
 
 #define SERIAL_STRING                       "sn"
 #define SERIAL_STRING_LEN                   (11)
@@ -673,14 +686,15 @@
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
 #define CUSTOM_TRIGGER_COMMAND              "#HAA@trcmd"
+#define HAA_SETUP_ACCESSORY_SET             "s"
 
 #define ACTION_TASK_TYPE_UART               (0)
 #define ACTION_TASK_TYPE_NETWORK            (1)
 #define ACTION_TASK_TYPE_IRRF               (2)
 #define ACTION_TASK_MAX_ERRORS              (10)
 
-#define SAVE_STATES_TIMER                   ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE)->timer
-#define WIFI_WATCHDOG_TIMER                 ch_group_find_by_acc(ACC_TYPE_ROOT_DEVICE)->timer2
+#define SAVE_STATES_TIMER                   ch_group_find_by_acc(SERV_TYPE_ROOT_DEVICE)->timer
+#define WIFI_WATCHDOG_TIMER                 ch_group_find_by_acc(SERV_TYPE_ROOT_DEVICE)->timer2
 #define WIFI_STATUS_DISCONNECTED            (0)
 #define WIFI_STATUS_CONNECTING              (1)
 #define WIFI_STATUS_CONNECTED               (2)
@@ -700,6 +714,8 @@
 #define RANDOM_DELAY_MS                     (4000)
 
 #define ACCESSORIES_WITHOUT_BRIDGE          (4)     // Max number of accessories before using a bridge
+
+#define WOL_PACKET_LEN                      (102)
 
 #define SYSTEM_UPTIME_MS                    ((float) sdk_system_get_time() * 1e-3)
 

@@ -6,7 +6,7 @@ body .container{width:22em;margin:0 auto;padding:0.5em;}
 label{display:block;}
 input[type=text],input[type=password]{width:100%;box-sizing:border-box;}
 input[type=checkbox]{transform:scale(1.8);}
-textarea{width:100%; box-sizing: border-box;}
+textarea{width:100%;box-sizing:border-box;height:5em;margin:2px auto;}
 select{border:1px solid black;font-size:70%;text-decoration:none;padding:0.25em 0.25em;color:white;margin:0;background-color:#ac0000;cursor:pointer;-webkit-appearance:none;-webkit-border-radius:0;}
 input[type=submit],input[type=button]{width: 100%;border:1px solid black;text-decoration:none;padding:0.25em 5em;color:white;background-color:#4caf50;cursor:pointer;-webkit-appearance:none;-webkit-border-radius:0;}
 input[type=button]#refresh{background-color: #44bbe3;}
@@ -22,11 +22,11 @@ input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
 .nonetworks{text-align:center;margin:1em 0;}
 .field{margin-bottom:0.5em;}
 .field.required label::before{content:"*";color:red;}
-</style></head><body><div class="container"><h1>Home Accessory Architect v10.3.2 Kestrel</h1>
+</style></head><body><div class="container"><h1>Home Accessory Architect v10.4.0 Kestrel</h1>
 <form action="/settings" method="post">
 <div class="field required conf">
 <label for="conf">JSON Config:</label>
-<textarea id="conf" name="conf">
+<textarea id="conf" name="conf" autocorrect="off" autocomplete="off" autocapitalize="off" spellcheck="false">
 <!-- part HTML_SETTINGS_MIDDLE --></textarea><br>
 <!-- part HTML_SETTINGS_FLASH_ERROR --><input type="checkbox" name="reset" value="y"> Reset HomeKit ID<br>
 <input type="checkbox" name="reset_sys" value="y"> Reset Settings<br>

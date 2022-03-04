@@ -59,11 +59,11 @@
 #endif
 
 #ifndef HOMEKIT_NETWORK_MIN_FREEHEAP
-#define HOMEKIT_NETWORK_MIN_FREEHEAP            (15360)
+#define HOMEKIT_NETWORK_MIN_FREEHEAP            (18432)
 #endif
 
 #ifndef HOMEKIT_NETWORK_PAUSE_COUNT
-#define HOMEKIT_NETWORK_PAUSE_COUNT             (6)
+#define HOMEKIT_NETWORK_PAUSE_COUNT             (8)
 #endif
 
 #ifdef HOMEKIT_DEBUG
@@ -671,7 +671,7 @@ int client_send_encrypted(client_context_t *context, byte *payload, size_t size)
             homekit_server->encrypted + 2, &available
         );
         if (r) {
-            CLIENT_ERROR(context, "Encrypt payload (%d)", r);
+            CLIENT_ERROR(context, "Enc payload (%d)", r);
             return -1;
         }
         
@@ -682,7 +682,7 @@ int client_send_encrypted(client_context_t *context, byte *payload, size_t size)
         r = write(context->socket, homekit_server->encrypted, available + 2);
         
         if (r < 0) {
-            CLIENT_ERROR(context, "Send payload");
+            CLIENT_ERROR(context, "Payload");
             return r;
         }
         
@@ -787,7 +787,7 @@ int client_send(client_context_t *context, byte *data, size_t data_size) {
     }
     
     if (r < 0) {
-        CLIENT_ERROR(context, "Send response");
+        CLIENT_ERROR(context, "Response");
         return r;
     }
     

@@ -40,15 +40,15 @@ typedef struct _action_binary_output {
     struct _action_binary_output* next;
 } action_binary_output_t;
 
-typedef struct _action_acc_manager {
+typedef struct _action_serv_manager {
     uint8_t action;
     
-    uint16_t accessory: 10;
+    uint16_t serv_index: 10;
 
     float value;
     
-    struct _action_acc_manager* next;
-} action_acc_manager_t;
+    struct _action_serv_manager* next;
+} action_serv_manager_t;
 
 typedef struct _action_system {
     uint8_t action;
@@ -131,13 +131,13 @@ typedef struct _pattern {
 } pattern_t;
 
 typedef struct _ch_group {
-    uint16_t accessory: 10;
+    uint16_t serv_index: 10;
     bool main_enabled: 1;
     bool child_enabled: 1;
     bool homekit_enabled: 1;
     
     uint8_t chs;
-    uint8_t acc_type: 7;
+    uint8_t serv_type: 7;
     
     homekit_characteristic_t** ch;
     homekit_characteristic_t* ch_target;
@@ -153,7 +153,7 @@ typedef struct _ch_group {
     
     action_copy_t* action_copy;
     action_binary_output_t* action_binary_output;
-    action_acc_manager_t* action_acc_manager;
+    action_serv_manager_t* action_serv_manager;
     action_system_t* action_system;
     action_network_t* action_network;
     action_irrf_tx_t* action_irrf_tx;
