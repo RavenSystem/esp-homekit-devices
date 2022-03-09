@@ -11101,24 +11101,6 @@ void wifi_done() {
 }
 
 void init_task() {
-    // GPIO Init
-    gpio_enable(15, GPIO_INPUT);
-    gpio_enable(16, GPIO_INPUT);
-    gpio_enable(3, GPIO_INPUT);
-    gpio_enable(2, GPIO_INPUT);
-    gpio_enable(1, GPIO_INPUT);
-    gpio_enable(0, GPIO_INPUT);
-    gpio_enable(4, GPIO_INPUT);
-    gpio_enable(5, GPIO_INPUT);
-    gpio_enable(12, GPIO_INPUT);
-    gpio_enable(13, GPIO_INPUT);
-    gpio_enable(14, GPIO_INPUT);
-    
-    sdk_wifi_station_set_auto_connect(false);
-    sdk_wifi_set_opmode(STATION_MODE);
-    sdk_wifi_station_disconnect();
-    sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
-    
     // Sysparam starter
     sysparam_status_t status;
     status = sysparam_init(SYSPARAMSECTOR, 0);
@@ -11208,5 +11190,23 @@ void init_task() {
 }
 
 void user_init(void) {
+    // GPIO Init
+    gpio_enable(15, GPIO_INPUT);
+    gpio_enable(16, GPIO_INPUT);
+    gpio_enable(3, GPIO_INPUT);
+    gpio_enable(2, GPIO_INPUT);
+    gpio_enable(1, GPIO_INPUT);
+    gpio_enable(0, GPIO_INPUT);
+    gpio_enable(4, GPIO_INPUT);
+    gpio_enable(5, GPIO_INPUT);
+    gpio_enable(12, GPIO_INPUT);
+    gpio_enable(13, GPIO_INPUT);
+    gpio_enable(14, GPIO_INPUT);
+    
+    sdk_wifi_station_set_auto_connect(false);
+    sdk_wifi_set_opmode(STATION_MODE);
+    sdk_wifi_station_disconnect();
+    sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
+    
     xTaskCreate(init_task, "ini", 512, NULL, (tskIDLE_PRIORITY + 2), NULL);
 }
