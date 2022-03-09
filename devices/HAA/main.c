@@ -676,7 +676,7 @@ void wifi_ping_gw_task() {
 
 void wifi_reconnection_task(void* args) {
     main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
-    esp_timer_stop(WIFI_WATCHDOG_TIMER);
+    esp_timer_stop_forced(WIFI_WATCHDOG_TIMER);
     homekit_mdns_announce_pause();
     
     INFO("Wifi reconnection process started");
@@ -4461,7 +4461,7 @@ void free_monitor_task(void* args) {
                                 INFO("<%i> Connect %s:%i", ch_group->serv_index, action_network->host, action_network->port_n);
                                 
                                 if (action_network->method_n < 10) {
-                                    unsigned int content_len_n = 0;
+                                    size_t content_len_n = 0;
                                     
                                     char* method = strdup("GET");
                                     char* method_req = NULL;
@@ -4761,7 +4761,7 @@ void free_monitor_task(void* args) {
                                 break;
                                 
                             default:
-                                ERROR("<%i> Target Ch", ch_group->serv_index);
+                                ERROR("<%i> Tg Ch", ch_group->serv_index);
                                 break;
                         }
                         
@@ -5066,8 +5066,115 @@ void net_action_task(void* pvParameters) {
     action_task_t* action_task = pvParameters;
     action_network_t* action_network = action_task->ch_group->action_network;
     
-    int errors = 0;
     int socket;
+    
+    size_t search_str_ch_values(str_ch_value_t** str_ch_value_ini, char* content) {
+        size_t len = strlen(content);
+        
+        char* content_search = content;
+        str_ch_value_t* str_ch_value_last = NULL;
+        
+        do {
+            content_search = strstr(content_search, NETWORK_ACTION_WILDCARD_VALUE);
+            if (content_search) {
+                char buffer[15];
+                buffer[2] = 0;
+                
+                buffer[0] = content_search[5];
+                buffer[1] = content_search[6];
+                
+                int acc_number = strtol(buffer, NULL, 10);
+                
+                ch_group_t* ch_group_found = action_task->ch_group;
+                
+                if (acc_number > 0) {
+                    ch_group_found = ch_group_find_by_acc(acc_number);
+                }
+                
+                buffer[0] = content_search[7];
+                buffer[1] = content_search[8];
+                
+                homekit_value_t* value = &ch_group_found->ch[(int) strtol(buffer, NULL, 10)]->value;
+                
+                switch (value->format) {
+                    case HOMETKIT_FORMAT_BOOL:
+                        snprintf(buffer, 15, "%s", value->bool_value ? "true" : "false");
+                        break;
+                        
+                    case HOMETKIT_FORMAT_UINT8:
+                    case HOMETKIT_FORMAT_UINT16:
+                    case HOMETKIT_FORMAT_UINT32:
+                    case HOMETKIT_FORMAT_UINT64:
+                    case HOMETKIT_FORMAT_INT:
+                        snprintf(buffer, 15, "%i", value->int_value);
+                        break;
+                        
+                    case HOMETKIT_FORMAT_FLOAT:
+                        snprintf(buffer, 15, "%1.7g", value->float_value);
+                        break;
+                        
+                    default:
+                        buffer[0] = 0;
+                        break;
+                }
+                
+                len += strlen(buffer) - 9;
+                
+                str_ch_value_t* str_ch_value = malloc(sizeof(str_ch_value_t));
+                memset(str_ch_value, 0, sizeof(*str_ch_value));
+                
+                str_ch_value->string = strdup(buffer);
+                str_ch_value->next = NULL;
+                INFO("Wildcard val: %s", str_ch_value->string);
+                
+                if (*str_ch_value_ini == NULL) {
+                    *str_ch_value_ini = str_ch_value;
+                    str_ch_value_last = str_ch_value;
+                } else {
+                    str_ch_value_last->next = str_ch_value;
+                    str_ch_value_last = str_ch_value;
+                }
+
+                content_search += 9;
+            }
+            
+        } while (content_search);
+        
+        return len;
+    }
+    
+    void write_str_ch_values(str_ch_value_t** str_ch_value_ini, char** new_req, char* content) {
+        if (*str_ch_value_ini) {
+            str_ch_value_t* str_ch_value = *str_ch_value_ini;
+            char* content_search = content;
+            char* last_pos = content;
+            
+            do {
+                content_search = strstr(last_pos, NETWORK_ACTION_WILDCARD_VALUE);
+                
+                if (content_search - last_pos > 0) {
+                    strncat(*new_req, last_pos, content_search - last_pos);
+                }
+                
+                strcat(*new_req, str_ch_value->string);
+                
+                free(str_ch_value->string);
+
+                str_ch_value_t* str_ch_value_old = str_ch_value;
+                str_ch_value = str_ch_value->next;
+                
+                free(str_ch_value_old);
+
+                last_pos = content_search + 9;
+                
+            } while (str_ch_value);
+            
+            strcat(*new_req, last_pos);
+            
+        } else {
+            strcat(*new_req, content);
+        }
+    }
     
     while (action_network) {
         if (action_network->action == action_task->action && !action_network->is_running) {
@@ -5081,115 +5188,17 @@ void net_action_task(void* pvParameters) {
             
             INFO("<%i> Network Action %s:%i", action_task->ch_group->serv_index, action_network->host, action_network->port_n);
             
+            str_ch_value_t* str_ch_value_first = NULL;
+            
             if (action_network->method_n < 10) {
                 size_t content_len_n = 0;
-                str_ch_value_t* str_ch_value_first = NULL;
                 
                 char* method = strdup("GET");
                 char* method_req = NULL;
                 if (action_network->method_n <= 3 &&
-                    action_network->method_n > 0) {
-                    content_len_n = strlen(action_network->content);
+                    action_network->method_n >= 1) {
+                    content_len_n = search_str_ch_values(&str_ch_value_first, action_network->content);
                     
-                    char* content_search = action_network->content;
-                    str_ch_value_t* str_ch_value_last = NULL;
-                    
-                    do {
-                        content_search = strstr(content_search, NETWORK_ACTION_WILDCARD_VALUE);
-                        if (content_search) {
-                            char buffer[15];
-                            buffer[2] = 0;
-                            
-                            buffer[0] = content_search[5];
-                            buffer[1] = content_search[6];
-                            
-                            int acc_number = strtol(buffer, NULL, 10);
-                            
-                            ch_group_t* ch_group_found = action_task->ch_group;
-                            
-                            if (acc_number > 0) {
-                                ch_group_found = ch_group_find_by_acc(acc_number);
-                            }
-                            
-                            buffer[0] = content_search[7];
-                            buffer[1] = content_search[8];
-
-                            homekit_value_t* value;
-                            
-                            switch ((int) strtol(buffer, NULL, 10)) {
-                                case 1:
-                                    value = &ch_group_found->ch[1]->value;
-                                    break;
-                                    
-                                case 2:
-                                    value = &ch_group_found->ch[2]->value;
-                                    break;
-                                    
-                                case 3:
-                                    value = &ch_group_found->ch[3]->value;
-                                    break;
-                                    
-                                case 4:
-                                    value = &ch_group_found->ch[4]->value;
-                                    break;
-                                    
-                                case 5:
-                                    value = &ch_group_found->ch[5]->value;
-                                    break;
-                                    
-                                case 6:
-                                    value = &ch_group_found->ch[6]->value;
-                                    break;
-                                    
-                                default:    // case 0:
-                                    value = &ch_group_found->ch[0]->value;
-                                    break;
-                            }
-                            
-                            switch (value->format) {
-                                case HOMETKIT_FORMAT_BOOL:
-                                    snprintf(buffer, 15, "%s", value->bool_value ? "true" : "false");
-                                    break;
-                                    
-                                case HOMETKIT_FORMAT_UINT8:
-                                case HOMETKIT_FORMAT_UINT16:
-                                case HOMETKIT_FORMAT_UINT32:
-                                case HOMETKIT_FORMAT_UINT64:
-                                case HOMETKIT_FORMAT_INT:
-                                    snprintf(buffer, 15, "%i", value->int_value);
-                                    break;
-
-                                case HOMETKIT_FORMAT_FLOAT:
-                                    snprintf(buffer, 15, "%1.7g", value->float_value);
-                                    break;
-                                    
-                                default:
-                                    buffer[0] = 0;
-                                    break;
-                            }
-                            
-                            content_len_n += strlen(buffer) - 9;
-                            
-                            str_ch_value_t* str_ch_value = malloc(sizeof(str_ch_value_t));
-                            memset(str_ch_value, 0, sizeof(*str_ch_value));
-                            
-                            str_ch_value->string = strdup(buffer);
-                            str_ch_value->next = NULL;
-                            INFO("Wildcard val %s", str_ch_value->string);
-                            
-                            if (str_ch_value_first == NULL) {
-                                str_ch_value_first = str_ch_value;
-                                str_ch_value_last = str_ch_value;
-                            } else {
-                                str_ch_value_last->next = str_ch_value;
-                                str_ch_value_last = str_ch_value;
-                            }
-
-                            content_search += 9;
-                        }
-                        
-                    } while (content_search);
-
                     char content_len[4];
                     itoa(content_len_n, content_len, 10);
                     method_req = malloc(23);
@@ -5207,32 +5216,10 @@ void net_action_task(void* pvParameters) {
                 
                 char* req = NULL;
                 
-                if (action_network->method_n == 3) {        // TCP RAW
-                    req = action_network->content;
-                    
-                } else if (action_network->method_n != 4) { // HTTP
+                if (action_network->method_n < 3) { // HTTP
                     action_network->len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(action_network->host) +  strlen(action_network->url) + strlen(action_network->header) + content_len_n;
                     
                     req = malloc(action_network->len);
-                    if (!req) {
-                        action_network->is_running = false;
-                        
-                        if (method_req) {
-                            free(method_req);
-                        }
-                        
-                        free(method);
-                        
-                        homekit_remove_oldest_client();
-                        errors++;
-                        
-                        if (errors < 5) {
-                            vTaskDelay(MS_TO_TICKS(200));
-                            continue;
-                        } else {
-                            break;
-                        }
-                    }
                     
                     snprintf(req, action_network->len, "%s /%s%s%s%s%s%s\r\n",
                              method,
@@ -5244,38 +5231,16 @@ void net_action_task(void* pvParameters) {
                              (method_req != NULL) ? method_req : "");
                     
                     free(method);
-                    
-                    if (str_ch_value_first) {
-                        str_ch_value_t* str_ch_value = str_ch_value_first;
-                        char* content_search = action_network->content;
-                        char* last_pos = action_network->content;
-                        
-                        do {
-                            content_search = strstr(last_pos, NETWORK_ACTION_WILDCARD_VALUE);
-                            
-                            if (content_search - last_pos > 0) {
-                                strncat(req, last_pos, content_search - last_pos);
-                            }
-                            
-                            strcat(req, str_ch_value->string);
-                            
-                            free(str_ch_value->string);
-
-                            str_ch_value_t* str_ch_value_old = str_ch_value;
-                            str_ch_value = str_ch_value->next;
-                            
-                            free(str_ch_value_old);
-
-                            last_pos = content_search + 9;
-                            
-                        } while (str_ch_value);
-                        
-                        strcat(req, last_pos);
-                        
-                    } else {
-                        strcat(req, action_network->content);
+                }
+                
+                if (action_network->method_n < 4) {
+                    if (action_network->method_n == 3) {
+                        action_network->len = content_len_n;
+                        req = malloc(content_len_n + 1);
+                        req[0] = 0;
                     }
                     
+                    write_str_ch_values(&str_ch_value_first, &req, action_network->content);
                 }
                 
                 int result = new_net_con(action_network->host,
@@ -5321,7 +5286,7 @@ void net_action_task(void* pvParameters) {
                     free(method_req);
                 }
                 
-                if (req && action_network->method_n != 3) {
+                if (req) {
                     free(req);
                 }
                 
@@ -5343,16 +5308,27 @@ void net_action_task(void* pvParameters) {
                 int result = -1;
                 
                 if (action_network->method_n == 13) {
+                    size_t content_len_n = search_str_ch_values(&str_ch_value_first, action_network->content);
+                    char* req = malloc(content_len_n + 1);
+                    req[0] = 0;
+                    write_str_ch_values(&str_ch_value_first, &req, action_network->content);
+                    
                     result = new_net_con(action_network->host,
                                          action_network->port_n,
                                          true,
-                                         (uint8_t*) action_network->content,
-                                         action_network->len,
+                                         (uint8_t*) req,
+                                         content_len_n,
                                          &socket);
                     
                     if (result >= -1) {
                         close(socket);
+                        
+                        if (result > 0) {
+                            INFO("<%i> Payload:\n%s", action_task->ch_group->serv_index, req);
+                        }
                     }
+                    
+                    free(req);
                     
                 } else {
                     int max_attemps = 1;
@@ -5383,11 +5359,8 @@ void net_action_task(void* pvParameters) {
                 }
                 
                 if (result > 0) {
-                    printf("<%i> Payload", action_task->ch_group->serv_index);
-                    if (action_network->method_n == 13) {
-                        INFO(":\n%s", action_network->content);
-                    } else {
-                        INFO(" RAW");
+                    if (action_network->method_n != 13) {
+                        INFO("<%i> Payload RAW", action_task->ch_group->serv_index);
                     }
                 } else {
                     ERROR("<%i> UDP", action_task->ch_group->serv_index);
@@ -6290,7 +6263,8 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
 }
 
 void do_wildcard_actions(ch_group_t* ch_group, uint8_t index, const float action_value) {
-    float last_value, last_diff = 1000000;
+    float last_value;
+    float last_diff = 10000000;
     wildcard_action_t* wildcard_action = ch_group->wildcard_action;
     wildcard_action_t* last_wildcard_action = NULL;
     
@@ -6465,7 +6439,7 @@ void run_homekit_server() {
 void printf_header() {
     INFO("\n\n");
     INFO("Home Accessory Architect v"FIRMWARE_VERSION);
-    INFO("(c) 2018-2021 José Antonio Jiménez Campos\n");
+    INFO("(c) 2018-2022 José Antonio Jiménez Campos\n");
     
 #ifdef HAA_DEBUG
     INFO("HAA DEBUG ENABLED\n");
@@ -9334,7 +9308,7 @@ void normal_mode_init() {
             
             adv_pwm_start();
             
-        } else if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_MY92X1) {
+        } else if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_SM16716) {
             lightbulb_group->gpio[0] = cJSON_GetArrayItem(gpio_array, 0)->valuedouble;
             lightbulb_group->gpio[1] = cJSON_GetArrayItem(gpio_array, 1)->valuedouble;
             
@@ -11127,12 +11101,30 @@ void wifi_done() {
 }
 
 void init_task() {
+    // GPIO Init
+    gpio_enable(15, GPIO_INPUT);
+    gpio_enable(16, GPIO_INPUT);
+    gpio_enable(3, GPIO_INPUT);
+    gpio_enable(2, GPIO_INPUT);
+    gpio_enable(1, GPIO_INPUT);
+    gpio_enable(0, GPIO_INPUT);
+    gpio_enable(4, GPIO_INPUT);
+    gpio_enable(5, GPIO_INPUT);
+    gpio_enable(12, GPIO_INPUT);
+    gpio_enable(13, GPIO_INPUT);
+    gpio_enable(14, GPIO_INPUT);
+    
+    sdk_wifi_station_set_auto_connect(false);
+    sdk_wifi_set_opmode(STATION_MODE);
+    sdk_wifi_station_disconnect();
+    sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
+    
     // Sysparam starter
     sysparam_status_t status;
     status = sysparam_init(SYSPARAMSECTOR, 0);
     if (status != SYSPARAM_OK) {
         wifi_config_remove_sys_param();
-
+        
         sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
         sysparam_init(SYSPARAMSECTOR, 0);
     }
@@ -11216,22 +11208,5 @@ void init_task() {
 }
 
 void user_init(void) {
-    gpio_enable(15, GPIO_INPUT);
-    gpio_enable(16, GPIO_INPUT);
-    gpio_enable(3, GPIO_INPUT);
-    gpio_enable(2, GPIO_INPUT);
-    gpio_enable(1, GPIO_INPUT);
-    gpio_enable(0, GPIO_INPUT);
-    gpio_enable(4, GPIO_INPUT);
-    gpio_enable(5, GPIO_INPUT);
-    gpio_enable(12, GPIO_INPUT);
-    gpio_enable(13, GPIO_INPUT);
-    gpio_enable(14, GPIO_INPUT);
-    
-    sdk_wifi_station_set_auto_connect(false);
-    sdk_wifi_set_opmode(STATION_MODE);
-    sdk_wifi_station_disconnect();
-    sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
-    
     xTaskCreate(init_task, "ini", 512, NULL, (tskIDLE_PRIORITY + 2), NULL);
 }

@@ -59,11 +59,19 @@
 #endif
 
 #ifndef HOMEKIT_NETWORK_MIN_FREEHEAP
-#define HOMEKIT_NETWORK_MIN_FREEHEAP            (18432)
+#define HOMEKIT_NETWORK_MIN_FREEHEAP            (20480)
 #endif
 
 #ifndef HOMEKIT_NETWORK_PAUSE_COUNT
-#define HOMEKIT_NETWORK_PAUSE_COUNT             (8)
+#define HOMEKIT_NETWORK_PAUSE_COUNT             (4)
+#endif
+
+#ifndef HOMEKIT_NETWORK_MIN_FREEHEAP_CRITIC
+#define HOMEKIT_NETWORK_MIN_FREEHEAP_CRITIC     (14336)
+#endif
+
+#ifndef HOMEKIT_NETWORK_PAUSE_COUNT_CRITIC
+#define HOMEKIT_NETWORK_PAUSE_COUNT_CRITIC      (7)
 #endif
 
 #ifdef HOMEKIT_DEBUG
@@ -638,6 +646,21 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
     }
 }
 
+void network_delay(const uint32_t free_heap) {
+    if (free_heap < HOMEKIT_NETWORK_MIN_FREEHEAP) {
+        unsigned int max_count = HOMEKIT_NETWORK_PAUSE_COUNT;
+        if (free_heap < HOMEKIT_NETWORK_MIN_FREEHEAP_CRITIC) {
+            max_count = HOMEKIT_NETWORK_PAUSE_COUNT_CRITIC;
+        }
+        
+        unsigned int count = 0;
+        while (free_heap > xPortGetFreeHeapSize() && count < max_count) {
+            count++;
+            //HOMEKIT_INFO("Net Delay %i", count);
+            vTaskDelay(count);
+        }
+    }
+}
 
 int client_send_encrypted(client_context_t *context, byte *payload, size_t size) {
     if (!context || !context->encrypted)
@@ -686,14 +709,7 @@ int client_send_encrypted(client_context_t *context, byte *payload, size_t size)
             return r;
         }
         
-        if (free_heap < HOMEKIT_NETWORK_MIN_FREEHEAP) {
-            unsigned int count = 0;
-            while (free_heap > xPortGetFreeHeapSize() && count < HOMEKIT_NETWORK_PAUSE_COUNT) {
-                count++;
-                //CLIENT_INFO(context, "Waiting %i", count);
-                vTaskDelay(count);
-            }
-        }
+        network_delay(free_heap);
     }
 
     return 0;
@@ -776,14 +792,7 @@ int client_send(client_context_t *context, byte *data, size_t data_size) {
         
         r = write(context->socket, data, data_size);
         
-        if (free_heap < HOMEKIT_NETWORK_MIN_FREEHEAP) {
-            unsigned int count = 0;
-            while (free_heap > xPortGetFreeHeapSize() && count < HOMEKIT_NETWORK_PAUSE_COUNT) {
-                count++;
-                //CLIENT_INFO(context, "Waiting %i", count);
-                vTaskDelay(count);
-            }
-        }
+        network_delay(free_heap);
     }
     
     if (r < 0) {
@@ -1081,7 +1090,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             homekit_server->pairing_context->public_key = malloc(homekit_server->pairing_context->public_key_size);
             int r = crypto_srp_get_public_key(homekit_server->pairing_context->srp, homekit_server->pairing_context->public_key, &homekit_server->pairing_context->public_key_size);
             if (r) {
-                CLIENT_ERROR(context, "Dump SPR public key (%d)", r);
+                CLIENT_ERROR(context, "SPR key (%d). DRAM?", r);
 
                 pairing_context_free(homekit_server->pairing_context);
                 homekit_server->pairing_context = NULL;
@@ -1161,7 +1170,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 #endif //ESP_OPEN_RTOS
             
             if (r) {
-                CLIENT_ERROR(context, "Compute pairing code (%d). No DRAM?", r);
+                CLIENT_ERROR(context, "Pairing code (%d). DRAM?", r);
                 send_tlv_error_response(context, 4, TLVError_Authentication);
                 pairing_context_free(homekit_server->pairing_context);
                 homekit_server->pairing_context = NULL;

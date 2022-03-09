@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "10.4.0"
+#define FIRMWARE_VERSION                    "10.4.1"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -23,7 +23,7 @@
 #define FLOAT_FACTOR_SAVE_AS_INT            (100000.00000f)
 
 // Task Stack Sizes
-#define GLOBAL_TASK_SIZE                    (612)
+#define GLOBAL_TASK_SIZE                    (640)
 
 #define INITIAL_SETUP_TASK_SIZE             (1600)
 #define NTP_TASK_SIZE                       (512)
@@ -31,7 +31,7 @@
 #define AUTODIMMER_TASK_SIZE                GLOBAL_TASK_SIZE
 #define IRRF_TX_TASK_SIZE                   (456)
 #define UART_ACTION_TASK_SIZE               (384)
-#define NETWORK_ACTION_TASK_SIZE            (512)
+#define NETWORK_ACTION_TASK_SIZE            (528)
 #define DELAYED_SENSOR_START_TASK_SIZE      GLOBAL_TASK_SIZE
 #define TEMPERATURE_TASK_SIZE               GLOBAL_TASK_SIZE
 #define PROCESS_TH_TASK_SIZE                GLOBAL_TASK_SIZE
