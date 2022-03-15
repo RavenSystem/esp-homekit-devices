@@ -286,11 +286,14 @@ void init_task() {
 void user_init(void) {
     // GPIO Init
     for (int i = 0; i < 17; i++) {
-        if (i < 6 || i > 11) {
-            if (!(i == 1 || i == 3)) {
-                gpio_enable(i, GPIO_INPUT);
-            }
+        if (i == 6) {
+            i += 6;
+        } else if (i == 1) {
+            i++;
         }
+        
+        gpio_write(i, false);
+        gpio_enable(i, GPIO_INPUT);
     }
     
     sdk_wifi_station_set_auto_connect(false);

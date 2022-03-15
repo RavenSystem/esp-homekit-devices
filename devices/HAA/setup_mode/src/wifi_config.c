@@ -332,7 +332,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
             return;
         }
         
-        if (xTaskCreate(wifi_smart_connect_task, "wifi_smart", 512, (void*) best_bssid, (tskIDLE_PRIORITY + 1), NULL) == pdPASS) {
+        if (xTaskCreate(wifi_smart_connect_task, "wsm", 512, (void*) best_bssid, (tskIDLE_PRIORITY + 1), NULL) == pdPASS) {
             if (wifi_bssid) {
                 free(wifi_bssid);
             }
@@ -358,7 +358,7 @@ void wifi_config_smart_connect() {
     int8_t wifi_mode = 0;
     sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
     
-    if (wifi_mode < 2 || xTaskCreate(wifi_scan_sc_task, "wifi_scan_smart", 384, NULL, (tskIDLE_PRIORITY + 2), NULL) != pdPASS) {
+    if (wifi_mode < 2 || xTaskCreate(wifi_scan_sc_task, "sma", 512, NULL, (tskIDLE_PRIORITY + 2), NULL) != pdPASS) {
         if (wifi_config_get_ip() < 0) {
             sdk_wifi_station_connect();
         }
@@ -472,7 +472,7 @@ static void setup_announcer_task() {
 static void wifi_config_server_on_settings(client_t *client) {
     esp_timer_change_period_forced(context->auto_reboot_timer, AUTO_REBOOT_LONG_TIMEOUT);
     
-    xTaskCreate(wifi_scan_task, "wifi_scan", 384, NULL, (tskIDLE_PRIORITY + 2), NULL);
+    xTaskCreate(wifi_scan_task, "sca", 512, NULL, (tskIDLE_PRIORITY + 2), NULL);
     
     static const char http_prologue[] =
         "HTTP/1.1 200 \r\n"
@@ -777,7 +777,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
 
     INFO("\nRebooting");
     
-    vTaskDelay(MS_TO_TICKS(1000));
+    vTaskDelay(MS_TO_TICKS(500));
     
     sdk_system_restart();
 }
@@ -846,7 +846,7 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
                 }
             }
             
-            xTaskCreate(wifi_config_server_on_settings_update_task, "settings_update", 512, client, (tskIDLE_PRIORITY + 1), NULL);
+            xTaskCreate(wifi_config_server_on_settings_update_task, "upd", 512, client, (tskIDLE_PRIORITY + 1), NULL);
             return 0;
         }
         
@@ -1152,7 +1152,7 @@ uint8_t wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool wi
             wifi_config_toggle_phy_mode(phy);
             
             if (wifi_mode == 4) {
-                xTaskCreate(wifi_scan_sc_task, "wifi_scan_smart", 384, NULL, (tskIDLE_PRIORITY + 2), NULL);
+                xTaskCreate(wifi_scan_sc_task, "sma", 512, NULL, (tskIDLE_PRIORITY + 2), NULL);
             } else {
                 wifi_config_smart_connect();
             }
@@ -1182,7 +1182,7 @@ static void wifi_config_station_connect() {
     }
     
     if (wifi_config_connect(0, phy_mode, false) == 1) {
-        xTaskCreate(wifi_config_sta_connect_timeout_task, "sta_con", 512, NULL, (tskIDLE_PRIORITY + 1), &context->sta_connect_timeout);
+        xTaskCreate(wifi_config_sta_connect_timeout_task, "sta", 640, NULL, (tskIDLE_PRIORITY + 1), &context->sta_connect_timeout);
         
         if (!context->on_wifi_ready) {
             INFO("HAA Setup");
@@ -1233,5 +1233,5 @@ void wifi_config_init(const char* ssid_prefix, const char* password, void (*on_w
     context->on_wifi_ready = on_wifi_ready;
     context->param = param;
 
-    xTaskCreate(wifi_config_station_connect, "wifi_config", 512, NULL, (tskIDLE_PRIORITY + 1), NULL);
+    xTaskCreate(wifi_config_station_connect, "wco", 512, NULL, (tskIDLE_PRIORITY + 1), NULL);
 }

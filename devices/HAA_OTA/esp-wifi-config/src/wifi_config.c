@@ -314,7 +314,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
             return;
         }
         
-        if (xTaskCreate(wifi_smart_connect_task, "wifi_smart", 512, (void*) best_bssid, (tskIDLE_PRIORITY + 1), NULL) == pdPASS) {
+        if (xTaskCreate(wifi_smart_connect_task, "wsm", 512, (void*) best_bssid, (tskIDLE_PRIORITY + 1), NULL) == pdPASS) {
             if (wifi_bssid) {
                 free(wifi_bssid);
             }
@@ -330,7 +330,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
 }
 
 static void wifi_scan_sc_task(void* arg) {
-    INFO("Start Wifi smart connect scan");
+    INFO("Start Wifi Smart connect scan");
     vTaskDelay(MS_TO_TICKS(2000));
     sdk_wifi_station_scan(NULL, wifi_scan_sc_done);
     vTaskDelete(NULL);
@@ -340,7 +340,7 @@ static void wifi_config_smart_connect() {
     int8_t wifi_mode = 0;
     sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
     
-    if (wifi_mode < 2 || xTaskCreate(wifi_scan_sc_task, "wifi_scan_smart", 384, NULL, (tskIDLE_PRIORITY + 2), NULL) != pdPASS) {
+    if (wifi_mode < 2 || xTaskCreate(wifi_scan_sc_task, "sma", 512, NULL, (tskIDLE_PRIORITY + 2), NULL) != pdPASS) {
         if (!wifi_config_got_ip()) {
             sdk_wifi_station_connect();
         }
@@ -427,7 +427,7 @@ static void wifi_scan_task(void *arg) {
 static void wifi_config_server_on_settings(client_t *client) {
     esp_timer_change_period_forced(context->auto_reboot_timer, AUTO_REBOOT_LONG_TIMEOUT);
     
-    xTaskCreate(wifi_scan_task, "wifi_scan", 384, NULL, (tskIDLE_PRIORITY + 0), NULL);
+    xTaskCreate(wifi_scan_task, "sca", 512, NULL, (tskIDLE_PRIORITY + 0), NULL);
     
     static const char http_prologue[] =
         "HTTP/1.1 200 \r\n"
@@ -682,7 +682,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     
     INFO("\nRebooting");
 
-    vTaskDelay(MS_TO_TICKS(1000));
+    vTaskDelay(MS_TO_TICKS(500));
     
     sdk_system_restart();
 }
@@ -742,7 +742,7 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
                 vTaskDelete(context->sta_connect_timeout);
             }
             
-            xTaskCreate(wifi_config_server_on_settings_update_task, "settings_update", 512, client, (tskIDLE_PRIORITY + 1), NULL);
+            xTaskCreate(wifi_config_server_on_settings_update_task, "upd", 512, client, (tskIDLE_PRIORITY + 1), NULL);
             return 0;
         }
             
@@ -881,7 +881,7 @@ static void wifi_config_softap_start() {
     INFO("Start DHCP server");
     dhcpserver_start(&first_client_ip, 4);
     
-    xTaskCreate(http_task, "http", 512, NULL, (tskIDLE_PRIORITY + 1), NULL);
+    xTaskCreate(http_task, "http", 640, NULL, (tskIDLE_PRIORITY + 1), NULL);
 }
 
 static void auto_reboot_run() {
@@ -993,7 +993,7 @@ static uint8_t wifi_config_connect(const uint8_t phy) {
             wifi_config_toggle_phy_mode(phy);
             
             if (wifi_mode == 4) {
-                xTaskCreate(wifi_scan_sc_task, "wifi_scan_smart", 384, NULL, (tskIDLE_PRIORITY + 2), NULL);
+                xTaskCreate(wifi_scan_sc_task, "sma", 512, NULL, (tskIDLE_PRIORITY + 2), NULL);
             } else {
                 wifi_config_smart_connect();
             }
@@ -1029,7 +1029,7 @@ static void wifi_config_station_connect() {
         INFO("\n* NORMAL\n");
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
         
-        xTaskCreate(wifi_config_sta_connect_timeout_task, "sta_con", 512, NULL, (tskIDLE_PRIORITY + 1), &context->sta_connect_timeout);
+        xTaskCreate(wifi_config_sta_connect_timeout_task, "sta", 640, NULL, (tskIDLE_PRIORITY + 1), &context->sta_connect_timeout);
         
     } else {
         INFO("\n* SETUP\n");
@@ -1055,5 +1055,5 @@ void wifi_config_init(const char *ssid_prefix, TaskHandle_t xHandle) {
     
     context->ota_task = xHandle;
     
-    xTaskCreate(wifi_config_station_connect, "wifi_config", 512, NULL, (tskIDLE_PRIORITY + 1), NULL);
+    xTaskCreate(wifi_config_station_connect, "wco", 512, NULL, (tskIDLE_PRIORITY + 1), NULL);
 }

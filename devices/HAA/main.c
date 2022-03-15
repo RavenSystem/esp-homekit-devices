@@ -253,6 +253,7 @@ int new_net_con(char* host, uint16_t port_n, bool is_udp, uint8_t* payload, size
     struct addrinfo hints;
     int result;
     char port[6];
+    *s = -2;
     memset(port, 0, 6);
     itoa(port_n, port, 10);
     
@@ -4592,8 +4593,8 @@ void free_monitor_task(void* args) {
                                         str[total_recv] = 0;
                                     } while (read_byte > 0 && total_recv < 2048);
                                 }
-                                    
-                                if (result >= -1) {
+                                
+                                if (socket >= 0) {
                                     close(socket);
                                 }
                                 
@@ -5186,7 +5187,7 @@ void net_action_task(void* pvParameters) {
             
             main_config.network_is_busy = true;
             
-            INFO("<%i> Network Action %s:%i", action_task->ch_group->serv_index, action_network->host, action_network->port_n);
+            INFO("<%i> Net Action %s:%i", action_task->ch_group->serv_index, action_network->host, action_network->port_n);
             
             str_ch_value_t* str_ch_value_first = NULL;
             
@@ -5278,7 +5279,7 @@ void net_action_task(void* pvParameters) {
                     ERROR("<%i> TCP (%i)", action_task->ch_group->serv_index, result);
                 }
                 
-                if (result >= -1) {
+                if (socket >= 0) {
                     close(socket);
                 }
                         
@@ -5320,7 +5321,7 @@ void net_action_task(void* pvParameters) {
                                          content_len_n,
                                          &socket);
                     
-                    if (result >= -1) {
+                    if (socket >= 0) {
                         close(socket);
                         
                         if (result > 0) {
@@ -5344,7 +5345,7 @@ void net_action_task(void* pvParameters) {
                                              wol ? WOL_PACKET_LEN : action_network->len,
                                              &socket);
                         
-                        if (result >= -1) {
+                        if (socket >= 0) {
                             close(socket);
                         }
                         
@@ -5370,7 +5371,7 @@ void net_action_task(void* pvParameters) {
             main_config.network_is_busy = false;
             action_network->is_running = false;
             
-            INFO("<%i> Net Action %s:%i done", action_task->ch_group->serv_index, action_network->host, action_network->port_n);
+            INFO("<%i> Net Action done", action_task->ch_group->serv_index);
             
             vTaskDelay(MS_TO_TICKS(20));
         }
@@ -5970,9 +5971,9 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 hkc_humidif_setter(ch_group->ch[4], HOMEKIT_UINT8(value_int + 3));
                             } else if (value_int <= 1) {
                                 hkc_humidif_setter(ch_group->ch[2], HOMEKIT_UINT8(value_int));
-                            } else if (value_int <= 1000) {
+                            } else if (value_int <= 1100) {
                                 hkc_humidif_setter(ch_group->ch[5], HOMEKIT_FLOAT(value_int - 1000));
-                            } else {    // if (value_int <= 2000)
+                            } else {    // if (value_int <= 2100)
                                 hkc_humidif_setter(ch_group->ch[6], HOMEKIT_FLOAT(value_int - 2000));
                             }
                             break;
@@ -6031,6 +6032,8 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                         lightbulb_group->autodimmer = 0;
                                     }
                                 }
+                            } else if (value_int == 200) {
+                                hkc_rgbw_setter(ch_group->ch[0], HOMEKIT_BOOL(!ch_group->ch[0]->value.bool_value));
                             } else {
                                 hkc_rgbw_setter(ch_group->ch[0], HOMEKIT_BOOL((bool) value_int));
                             }
@@ -11191,17 +11194,14 @@ void init_task() {
 
 void user_init(void) {
     // GPIO Init
-    gpio_enable(15, GPIO_INPUT);
-    gpio_enable(16, GPIO_INPUT);
-    gpio_enable(3, GPIO_INPUT);
-    gpio_enable(2, GPIO_INPUT);
-    gpio_enable(1, GPIO_INPUT);
-    gpio_enable(0, GPIO_INPUT);
-    gpio_enable(4, GPIO_INPUT);
-    gpio_enable(5, GPIO_INPUT);
-    gpio_enable(12, GPIO_INPUT);
-    gpio_enable(13, GPIO_INPUT);
-    gpio_enable(14, GPIO_INPUT);
+    for (int i = 0; i < 17; i++) {
+        if (i == 6) {
+            i += 6;
+        }
+        
+        gpio_write(i, false);
+        gpio_enable(i, GPIO_INPUT);
+    }
     
     sdk_wifi_station_set_auto_connect(false);
     sdk_wifi_set_opmode(STATION_MODE);

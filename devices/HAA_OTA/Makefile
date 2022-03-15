@@ -11,7 +11,7 @@ EXTRA_COMPONENTS = \
 	$(abspath ../../libs/adv_logger) \
 	$(abspath ../../libs/timers_helper)
 
-FLASH_SIZE ?= 8
+FLASH_SIZE ?= 1
 
 EXTRA_WOLFSSL_CFLAGS = \
 	-DWOLFSSL_USER_SETTINGS \

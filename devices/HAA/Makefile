@@ -21,7 +21,7 @@ EXTRA_COMPONENTS = \
 	$(abspath ../../libs/adv_logger_ntp) \
 	$(abspath ../../libs/timers_helper)
 
-FLASH_SIZE = 8
+FLASH_SIZE = 1
 FLASH_MODE = dout
 FLASH_SPEED = 40
 
