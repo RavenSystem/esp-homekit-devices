@@ -47,7 +47,7 @@
 #include <timers_helper.h>
 
 #include <dht.h>
-#include <ds18b20/ds18b20.h>
+#include <new_ds18b20/ds18b20.h>
 
 #include <cJSON.h>
 
@@ -592,8 +592,8 @@ void reboot_task() {
 }
 
 void reboot_haa() {
-    if (xTaskCreate(reboot_task, "REBOOT", REBOOT_TASK_SIZE, NULL, REBOOT_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("Creating REBOOT");
+    if (xTaskCreate(reboot_task, "Reb", REBOOT_TASK_SIZE, NULL, REBOOT_TASK_PRIORITY, NULL) != pdPASS) {
+        ERROR("Creating Reb");
         homekit_remove_oldest_client();
     }
 }
@@ -2457,10 +2457,17 @@ void temperature_task(void* args) {
                 const unsigned int sensor_index = TH_SENSOR_INDEX;
                 ds18b20_addr_t ds18b20_addrs[sensor_index];
                 
-                if (ds18b20_scan_devices(sensor_gpio, ds18b20_addrs, sensor_index) >= sensor_index) {
+                taskENTER_CRITICAL();
+                const int scaned_devices = ds18b20_scan_devices(sensor_gpio, ds18b20_addrs, sensor_index);
+                taskEXIT_CRITICAL();
+                
+                if (scaned_devices >= sensor_index) {
                     ds18b20_addr_t ds18b20_addr;
                     ds18b20_addr = ds18b20_addrs[sensor_index - 1];
+                    
+                    taskENTER_CRITICAL();
                     ds18b20_measure_and_read_multi(sensor_gpio, &ds18b20_addr, 1, &temperature_value);
+                    taskEXIT_CRITICAL();
                     
                     if (temperature_value < 130.f && temperature_value > -60.f) {
                         get_temp = true;
@@ -3695,7 +3702,7 @@ float window_cover_step(ch_group_t* ch_group, const float cover_time) {
     const float actual_time = SYSTEM_UPTIME_MS;
     const float time = actual_time - WINDOW_COVER_LAST_TIME;
     WINDOW_COVER_LAST_TIME = actual_time;
-
+    
     return (100.00000000f / cover_time) * (time / 1000.00000000f);
 }
 
@@ -3877,6 +3884,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
     
     homekit_characteristic_notify_safe(ch1);
     homekit_characteristic_notify_safe(WINDOW_COVER_CH_STATE);
+    homekit_characteristic_notify_safe(WINDOW_COVER_CH_CURRENT_POSITION);
 }
 
 void window_cover_timer_worker(TimerHandle_t xTimer) {
@@ -4457,6 +4465,10 @@ void free_monitor_task(void* args) {
                                 int socket;
                                 int result = -1;
                                 
+                                if (main_config.network_is_busy) {
+                                    break;
+                                }
+                                
                                 main_config.network_is_busy = true;
                                 
                                 INFO("<%i> Connect %s:%i", ch_group->serv_index, action_network->host, action_network->port_n);
@@ -4581,14 +4593,14 @@ void free_monitor_task(void* args) {
                                     INFO("<%i> Response", ch_group->serv_index);
                                     int read_byte;
                                     do {
-                                        uint8_t recv_buffer[64];
-                                        memset(recv_buffer, 0, 64);
+                                        uint8_t recv_buffer[65];
+                                        memset(recv_buffer, 0, 65);
                                         read_byte = lwip_read(socket, recv_buffer, 64);
                                         if (fm_sensor_type == FM_SENSOR_TYPE_NETWORK || fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_TEXT) {
-                                            printf("%s", recv_buffer);
+                                            INFO("%s", recv_buffer);
                                         }
                                         str = realloc(str, total_recv + read_byte + 1);
-                                        memcpy(str + total_recv, recv_buffer, total_recv);
+                                        memcpy(str + total_recv, recv_buffer, read_byte);
                                         total_recv += read_byte;
                                         str[total_recv] = 0;
                                     } while (read_byte > 0 && total_recv < 2048);
@@ -5264,12 +5276,11 @@ void net_action_task(void* pvParameters) {
                         int read_byte;
                         size_t total_recv = 0;
                         do {
-                            uint8_t recv_buffer[64];
-                            memset(recv_buffer, 0, 64);
+                            uint8_t recv_buffer[65];
+                            memset(recv_buffer, 0, 65);
                             read_byte = lwip_read(socket, recv_buffer, 64);
                             printf("%s", recv_buffer);
-                            recv_buffer[0] = 0;
-                            total_recv += 64;
+                            total_recv += read_byte;
                         } while (read_byte > 0 && total_recv < 2048);
                         
                         INFO("-> %i", total_recv);
@@ -5835,7 +5846,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     while(action_binary_output) {
         if (action_binary_output->action == action) {
             extended_gpio_write(action_binary_output->gpio, action_binary_output->value);
-            INFO("<%i> Bin Out: gpio %i, val %i, inch %i", ch_group->serv_index, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
+            INFO("<%i> Bin Out: g %i, v %i, i %i", ch_group->serv_index, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
             
             if (action_binary_output->inching > 0) {
                 esp_timer_start(esp_timer_create(action_binary_output->inching, false, (void*) action_binary_output, autoswitch_timer));
@@ -5851,7 +5862,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         if (action_serv_manager->action == action) {
             ch_group_t* ch_group = ch_group_find_by_acc(action_serv_manager->serv_index);
             if (ch_group) {
-                INFO("Serv Notif: targ %i, val %g", action_serv_manager->serv_index, action_serv_manager->value);
+                INFO("Serv Notif: t %i, v %g", action_serv_manager->serv_index, action_serv_manager->value);
                 
                 int value_int = action_serv_manager->value;
                 
@@ -6510,14 +6521,14 @@ void normal_mode_init() {
                     
                     adv_button_create(gpio, pullup_resistor, inverted, button_mode);
                     
-                    INFO("New Input GPIO %i: pullup %i, inv %i, filter %i, mode %i", gpio, pullup_resistor, inverted, button_filter, button_mode);
+                    INFO("New Input GPIO %i: p %i, i %i, f %i, m %i", gpio, pullup_resistor, inverted, button_filter, button_mode);
                 }
                 
             } else {    // MCP23017
                 mcp23017_t* mcp = mcp_find_by_index(gpio / 100);
                 adv_button_create(gpio, mcp->bus, inverted, mcp->addr);
                 
-                INFO("New Input MCP GPIO %i: inv %i, filter %i, bus %i, addr %i", gpio, inverted, button_filter, mcp->bus, mcp->addr);
+                INFO("New Input MCP GPIO %i: i %i, f %i, b %i, a %i", gpio, inverted, button_filter, mcp->bus, mcp->addr);
             }
             
             if (button_filter > 0) {
@@ -6535,7 +6546,7 @@ void normal_mode_init() {
                 active = true;
             }
             
-            INFO("New DigI GPIO %i: type %i, status %i", gpio, button_type, active);
+            INFO("New DigI GPIO %i: t %i, s %i", gpio, button_type, active);
         }
         
         return active;
@@ -6586,7 +6597,7 @@ void normal_mode_init() {
                 ping_input->callback_0 = ping_input_callback_fn;
             }
             
-            INFO("New Ping Input: host %s, res %i", ping_input->host, response_type);
+            INFO("New Ping Input: h %s, r %i", ping_input->host, response_type);
         }
     }
     
@@ -6664,13 +6675,13 @@ void normal_mode_init() {
                 }
                 
                 if (status != SYSPARAM_OK) {
-                    ERROR("Init state: not saved, using default");
+                    ERROR("Init: not saved, using default");
                 }
                 
                 if (ch_type == CH_TYPE_STRING && state > 0) {
-                    INFO("Init state: %s", (char*) (uint32_t) state);
+                    INFO("Init: %s", (char*) (uint32_t) state);
                 } else {
-                    INFO("Init state: %g", state);
+                    INFO("Init: %g", state);
                 }
                 
             }
@@ -6699,7 +6710,7 @@ void normal_mode_init() {
                     action_copy->next = last_action;
                     last_action = action_copy;
                     
-                    INFO("New Copy Action %i: val %i", new_int_action, action_copy->new_action);
+                    INFO("New Copy Action %i: v %i", new_int_action, action_copy->new_action);
                 }
             }
         }
@@ -6759,7 +6770,7 @@ void normal_mode_init() {
                         action_binary_output->next = last_action;
                         last_action = action_binary_output;
                         
-                        INFO("New Binary Output Action %i: gpio %i, val %i, inch %i", new_int_action, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
+                        INFO("New Binary Output Action %i: g %i, v %i, i %i", new_int_action, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
                     }
                 }
             }
@@ -6820,7 +6831,7 @@ void normal_mode_init() {
                             }
                         }
                         
-                        INFO("New Serv Manager Act %i: ser %i, val %g", new_int_action, action_serv_manager->serv_index, action_serv_manager->value);
+                        INFO("New Serv Manager Act %i: s %i, v %g", new_int_action, action_serv_manager->serv_index, action_serv_manager->value);
                     }
                 }
             }
@@ -6860,7 +6871,7 @@ void normal_mode_init() {
                         action_system->next = last_action;
                         last_action = action_system;
                         
-                        INFO("New System Action %i: val %i", new_int_action, action_system->value);
+                        INFO("New System Action %i: v %i", new_int_action, action_system->value);
                     }
                 }
             }
@@ -7011,7 +7022,7 @@ void normal_mode_init() {
                         action_irrf_tx->next = last_action;
                         last_action = action_irrf_tx;
                         
-                        INFO("New IR/RF Action %i: repeats %i, pause %i", new_int_action, action_irrf_tx->repeats, action_irrf_tx->pause);
+                        INFO("New IR/RF Action %i: r %i, p %i", new_int_action, action_irrf_tx->repeats, action_irrf_tx->pause);
                     }
                 }
             }
@@ -7070,7 +7081,7 @@ void normal_mode_init() {
                         action_uart->next = last_action;
                         last_action = action_uart;
                         
-                        INFO("New UART Action %i: uart %i, pause %i, len %i", new_int_action, action_uart->uart, action_uart->pause, action_uart->len);
+                        INFO("New UART Action %i: u %i, p %i, l %i", new_int_action, action_uart->uart, action_uart->pause, action_uart->len);
                     }
                 }
             }
@@ -7369,7 +7380,7 @@ void normal_mode_init() {
     INFO("NORMAL\n\nJSON:\n %s\n", txt_config);
     
     free(txt_config);
-
+    
     // Custom Hostname
     char* custom_hostname = name.value.string_value;
     if (cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME) != NULL) {
@@ -7400,7 +7411,7 @@ void normal_mode_init() {
 
             unsigned int i2c_scl_gpio = (uint8_t) cJSON_GetArrayItem(json_i2c, 0)->valuedouble;
             if (get_used_gpio(i2c_scl_gpio)) {
-                ERROR("I2C bus %i: scl %i is used", i, i2c_scl_gpio);
+                ERROR("I2C bus %i: scl %i", i, i2c_scl_gpio);
                 i2c_scl_gpio = MAX_GPIOS;
                 break;
             }
@@ -7408,7 +7419,7 @@ void normal_mode_init() {
 
             unsigned int i2c_sda_gpio = (uint8_t) cJSON_GetArrayItem(json_i2c, 1)->valuedouble;
             if (get_used_gpio(i2c_sda_gpio)) {
-                ERROR("I2C bus %i: sda %i is used", i, i2c_sda_gpio);
+                ERROR("I2C bus %i: sda %i", i, i2c_sda_gpio);
                 i2c_sda_gpio = MAX_GPIOS;
                 break;
             }
@@ -7420,7 +7431,7 @@ void normal_mode_init() {
                 i2c_sda_gpio < MAX_GPIOS &&
                 i2c_freq_hz > 0) {
                 const unsigned int i2c_res = i2c_init_hz(i, i2c_scl_gpio, i2c_sda_gpio, i2c_freq_hz);
-                INFO("I2C bus %i: scl %i, sda %i, freq %i, res %i", i, i2c_scl_gpio, i2c_sda_gpio, i2c_freq_hz, i2c_res);
+                INFO("I2C bus %i: scl %i, sda %i, f %i, r %i", i, i2c_scl_gpio, i2c_sda_gpio, i2c_freq_hz, i2c_res);
             } else {
                 ERROR("I2C JSON");
             }
@@ -7444,7 +7455,7 @@ void normal_mode_init() {
             mcp23017->bus = (uint8_t) cJSON_GetArrayItem(json_mcp23017, 0)->valuedouble;
             mcp23017->addr = (uint8_t) cJSON_GetArrayItem(json_mcp23017, 1)->valuedouble;
             
-            INFO("MCP23017 %i: bus %i, addr %i", mcp23017->index, mcp23017->bus, mcp23017->addr);
+            INFO("MCP23017 %i: b %i, a %i", mcp23017->index, mcp23017->bus, mcp23017->addr);
             
             const uint8_t byte_zeros = 0x00;
             const uint8_t byte_ones = 0xFF;
@@ -7926,7 +7937,7 @@ void normal_mode_init() {
             initial_state = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE)->valuedouble;
         }
         
-        INFO("Init State %i", initial_state);
+        INFO("Init %i", initial_state);
         
         return initial_state;
     }
@@ -9680,11 +9691,11 @@ void normal_mode_init() {
         }
         
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSING)) {
-            garage_door_sensor(99, ch_group, GARAGE_DOOR_OPENING);
+            garage_door_sensor(99, ch_group, GARAGE_DOOR_OPENED);
         }
         
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), garage_door_sensor, ch_group, GARAGE_DOOR_OPENING)) {
-            garage_door_sensor(99, ch_group, GARAGE_DOOR_OPENING);
+            garage_door_sensor(99, ch_group, GARAGE_DOOR_OPENED);
         }
         
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSED)) {
@@ -10494,10 +10505,13 @@ void normal_mode_init() {
                                             ( fm_sensor_type == FM_SENSOR_TYPE_PULSE_US_TIME ? 3 : 0 ) +
                                             is_val_data +
                                             ( fm_sensor_type >= FM_SENSOR_TYPE_NETWORK ? 2 : 0 ) +
+                                            ( fm_sensor_type >= FM_SENSOR_TYPE_NETWORK && fm_sensor_type <= FM_SENSOR_TYPE_NETWORK_PATTERN_HEX ? 2 : 0 ) +
                                             ( fm_sensor_type == FM_SENSOR_TYPE_I2C ? 8 : 0 ) +
                                             ( fm_sensor_type == FM_SENSOR_TYPE_I2C_TRIGGER ? 18 : 0 ),
                                             4 + has_limits,
                                             1);
+        
+        FM_OVERRIDE_VALUE = NO_LAST_WILDCARD_ACTION;
         
         if (has_limits > 0) {
             cJSON* limits_array = cJSON_GetObjectItemCaseSensitive(json_context, FM_LIMIT_ARRAY_SET);
@@ -10523,6 +10537,7 @@ void normal_mode_init() {
         
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
+        new_action_network(ch_group, json_context, 0);
         
         ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_FREE_VALUE, 0);
         

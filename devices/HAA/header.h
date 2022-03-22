@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * Copyright 2019-2021 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2022 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "10.4.3"
+#define FIRMWARE_VERSION                    "10.4.4"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -86,7 +86,7 @@
 // JSON
 #define GENERAL_CONFIG                      "c"
 #define MDNS_TTL                            "ttl"
-#define MDNS_TTL_DEFAULT                    (4500)
+#define MDNS_TTL_DEFAULT                    (3492)
 #define CUSTOM_HOSTNAME                     "n"
 #define CUSTOM_NTP_HOST                     "ntp"
 #define TIMEZONE                            "tz"
@@ -100,8 +100,8 @@
 #define PWM_ZEROCROSSING_ARRAY_SET          "zc"
 #define ENABLE_HOMEKIT                      "h"
 #define HOMEKIT_SERVER_MAX_CLIENTS          "h"
-#define HOMEKIT_SERVER_MAX_CLIENTS_DEFAULT  (20)
-#define HOMEKIT_SERVER_MAX_CLIENTS_MAX      (20)
+#define HOMEKIT_SERVER_MAX_CLIENTS_DEFAULT  (8)
+#define HOMEKIT_SERVER_MAX_CLIENTS_MAX      (8)
 #define ALLOW_INSECURE_CONNECTIONS          "u"
 #define UART_CONFIG_ARRAY                   "r"
 #define UART_CONFIG_ENABLE                  "n"
@@ -711,9 +711,9 @@
 #define STATUS_LED_DURATION_OFF             (120)
 
 #define SAVE_STATES_DELAY_MS                (5000)
-#define RANDOM_DELAY_MS                     (4000)
+#define RANDOM_DELAY_MS                     (7000)
 
-#define ACCESSORIES_WITHOUT_BRIDGE          (4)     // Max number of accessories before using a bridge
+#define ACCESSORIES_WITHOUT_BRIDGE          (4)     // Max number of accessories before using a dedicated HomeKit bridge
 
 #define WOL_PACKET_LEN                      (102)
 

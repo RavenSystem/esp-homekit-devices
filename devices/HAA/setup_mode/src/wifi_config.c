@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * Copyright 2019-2021 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2022 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -1118,7 +1118,7 @@ uint8_t wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool wi
         if (wifi_bssid) {
             INFO("Saved BSSID: %02x%02x%02x%02x%02x%02x", wifi_bssid[0], wifi_bssid[1], wifi_bssid[2], wifi_bssid[3], wifi_bssid[4], wifi_bssid[5]);
         } else {
-            INFO("Saved BSSID: none");
+            INFO("Saved BSSID: -");
         }
         
         if (wifi_mode < 2 || (wifi_mode == 4 && mode == 1)) {

@@ -23,6 +23,8 @@
 
 #endif
 
+#include <sysparam.h>
+
 #include <http-parser/http_parser.h>
 #include <cJSON.h>
 #include <wolfssl/wolfcrypt/hash.h>
@@ -51,11 +53,11 @@
 #endif
 
 #ifndef HOMEKIT_MIN_CLIENTS
-#define HOMEKIT_MIN_CLIENTS                     (3)
+#define HOMEKIT_MIN_CLIENTS                     (2)
 #endif
 
 #ifndef HOMEKIT_MIN_FREEHEAP
-#define HOMEKIT_MIN_FREEHEAP                    (13312)
+#define HOMEKIT_MIN_FREEHEAP                    (14336)
 #endif
 
 #ifndef HOMEKIT_NETWORK_MIN_FREEHEAP
@@ -67,11 +69,11 @@
 #endif
 
 #ifndef HOMEKIT_NETWORK_MIN_FREEHEAP_CRITIC
-#define HOMEKIT_NETWORK_MIN_FREEHEAP_CRITIC     (14336)
+#define HOMEKIT_NETWORK_MIN_FREEHEAP_CRITIC     (16384)
 #endif
 
 #ifndef HOMEKIT_NETWORK_PAUSE_COUNT_CRITIC
-#define HOMEKIT_NETWORK_PAUSE_COUNT_CRITIC      (7)
+#define HOMEKIT_NETWORK_PAUSE_COUNT_CRITIC      (6)
 #endif
 
 #ifdef HOMEKIT_DEBUG
@@ -3312,7 +3314,7 @@ void homekit_server_accept_client() {
             homekit_server->max_fd = s;
         }
         
-        HOMEKIT_INFO("[%d] New %s:%d (%i/%i) Free HEAP: %d", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
+        HOMEKIT_INFO("[%d] New %s:%d (%i/%i) Free HEAP %d", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
 
         HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_CLIENT_CONNECTED);
         
@@ -3551,25 +3553,43 @@ void homekit_setup_mdns() {
     
     // accessory model name (required)
     homekit_mdns_add_txt("md", "%s", model->value.string_value);
+    
     // protocol version (required)
     homekit_mdns_add_txt("pv", "1.1");
+    
     // device ID (required)
     // should be in format XX:XX:XX:XX:XX:XX, otherwise devices will ignore it
     homekit_mdns_add_txt("id", "%s", homekit_server->accessory_id);
+    
     // current configuration number (required)
     homekit_mdns_add_txt("c#", "%d", homekit_server->config->config_number);
+    
     // current state number (required)
-    homekit_mdns_add_txt("s#", "1");
+    int32_t current_state_number = 1;
+    if (!homekit_server->paired) {
+        sysparam_set_int32("cs", 0);
+    } else {
+        sysparam_get_int32("cs", &current_state_number);
+        current_state_number++;
+        if (current_state_number > 65535) {
+            current_state_number = 1;
+        }
+        sysparam_set_int32("cs", current_state_number);
+    }
+    homekit_mdns_add_txt("s#", "%d", current_state_number);
+    
     // feature flags (required if non-zero)
     //   bit 0 - supports HAP pairing. required for all HomeKit accessories
     //   bits 1-7 - reserved
-    homekit_mdns_add_txt("ff", "0");
+    //homekit_mdns_add_txt("ff", "0");
+    
     // status flags
     //   bit 0 - not paired
     //   bit 1 - not configured to join WiFi
     //   bit 2 - problem detected on accessory
     //   bits 3-7 - reserved
     homekit_mdns_add_txt("sf", "%d", (homekit_server->paired) ? 0 : 1);
+    
     // accessory category identifier
     homekit_mdns_add_txt("ci", "%d", homekit_server->config->category);
     

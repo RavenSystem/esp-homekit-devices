@@ -2,8 +2,6 @@ PROGRAM = haamain
 
 EXTRA_COMPONENTS = \
 	$(abspath setup_mode) \
-    extras/onewire \
-    extras/ds18b20 \
 	extras/dhcpserver \
 	extras/rboot-ota \
 	$(abspath ../../external_libs/http-parser) \
@@ -16,6 +14,8 @@ EXTRA_COMPONENTS = \
 	$(abspath ../../libs/adv_pwm) \
 	$(abspath ../../libs/adv_nrzled) \
 	$(abspath ../../libs/new_dht) \
+	$(abspath ../../libs/new_onewire) \
+	$(abspath ../../libs/new_ds18b20) \
 	$(abspath ../../libs/raven_ntp) \
 	$(abspath ../../libs/ping) \
 	$(abspath ../../libs/adv_logger_ntp) \
@@ -58,7 +58,7 @@ EXTRA_CFLAGS += -DARP_TABLE_SIZE=10
 EXTRA_CFLAGS += -DDNS_MAX_RETRIES=2
 EXTRA_CFLAGS += -DDHCP_DOES_ARP_CHECK=0
 EXTRA_CFLAGS += -DDEFAULT_RAW_RECVMBOX_SIZE=5
-EXTRA_CFLAGS += -DMEMP_NUM_NETCONN=24
+EXTRA_CFLAGS += -DMEMP_NUM_NETCONN=13
 #EXTRA_CFLAGS += -DCHECKSUM_CHECK_UDP=0
 #EXTRA_CFLAGS += -DMEMP_NUM_RAW_PCB=1
 #EXTRA_CFLAGS += -DMEMP_NUM_UDP_PCB=3

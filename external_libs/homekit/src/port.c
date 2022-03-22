@@ -106,7 +106,7 @@ void homekit_mdns_configure_finalize(const uint16_t mdns_ttl) {
     mdns_clear();
     mdns_add_facility(mdns_instance_name, "_hap", mdns_txt_rec, mdns_TCP, mdns_port, mdns_ttl);
 
-    printf("mDNS announcement: Name=%s %s Port=%d TTL=%d\n", mdns_instance_name, mdns_txt_rec, mdns_port, mdns_ttl);
+    printf("mDNS: Name=%s %s Port=%d TTL=%d\n", mdns_instance_name, mdns_txt_rec, mdns_port, mdns_ttl);
 }
 
 void homekit_port_mdns_announce() {

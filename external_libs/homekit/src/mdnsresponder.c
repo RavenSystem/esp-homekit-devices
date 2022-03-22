@@ -136,7 +136,7 @@ static u16_t mdns_responder_reply_size = 0;
 
 #define MDNS_TTL_MIN                (30)
 #define MDNS_TTL_MULTIPLIER_MS      (1000)  // Set to 1000 to use standard time
-#define MDNS_TTL_SAFE_MARGIN        (7)
+#define MDNS_TTL_SAFE_MARGIN        (3)
 static uint32_t mdns_ttl = 4500;
 
 #define MDNS_STATUS_PROBING_1       (0)
@@ -691,16 +691,18 @@ void mdns_add_facility(const char* instanceName,   // Friendly name, need not be
     }
     
     vTaskDelay(400 / portTICK_PERIOD_MS);
-
+    
     if (ttl < 1000 && strstr(addText, "sf=1") != NULL) {
-        printf(">>> mDNS changes TTL to 4500 for pairing\n");
-        ttl = 4500;
+        printf(">>> mDNS TTL 3600 for pairing\n");
+        ttl = 3492;
     }
     
     if (ttl < MDNS_TTL_MIN) {
         ttl = MDNS_TTL_MIN;
     }
-
+    
+    ttl += hwrand() % (ttl >> 5);
+    
     mdns_add_facility_work(instanceName, serviceName, addText, flags, onPort, ttl);
 }
 
