@@ -138,8 +138,8 @@ int get_used_gpio(const uint16_t gpio) {
     return false;
 }
 
-void set_used_gpio(const uint16_t gpio) {
-    if (gpio < MAX_GPIOS) {
+void set_used_gpio(const int16_t gpio) {
+    if (gpio > -1 && gpio < MAX_GPIOS) {
         if (gpio == 1) {
             gpio_set_iomux_function(1, IOMUX_GPIO1_FUNC_GPIO);
         } else if (gpio == 3) {
@@ -148,6 +148,18 @@ void set_used_gpio(const uint16_t gpio) {
         
         const uint64_t bit = 1 << gpio;
         main_config.used_gpio |= bit;
+    }
+}
+
+void set_unused_gpios() {
+    for (int i = 0; i < 17; i++) {
+        if (i == 6) {
+            i += 6;
+        }
+        
+        if (!get_used_gpio(i)) {
+            gpio_enable(i, GPIO_INPUT);
+        }
     }
 }
 
@@ -4474,38 +4486,39 @@ void free_monitor_task(void* args) {
                                 INFO("<%i> Connect %s:%i", ch_group->serv_index, action_network->host, action_network->port_n);
                                 
                                 if (action_network->method_n < 10) {
-                                    size_t content_len_n = 0;
-                                    
-                                    char* method = strdup("GET");
-                                    char* method_req = NULL;
-                                    if (action_network->method_n <= 3 &&
-                                        action_network->method_n > 0) {
-                                        content_len_n = strlen(action_network->content);
-                                        
-                                        char content_len[4];
-                                        itoa(content_len_n, content_len, 10);
-                                        method_req = malloc(23);
-                                        snprintf(method_req, 23, "%s%s\r\n",
-                                                 http_header_len,
-                                                 content_len);
-                                        
-                                        free(method);
-                                        if (action_network->method_n == 1) {
-                                            method = strdup("PUT");
-                                        } else {
-                                            method = strdup("POST");
-                                        }
-                                    }
-                                    
                                     char* req = NULL;
                                     
                                     if (action_network->method_n == 3) {        // TCP RAW
                                         req = action_network->content;
                                         
                                     } else if (action_network->method_n != 4) { // HTTP
+                                        size_t content_len_n = 0;
+                                        
+                                        char* method = strdup("GET");
+                                        char* method_req = NULL;
+                                        if (action_network->method_n < 3 &&
+                                            action_network->method_n > 0) {
+                                            content_len_n = strlen(action_network->content);
+                                            
+                                            char content_len[4];
+                                            itoa(content_len_n, content_len, 10);
+                                            method_req = malloc(23);
+                                            snprintf(method_req, 23, "%s%s\r\n",
+                                                     http_header_len,
+                                                     content_len);
+                                            
+                                            free(method);
+                                            if (action_network->method_n == 1) {
+                                                method = strdup("PUT");
+                                            } else {
+                                                method = strdup("POST");
+                                            }
+                                        }
+                                        
                                         action_network->len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(action_network->host) +  strlen(action_network->url) + strlen(action_network->header) + content_len_n;
                                         
                                         req = malloc(action_network->len);
+                                        
                                         if (!req) {
                                             action_network->is_running = false;
                                             
@@ -4537,6 +4550,10 @@ void free_monitor_task(void* args) {
                                         
                                         free(method);
                                         
+                                        if (method_req) {
+                                            free(method_req);
+                                        }
+                                        
                                         strcat(req, action_network->content);
                                     }
                                     
@@ -4556,10 +4573,6 @@ void free_monitor_task(void* args) {
                                         }
                                     } else {
                                         ERROR("<%i> TCP (%i)", ch_group->serv_index, result);
-                                    }
-                                            
-                                    if (method_req) {
-                                        free(method_req);
                                     }
                                     
                                     if (req && action_network->method_n != 3) {
@@ -4592,18 +4605,23 @@ void free_monitor_task(void* args) {
                                     // Read response
                                     INFO("<%i> Response", ch_group->serv_index);
                                     int read_byte;
+                                    uint8_t* recv_buffer = malloc(65);
                                     do {
-                                        uint8_t recv_buffer[65];
                                         memset(recv_buffer, 0, 65);
                                         read_byte = lwip_read(socket, recv_buffer, 64);
-                                        if (fm_sensor_type == FM_SENSOR_TYPE_NETWORK || fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_TEXT) {
-                                            INFO("%s", recv_buffer);
+                                        if (read_byte > 0) {
+                                            uint8_t* new_str = realloc(str, total_recv + read_byte + 1);
+                                            if (!new_str) {
+                                                break;
+                                            }
+                                            str = new_str;
+                                            memcpy(str + total_recv, recv_buffer, read_byte);
+                                            total_recv += read_byte;
+                                            str[total_recv] = 0;
                                         }
-                                        str = realloc(str, total_recv + read_byte + 1);
-                                        memcpy(str + total_recv, recv_buffer, read_byte);
-                                        total_recv += read_byte;
-                                        str[total_recv] = 0;
                                     } while (read_byte > 0 && total_recv < 2048);
+                                    
+                                    free(recv_buffer);
                                 }
                                 
                                 if (socket >= 0) {
@@ -4613,8 +4631,12 @@ void free_monitor_task(void* args) {
                                 main_config.network_is_busy = false;
                                 
                                 if (total_recv > 0) {
+                                    if (fm_sensor_type == FM_SENSOR_TYPE_NETWORK || fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_TEXT) {
+                                        INFO("%s", str);
+                                    }
+                                    
                                     uint8_t* found = str;
-                                    if (action_network->method_n <= 3 &&
+                                    if (action_network->method_n < 3 &&
                                         (fm_sensor_type == FM_SENSOR_TYPE_NETWORK ||
                                          fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_TEXT)) {
                                         found = (uint8_t*) strstr((char*) str, "\r\n\r\n");
@@ -4650,9 +4672,7 @@ void free_monitor_task(void* args) {
                                         }
                                     }
                                     
-                                    if (str) {
-                                        free(str);
-                                    }
+                                    free(str);
                                     
                                     INFO("<%i> -> %i", ch_group->serv_index, total_recv);
                                 }
@@ -5197,39 +5217,38 @@ void net_action_task(void* pvParameters) {
                 vTaskDelay(MS_TO_TICKS(100));
             }
             
-            main_config.network_is_busy = true;
-            
             INFO("<%i> Net Action %s:%i", action_task->ch_group->serv_index, action_network->host, action_network->port_n);
             
             str_ch_value_t* str_ch_value_first = NULL;
             
+            main_config.network_is_busy = true;
+            
             if (action_network->method_n < 10) {
                 size_t content_len_n = 0;
-                
-                char* method = strdup("GET");
-                char* method_req = NULL;
-                if (action_network->method_n <= 3 &&
-                    action_network->method_n >= 1) {
-                    content_len_n = search_str_ch_values(&str_ch_value_first, action_network->content);
-                    
-                    char content_len[4];
-                    itoa(content_len_n, content_len, 10);
-                    method_req = malloc(23);
-                    snprintf(method_req, 23, "%s%s\r\n",
-                             http_header_len,
-                             content_len);
-                    
-                    free(method);
-                    if (action_network->method_n == 1) {
-                        method = strdup("PUT");
-                    } else {
-                        method = strdup("POST");
-                    }
-                }
                 
                 char* req = NULL;
                 
                 if (action_network->method_n < 3) { // HTTP
+                    char* method = strdup("GET");
+                    char* method_req = NULL;
+                    if (action_network->method_n > 0) {
+                        content_len_n = search_str_ch_values(&str_ch_value_first, action_network->content);
+                        
+                        char content_len[4];
+                        itoa(content_len_n, content_len, 10);
+                        method_req = malloc(23);
+                        snprintf(method_req, 23, "%s%s\r\n",
+                                 http_header_len,
+                                 content_len);
+                        
+                        free(method);
+                        if (action_network->method_n == 1) {
+                            method = strdup("PUT");
+                        } else {
+                            method = strdup("POST");
+                        }
+                    }
+                    
                     action_network->len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(action_network->host) +  strlen(action_network->url) + strlen(action_network->header) + content_len_n;
                     
                     req = malloc(action_network->len);
@@ -5242,6 +5261,10 @@ void net_action_task(void* pvParameters) {
                              http_header2,
                              action_network->header,
                              (method_req != NULL) ? method_req : "");
+                    
+                    if (method_req) {
+                        free(method_req);
+                    }
                     
                     free(method);
                 }
@@ -5275,14 +5298,15 @@ void net_action_task(void* pvParameters) {
                         INFO("<%i> Response:", action_task->ch_group->serv_index);
                         int read_byte;
                         size_t total_recv = 0;
+                        uint8_t* recv_buffer = malloc(65);
                         do {
-                            uint8_t recv_buffer[65];
                             memset(recv_buffer, 0, 65);
                             read_byte = lwip_read(socket, recv_buffer, 64);
                             printf("%s", recv_buffer);
                             total_recv += read_byte;
                         } while (read_byte > 0 && total_recv < 2048);
                         
+                        free(recv_buffer);
                         INFO("-> %i", total_recv);
                     }
                     
@@ -5292,10 +5316,6 @@ void net_action_task(void* pvParameters) {
                 
                 if (socket >= 0) {
                     close(socket);
-                }
-                        
-                if (method_req) {
-                    free(method_req);
                 }
                 
                 if (req) {
@@ -6278,7 +6298,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
 
 void do_wildcard_actions(ch_group_t* ch_group, uint8_t index, const float action_value) {
     float last_value;
-    float last_diff = 10000000;
+    float last_diff = 10000000.f;
     wildcard_action_t* wildcard_action = ch_group->wildcard_action;
     wildcard_action_t* last_wildcard_action = NULL;
     
@@ -6356,20 +6376,17 @@ void identify(homekit_characteristic_t* ch, const homekit_value_t value) {
 // ---------
 
 void delayed_sensor_task() {
-    vTaskDelay(MS_TO_TICKS(3000));
-    
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
         if (ch_group->timer &&
             ch_group->serv_type >= SERV_TYPE_THERMOSTAT &&
             ch_group->serv_type <= SERV_TYPE_HUMIDIFIER_WITH_TEMP) {
+            vTaskDelay(MS_TO_TICKS(3500));
             
             INFO("<%i> Starting TH sensor", ch_group->serv_index);
             
             temperature_timer_worker(ch_group->timer);
             esp_timer_start_forced(ch_group->timer);
-            
-            vTaskDelay(MS_TO_TICKS(4000));
         }
         
         ch_group = ch_group->next;
@@ -6377,15 +6394,13 @@ void delayed_sensor_task() {
     
     ch_group = main_config.ch_groups;
     while (ch_group) {
-        if (ch_group->serv_type == SERV_TYPE_IAIRZONING &&
-            ch_group->timer) {
+        if (ch_group->serv_type == SERV_TYPE_IAIRZONING) {
+            vTaskDelay(MS_TO_TICKS(9500));
             
             INFO("<%i> Starting iAirZoning", ch_group->serv_index);
             
             temperature_timer_worker(ch_group->timer);
             esp_timer_start_forced(ch_group->timer);
-            
-            vTaskDelay(MS_TO_TICKS(9500));
         }
         
         ch_group = ch_group->next;
@@ -6461,6 +6476,7 @@ void printf_header() {
 }
 
 void reset_uart() {
+    set_used_gpio(1);
     gpio_disable(1);
     iomux_set_pullup_flags(5, 0);
     iomux_set_function(5, IOMUX_GPIO1_FUNC_UART0_TXD);
@@ -6690,6 +6706,18 @@ void normal_mode_init() {
         return state;
     }
     
+    uint16_t get_absolut_index(const uint16_t base, const int16_t rel_index) {
+        if (rel_index > 7000) {
+            return base + rel_index - 7000;
+        }
+        
+        if (rel_index <= 0) {
+            return base + rel_index;
+        }
+        
+        return rel_index;
+    }
+    
     // REGISTER ACTIONS
     // Copy actions
     inline void new_action_copy(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
@@ -6811,18 +6839,10 @@ void normal_mode_init() {
                         cJSON* json_acc_manager = cJSON_GetArrayItem(json_acc_managers, i);
                         for (int j = 0; j < cJSON_GetArraySize(json_acc_manager); j++) {
                             const float value = (float) cJSON_GetArrayItem(json_acc_manager, j)->valuedouble;
-                            int acc_index;
                             
                             switch (j) {
                                 case 0:
-                                    acc_index = value;
-                                    if (acc_index <= 0) {
-                                        action_serv_manager->serv_index = ch_group->serv_index + acc_index;
-                                    } else if (acc_index > 7000) {
-                                        action_serv_manager->serv_index = ch_group->serv_index + (acc_index - 7000);
-                                    } else {
-                                        action_serv_manager->serv_index = acc_index;
-                                    }
+                                    action_serv_manager->serv_index = get_absolut_index(ch_group->serv_index, value);
                                     break;
                                     
                                 case 1:
@@ -7173,7 +7193,9 @@ void normal_mode_init() {
     
     int8_t th_sensor_gpio(cJSON* json_accessory) {
         if (cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO) != NULL) {
-            return (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO)->valuedouble;
+            const uint8_t sensor_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO)->valuedouble;
+            set_used_gpio(sensor_gpio);
+            return sensor_gpio;
         }
         return -1;
     }
@@ -7286,7 +7308,6 @@ void normal_mode_init() {
                         break;
                         
                     default:    // case 0:
-                        set_used_gpio(1);
                         reset_uart();
                         break;
                 }
@@ -7358,7 +7379,6 @@ void normal_mode_init() {
         log_output_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT)->valuedouble;
         
         if ((log_output_type == 1 || log_output_type == 4 || log_output_type == 7) && !used_uart[0]) {
-            set_used_gpio(1);
             reset_uart();
         } else if ((log_output_type == 2 || log_output_type == 5 || log_output_type == 8) && !used_uart[1]) {
             set_used_gpio(2);
@@ -8369,6 +8389,7 @@ void normal_mode_init() {
         }
     }
     
+    // *** NEW AIR QUALITY
     void new_air_quality(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
         size_t extra_data_size = 0;
         cJSON* json_extra_data = NULL;
@@ -8760,9 +8781,6 @@ void normal_mode_init() {
         ch_group->timer2 = esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, process_th_timer);
         
         const int sensor_gpio = TH_SENSOR_GPIO;
-        if (sensor_gpio != -1) {
-            set_used_gpio(sensor_gpio);
-        }
         
         if ((sensor_gpio != -1 || TH_SENSOR_TYPE >= 5) && TH_IAIRZONING_CONTROLLER == 0) {
             th_sensor_starter(ch_group, poll_period);
@@ -8870,9 +8888,6 @@ void normal_mode_init() {
         }
         
         const int sensor_gpio = TH_SENSOR_GPIO;
-        if (sensor_gpio != -1) {
-            set_used_gpio(sensor_gpio);
-        }
         
         if (sensor_gpio != -1 || TH_SENSOR_TYPE >= 5) {
             th_sensor_starter(ch_group, poll_period);
@@ -8920,9 +8935,6 @@ void normal_mode_init() {
         }
         
         const int sensor_gpio = TH_SENSOR_GPIO;
-        if (sensor_gpio != -1) {
-            set_used_gpio(sensor_gpio);
-        }
         
         if (sensor_gpio != -1 || TH_SENSOR_TYPE >= 9) {
             th_sensor_starter(ch_group, poll_period);
@@ -8991,7 +9003,6 @@ void normal_mode_init() {
         
         const int sensor_gpio = TH_SENSOR_GPIO;
         if (sensor_gpio != -1) {
-            set_used_gpio(sensor_gpio);
             th_sensor_starter(ch_group, poll_period);
         }
     }
@@ -9153,9 +9164,6 @@ void normal_mode_init() {
         ch_group->timer2 = esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, process_humidif_timer);
         
         const int sensor_gpio = TH_SENSOR_GPIO;
-        if (sensor_gpio != -1) {
-            set_used_gpio(sensor_gpio);
-        }
         
         if (sensor_gpio != -1 || TH_SENSOR_TYPE >= 9) {
             th_sensor_starter(ch_group, poll_period);
@@ -9307,17 +9315,18 @@ void normal_mode_init() {
             
             LIGHTBULB_CHANNELS = cJSON_GetArraySize(gpio_array);
             for (int i = 0; i < LIGHTBULB_CHANNELS; i++) {
-                int gpio = cJSON_GetArrayItem(gpio_array, i)->valuedouble;
-                set_used_gpio(gpio % 100);
+                const int gpio = cJSON_GetArrayItem(gpio_array, i)->valuedouble;
+                const int real_gpio = gpio % 100;
+                set_used_gpio(real_gpio);
                 
-                lightbulb_group->gpio[i] = gpio % 100;
+                lightbulb_group->gpio[i] = real_gpio;
                 
                 int is_leading = false;
                 if (leading_array) {
                     is_leading = (bool) cJSON_GetArrayItem(leading_array, i)->valuedouble;
                 }
                 
-                adv_pwm_new_channel(lightbulb_group->gpio[i], gpio / 100, is_leading);
+                adv_pwm_new_channel(real_gpio, gpio / 100, is_leading);
             }
             
             adv_pwm_start();
@@ -10429,6 +10438,10 @@ void normal_mode_init() {
                 PM_SENSOR_HLW_GPIO = data[1];
             }
             
+            for (int i = 0; i < 3; i++) {
+                set_used_gpio(data[i]);
+            }
+            
             adv_hlw_unit_create(data[0], data[1], data[2], pm_sensor_type, data[3], true);
         }
         
@@ -10542,11 +10555,7 @@ void normal_mode_init() {
         ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_FREE_VALUE, 0);
         
         if (tg_serv != 0) {
-            if (tg_serv < 0) {
-                tg_serv += service_numerator;
-            }
-            
-            ch_group->ch_target = ch_group_find_by_acc(tg_serv)->ch[tg_ch];
+            ch_group->ch_target = ch_group_find_by_acc(get_absolut_index(service_numerator, tg_serv))->ch[tg_ch];
         }
         
         if (pattern_base) {
@@ -10712,10 +10721,10 @@ void normal_mode_init() {
     }
     
     // *** HISTORICAL
-    void new_historical(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+    void new_history(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
         cJSON* data_array = cJSON_GetObjectItemCaseSensitive(json_context, HIST_DATA_ARRAY_SET);
         
-        const unsigned int hist_accessory = cJSON_GetArrayItem(data_array, 0)->valuedouble;
+        const unsigned int hist_accessory = get_absolut_index(service_numerator, cJSON_GetArrayItem(data_array, 0)->valuedouble);
         const unsigned int hist_ch = cJSON_GetArrayItem(data_array, 1)->valuedouble;
         const size_t hist_size = cJSON_GetArrayItem(data_array, 2)->valuedouble;
         
@@ -10870,7 +10879,7 @@ void normal_mode_init() {
             new_free_monitor(acc_count, serv_count, total_services, json_accessory, serv_type);
             
         } else if (serv_type == SERV_TYPE_HISTORICAL) {
-            new_historical(acc_count, serv_count, total_services, json_accessory);
+            new_history(acc_count, serv_count, total_services, json_accessory);
             
         } else if (serv_type == SERV_TYPE_IAIRZONING) {
             new_iairzoning(json_accessory);
@@ -11023,17 +11032,19 @@ void normal_mode_init() {
         }
     }
     
+    cJSON_Delete(json_haa);
+    cJSON_Delete(init_last_state_json);
+    
+    xTaskCreate(delayed_sensor_task, "DS", DELAYED_SENSOR_START_TASK_SIZE, NULL, DELAYED_SENSOR_START_TASK_PRIORITY, NULL);
+    
+    set_unused_gpios();
+    
     INFO("Device Category: %i\n", config.category);
     
     config.accessories = accessories;
     config.config_number = (uint16_t) last_config_number;
     
     main_config.setup_mode_toggle_counter = 0;
-    
-    cJSON_Delete(json_haa);
-    cJSON_Delete(init_last_state_json);
-    
-    xTaskCreate(delayed_sensor_task, "DS", DELAYED_SENSOR_START_TASK_SIZE, NULL, DELAYED_SENSOR_START_TASK_PRIORITY, NULL);
     
     if (main_config.uart_buffer_len == 1) {
         main_config.uart_buffer_len = 0;
@@ -11062,7 +11073,9 @@ void normal_mode_init() {
 void irrf_capture_task(void* args) {
     const int irrf_capture_gpio = ((int) args) - 100;
     INFO("\nCapture GPIO: %i\n", irrf_capture_gpio);
+    set_used_gpio(irrf_capture_gpio);
     gpio_enable(irrf_capture_gpio, GPIO_INPUT);
+    set_unused_gpios();
     
     int read, last = true;
     unsigned int i, c = 0;
@@ -11144,6 +11157,8 @@ void init_task() {
     
     void enter_setup(const int param) {
         reset_uart();
+        set_unused_gpios();
+        
         printf_header();
         INFO("SETUP");
         wifi_config_init("HAA", NULL, NULL, main_config.name_value, param);
@@ -11208,20 +11223,10 @@ void init_task() {
 }
 
 void user_init(void) {
-    // GPIO Init
-    for (int i = 0; i < 17; i++) {
-        if (i == 6) {
-            i += 6;
-        }
-        
-        gpio_write(i, false);
-        gpio_enable(i, GPIO_INPUT);
-    }
-    
     sdk_wifi_station_set_auto_connect(false);
     sdk_wifi_set_opmode(STATION_MODE);
     sdk_wifi_station_disconnect();
     sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
     
-    xTaskCreate(init_task, "ini", 512, NULL, (tskIDLE_PRIORITY + 2), NULL);
+    xTaskCreate(init_task, "INI", 512, NULL, (tskIDLE_PRIORITY + 2), NULL);
 }

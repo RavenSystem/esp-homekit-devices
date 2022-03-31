@@ -76,7 +76,7 @@ void ota_task(void *arg) {
         }
     }
     
-    INFO("REPO http%s://%s:%i", is_ssl ? "s" : "", user_repo, port);
+    INFO("REPO http%s://%s %i", is_ssl ? "s" : "", user_repo, port);
 
     status = sysparam_get_string(USER_VERSION_SYSPARAM, &user_version);
     if (status == SYSPARAM_OK) {
@@ -221,6 +221,17 @@ void ota_task(void *arg) {
                             if (ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
                                 ota_finalize_file(BOOT0SECTOR);
                                 sysparam_set_string(USER_VERSION_SYSPARAM, new_version);
+                                
+                                int last_config_number = 0;
+                                sysparam_get_int32(LAST_CONFIG_NUMBER_SYSPARAM, &last_config_number);
+                                last_config_number++;
+                                
+                                if (last_config_number > 65535) {
+                                    last_config_number = 1;
+                                }
+                                
+                                sysparam_set_int32(LAST_CONFIG_NUMBER_SYSPARAM, last_config_number);
+                                
                                 INFO("\n* HAAMAIN v%s installed", new_version);
                             }
                             
@@ -292,7 +303,6 @@ void user_init(void) {
             i++;
         }
         
-        gpio_write(i, false);
         gpio_enable(i, GPIO_INPUT);
     }
     

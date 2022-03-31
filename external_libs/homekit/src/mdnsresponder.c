@@ -134,10 +134,10 @@ static mdns_rsrc*      gDictP = NULL;       // RR database, linked list
 static u8_t* mdns_response = NULL;
 static u16_t mdns_responder_reply_size = 0;
 
-#define MDNS_TTL_MIN                (30)
+#define MDNS_TTL_MIN                (32)
 #define MDNS_TTL_MULTIPLIER_MS      (1000)  // Set to 1000 to use standard time
-#define MDNS_TTL_SAFE_MARGIN        (3)
-static uint32_t mdns_ttl = 4500;
+#define MDNS_TTL_SAFE_MARGIN        (7)
+static uint32_t mdns_ttl = 3492;
 
 #define MDNS_STATUS_PROBING_1       (0)
 #define MDNS_STATUS_PROBING_2       (1)

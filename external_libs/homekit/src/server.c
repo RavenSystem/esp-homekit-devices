@@ -312,20 +312,21 @@ pair_verify_context_t *pair_verify_context_new() {
     return context;
 }
 
-void pair_verify_context_free(pair_verify_context_t *context) {
-    if (context->secret)
-        free(context->secret);
+void pair_verify_context_free(pair_verify_context_t **context) {
+    if ((*context)->secret)
+        free((*context)->secret);
 
-    if (context->session_key)
-        free(context->session_key);
+    if ((*context)->session_key)
+        free((*context)->session_key);
 
-    if (context->device_public_key)
-        free(context->device_public_key);
+    if ((*context)->device_public_key)
+        free((*context)->device_public_key);
 
-    if (context->accessory_public_key)
-        free(context->accessory_public_key);
+    if ((*context)->accessory_public_key)
+        free((*context)->accessory_public_key);
 
-    free(context);
+    free(*context);
+    *context = NULL;
 }
 
 
@@ -347,7 +348,7 @@ client_context_t *client_context_new() {
 
 void client_context_free(client_context_t *c) {
     if (c->verify_context)
-        pair_verify_context_free(c->verify_context);
+        pair_verify_context_free(&c->verify_context);
 
     if (c->endpoint_params)
         query_params_free(c->endpoint_params);
@@ -1776,8 +1777,9 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             
             send_tlv_response(context, response);
 
-            if (context->verify_context)
-                pair_verify_context_free(context->verify_context);
+            if (context->verify_context) {
+                pair_verify_context_free(&context->verify_context);
+            }
 
             context->verify_context = pair_verify_context_new();
             context->verify_context->secret = shared_secret;
@@ -1809,8 +1811,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             if (!tlv_encrypted_data) {
                 CLIENT_ERROR(context, "No encrypted data");
 
-                pair_verify_context_free(context->verify_context);
-                context->verify_context = NULL;
+                pair_verify_context_free(&context->verify_context);
 
                 send_tlv_error_response(context, 4, TLVError_Authentication);
                 break;
@@ -1834,8 +1835,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
                 CLIENT_ERROR(context, "Decrypt data (%d)", r);
 
                 free(decrypted_data);
-                pair_verify_context_free(context->verify_context);
-                context->verify_context = NULL;
+                pair_verify_context_free(&context->verify_context);
 
                 send_tlv_error_response(context, 4, TLVError_Authentication);
                 break;
@@ -1849,8 +1849,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
                 CLIENT_ERROR(context, "Parse TLV (%d)", r);
 
                 tlv_free(decrypted_message);
-                pair_verify_context_free(context->verify_context);
-                context->verify_context = NULL;
+                pair_verify_context_free(&context->verify_context);
 
                 send_tlv_error_response(context, 4, TLVError_Authentication);
                 break;
@@ -1861,8 +1860,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
                 CLIENT_ERROR(context, "No id");
 
                 tlv_free(decrypted_message);
-                pair_verify_context_free(context->verify_context);
-                context->verify_context = NULL;
+                pair_verify_context_free(&context->verify_context);
 
                 send_tlv_error_response(context, 4, TLVError_Authentication);
                 break;
@@ -1873,8 +1871,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
                 CLIENT_ERROR(context, "No sign");
 
                 tlv_free(decrypted_message);
-                pair_verify_context_free(context->verify_context);
-                context->verify_context = NULL;
+                pair_verify_context_free(&context->verify_context);
 
                 send_tlv_error_response(context, 4, TLVError_Authentication);
                 break;
@@ -1888,8 +1885,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
 
                 free(device_id);
                 tlv_free(decrypted_message);
-                pair_verify_context_free(context->verify_context);
-                context->verify_context = NULL;
+                pair_verify_context_free(&context->verify_context);
 
                 send_tlv_error_response(context, 4, TLVError_Authentication);
                 break;
@@ -1927,8 +1923,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             if (r) {
                 CLIENT_ERROR(context, "Verify sign (%d)", r);
 
-                pair_verify_context_free(context->verify_context);
-                context->verify_context = NULL;
+                pair_verify_context_free(&context->verify_context);
 
                 send_tlv_error_response(context, 4, TLVError_Authentication);
                 break;
@@ -1948,8 +1943,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             if (r) {
                 CLIENT_ERROR(context, "Derive read encryption key (%d)", r);
 
-                pair_verify_context_free(context->verify_context);
-                context->verify_context = NULL;
+                pair_verify_context_free(&context->verify_context);
 
                 send_tlv_error_response(context, 4, TLVError_Unknown);
                 break;
@@ -1964,8 +1958,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
                 context->write_key, &write_key_size
             );
 
-            pair_verify_context_free(context->verify_context);
-            context->verify_context = NULL;
+            pair_verify_context_free(&context->verify_context);
 
             if (r) {
                 CLIENT_ERROR(context, "Derive write encryption key (%d)", r);

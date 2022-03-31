@@ -760,7 +760,7 @@ char* ota_get_version(char* repo, char* version_file, uint16_t port, const bool 
     memset(version, 0, VERSIONFILESIZE + 1);
 
     if (ota_get_file_ex(repo, version_file, 0, version, VERSIONFILESIZE, port, is_ssl, NULL) == 0) {
-        INFO("*** VERSION of %s: %s", version_file, (char*) version);
+        INFO("**** %s v%s", version_file, (char*) version);
     } else {
         free(version);
         version = NULL;
@@ -819,7 +819,7 @@ int ota_verify_sign(int start_sector, int filesize, uint8_t* signature) {
     int verify = 0;
     wc_ecc_verify_hash(signature, SIGNSIZE, hash, HASHSIZE, &verify, &public_key);
     
-    INFO(">>> Sign result: %s", verify == 1 ? "OK" : "ERROR");
+    INFO(">>> Result %s", verify == 1 ? "OK" : "ERROR");
     
 #ifndef HAABOOT
     sign_check_client(verify);

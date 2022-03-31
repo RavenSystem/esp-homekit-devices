@@ -16,15 +16,12 @@ BaseType_t esp_timer_manager(const uint8_t option, TimerHandle_t xTimer, TickTyp
         switch (option) {
             case TIMER_MANAGER_STOP:
                 return xTimerStop(xTimer, xBlockTime);
-                break;
                 
             case TIMER_MANAGER_DELETE:
                 return xTimerDelete(xTimer, xBlockTime);
-                break;
                 
             default:    // TIMER_MANAGER_START:
                 return xTimerStart(xTimer, xBlockTime);
-                break;
         }
     }
     
@@ -46,11 +43,9 @@ BaseType_t IRAM esp_timer_manager_from_ISR(const uint8_t option, TimerHandle_t x
         switch (option) {
             case TIMER_MANAGER_STOP:
                 return xTimerStopFromISR(xTimer, &xHigherPriorityTaskWoken);
-                break;
                 
             default:    // TIMER_MANAGER_START:
                 return xTimerStartFromISR(xTimer, &xHigherPriorityTaskWoken);
-                break;
         }
     }
     

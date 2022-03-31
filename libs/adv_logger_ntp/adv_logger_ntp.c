@@ -101,12 +101,16 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
             continue;
         }
         
+        if (adv_logger_data->udplogstring_len > (UDP_LOG_LEN - 40 - 1)) {
+            is_adv_logger_data = false;
+        }
+        
         if (((char*) ptr)[i] == '\n') {
             if (adv_logger_data->log_type >= 0) {
                 uart_putc(adv_logger_data->log_type, '\r');
             }
             
-            if (adv_logger_data->ready_to_send) {
+            if (adv_logger_data->ready_to_send && is_adv_logger_data) {
                 adv_logger_data->udplogstring[adv_logger_data->udplogstring_len] = '\r';
                 adv_logger_data->udplogstring_len++;
             }
@@ -243,7 +247,7 @@ static void adv_logger_init_task(void* args) {
         adv_logger_data->udplogstring_len = strlen(adv_logger_data->udplogstring);
 
         if (adv_logger_data->is_buffered) {
-            xTaskCreate(adv_logger_buffered_task, "adv_logger_buff", ADV_LOGGER_BUFFERED_TASK_SIZE, NULL, ADV_LOGGER_BUFFERED_TASK_PRIORITY, &adv_logger_data->xHandle);
+            xTaskCreate(adv_logger_buffered_task, "LOG", ADV_LOGGER_BUFFERED_TASK_SIZE, NULL, ADV_LOGGER_BUFFERED_TASK_PRIORITY, &adv_logger_data->xHandle);
         }
         
         adv_logger_data->is_new_line = true;

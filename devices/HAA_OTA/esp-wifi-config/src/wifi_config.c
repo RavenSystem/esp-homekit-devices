@@ -340,7 +340,7 @@ static void wifi_config_smart_connect() {
     int8_t wifi_mode = 0;
     sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
     
-    if (wifi_mode < 2 || xTaskCreate(wifi_scan_sc_task, "sma", 512, NULL, (tskIDLE_PRIORITY + 2), NULL) != pdPASS) {
+    if (wifi_mode < 2 || xTaskCreate(wifi_scan_sc_task, "sma", 384, NULL, (tskIDLE_PRIORITY + 2), NULL) != pdPASS) {
         if (!wifi_config_got_ip()) {
             sdk_wifi_station_connect();
         }
@@ -427,7 +427,7 @@ static void wifi_scan_task(void *arg) {
 static void wifi_config_server_on_settings(client_t *client) {
     esp_timer_change_period_forced(context->auto_reboot_timer, AUTO_REBOOT_LONG_TIMEOUT);
     
-    xTaskCreate(wifi_scan_task, "sca", 512, NULL, (tskIDLE_PRIORITY + 0), NULL);
+    xTaskCreate(wifi_scan_task, "sca", 384, NULL, (tskIDLE_PRIORITY + 0), NULL);
     
     static const char http_prologue[] =
         "HTTP/1.1 200 \r\n"
@@ -993,7 +993,7 @@ static uint8_t wifi_config_connect(const uint8_t phy) {
             wifi_config_toggle_phy_mode(phy);
             
             if (wifi_mode == 4) {
-                xTaskCreate(wifi_scan_sc_task, "sma", 512, NULL, (tskIDLE_PRIORITY + 2), NULL);
+                xTaskCreate(wifi_scan_sc_task, "sma", 384, NULL, (tskIDLE_PRIORITY + 2), NULL);
             } else {
                 wifi_config_smart_connect();
             }
