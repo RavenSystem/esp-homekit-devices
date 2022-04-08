@@ -693,8 +693,8 @@ void mdns_add_facility(const char* instanceName,   // Friendly name, need not be
     vTaskDelay(400 / portTICK_PERIOD_MS);
     
     if (ttl < 1000 && strstr(addText, "sf=1") != NULL) {
-        printf(">>> mDNS TTL 3600 for pairing\n");
-        ttl = 3492;
+        printf(">>> mDNS TTL 4500 for pairing\n");
+        ttl = 4365;
     }
     
     if (ttl < MDNS_TTL_MIN) {

@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "10.4.5"
+#define FIRMWARE_VERSION                    "10.4.6"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -86,7 +86,7 @@
 // JSON
 #define GENERAL_CONFIG                      "c"
 #define MDNS_TTL                            "ttl"
-#define MDNS_TTL_DEFAULT                    (3492)
+#define MDNS_TTL_DEFAULT                    (4365)
 #define CUSTOM_HOSTNAME                     "n"
 #define CUSTOM_NTP_HOST                     "ntp"
 #define TIMEZONE                            "tz"
@@ -100,8 +100,8 @@
 #define PWM_ZEROCROSSING_ARRAY_SET          "zc"
 #define ENABLE_HOMEKIT                      "h"
 #define HOMEKIT_SERVER_MAX_CLIENTS          "h"
-#define HOMEKIT_SERVER_MAX_CLIENTS_DEFAULT  (8)
-#define HOMEKIT_SERVER_MAX_CLIENTS_MAX      (8)
+#define HOMEKIT_SERVER_MAX_CLIENTS_DEFAULT  (20)
+#define HOMEKIT_SERVER_MAX_CLIENTS_MAX      (20)
 #define ALLOW_INSECURE_CONNECTIONS          "u"
 #define UART_CONFIG_ARRAY                   "r"
 #define UART_CONFIG_ENABLE                  "n"

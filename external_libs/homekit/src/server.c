@@ -1890,13 +1890,14 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
                 send_tlv_error_response(context, 4, TLVError_Authentication);
                 break;
             }
-
-            CLIENT_INFO(context, "Pairing with %s", device_id);
+            
             free(device_id);
-
+            
+            CLIENT_INFO(context, "Pair found");
+            
             byte permissions = pairing->permissions;
             int pairing_id = pairing->id;
-
+            
             size_t device_info_size =
                 context->verify_context->device_public_key_size +
                 context->verify_context->accessory_public_key_size +
@@ -2898,9 +2899,9 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
                     send_tlv_error_response(context, 2, TLVError_Unknown);
                     break;
                 }
-
-                HOMEKIT_INFO("Removed paired with %s", device_identifier);
-
+                
+                HOMEKIT_INFO("Pairing removed");
+                
                 HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_PAIRING_REMOVED);
 
                 client_context_t *c = homekit_server->clients;

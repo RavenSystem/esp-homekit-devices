@@ -1050,7 +1050,7 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
             setup_mode_toggle_upcount();
             save_states_callback();
             
-            if (ch_group->chs > 1) {
+            if (ch_group->chs > 1 && ch_group->ch[1]->value.int_value > 0) {
                 if (value.bool_value) {
                     ch_group->ch[2]->value.int_value = ch_group->ch[1]->value.int_value;
                     esp_timer_start(ch_group->timer);
@@ -1085,14 +1085,13 @@ void hkc_on_status_setter(homekit_characteristic_t* ch, const homekit_value_t va
 void on_timer_worker(TimerHandle_t xTimer) {
     ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
     
-    ch_group->ch[2]->value.int_value--;
+    if (ch_group->ch[2]->value.int_value > 0) {
+        ch_group->ch[2]->value.int_value--;
+    }
     
-    if (ch_group->ch[2]->value.int_value <= 0) {
+    if (ch_group->ch[2]->value.int_value == 0) {
         esp_timer_stop(ch_group->timer);
-        
-        if (ch_group->ch[2]->value.int_value == 0) {
-            hkc_on_setter(ch_group->ch[0], HOMEKIT_BOOL(false));
-        }
+        hkc_on_setter(ch_group->ch[0], HOMEKIT_BOOL(false));
     }
 }
 
@@ -1444,7 +1443,7 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
             setup_mode_toggle_upcount();
             save_states_callback();
             
-            if (ch_group->chs > 2) {
+            if (ch_group->chs > 2 && ch_group->ch[2]->value.int_value > 0) {
                 if (value.int_value == 0) {
                     ch_group->ch[3]->value.int_value = 0;
                     esp_timer_stop(ch_group->timer);
@@ -1485,14 +1484,13 @@ void hkc_valve_status_setter(homekit_characteristic_t* ch, const homekit_value_t
 void valve_timer_worker(TimerHandle_t xTimer) {
     ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
     
-    ch_group->ch[3]->value.int_value--;
+    if (ch_group->ch[3]->value.int_value > 0) {
+        ch_group->ch[3]->value.int_value--;
+    }
     
-    if (ch_group->ch[3]->value.int_value <= 0) {
+    if (ch_group->ch[3]->value.int_value == 0) {
         esp_timer_stop(ch_group->timer);
-        
-        if (ch_group->ch[3]->value.int_value == 0) {
-            hkc_valve_setter(ch_group->ch[0], HOMEKIT_UINT8(0));
-        }
+        hkc_valve_setter(ch_group->ch[0], HOMEKIT_UINT8(0));
     }
 }
 
@@ -5964,7 +5962,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 
                                 if (ch_group->chs > 2) {
                                     if (value_int < -1) {
-                                        hkc_setter(ch_group->ch[2], HOMEKIT_UINT32(- value_int - 1));
+                                        hkc_setter(ch_group->ch[2], HOMEKIT_UINT32(- value_int - 2));
                                     }
                                     if (value_int == -1 || ch_group->ch[3]->value.int_value > ch_group->ch[2]->value.int_value) {
                                         ch_group->ch[3]->value.int_value = ch_group->ch[2]->value.int_value;
@@ -6204,7 +6202,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 
                                 if (ch_group->chs > 1) {
                                     if (value_int < -1) {
-                                        hkc_setter(ch_group->ch[1], HOMEKIT_UINT32(- value_int - 1));
+                                        hkc_setter(ch_group->ch[1], HOMEKIT_UINT32(- value_int - 2));
                                     }
                                     if (value_int == -1 || ch_group->ch[2]->value.int_value > ch_group->ch[1]->value.int_value) {
                                         ch_group->ch[2]->value.int_value = ch_group->ch[1]->value.int_value;
