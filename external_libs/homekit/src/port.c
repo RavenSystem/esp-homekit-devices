@@ -42,7 +42,7 @@ void homekit_mdns_add_txt(const char *key, const char *format, ...) {
     }
 }
 
-void homekit_mdns_configure_finalize(const uint16_t mdns_ttl) {
+void homekit_mdns_configure_finalize(const uint16_t mdns_ttl, const uint16_t mdns_ttl_period) {
     /*
     printf("mDNS announcement: Name=%s %s Port=%d TTL=%d\n",
            name->value.string_value, txt_rec, PORT, 0);
@@ -102,9 +102,9 @@ void homekit_mdns_add_txt(const char *key, const char *format, ...) {
     }
 }
 
-void homekit_mdns_configure_finalize(const uint16_t mdns_ttl) {
+void homekit_mdns_configure_finalize(const uint16_t mdns_ttl, const uint16_t mdns_ttl_period) {
     mdns_clear();
-    mdns_add_facility(mdns_instance_name, "_hap", mdns_txt_rec, mdns_TCP, mdns_port, mdns_ttl);
+    mdns_add_facility(mdns_instance_name, "_hap", mdns_txt_rec, mdns_TCP, mdns_port, mdns_ttl, mdns_ttl_period);
 
     printf("mDNS: Name=%s %s Port=%d TTL=%d\n", mdns_instance_name, mdns_txt_rec, mdns_port, mdns_ttl);
 }

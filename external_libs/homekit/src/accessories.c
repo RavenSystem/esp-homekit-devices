@@ -344,11 +344,9 @@ homekit_accessory_t* homekit_accessory_clone(homekit_accessory_t* ac) {
     uint8_t* p = calloc(1, size);
     homekit_accessory_t* clone = (homekit_accessory_t*) p;
     p += align_size(sizeof(homekit_accessory_t));
-
+    
     clone->id = ac->id;
-    clone->category = ac->category;
-    clone->config_number = ac->config_number;
-
+    
     if (ac->services) {
         clone->services = (homekit_service_t**) p;
         int i = 0;

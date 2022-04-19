@@ -35,39 +35,43 @@ typedef uint8_t homekit_permissions_t;                  // 6 bits
 #define HOMEKIT_PERMISSIONS_TIMED_WRITE                 (16)
 #define HOMEKIT_PERMISSIONS_HIDDEN                      (32)
 
-typedef enum {
-    homekit_accessory_category_other = 1,
-    homekit_accessory_category_bridge = 2,
-    homekit_accessory_category_fan = 3,
-    homekit_accessory_category_garage = 4,
-    homekit_accessory_category_lightbulb = 5,
-    homekit_accessory_category_door_lock = 6,
-    homekit_accessory_category_outlet = 7,
-    homekit_accessory_category_switch = 8,
-    homekit_accessory_category_thermostat = 9,
-    homekit_accessory_category_sensor = 10,
-    homekit_accessory_category_security_system = 11,
-    homekit_accessory_category_door = 12,
-    homekit_accessory_category_window = 13,
-    homekit_accessory_category_window_covering = 14,
-    homekit_accessory_category_programmable_switch = 15,
-    homekit_accessory_category_range_extender = 16,
-    homekit_accessory_category_ip_camera = 17,
-    homekit_accessory_category_video_door_bell = 18,
-    homekit_accessory_category_air_purifier = 19,
-    homekit_accessory_category_heater = 20,
-    homekit_accessory_category_air_conditioner = 21,
-    homekit_accessory_category_humidifier = 22,
-    homekit_accessory_category_dehumidifier = 23,
-    homekit_accessory_category_apple_tv = 24,
-    homekit_accessory_category_speaker = 26,
-    homekit_accessory_category_airport = 27,
-    homekit_accessory_category_sprinkler = 28,
-    homekit_accessory_category_faucet = 29,
-    homekit_accessory_category_shower_head = 30,
-    homekit_accessory_category_television = 31,
-    homekit_accessory_category_target_controller = 32,
-} homekit_accessory_category_t;
+typedef uint8_t homekit_device_category_t;              // 6 bits
+#define HOMEKIT_DEVICE_CATEGORY_OTHER                   (1)
+#define HOMEKIT_DEVICE_CATEGORY_BRIDGE                  (2)
+#define HOMEKIT_DEVICE_CATEGORY_FAN                     (3)
+#define HOMEKIT_DEVICE_CATEGORY_GARAGE                  (4)
+#define HOMEKIT_DEVICE_CATEGORY_LIGHTBULB               (5)
+#define HOMEKIT_DEVICE_CATEGORY_DOOR_LOCK               (6)
+#define HOMEKIT_DEVICE_CATEGORY_OUTLET                  (7)
+#define HOMEKIT_DEVICE_CATEGORY_SWITCH                  (8)
+#define HOMEKIT_DEVICE_CATEGORY_THERSMOSTAT             (9)
+#define HOMEKIT_DEVICE_CATEGORY_SENSOR                  (10)
+#define HOMEKIT_DEVICE_CATEGORY_SECURITY_SYSTEM         (11)
+#define HOMEKIT_DEVICE_CATEGORY_DOOR                    (12)
+#define HOMEKIT_DEVICE_CATEGORY_WINDOW                  (13)
+#define HOMEKIT_DEVICE_CATEGORY_WINDOW_COVERING         (14)
+#define HOMEKIT_DEVICE_CATEGORY_PROGRAMMABLE_SWITCH     (15)
+#define HOMEKIT_DEVICE_CATEGORY_RANGE_EXTENDER          (16)
+#define HOMEKIT_DEVICE_CATEGORY_IP_CAMERA               (17)
+#define HOMEKIT_DEVICE_CATEGORY_VIDEO_DOOR_BELL         (18)
+#define HOMEKIT_DEVICE_CATEGORY_AIR_PURIFIER            (19)
+#define HOMEKIT_DEVICE_CATEGORY_HEATER                  (20)
+#define HOMEKIT_DEVICE_CATEGORY_AIR_CONDITIONER         (21)
+#define HOMEKIT_DEVICE_CATEGORY_HUMIDIFIER              (22)
+#define HOMEKIT_DEVICE_CATEGORY_DEHUMIDIFIER            (23)
+#define HOMEKIT_DEVICE_CATEGORY_APPLE_TV                (24)
+#define HOMEKIT_DEVICE_CATEGORY_HOMEPOD                 (25)
+#define HOMEKIT_DEVICE_CATEGORY_SPEAKER                 (26)
+#define HOMEKIT_DEVICE_CATEGORY_AIRPORT                 (27)
+#define HOMEKIT_DEVICE_CATEGORY_SPRINKLER               (28)
+#define HOMEKIT_DEVICE_CATEGORY_FAUCET                  (29)
+#define HOMEKIT_DEVICE_CATEGORY_SHOWER_HEAD             (30)
+#define HOMEKIT_DEVICE_CATEGORY_TELEVISION              (31)
+#define HOMEKIT_DEVICE_CATEGORY_TARGET_CONTROLLER       (32)
+#define HOMEKIT_DEVICE_CATEGORY_WIFI_ROUTER             (33)
+#define HOMEKIT_DEVICE_CATEGORY_AUDIO_RECEIVER          (34)
+#define HOMEKIT_DEVICE_CATEGORY_TV_SET_BOX              (35)
+#define HOMEKIT_DEVICE_CATEGORY_TV_STREAMING_STICK      (36)
 
 struct _homekit_accessory;
 struct _homekit_service;
@@ -146,7 +150,7 @@ void homekit_value_free(homekit_value_t *value);
 
 typedef struct {
     int count;
-    uint8_t *values;
+    uint8_t* values;
 } homekit_valid_values_t;
 
 
@@ -216,18 +220,13 @@ struct _homekit_service {
 
 struct _homekit_accessory {
     uint16_t id;
-    uint16_t config_number;
-
-    homekit_accessory_category_t category;
-
+    
     homekit_service_t **services;
 };
 
 // Macro to define accessory
 #define HOMEKIT_ACCESSORY(...) \
     &(homekit_accessory_t) { \
-        .config_number=1, \
-        .category=homekit_accessory_category_other, \
         ##__VA_ARGS__ \
     }
 

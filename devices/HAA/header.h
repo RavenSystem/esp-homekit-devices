@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "10.4.6"
+#define FIRMWARE_VERSION                    "10.5.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -86,7 +86,7 @@
 // JSON
 #define GENERAL_CONFIG                      "c"
 #define MDNS_TTL                            "ttl"
-#define MDNS_TTL_DEFAULT                    (4365)
+#define MDNS_TTL_DEFAULT                    (4500)
 #define CUSTOM_HOSTNAME                     "n"
 #define CUSTOM_NTP_HOST                     "ntp"
 #define TIMEZONE                            "tz"

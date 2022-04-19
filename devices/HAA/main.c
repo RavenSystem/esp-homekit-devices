@@ -7715,8 +7715,15 @@ void normal_mode_init() {
     
     // mDNS TTL
     config.mdns_ttl = MDNS_TTL_DEFAULT;
+    config.mdns_ttl_period = config.mdns_ttl;
     if (cJSON_GetObjectItemCaseSensitive(json_config, MDNS_TTL) != NULL) {
-        config.mdns_ttl = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, MDNS_TTL)->valuedouble;
+        cJSON* mdns_ttl_array = cJSON_GetObjectItemCaseSensitive(json_config, MDNS_TTL);
+        config.mdns_ttl = (uint16_t) cJSON_GetArrayItem(mdns_ttl_array, 0)->valuedouble;
+        config.mdns_ttl_period = config.mdns_ttl;
+        
+        if (cJSON_GetArraySize(mdns_ttl_array) > 1) {
+            config.mdns_ttl_period = (uint16_t) cJSON_GetArrayItem(mdns_ttl_array, 1)->valuedouble;
+        }
     }
     
     // Gateway Ping
@@ -10945,7 +10952,7 @@ void normal_mode_init() {
         config.category = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, HOMEKIT_DEVICE_CATEGORY_SET)->valuedouble;
         
     } else if (bridge_needed) {
-        config.category = homekit_accessory_category_bridge;
+        config.category = HOMEKIT_DEVICE_CATEGORY_BRIDGE;
         
     } else {
         int first_serv_type = 0;
@@ -10959,20 +10966,20 @@ void normal_mode_init() {
         
         switch (first_serv_type) {
             case SERV_TYPE_SWITCH:
-                config.category = homekit_accessory_category_switch;
+                config.category = HOMEKIT_DEVICE_CATEGORY_SWITCH;
                 break;
                 
             case SERV_TYPE_OUTLET:
-                config.category = homekit_accessory_category_outlet;
+                config.category = HOMEKIT_DEVICE_CATEGORY_OUTLET;
                 break;
                 
             case SERV_TYPE_BUTTON:
             case SERV_TYPE_DOORBELL:
-                config.category = homekit_accessory_category_programmable_switch;
+                config.category = HOMEKIT_DEVICE_CATEGORY_PROGRAMMABLE_SWITCH;
                 break;
                 
             case SERV_TYPE_LOCK:
-                config.category = homekit_accessory_category_door_lock;
+                config.category = HOMEKIT_DEVICE_CATEGORY_DOOR_LOCK;
                 break;
                 
             case SERV_TYPE_CONTACT_SENSOR:
@@ -10982,50 +10989,50 @@ void normal_mode_init() {
             case SERV_TYPE_TH_SENSOR:
             case SERV_TYPE_LIGHT_SENSOR:
             case SERV_TYPE_AIR_QUALITY:
-                config.category = homekit_accessory_category_sensor;
+                config.category = HOMEKIT_DEVICE_CATEGORY_SENSOR;
                 break;
                 
             case SERV_TYPE_WATER_VALVE:
-                config.category = homekit_accessory_category_faucet;
+                config.category = HOMEKIT_DEVICE_CATEGORY_FAUCET;
                 break;
                 
             case SERV_TYPE_THERMOSTAT:
             case SERV_TYPE_THERMOSTAT_WITH_HUM:
             case SERV_TYPE_IAIRZONING:
-                config.category = homekit_accessory_category_air_conditioner;
+                config.category = HOMEKIT_DEVICE_CATEGORY_AIR_CONDITIONER;
                 break;
                 
             case SERV_TYPE_HUMIDIFIER:
             case SERV_TYPE_HUMIDIFIER_WITH_TEMP:
-                config.category = homekit_accessory_category_humidifier;
+                config.category = HOMEKIT_DEVICE_CATEGORY_HUMIDIFIER;
                 break;
                 
             case SERV_TYPE_LIGHTBULB:
-                config.category = homekit_accessory_category_lightbulb;
+                config.category = HOMEKIT_DEVICE_CATEGORY_LIGHTBULB;
                 break;
                 
             case SERV_TYPE_GARAGE_DOOR:
-                config.category = homekit_accessory_category_garage;
+                config.category = HOMEKIT_DEVICE_CATEGORY_GARAGE;
                 break;
                 
             case SERV_TYPE_WINDOW_COVER:
-                config.category = homekit_accessory_category_window_covering;
+                config.category = HOMEKIT_DEVICE_CATEGORY_WINDOW_COVERING;
                 break;
                 
             case SERV_TYPE_SECURITY_SYSTEM:
-                config.category = homekit_accessory_category_security_system;
+                config.category = HOMEKIT_DEVICE_CATEGORY_SECURITY_SYSTEM;
                 break;
                 
             case SERV_TYPE_TV:
-                config.category = homekit_accessory_category_television;
+                config.category = HOMEKIT_DEVICE_CATEGORY_TELEVISION;
                 break;
                 
             case SERV_TYPE_FAN:
-                config.category = homekit_accessory_category_fan;
+                config.category = HOMEKIT_DEVICE_CATEGORY_FAN;
                 break;
                 
             default:
-                config.category = homekit_accessory_category_other;
+                config.category = HOMEKIT_DEVICE_CATEGORY_OTHER;
                 break;
         }
     }

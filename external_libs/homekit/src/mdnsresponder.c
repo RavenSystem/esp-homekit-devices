@@ -134,10 +134,10 @@ static mdns_rsrc*      gDictP = NULL;       // RR database, linked list
 static u8_t* mdns_response = NULL;
 static u16_t mdns_responder_reply_size = 0;
 
-#define MDNS_TTL_MIN                (32)
 #define MDNS_TTL_MULTIPLIER_MS      (1000)  // Set to 1000 to use standard time
 #define MDNS_TTL_SAFE_MARGIN        (7)
-static uint32_t mdns_ttl = 3492;
+static uint32_t mdns_ttl = 4500;
+static uint32_t mdns_ttl_period = 4500;
 
 #define MDNS_STATUS_PROBING_1       (0)
 #define MDNS_STATUS_PROBING_2       (1)
@@ -598,8 +598,8 @@ void mdns_announce() {
         printf(">>> mDNS probing 2\n");
     } else if (mdns_status == MDNS_STATUS_PROBE_OK) {
         mdns_status = MDNS_STATUS_WORKING;
-        esp_timer_change_period(mdns_announce_timer, (mdns_ttl - MDNS_TTL_SAFE_MARGIN) * MDNS_TTL_MULTIPLIER_MS);
-        printf(">>> mDNS working TTL %i\n", mdns_ttl);
+        esp_timer_change_period(mdns_announce_timer, (mdns_ttl_period - MDNS_TTL_SAFE_MARGIN) * MDNS_TTL_MULTIPLIER_MS);
+        printf(">>> mDNS working TTL %i each %is\n", mdns_ttl, mdns_ttl_period);
     }
     
     struct netif *netif = sdk_system_get_netif(STATION_IF);
@@ -622,7 +622,8 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
                             const char* addText,        // Must be <key>=<value>
                             mdns_flags flags,           // TCP or UDP
                             u16_t onPort,               // port number
-                            u32_t ttl                   // seconds
+                            u32_t ttl,                  // seconds
+                            u32_t ttl_period            // seconds
                            )
 {
     if (mdns_buffer_init(0) != 0) {
@@ -630,6 +631,7 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
     }
     
     mdns_ttl = ttl;
+    mdns_ttl_period = ttl_period;
     
     size_t key_len = strlen(serviceName) + 12;
     char *key = malloc(key_len + 1);
@@ -683,7 +685,8 @@ void mdns_add_facility(const char* instanceName,   // Friendly name, need not be
                        const char* addText,        // Must be <key>=<value>
                        mdns_flags flags,           // TCP or UDP
                        u16_t onPort,               // port number
-                       u32_t ttl                   // seconds
+                       u32_t ttl,                  // seconds
+                       u32_t ttl_period            // seconds
                       )
 {
     while (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
@@ -692,18 +695,15 @@ void mdns_add_facility(const char* instanceName,   // Friendly name, need not be
     
     vTaskDelay(400 / portTICK_PERIOD_MS);
     
-    if (ttl < 1000 && strstr(addText, "sf=1") != NULL) {
-        printf(">>> mDNS TTL 4500 for pairing\n");
-        ttl = 4365;
+    if (strstr(addText, "sf=1") != NULL) {
+        //printf(">>> mDNS TTL 4500 for pairing\n");
+        ttl = 4500;
+        ttl_period = 4500;
     }
     
-    if (ttl < MDNS_TTL_MIN) {
-        ttl = MDNS_TTL_MIN;
-    }
+    ttl_period -= hwrand() % (ttl_period >> 5);
     
-    ttl += hwrand() % (ttl >> 5);
-    
-    mdns_add_facility_work(instanceName, serviceName, addText, flags, onPort, ttl);
+    mdns_add_facility_work(instanceName, serviceName, addText, flags, onPort, ttl, ttl_period);
 }
 
 static mdns_rsrc* mdns_match(const char* qstr, u16_t qType)

@@ -93,23 +93,29 @@
 struct _client_context_t;
 typedef struct _client_context_t client_context_t;
 
+#ifdef HOMEKIT_NOTIFY_EVENT_ENABLE
 
 #define HOMEKIT_NOTIFY_EVENT(server, event) \
   if ((server)->config->on_event) \
       (server)->config->on_event(event);
 
-typedef enum {
-    HOMEKIT_ENDPOINT_UNKNOWN = 0,
-    HOMEKIT_ENDPOINT_PAIR_SETUP,
-    HOMEKIT_ENDPOINT_PAIR_VERIFY,
-    HOMEKIT_ENDPOINT_IDENTIFY,
-    HOMEKIT_ENDPOINT_GET_ACCESSORIES,
-    HOMEKIT_ENDPOINT_GET_CHARACTERISTICS,
-    HOMEKIT_ENDPOINT_UPDATE_CHARACTERISTICS,
-    HOMEKIT_ENDPOINT_PAIRINGS,
-    HOMEKIT_ENDPOINT_RESOURCE,
-    HOMEKIT_ENDPOINT_PREPARE,
-} homekit_endpoint_t;
+#else
+
+#define HOMEKIT_NOTIFY_EVENT(server, event)
+
+#endif
+
+
+#define HOMEKIT_ENDPOINT_UNKNOWN                    (0)
+#define HOMEKIT_ENDPOINT_PAIR_SETUP                 (1)
+#define HOMEKIT_ENDPOINT_PAIR_VERIFY                (2)
+#define HOMEKIT_ENDPOINT_IDENTIFY                   (3)
+#define HOMEKIT_ENDPOINT_GET_ACCESSORIES            (4)
+#define HOMEKIT_ENDPOINT_GET_CHARACTERISTICS        (5)
+#define HOMEKIT_ENDPOINT_UPDATE_CHARACTERISTICS     (6)
+#define HOMEKIT_ENDPOINT_PAIRINGS                   (7)
+#define HOMEKIT_ENDPOINT_PREPARE                    (8)
+#define HOMEKIT_ENDPOINT_RESOURCE                   (9)
 
 
 typedef struct {
@@ -119,7 +125,6 @@ typedef struct {
 
     client_context_t *client;
 } pairing_context_t;
-
 
 typedef struct {
     byte *secret;
@@ -174,12 +179,12 @@ static homekit_server_t *homekit_server = NULL;
 
 struct _client_context_t {
     int socket;
-    homekit_endpoint_t endpoint;
     query_param_t *endpoint_params;
-
+    
     char *body;
     size_t body_length: 16;
     byte permissions;
+    uint8_t endpoint: 4;
     bool encrypted: 1;
     bool disconnect: 1;
     
@@ -3005,6 +3010,7 @@ void homekit_server_on_reset(client_context_t *context) {
     sdk_system_restart();
 }
 
+#ifdef HOMEKIT_SERVER_ON_RESOURCE_ENABLE
 void homekit_server_on_resource(client_context_t *context) {
     CLIENT_INFO(context, "Resource");
     DEBUG_HEAP();
@@ -3016,6 +3022,7 @@ void homekit_server_on_resource(client_context_t *context) {
 
     homekit_server->config->on_resource(context->body, context->body_length);
 }
+#endif
 
 void homekit_server_on_prepare(client_context_t *context) {
     CLIENT_INFO(context, "Prepare");
@@ -3056,8 +3063,10 @@ int homekit_server_on_url(http_parser *parser, const char *data, size_t length) 
             context->endpoint = HOMEKIT_ENDPOINT_PAIR_VERIFY;
         } else if (!strncmp(data, "/pairings", length)) {
             context->endpoint = HOMEKIT_ENDPOINT_PAIRINGS;
+#ifdef HOMEKIT_SERVER_ON_RESOURCE_ENABLE
         } else if (!strncmp(data, "/resource", length)) {
             context->endpoint = HOMEKIT_ENDPOINT_RESOURCE;
+#endif
         }
     } else if (parser->method == HTTP_PUT) {
         if (!strncmp(data, "/characteristics", length)) {
@@ -3088,7 +3097,7 @@ int homekit_server_on_body(http_parser *parser, const char *data, size_t length)
 
 int homekit_server_on_message_complete(http_parser *parser) {
     client_context_t *context = parser->data;
-
+    
     switch(context->endpoint) {
         case HOMEKIT_ENDPOINT_PAIR_SETUP: {
             homekit_server_on_pair_setup(context, (const byte *)context->body, context->body_length);
@@ -3128,12 +3137,14 @@ int homekit_server_on_message_complete(http_parser *parser) {
             }
             break;
         }
+#ifdef HOMEKIT_SERVER_ON_RESOURCE_ENABLE
         case HOMEKIT_ENDPOINT_RESOURCE: {
             if (context->encrypted || homekit_server->config->insecure) {
                 homekit_server_on_resource(context);
             }
             break;
         }
+#endif
         case HOMEKIT_ENDPOINT_PREPARE: {
             if (context->encrypted || homekit_server->config->insecure) {
                 homekit_server_on_prepare(context);
@@ -3291,7 +3302,7 @@ void homekit_server_accept_client() {
         const struct timeval sndtimeout = { 3, 0 };
         setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
         
-        const struct timeval rcvtimeout = { 10, 0 };
+        const struct timeval rcvtimeout = { 13, 0 };
         setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
         
         const int keepalive = 0;
@@ -3610,7 +3621,7 @@ void homekit_setup_mdns() {
     
     homekit_mdns_add_txt("sh", "%s", encodedHash);
     
-    homekit_mdns_configure_finalize(homekit_server->config->mdns_ttl);
+    homekit_mdns_configure_finalize(homekit_server->config->mdns_ttl, homekit_server->config->mdns_ttl_period);
 }
 
 char *homekit_accessory_id_generate() {
@@ -3714,7 +3725,7 @@ void homekit_mdns_announce_pause() {
     homekit_port_mdns_announce_pause();
 }
 
-int homekit_is_paired() {
+bool homekit_is_paired() {
     pairing_iterator_t *pairing_it = homekit_storage_pairing_iterator();
     pairing_t *pairing;
     while ((pairing = homekit_storage_next_pairing(pairing_it))) {
@@ -3749,7 +3760,7 @@ int homekit_get_accessory_id(char *buffer, size_t size) {
     return 0;
 }
 
-int homekit_is_pairing() {
+bool homekit_is_pairing() {
     if (homekit_server) {
         return homekit_server->is_pairing;
     }

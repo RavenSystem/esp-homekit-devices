@@ -45,7 +45,8 @@ void mdns_add_facility( const char* instanceName,   // Short user-friendly insta
                         const char* addText,        // Should be <key>=<value>, or "" if unused (see RFC6763 6.3)
                         mdns_flags  flags,          // TCP or UDP plus browsable
                         u16_t       onPort,         // port number
-                        u32_t       ttl             // time-to-live, seconds
+                        u32_t       ttl,            // time-to-live, seconds
+                        u32_t       ttl_period      // time-to-live period, seconds
                       );
 
 
