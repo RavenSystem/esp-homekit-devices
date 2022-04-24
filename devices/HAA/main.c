@@ -7715,7 +7715,7 @@ void normal_mode_init() {
     
     // mDNS TTL
     config.mdns_ttl = MDNS_TTL_DEFAULT;
-    config.mdns_ttl_period = config.mdns_ttl;
+    config.mdns_ttl_period = MDNS_TTL_PERIOD_DEFAULT;
     if (cJSON_GetObjectItemCaseSensitive(json_config, MDNS_TTL) != NULL) {
         cJSON* mdns_ttl_array = cJSON_GetObjectItemCaseSensitive(json_config, MDNS_TTL);
         config.mdns_ttl = (uint16_t) cJSON_GetArrayItem(mdns_ttl_array, 0)->valuedouble;
@@ -10405,7 +10405,7 @@ void normal_mode_init() {
             for (int i = 0; i < cJSON_GetArraySize(gpio_array); i++) {
                 data[i] = (int16_t) cJSON_GetArrayItem(gpio_array, i)->valuedouble;
                 
-                if (i < 3 && pm_sensor_type < 2 && data[i] >= 0) {
+                if (i < 3 && pm_sensor_type < 2 && data[i] > -1) {
                     set_used_gpio(data[i]);
                 }
             }
@@ -10441,10 +10441,6 @@ void normal_mode_init() {
                 PM_SENSOR_HLW_GPIO = data[0];
             } else {
                 PM_SENSOR_HLW_GPIO = data[1];
-            }
-            
-            for (int i = 0; i < 3; i++) {
-                set_used_gpio(data[i]);
             }
             
             adv_hlw_unit_create(data[0], data[1], data[2], pm_sensor_type, data[3], true);

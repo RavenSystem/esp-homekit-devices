@@ -39,7 +39,7 @@ typedef struct _adv_hlw_unit {
 
 static adv_hlw_unit_t* adv_hlw_units = NULL;
 
-static adv_hlw_unit_t* IRAM adv_hlw_find_by_gpio(const unsigned int gpio) {
+static adv_hlw_unit_t* IRAM adv_hlw_find_by_gpio(const int gpio) {
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_units;
     while (adv_hlw_unit &&
            adv_hlw_unit->gpio_cf != gpio &&
@@ -79,7 +79,7 @@ static void normalize_cf1(adv_hlw_unit_t* adv_hlw_unit) {
     }
 }
 
-double adv_hlw_get_voltage_freq(const unsigned int gpio) {
+double adv_hlw_get_voltage_freq(const int gpio) {
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
     
     if (adv_hlw_unit && adv_hlw_unit->period_cf1_v > 0) {
@@ -91,7 +91,7 @@ double adv_hlw_get_voltage_freq(const unsigned int gpio) {
     return 0;
 }
 
-double adv_hlw_get_current_freq(const unsigned int gpio) {
+double adv_hlw_get_current_freq(const int gpio) {
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
     
     if (adv_hlw_unit && adv_hlw_unit->period_cf1_c > 0) {
@@ -103,7 +103,7 @@ double adv_hlw_get_current_freq(const unsigned int gpio) {
     return 0;
 }
 
-double adv_hlw_get_power_freq(const unsigned int gpio) {
+double adv_hlw_get_power_freq(const int gpio) {
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
     
     if (adv_hlw_unit && adv_hlw_unit->period_cf > 0) {
@@ -192,18 +192,18 @@ int adv_hlw_unit_create(const int gpio_cf, const int gpio_cf1, const int gpio_se
                 adv_hlw_unit->next = adv_hlw_units;
                 adv_hlw_units = adv_hlw_unit;
                 
-                if (gpio_cf >= 0) {
+                if (gpio_cf > -1) {
                     gpio_enable(gpio_cf, GPIO_INPUT);
                     gpio_set_pullup(gpio_cf, pullup, pullup);
                     gpio_set_interrupt(gpio_cf, interrupt_type, adv_hlw_cf_callback);
                 }
                 
-                if (gpio_cf1 >= 0) {
+                if (gpio_cf1 > -1) {
                     gpio_enable(gpio_cf1, GPIO_INPUT);
                     gpio_set_pullup(gpio_cf1, pullup, pullup);
                     gpio_set_interrupt(gpio_cf1, interrupt_type, adv_hlw_cf1_callback);
                     
-                    if (gpio_sel >= 0) {
+                    if (gpio_sel > -1) {
                         gpio_enable(gpio_sel, GPIO_OUTPUT);
                         gpio_write(gpio_sel, adv_hlw_unit->current_mode);
                     }

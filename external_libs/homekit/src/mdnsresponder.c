@@ -701,7 +701,7 @@ void mdns_add_facility(const char* instanceName,   // Friendly name, need not be
         ttl_period = 4500;
     }
     
-    ttl_period -= hwrand() % (ttl_period >> 5);
+    ttl_period -= hwrand() % (ttl_period >> 4);
     
     mdns_add_facility_work(instanceName, serviceName, addText, flags, onPort, ttl, ttl_period);
 }
