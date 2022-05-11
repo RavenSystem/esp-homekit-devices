@@ -324,7 +324,7 @@ void adv_logger_init(const int log_type, char* dest_addr) {
                 snprintf(destination, strlen(ADV_LOGGER_DEFAULT_DESTINATION) + 1, ADV_LOGGER_DEFAULT_DESTINATION);
             }
             
-            xTaskCreate(adv_logger_init_task, "adv_logger_init", ADV_LOGGER_INIT_TASK_SIZE, (void*) destination, ADV_LOGGER_INIT_TASK_PRIORITY, NULL);
+            xTaskCreate(adv_logger_init_task, "Log", ADV_LOGGER_INIT_TASK_SIZE, (void*) destination, ADV_LOGGER_INIT_TASK_PRIORITY, NULL);
         }
         
         set_write_stdout(adv_logger_write);

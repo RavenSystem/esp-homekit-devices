@@ -596,9 +596,13 @@ void reboot_task() {
     led_blink(5);
     
     INFO("\nRebooting\n");
-    esp_timer_stop(WIFI_WATCHDOG_TIMER);
+    esp_timer_stop_forced(WIFI_WATCHDOG_TIMER);
     
-    vTaskDelay(MS_TO_TICKS((hwrand() % RANDOM_DELAY_MS) + 1000));
+    vTaskDelay(MS_TO_TICKS(2000));
+    
+    sdk_wifi_station_disconnect();
+    
+    vTaskDelay(MS_TO_TICKS(hwrand() % RANDOM_DELAY_MS));
     
     sdk_system_restart();
 }
@@ -7902,6 +7906,8 @@ void normal_mode_init() {
         accessories[accessory]->services[0]->characteristics[4] = &firmware;
         accessories[accessory]->services[0]->characteristics[5] = &identify_function;
         
+        free(serial_str);
+        
         services--;
         
         if (acc_count == haa_setup_accessory) {
@@ -9261,9 +9267,9 @@ void normal_mode_init() {
         lightbulb_group->cw[1] = 0.3338;
         lightbulb_group->ww[0] = 0.4784;
         lightbulb_group->ww[1] = 0.4065;
-        lightbulb_group->wp[0] = 0.34567;       // D50
+        lightbulb_group->wp[0] = 0.34567;   // D50
         lightbulb_group->wp[1] = 0.35850;
-        lightbulb_group->rgb[0][0] = lightbulb_group->r[0];     // Default to the LED RGB coordinates
+        lightbulb_group->rgb[0][0] = lightbulb_group->r[0]; // Default to the LED RGB coordinates
         lightbulb_group->rgb[0][1] = lightbulb_group->r[1];
         lightbulb_group->rgb[1][0] = lightbulb_group->g[0];
         lightbulb_group->rgb[1][1] = lightbulb_group->g[1];
@@ -9404,7 +9410,7 @@ void normal_mode_init() {
                 }
             }
             
-            INFO("Flux array %g, %g, %g, %g, %g", lightbulb_group->flux[0], lightbulb_group->flux[1], lightbulb_group->flux[2], lightbulb_group->flux[3], lightbulb_group->flux[4]);
+            INFO("Flux %g, %g, %g, %g, %g", lightbulb_group->flux[0], lightbulb_group->flux[1], lightbulb_group->flux[2], lightbulb_group->flux[3], lightbulb_group->flux[4]);
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_RGB_ARRAY_SET) != NULL) {
                 cJSON* rgb_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_RGB_ARRAY_SET);
@@ -9413,7 +9419,7 @@ void normal_mode_init() {
                 }
             }
             
-            INFO("Target RGB array %g, %g, %g, %g, %g, %g", lightbulb_group->rgb[0][0], lightbulb_group->rgb[0][1], lightbulb_group->rgb[1][0], lightbulb_group->rgb[1][1], lightbulb_group->rgb[2][0], lightbulb_group->rgb[2][1]);
+            INFO("Target RGB %g, %g, %g, %g, %g, %g", lightbulb_group->rgb[0][0], lightbulb_group->rgb[0][1], lightbulb_group->rgb[1][0], lightbulb_group->rgb[1][1], lightbulb_group->rgb[2][0], lightbulb_group->rgb[2][1]);
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CMY_ARRAY_SET) != NULL) {
                 cJSON* cmy_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CMY_ARRAY_SET);
@@ -9422,9 +9428,9 @@ void normal_mode_init() {
                 }
             }
             
-            INFO("Target CMY array %g, %g, %g, %g, %g, %g", lightbulb_group->cmy[0][0], lightbulb_group->cmy[0][1], lightbulb_group->cmy[1][0], lightbulb_group->cmy[1][1], lightbulb_group->cmy[2][0], lightbulb_group->cmy[2][1]);
+            INFO("Target CMY %g, %g, %g, %g, %g, %g", lightbulb_group->cmy[0][0], lightbulb_group->cmy[0][1], lightbulb_group->cmy[1][0], lightbulb_group->cmy[1][1], lightbulb_group->cmy[2][0], lightbulb_group->cmy[2][1]);
             
-            INFO("CMY array [%g, %g, %g], [%g, %g, %g]", lightbulb_group->cmy[0][0], lightbulb_group->cmy[0][1], lightbulb_group->cmy[0][2], lightbulb_group->cmy[1][0], lightbulb_group->cmy[1][1], lightbulb_group->cmy[1][2]);
+            INFO("CMY [%g, %g, %g], [%g, %g, %g]", lightbulb_group->cmy[0][0], lightbulb_group->cmy[0][1], lightbulb_group->cmy[0][2], lightbulb_group->cmy[1][0], lightbulb_group->cmy[1][1], lightbulb_group->cmy[1][2]);
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY_SET) != NULL) {
                 cJSON* coordinate_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY_SET);
@@ -9446,7 +9452,7 @@ void normal_mode_init() {
                 }
             }
 
-            INFO("Coordinate array [%g, %g], [%g, %g], [%g, %g], [%g, %g], [%g, %g]", lightbulb_group->r[0], lightbulb_group->r[1],
+            INFO("Coordinate [%g, %g], [%g, %g], [%g, %g], [%g, %g], [%g, %g]", lightbulb_group->r[0], lightbulb_group->r[1],
                                                                                         lightbulb_group->g[0], lightbulb_group->g[1],
                                                                                         lightbulb_group->b[0], lightbulb_group->b[1],
                                                                                         lightbulb_group->cw[0], lightbulb_group->cw[1],
@@ -10047,7 +10053,7 @@ void normal_mode_init() {
         set_accessory_ir_protocol(ch_group, json_context);
         
         homekit_service_t* new_tv_input_service(const uint8_t service_number, char* name) {
-            INFO("TV Input: %s", name);
+            INFO("Input %s", name);
             
             homekit_service_t* *input_service = calloc(1, sizeof(homekit_service_t*));
             

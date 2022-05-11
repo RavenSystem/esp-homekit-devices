@@ -32,6 +32,7 @@
 #define WIFI_CONFIG_SERVER_PORT             (4567)
 #define AUTO_REBOOT_TIMEOUT                 (90000)
 #define AUTO_REBOOT_LONG_TIMEOUT            (900000)
+#define AUTO_REBOOT_ON_HANG_OTA_TIMEOUT     (2000000)
 #define MAX_BODY_LEN                        (16000)
 #define BEST_RSSI_MARGIN                    (1)
 

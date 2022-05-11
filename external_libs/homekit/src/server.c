@@ -871,6 +871,7 @@ int send_207_response(client_context_t* context) {
 }
 
 void send_404_response(client_context_t* context) {
+    CLIENT_ERROR(context, "Not Found");
     byte response[] = "HTTP/1.1 404 Not Found\r\n\r\n";
     client_send(context, response, sizeof(response) - 1);
 }
@@ -891,12 +892,12 @@ void send_tlv_response(client_context_t *context, tlv_values_t *values) {
     }
 
     tlv_free(values);
-
-    char http_headers[] =
+    
+    const char http_headers[] =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: application/pairing+tlv8\r\n"
         "Content-Length: %d\r\n\r\n";
-
+    
     int response_size = strlen(http_headers) + payload_size + 32;
     char *response = malloc(response_size);
     int response_len = snprintf(response, response_size, http_headers, payload_size);
@@ -929,11 +930,6 @@ void send_json_response(client_context_t *context, int status_code, byte *payloa
     CLIENT_DEBUG(context, "Sending JSON response");
     DEBUG_HEAP();
 
-    char http_headers[] =
-        "HTTP/1.1 %d %s\r\n"
-        "Content-Type: application/hap+json\r\n"
-        "Content-Length: %d\r\n\r\n";
-
     CLIENT_DEBUG(context, "Payload: %s", payload);
 
     const char *status_text = "OK";
@@ -947,6 +943,11 @@ void send_json_response(client_context_t *context, int status_code, byte *payloa
         case 503: status_text = "Service Unavailable"; break;
     }
 
+    const char http_headers[] =
+        "HTTP/1.1 %d %s\r\n"
+        "Content-Type: application/hap+json\r\n"
+        "Content-Length: %d\r\n\r\n";
+    
     int response_size = strlen(http_headers) + payload_size + strlen(status_text) + 32;
     char *response = malloc(response_size);
     if (!response) {
@@ -1366,7 +1367,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             memcpy(device_info + device_x_size + tlv_device_id->size,
                    tlv_device_public_key->value,
                    tlv_device_public_key->size);
-
+            
             CLIENT_DEBUG(context, "Verifying device signature");
             r = crypto_ed25519_verify(
                 device_key,
@@ -1375,23 +1376,23 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             );
             if (r) {
                 CLIENT_ERROR(context, "Generate DeviceX (%d)", r);
-
+                
                 free(device_info);
                 crypto_ed25519_free(device_key);
                 tlv_free(decrypted_message);
-
+                
                 send_tlv_error_response(context, 6, TLVError_Authentication);
                 break;
             }
-
+            
             free(device_info);
-
+            
             char *device_id = strndup((const char *)tlv_device_id->value, tlv_device_id->size);
-
+            
             r = homekit_storage_add_pairing(device_id, device_key, pairing_permissions_admin);
             if (r) {
                 CLIENT_ERROR(context, "Store pairing (%d)", r);
-
+                
                 free(device_id);
                 crypto_ed25519_free(device_key);
                 tlv_free(decrypted_message);
@@ -2110,7 +2111,7 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
 
     query_param_t *id_param = query_params_find(context->endpoint_params, "id");
     if (!id_param) {
-        CLIENT_ERROR(context, "Missing ID parameter");
+        CLIENT_ERROR(context, "No ID param");
         send_json_error_response(context, 400, HAPStatus_InvalidValue);
         return;
     }
@@ -2261,7 +2262,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
     }
     
     if (characteristics->type != cJSON_Array) {
-        CLIENT_ERROR(context, "\"characteristics\" field is not an list");
+        CLIENT_ERROR(context, "\"characteristics\" no list");
         cJSON_Delete(json);
         send_json_error_response(context, 400, HAPStatus_InvalidValue);
         return;
@@ -2274,7 +2275,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
             return HAPStatus_NoResource;
         }
         if (j_aid->type != cJSON_Number) {
-            CLIENT_ERROR(context, "\"aid\" field is not a number");
+            CLIENT_ERROR(context, "\"aid\" no number");
             return HAPStatus_NoResource;
         }
         
@@ -2284,7 +2285,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
             return HAPStatus_NoResource;
         }
         if (j_iid->type != cJSON_Number) {
-            CLIENT_ERROR(context, "\"iid\" field is not a number");
+            CLIENT_ERROR(context, "\"iid\" no number");
             return HAPStatus_NoResource;
         }
         
@@ -2295,7 +2296,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
             homekit_server->config->accessories, aid, iid
         );
         if (!ch) {
-            CLIENT_ERROR(context, "Update %d.%d: no such ch", aid, iid);
+            CLIENT_ERROR(context, "Update %d.%d: no ch", aid, iid);
             return HAPStatus_NoResource;
         }
         
@@ -2319,7 +2320,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                             (j_value->valueint == 0 || j_value->valueint == 1)) {
                         value = j_value->valueint == 1;
                     } else {
-                        CLIENT_ERROR(context, "Update %d.%d: value is not a boolean or 0/1", aid, iid);
+                        CLIENT_ERROR(context, "Update %d.%d: no boolean or 0/1", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 
@@ -2340,7 +2341,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                 case HOMETKIT_FORMAT_INT: {
                     // We accept boolean values here in order to fix a bug in HomeKit. HomeKit sometimes sends a boolean instead of an integer of value 0 or 1.
                     if (j_value->type != cJSON_Number && j_value->type != cJSON_False && j_value->type != cJSON_True) {
-                        CLIENT_ERROR(context, "Update %d.%d: not a number", aid, iid);
+                        CLIENT_ERROR(context, "Update %d.%d: no number", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 
@@ -2427,7 +2428,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         }
 
                         if (!matches) {
-                            CLIENT_ERROR(context, "Update %d.%d: not one of valid values", aid, iid);
+                            CLIENT_ERROR(context, "Update %d.%d: invalid values", aid, iid);
                             return HAPStatus_InvalidValue;
                         }
                     }
@@ -2827,7 +2828,7 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
 
                 r = homekit_storage_update_pairing(device_identifier, device_permissions);
                 if (r) {
-                    CLIENT_ERROR(context, "Storage error (%d)", r);
+                    CLIENT_ERROR(context, "Storage (%d)", r);
                     free(device_identifier);
                     crypto_ed25519_free(device_key);
                     send_tlv_error_response(context, 2, TLVError_Unknown);
@@ -2848,14 +2849,14 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
                     device_identifier, device_key, device_permissions
                 );
                 if (r) {
-                    CLIENT_ERROR(context, "Storage error (%d)", r);
+                    CLIENT_ERROR(context, "Storage (%d)", r);
                     free(device_identifier);
                     crypto_ed25519_free(device_key);
                     send_tlv_error_response(context, 2, TLVError_Unknown);
                     break;
                 }
 
-                HOMEKIT_INFO("Paired with %s", device_identifier);
+                HOMEKIT_INFO("Paired %s", device_identifier);
 
                 HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_PAIRING_ADDED);
             }
@@ -2933,7 +2934,7 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
 
                     if (!pairing) {
                         // No admins left, enable pairing again
-                        HOMEKIT_INFO("Last admin pairing was removed, resetting");
+                        HOMEKIT_INFO("Pairing removed, resetting");
                         homekit_server_on_reset(context);
                     } else {
                         pairing_free(pairing);
@@ -3199,7 +3200,7 @@ inline static void IRAM homekit_client_process(client_context_t *context) {
             
             int r = client_decrypt(context, homekit_server->data, data_len, homekit_server->data + 2, &decrypted_size);
             if (r < 0) {
-                CLIENT_ERROR(context, "Invalid client data");
+                CLIENT_ERROR(context, "Client data");
                 return;
             }
             homekit_server->data_available = data_len - r;
@@ -3458,7 +3459,7 @@ static inline void homekit_server_close_clients() {
 }
 
 static void IRAM homekit_run_server() {
-    HOMEKIT_DEBUG_LOG("Staring HTTP server");
+    HOMEKIT_DEBUG_LOG("Starting HTTP server");
     
     struct sockaddr_in serv_addr;
     homekit_server->listen_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -3523,7 +3524,7 @@ static void IRAM homekit_run_server() {
 }
 
 void homekit_setup_mdns() {
-    HOMEKIT_INFO("Configuring mDNS");
+    HOMEKIT_INFO("mDNS");
 
     homekit_accessory_t *accessory = homekit_server->config->accessories[0];
     homekit_service_t *accessory_info =
@@ -3633,24 +3634,24 @@ char *homekit_accessory_id_generate() {
     snprintf(accessory_id, 18, "%02X:%02X:%02X:%02X:%02X:%02X",
              buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
 
-    HOMEKIT_INFO("Generated new HomeKit ID: %s", accessory_id);
+    HOMEKIT_INFO("New HK ID: %s", accessory_id);
     return accessory_id;
 }
 
 ed25519_key *homekit_accessory_key_generate() {
     ed25519_key *key = crypto_ed25519_generate();
     if (!key) {
-        HOMEKIT_ERROR("Failed to generate key");
+        HOMEKIT_ERROR("Create key");
         return NULL;
     }
 
-    HOMEKIT_INFO("Generated new key");
+    HOMEKIT_INFO("Created key");
 
     return key;
 }
 
 void homekit_server_task(void *args) {
-    HOMEKIT_INFO("Starting HKServer");
+    HOMEKIT_INFO("Starting HK");
 
     int r = homekit_storage_init();
 
@@ -3665,7 +3666,7 @@ void homekit_server_task(void *args) {
         homekit_server->accessory_key = homekit_accessory_key_generate();
         homekit_storage_save_accessory_key(homekit_server->accessory_key);
     } else {
-        HOMEKIT_INFO("Using existing HomeKit ID: %s", homekit_server->accessory_id);
+        HOMEKIT_INFO("Current HomeKit ID: %s", homekit_server->accessory_id);
     }
 
     pairing_iterator_t *pairing_it = homekit_storage_pairing_iterator();
@@ -3679,7 +3680,7 @@ void homekit_server_task(void *args) {
     homekit_storage_pairing_iterator_free(pairing_it);
 
     if (pairing) {
-        HOMEKIT_INFO("Found admin pairing with %s, disabling pair setup", pairing->device_id);
+        HOMEKIT_INFO("Found %s. No pair setup", pairing->device_id);
         pairing_free(pairing);
         homekit_server->paired = true;
     }
@@ -3698,6 +3699,8 @@ void homekit_server_task(void *args) {
 #define ISDIGIT(x)      isdigit((unsigned char)(x))
 #define ISBASE36(x)     (isdigit((unsigned char)(x)) || (x >= 'A' && x <= 'Z'))
 
+const static char hk_task_name[] = "HK";
+
 void homekit_server_init(homekit_server_config_t *config) {
     homekit_accessories_init(config->accessories);
     
@@ -3708,8 +3711,8 @@ void homekit_server_init(homekit_server_config_t *config) {
         homekit_server->config->max_clients = HOMEKIT_MAX_CLIENTS_DEFAULT;
     }
     
-    if (xTaskCreate(homekit_server_task, "HKServer", SERVER_TASK_STACK, NULL, SERVER_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("Creating HKServer");
+    if (xTaskCreate(homekit_server_task, hk_task_name, SERVER_TASK_STACK, NULL, SERVER_TASK_PRIORITY, NULL) != pdPASS) {
+        ERROR("Creating HK");
     }
 }
 

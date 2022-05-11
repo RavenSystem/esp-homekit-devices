@@ -96,7 +96,7 @@ static char ishex(unsigned char c) {
 }
 
 char *homekit_storage_load_accessory_id() {
-    byte data[ACCESSORY_ID_SIZE+1];
+    byte data[ACCESSORY_ID_SIZE + 1];
     if (!spiflash_read(ACCESSORY_ID_ADDR, data, sizeof(data))) {
         ERROR("Read ID from flash");
         return NULL;
@@ -185,7 +185,7 @@ static int compact_data() {
     byte *data = malloc(SPI_FLASH_SECTOR_SIZE);
     if (!spiflash_read(SPIFLASH_BASE_ADDR, data, SPI_FLASH_SECTOR_SIZE)) {
         free(data);
-        ERROR("Compact data: sector data read error");
+        ERROR("Compact data: sector data read");
         return -1;
     }
     
@@ -207,12 +207,12 @@ static int compact_data() {
     }
 
     if (homekit_storage_reset() != 0) {
-        ERROR("Compact data: error resetting flash");
+        ERROR("Compact data: resetting flash");
         free(data);
         return -1;
     }
     if (homekit_storage_init() < 0) {
-        ERROR("Compact data: error initializing flash");
+        ERROR("Compact data: initializing flash");
         free(data);
         return -1;
     }

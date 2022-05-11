@@ -49,7 +49,7 @@ TaskHandle_t xHandle = NULL;
 void ota_task(void *arg) {
     vTaskSuspend(NULL);
     
-    vTaskDelay(MS_TO_TICKS(100));
+    vTaskDelay(MS_TO_TICKS(1000));
     
     INFO("\n\nHAA Installer v%s\n\n", OTAVERSION);
     

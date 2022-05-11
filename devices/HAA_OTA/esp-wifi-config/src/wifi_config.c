@@ -906,6 +906,9 @@ static void wifi_config_sta_connect_timeout_task() {
             vTaskResume(context->ota_task);
             
             wifi_config_context_free(context);
+            
+            esp_timer_start_forced(esp_timer_create(AUTO_REBOOT_ON_HANG_OTA_TIMEOUT, false, NULL, auto_reboot_run));
+            
             break;
 
         } else if (sdk_wifi_get_opmode() == STATION_MODE) {

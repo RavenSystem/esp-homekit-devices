@@ -21,7 +21,7 @@ void homekit_random_fill(uint8_t *data, size_t size);
 #define ESP_OK 0
 void homekit_port_mdns_announce();
 void homekit_port_mdns_announce_pause();
-#define SERVER_TASK_STACK                   (1664)
+#define SERVER_TASK_STACK                   (1600)
 
 #endif
 

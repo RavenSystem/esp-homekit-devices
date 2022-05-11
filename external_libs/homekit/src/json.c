@@ -82,7 +82,7 @@ void json_write(json_stream *json, const char *format, ...) {
         va_end(arg_ptr);
         
         if (len > json->size - 1) {
-            ERROR("Write value too large %i/%i", len, json->size);
+            ERROR("Too large %i/%i", len, json->size);
             DEBUG("Format = %s", format);
             DEBUG("Data = %s", (char *)json->buffer);
         } else {
