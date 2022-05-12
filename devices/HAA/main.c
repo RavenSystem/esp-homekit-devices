@@ -336,6 +336,10 @@ void free_heap_watchdog() {
 }
 #endif  // HAA_DEBUG
 
+void random_task_delay() {
+    vTaskDelay(hwrand() % MS_TO_TICKS(RANDOM_DELAY_MS));
+}
+
 void disable_emergency_setup(TimerHandle_t xTimer) {
     INFO("Disarming Emergency Setup Mode");
     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
@@ -602,7 +606,7 @@ void reboot_task() {
     
     sdk_wifi_station_disconnect();
     
-    vTaskDelay(MS_TO_TICKS(hwrand() % RANDOM_DELAY_MS));
+    random_task_delay();
     
     sdk_system_restart();
 }
@@ -712,13 +716,15 @@ void wifi_reconnection_task(void* args) {
         
         const int new_ip = wifi_config_get_ip();
         if (new_ip >= 0) {
-            vTaskDelay(MS_TO_TICKS(2000));
+            vTaskDelay(MS_TO_TICKS(1000));
             
             main_config.wifi_status = WIFI_STATUS_CONNECTED;
             main_config.wifi_error_count = 0;
             main_config.wifi_arp_count = 0;
             main_config.wifi_channel = sdk_wifi_get_channel();
             main_config.wifi_ip = new_ip;
+            
+            random_task_delay();
             
             homekit_mdns_announce();
 
@@ -11066,7 +11072,8 @@ void normal_mode_init() {
     }
     main_config.wifi_mode = (uint8_t) wifi_mode;
     
-    vTaskDelay(MS_TO_TICKS((hwrand() % RANDOM_DELAY_MS) + 1000));
+    random_task_delay();
+    vTaskDelay(MS_TO_TICKS(1000));
     
     wifi_config_init("HAA", NULL, run_homekit_server, custom_hostname, 0);
     
