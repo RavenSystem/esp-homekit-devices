@@ -6435,6 +6435,7 @@ void run_homekit_server() {
     FREEHEAP();
     
     if (main_config.enable_homekit_server) {
+        random_task_delay();
         homekit_server_init(&config);
         FREEHEAP();
     }
