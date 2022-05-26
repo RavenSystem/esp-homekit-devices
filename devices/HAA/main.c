@@ -65,6 +65,7 @@ main_config_t main_config = {
     .wifi_ping_max_errors = 255,
     .wifi_error_count = 0,
     .wifi_arp_count = 0,
+    .wifi_arp_count_max = WIFI_WATCHDOG_ARP_PERIOD_DEFAULT,
     .wifi_roaming_count = 1,
     
     .setup_mode_toggle_counter = INT8_MIN,
@@ -150,7 +151,7 @@ void set_used_gpio(const int16_t gpio) {
         main_config.used_gpio |= bit;
     }
 }
-
+/*
 void set_unused_gpios() {
     for (int i = 0; i < 17; i++) {
         if (i == 6) {
@@ -162,7 +163,7 @@ void set_unused_gpios() {
         }
     }
 }
-
+*/
 mcp23017_t* mcp_find_by_index(const int index) {
     mcp23017_t* mcp23017 = main_config.mcp23017s;
     while (mcp23017 && mcp23017->index != index) {
@@ -260,7 +261,7 @@ const char http_header1[] = " HTTP/1.1\r\nHost: ";
 const char http_header2[] = "\r\nUser-Agent: HAA/"FIRMWARE_VERSION" esp8266\r\nConnection: close\r\n";
 const char http_header_len[] = "Content-length: ";
 
-int new_net_con(char* host, uint16_t port_n, bool is_udp, uint8_t* payload, size_t payload_len, int* s) {
+int new_net_con(char* host, uint16_t port_n, bool is_udp, uint8_t* payload, size_t payload_len, int* s, uint8_t rcvtimeout_s, int rcvtimeout_us) {
     struct addrinfo* res;
     struct addrinfo hints;
     int result;
@@ -292,7 +293,7 @@ int new_net_con(char* host, uint16_t port_n, bool is_udp, uint8_t* payload, size
     setsockopt(*s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
     
     if (!is_udp) {
-        const struct timeval rcvtimeout = { 1, 0 };
+        const struct timeval rcvtimeout = { rcvtimeout_s, rcvtimeout_us };
         setsockopt(*s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
         
         if (connect(*s, res->ai_addr, res->ai_addrlen) != 0) {
@@ -796,7 +797,7 @@ void wifi_watchdog() {
         }
         
         main_config.wifi_arp_count++;
-        if (main_config.wifi_arp_count >= WIFI_WATCHDOG_ARP_RESEND_PERIOD) {
+        if (main_config.wifi_arp_count >= main_config.wifi_arp_count_max) {
             main_config.wifi_arp_count = 0;
             wifi_config_resend_arp();
         }
@@ -4493,6 +4494,13 @@ void free_monitor_task(void* args) {
                                 
                                 INFO("<%i> Connect %s:%i", ch_group->serv_index, action_network->host, action_network->port_n);
                                 
+                                uint8_t rcvtimeout_s = 1;
+                                int rcvtimeout_us = 0;
+                                if (action_network->wait_response > 0) {
+                                    rcvtimeout_s = action_network->wait_response / 10;
+                                    rcvtimeout_us = (action_network->wait_response % 10) * 100000;
+                                }
+                                
                                 if (action_network->method_n < 10) {
                                     char* req = NULL;
                                     
@@ -4570,7 +4578,8 @@ void free_monitor_task(void* args) {
                                                          false,
                                                          action_network->method_n == 4 ? action_network->raw : (uint8_t*) req,
                                                          action_network->len,
-                                                         &socket);
+                                                         &socket,
+                                                         rcvtimeout_s, rcvtimeout_us);
 
                                     if (result >= 0) {
                                         printf("<%i> Payload", ch_group->serv_index);
@@ -4593,7 +4602,8 @@ void free_monitor_task(void* args) {
                                                          true,
                                                          action_network->method_n == 13 ? (uint8_t*) action_network->content : action_network->raw,
                                                          action_network->len,
-                                                         &socket);
+                                                         &socket,
+                                                         rcvtimeout_s, rcvtimeout_us);
                                     
                                     if (result > 0) {
                                         printf("<%i> Payload", ch_group->serv_index);
@@ -5287,12 +5297,20 @@ void net_action_task(void* pvParameters) {
                     write_str_ch_values(&str_ch_value_first, &req, action_network->content);
                 }
                 
+                uint8_t rcvtimeout_s = 1;
+                int rcvtimeout_us = 0;
+                if (action_network->wait_response > 0) {
+                    rcvtimeout_s = action_network->wait_response / 10;
+                    rcvtimeout_us = (action_network->wait_response % 10) * 100000;
+                }
+                
                 int result = new_net_con(action_network->host,
                                          action_network->port_n,
                                          false,
                                          action_network->method_n == 4 ? action_network->raw : (uint8_t*) req,
                                          action_network->len,
-                                         &socket);
+                                         &socket,
+                                         rcvtimeout_s, rcvtimeout_us);
 
                 if (result >= 0) {
                     printf("<%i> Payload", action_task->ch_group->serv_index);
@@ -5302,7 +5320,7 @@ void net_action_task(void* pvParameters) {
                         INFO(":\n%s", req);
                     }
                     
-                    if (action_network->wait_response) {
+                    if (action_network->wait_response > 0) {
                         INFO("<%i> Response:", action_task->ch_group->serv_index);
                         int read_byte;
                         size_t total_recv = 0;
@@ -5358,7 +5376,8 @@ void net_action_task(void* pvParameters) {
                                          true,
                                          (uint8_t*) req,
                                          content_len_n,
-                                         &socket);
+                                         &socket,
+                                         1, 0);
                     
                     if (socket >= 0) {
                         close(socket);
@@ -5382,7 +5401,8 @@ void net_action_task(void* pvParameters) {
                                              true,
                                              wol ? wol : action_network->raw,
                                              wol ? WOL_PACKET_LEN : action_network->len,
-                                             &socket);
+                                             &socket,
+                                             1, 0);
                         
                         if (socket >= 0) {
                             close(socket);
@@ -6949,7 +6969,7 @@ void normal_mode_init() {
                         }
                         
                         if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_WAIT_RESPONSE_SET) != NULL) {
-                            action_network->wait_response = (bool) cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_WAIT_RESPONSE_SET)->valuedouble;
+                            action_network->wait_response = (uint8_t) (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_WAIT_RESPONSE_SET)->valuedouble * 10);
                         }
                         
                         if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_METHOD) != NULL) {
@@ -7420,16 +7440,12 @@ void normal_mode_init() {
     // Custom NTP Host
     if (cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_NTP_HOST) != NULL) {
         main_config.ntp_host = strdup(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_NTP_HOST)->valuestring);
-        INFO("NTP %s", main_config.ntp_host);
     }
     
     // Timezone
     if (cJSON_GetObjectItemCaseSensitive(json_config, TIMEZONE) != NULL) {
-        char* timezone = strdup(cJSON_GetObjectItemCaseSensitive(json_config, TIMEZONE)->valuestring);
-        INFO("Timezone %s", timezone);
-        setenv("TZ", timezone, 1);
+        setenv("TZ", cJSON_GetObjectItemCaseSensitive(json_config, TIMEZONE)->valuestring, 1);
         tzset();
-        free(timezone);
     }
     
     // I2C Bus
@@ -7484,7 +7500,7 @@ void normal_mode_init() {
             mcp23017->bus = (uint8_t) cJSON_GetArrayItem(json_mcp23017, 0)->valuedouble;
             mcp23017->addr = (uint8_t) cJSON_GetArrayItem(json_mcp23017, 1)->valuedouble;
             
-            INFO("MCP23017 %i: b %i, a %i", mcp23017->index, mcp23017->bus, mcp23017->addr);
+            INFO("MCP %i: b %i, a %i", mcp23017->index, mcp23017->bus, mcp23017->addr);
             
             const uint8_t byte_zeros = 0x00;
             const uint8_t byte_ones = 0xFF;
@@ -7505,14 +7521,14 @@ void normal_mode_init() {
                         mcp_mode = (uint16_t) cJSON_GetArrayItem(json_mcp23017, 2)->valuedouble;
                     }
                     
-                    INFO("MCP23017 %i ChA: %i", mcp23017->index, mcp_mode);
+                    INFO("MCP %i ChA: %i", mcp23017->index, mcp_mode);
                     
                 } else {
                     if (cJSON_GetArrayItem(json_mcp23017, 3) != NULL) {
                         mcp_mode = (uint16_t) cJSON_GetArrayItem(json_mcp23017, 3)->valuedouble;
                     }
                     
-                    INFO("MCP23017 %i ChB: %i", mcp23017->index, mcp_mode);
+                    INFO("MCP %i ChB: %i", mcp23017->index, mcp_mode);
                 }
                 
                 uint8_t reg = channel;
@@ -7700,6 +7716,11 @@ void normal_mode_init() {
     // Ping poll period
     if (cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD) != NULL) {
         main_config.ping_poll_period = (float) cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD)->valuedouble;
+    }
+    
+    // ARP Gratuitous period
+    if (cJSON_GetObjectItemCaseSensitive(json_config, WIFI_WATCHDOG_ARP_PERIOD_SET) != NULL) {
+        main_config.wifi_arp_count_max = ((uint32_t) cJSON_GetObjectItemCaseSensitive(json_config, WIFI_WATCHDOG_ARP_PERIOD_SET)->valuedouble) / (WIFI_WATCHDOG_POLL_PERIOD_MS / 1000.0f);
     }
     
     // Allowed Setup Mode Time
@@ -11051,7 +11072,7 @@ void normal_mode_init() {
     
     xTaskCreate(delayed_sensor_task, "DS", DELAYED_SENSOR_START_TASK_SIZE, NULL, DELAYED_SENSOR_START_TASK_PRIORITY, NULL);
     
-    set_unused_gpios();
+    //set_unused_gpios();
     
     INFO("Device Category: %i\n", config.category);
     
@@ -11076,6 +11097,8 @@ void normal_mode_init() {
     random_task_delay();
     vTaskDelay(MS_TO_TICKS(1000));
     
+    //main_config.wifi_status = WIFI_STATUS_CONNECTING;     // Not needed
+    
     wifi_config_init("HAA", NULL, run_homekit_server, custom_hostname, 0);
     
     led_blink(2);
@@ -11088,9 +11111,9 @@ void normal_mode_init() {
 void irrf_capture_task(void* args) {
     const int irrf_capture_gpio = ((int) args) - 100;
     INFO("\nCapture GPIO: %i\n", irrf_capture_gpio);
-    set_used_gpio(irrf_capture_gpio);
-    gpio_enable(irrf_capture_gpio, GPIO_INPUT);
-    set_unused_gpios();
+    //set_used_gpio(irrf_capture_gpio);
+    //gpio_enable(irrf_capture_gpio, GPIO_INPUT);
+    //set_unused_gpios();
     
     int read, last = true;
     unsigned int i, c = 0;
@@ -11172,7 +11195,7 @@ void init_task() {
     
     void enter_setup(const int param) {
         reset_uart();
-        set_unused_gpios();
+        //set_unused_gpios();
         
         printf_header();
         INFO("SETUP");
@@ -11238,6 +11261,15 @@ void init_task() {
 }
 
 void user_init(void) {
+    // GPIO Init
+    for (int i = 0; i < 17; i++) {
+        if (i == 6) {
+            i += 6;
+        }
+        
+        gpio_enable(i, GPIO_INPUT);
+    }
+    
     sdk_wifi_station_set_auto_connect(false);
     sdk_wifi_set_opmode(STATION_MODE);
     sdk_wifi_station_disconnect();

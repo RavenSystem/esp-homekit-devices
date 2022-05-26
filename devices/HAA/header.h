@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "10.5.4"
+#define FIRMWARE_VERSION                    "10.6.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -705,7 +705,8 @@
 #define WIFI_DISCONNECTED_LONG_TIME         (24)    // * WIFI_RECONNECTION_POLL_PERIOD_MS
 
 #define WIFI_WATCHDOG_POLL_PERIOD_MS        (1500)
-#define WIFI_WATCHDOG_ARP_RESEND_PERIOD     (39)    // * WIFI_WATCHDOG_POLL_PERIOD_MS
+#define WIFI_WATCHDOG_ARP_PERIOD_SET        "e"
+#define WIFI_WATCHDOG_ARP_PERIOD_DEFAULT    (40)    // * WIFI_WATCHDOG_POLL_PERIOD_MS
 #define WIFI_WATCHDOG_ROAMING_PERIOD        (1234)  // * WIFI_WATCHDOG_POLL_PERIOD_MS
 
 #define STATUS_LED_DURATION_ON              (30)

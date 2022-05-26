@@ -344,15 +344,16 @@ void crypto_ed25519_free(ed25519_key *key) {
 
 ed25519_key *crypto_ed25519_generate() {
     ed25519_key *key = crypto_ed25519_new();
-
+    
     WC_RNG rng;
+    wc_InitRng(&rng);
     int r = wc_ed25519_make_key(&rng, ED25519_KEY_SIZE, key);
     if (r) {
         DEBUG("Failed to generate key (code %d)", r);
         crypto_ed25519_free(key);
         return NULL;
     }
-
+    
     return key;
 }
 
@@ -465,8 +466,9 @@ curve25519_key *crypto_curve25519_generate() {
     curve25519_key *key = crypto_curve25519_new();
     if (!key)
         return NULL;
-
+    
     WC_RNG rng;
+    wc_InitRng(&rng);
     int r = wc_curve25519_make_key(&rng, 32, key);
     if (r) {
         crypto_curve25519_free(key);

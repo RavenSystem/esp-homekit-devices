@@ -65,7 +65,7 @@ typedef struct _action_network {
     uint16_t port_n;
     
     uint16_t len;
-    bool wait_response: 1;
+    uint8_t wait_response;
     bool is_running: 1;
     
     char* host;
@@ -327,6 +327,7 @@ typedef struct _main_config {
     
     uint8_t uart_min_len;
     uint8_t uart_max_len;
+    uint8_t wifi_arp_count_max;
     
     char name_value[11];
     char serial_value[13];
