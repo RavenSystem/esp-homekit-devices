@@ -31,9 +31,10 @@ static inline IRAM uint32_t get_cycle_count() {
 void IRAM nrzled_set(const uint8_t gpio, const uint16_t ticks_0, const uint16_t ticks_1, const uint16_t period, uint8_t *colors, const uint16_t size) {
     uint32_t c, t;
     uint32_t start = 0;
+    uint8_t color = colors[1];
     
     for (int i = 0; i < size; i++) {
-        uint8_t color = *colors++;
+        color = colors[i];
         
         for (int p = 7; p >= 0; p--) {
             t = ticks_0;

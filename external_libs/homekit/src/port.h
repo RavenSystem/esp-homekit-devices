@@ -13,7 +13,7 @@ void homekit_random_fill(uint8_t *data, size_t size);
 #define spiflash_write(addr, data, size)    (spi_flash_write((addr), (data), (size)) == ESP_OK)
 #define spiflash_erase_sector(addr)         (spi_flash_erase_sector((addr) / SPI_FLASH_SECTOR_SIZE) == ESP_OK)
 #define sdk_system_restart()                esp_restart()
-#define SERVER_TASK_STACK                   (12288)
+#define SERVER_TASK_STACK_PAIR              (12288)
 
 #else
 
@@ -21,7 +21,8 @@ void homekit_random_fill(uint8_t *data, size_t size);
 #define ESP_OK 0
 void homekit_port_mdns_announce();
 void homekit_port_mdns_announce_pause();
-#define SERVER_TASK_STACK                   (1600)
+#define SERVER_TASK_STACK_PAIR              (1600)
+#define SERVER_TASK_STACK_NORMAL            (1100)
 
 #endif
 

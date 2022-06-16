@@ -465,16 +465,16 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
 
         const char *format_str = NULL;
         switch(ch->format) {
-            case HOMETKIT_FORMAT_BOOL:      format_str = "bool"; break;
-            case HOMETKIT_FORMAT_UINT8:     format_str = "uint8"; break;
-            case HOMETKIT_FORMAT_UINT16:    format_str = "uint16"; break;
-            case HOMETKIT_FORMAT_UINT32:    format_str = "uint32"; break;
-            case HOMETKIT_FORMAT_UINT64:    format_str = "uint64"; break;
-            case HOMETKIT_FORMAT_INT:       format_str = "int"; break;
-            case HOMETKIT_FORMAT_FLOAT:     format_str = "float"; break;
-            case HOMETKIT_FORMAT_STRING:    format_str = "string"; break;
-            case HOMETKIT_FORMAT_TLV:       format_str = "tlv8"; break;
-            case HOMETKIT_FORMAT_DATA:      format_str = "data"; break;
+            case HOMEKIT_FORMAT_BOOL:      format_str = "bool"; break;
+            case HOMEKIT_FORMAT_UINT8:     format_str = "uint8"; break;
+            case HOMEKIT_FORMAT_UINT16:    format_str = "uint16"; break;
+            case HOMEKIT_FORMAT_UINT32:    format_str = "uint32"; break;
+            case HOMEKIT_FORMAT_UINT64:    format_str = "uint64"; break;
+            case HOMEKIT_FORMAT_INT:       format_str = "int"; break;
+            case HOMEKIT_FORMAT_FLOAT:     format_str = "float"; break;
+            case HOMEKIT_FORMAT_STRING:    format_str = "string"; break;
+            case HOMEKIT_FORMAT_TLV:       format_str = "tlv8"; break;
+            case HOMEKIT_FORMAT_DATA:      format_str = "data"; break;
         }
         if (format_str) {
             json_string(json, "format"); json_string(json, format_str);
@@ -482,12 +482,12 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
 
         const char *unit_str = NULL;
         switch(ch->unit) {
-            case HOMETKIT_UNIT_NONE:        break;
-            case HOMETKIT_UNIT_CELSIUS:     unit_str = "celsius"; break;
-            case HOMETKIT_UNIT_PERCENTAGE:  unit_str = "percentage"; break;
-            case HOMETKIT_UNIT_ARCDEGREES:  unit_str = "arcdegrees"; break;
-            case HOMETKIT_UNIT_LUX:         unit_str = "lux"; break;
-            case HOMETKIT_UNIT_SECONDS:     unit_str = "seconds"; break;
+            case HOMEKIT_UNIT_NONE:        break;
+            case HOMEKIT_UNIT_CELSIUS:     unit_str = "celsius"; break;
+            case HOMEKIT_UNIT_PERCENTAGE:  unit_str = "percentage"; break;
+            case HOMEKIT_UNIT_ARCDEGREES:  unit_str = "arcdegrees"; break;
+            case HOMEKIT_UNIT_LUX:         unit_str = "lux"; break;
+            case HOMEKIT_UNIT_SECONDS:     unit_str = "seconds"; break;
         }
         if (unit_str) {
             json_string(json, "unit"); json_string(json, unit_str);
@@ -550,15 +550,15 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
             HOMEKIT_ERROR("Ch value format is different from ch format");
         } else {
             switch(v.format) {
-                case HOMETKIT_FORMAT_BOOL: {
+                case HOMEKIT_FORMAT_BOOL: {
                     json_string(json, "value"); json_boolean(json, v.bool_value);
                     break;
                 }
-                case HOMETKIT_FORMAT_UINT8:
-                case HOMETKIT_FORMAT_UINT16:
-                case HOMETKIT_FORMAT_UINT32:
-                case HOMETKIT_FORMAT_UINT64:
-                case HOMETKIT_FORMAT_INT: {
+                case HOMEKIT_FORMAT_UINT8:
+                case HOMEKIT_FORMAT_UINT16:
+                case HOMEKIT_FORMAT_UINT32:
+                case HOMEKIT_FORMAT_UINT64:
+                case HOMEKIT_FORMAT_INT: {
                     if (ch->max_value) {
                         int max_value = (int) *ch->max_value;
                         if (v.int_value > max_value) {
@@ -576,7 +576,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
                     json_string(json, "value"); json_integer(json, v.int_value);
                     break;
                 }
-                case HOMETKIT_FORMAT_FLOAT: {
+                case HOMEKIT_FORMAT_FLOAT: {
                     if (ch->max_value) {
                         int max_value = (int) *ch->max_value;
                         if (v.float_value > max_value) {
@@ -594,11 +594,11 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
                     json_string(json, "value"); json_float(json, v.float_value);
                     break;
                 }
-                case HOMETKIT_FORMAT_STRING: {
+                case HOMEKIT_FORMAT_STRING: {
                     json_string(json, "value"); json_string(json, v.string_value);
                     break;
                 }
-                case HOMETKIT_FORMAT_TLV: {
+                case HOMEKIT_FORMAT_TLV: {
                     json_string(json, "value");
                     if (!v.tlv_values) {
                         json_string(json, "");
@@ -624,7 +624,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
                     }
                     break;
                 }
-                case HOMETKIT_FORMAT_DATA:
+                case HOMEKIT_FORMAT_DATA:
                     json_string(json, "value");
                     if (!v.data_value || v.data_size == 0) {
                         json_string(json, "");
@@ -1548,8 +1548,8 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 
             pairing_context_free(homekit_server->pairing_context);
             homekit_server->pairing_context = NULL;
-
-            homekit_server->paired = 1;
+            
+            homekit_server->paired = true;
             
             homekit_mdns_buffer_set(0);
             homekit_setup_mdns();
@@ -2310,7 +2310,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
             }
 
             switch (ch->format) {
-                case HOMETKIT_FORMAT_BOOL: {
+                case HOMEKIT_FORMAT_BOOL: {
                     int value = false;
                     if (j_value->type == cJSON_True) {
                         value = true;
@@ -2334,11 +2334,11 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     }
                     break;
                 }
-                case HOMETKIT_FORMAT_UINT8:
-                case HOMETKIT_FORMAT_UINT16:
-                case HOMETKIT_FORMAT_UINT32:
-                case HOMETKIT_FORMAT_UINT64:
-                case HOMETKIT_FORMAT_INT: {
+                case HOMEKIT_FORMAT_UINT8:
+                case HOMEKIT_FORMAT_UINT16:
+                case HOMEKIT_FORMAT_UINT32:
+                case HOMEKIT_FORMAT_UINT64:
+                case HOMEKIT_FORMAT_INT: {
                     // We accept boolean values here in order to fix a bug in HomeKit. HomeKit sometimes sends a boolean instead of an integer of value 0 or 1.
                     if (j_value->type != cJSON_Number && j_value->type != cJSON_False && j_value->type != cJSON_True) {
                         CLIENT_ERROR(context, "Update %d.%d: no number", aid, iid);
@@ -2349,27 +2349,27 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     unsigned long long max_value = 0;
 
                     switch (ch->format) {
-                        case HOMETKIT_FORMAT_UINT8: {
+                        case HOMEKIT_FORMAT_UINT8: {
                             min_value = 0;
                             max_value = 255;
                             break;
                         }
-                        case HOMETKIT_FORMAT_UINT16: {
+                        case HOMEKIT_FORMAT_UINT16: {
                             min_value = 0;
                             max_value = 65535;
                             break;
                         }
-                        case HOMETKIT_FORMAT_UINT32: {
+                        case HOMEKIT_FORMAT_UINT32: {
                             min_value = 0;
                             max_value = 4294967295;
                             break;
                         }
-                        case HOMETKIT_FORMAT_UINT64: {
+                        case HOMEKIT_FORMAT_UINT64: {
                             min_value = 0;
                             max_value = 18446744073709551615ULL;
                             break;
                         }
-                        case HOMETKIT_FORMAT_INT: {
+                        case HOMEKIT_FORMAT_INT: {
                             min_value = -2147483648;
                             max_value = 2147483647;
                             break;
@@ -2458,19 +2458,19 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     /*
                     // New style
                     switch (ch->format) {
-                        case HOMETKIT_FORMAT_UINT8:
+                        case HOMEKIT_FORMAT_UINT8:
                             h_value = HOMEKIT_UINT8(value);
                             break;
-                        case HOMETKIT_FORMAT_UINT16:
+                        case HOMEKIT_FORMAT_UINT16:
                             h_value = HOMEKIT_UINT16(value);
                             break;
-                        case HOMETKIT_FORMAT_UINT32:
+                        case HOMEKIT_FORMAT_UINT32:
                             h_value = HOMEKIT_UINT32(value);
                             break;
-                        case HOMETKIT_FORMAT_UINT64:
+                        case HOMEKIT_FORMAT_UINT64:
                             h_value = HOMEKIT_UINT64(value);
                             break;
-                        case HOMETKIT_FORMAT_INT:
+                        case HOMEKIT_FORMAT_INT:
                             h_value = HOMEKIT_INT(value);
                             break;
 
@@ -2487,7 +2487,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     }
                     break;
                 }
-                case HOMETKIT_FORMAT_FLOAT: {
+                case HOMEKIT_FORMAT_FLOAT: {
                     if (j_value->type != cJSON_Number) {
                         CLIENT_ERROR(context, "Update %d.%d: not a number", aid, iid);
                         return HAPStatus_InvalidValue;
@@ -2510,7 +2510,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     }
                     break;
                 }
-                case HOMETKIT_FORMAT_STRING: {
+                case HOMEKIT_FORMAT_STRING: {
                     if (j_value->type != cJSON_String) {
                         CLIENT_ERROR(context, "Update %d.%d: not a string", aid, iid);
                         return HAPStatus_InvalidValue;
@@ -2540,7 +2540,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     }
                     break;
                 }
-                case HOMETKIT_FORMAT_TLV: {
+                case HOMEKIT_FORMAT_TLV: {
                     if (j_value->type != cJSON_String) {
                         CLIENT_ERROR(context, "Update %d.%d: not a string", aid, iid);
                         return HAPStatus_InvalidValue;
@@ -2583,7 +2583,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         CLIENT_DEBUG(context, " Type %d value (%d bytes): %s", t->type, t->size, escaped_payload);
                         free(escaped_payload);
                     }
-
+                    
                     h_value = HOMEKIT_TLV(tlv_values);
                     if (ch->setter_ex) {
                         ch->setter_ex(ch, h_value);
@@ -2591,16 +2591,16 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         homekit_value_destruct(&ch->value);
                         homekit_value_copy(&ch->value, &h_value);
                     }
-
+                    
                     tlv_free(tlv_values);
                     break;
                 }
-                case HOMETKIT_FORMAT_DATA: {
+                case HOMEKIT_FORMAT_DATA: {
                     if (j_value->type != cJSON_String) {
                         CLIENT_ERROR(context, "Update %d.%d: not a string", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
-
+                    
                     // Default max data len = 2,097,152 but that does not make sense
                     // for this accessory
 #ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
@@ -3478,7 +3478,7 @@ static void IRAM homekit_run_server() {
         }
     }
     */
-     
+    
     listen(homekit_server->listen_fd, 10);
     
     FD_SET(homekit_server->listen_fd, &homekit_server->fds);
@@ -3524,8 +3524,6 @@ static void IRAM homekit_run_server() {
 }
 
 void homekit_setup_mdns() {
-    HOMEKIT_INFO("mDNS");
-
     homekit_accessory_t *accessory = homekit_server->config->accessories[0];
     homekit_service_t *accessory_info =
         homekit_service_by_type(accessory, HOMEKIT_SERVICE_ACCESSORY_INFORMATION);
@@ -3651,39 +3649,7 @@ ed25519_key *homekit_accessory_key_generate() {
 }
 
 void homekit_server_task(void *args) {
-    HOMEKIT_INFO("Starting HK");
-
-    int r = homekit_storage_init();
-
-    if (r == 0) {
-        homekit_server->accessory_id = homekit_storage_load_accessory_id();
-        homekit_server->accessory_key = homekit_storage_load_accessory_key();
-    }
-    if (!homekit_server->accessory_id || !homekit_server->accessory_key) {
-        homekit_server->accessory_id = homekit_accessory_id_generate();
-        homekit_storage_save_accessory_id(homekit_server->accessory_id);
-
-        homekit_server->accessory_key = homekit_accessory_key_generate();
-        homekit_storage_save_accessory_key(homekit_server->accessory_key);
-    } else {
-        HOMEKIT_INFO("Current HomeKit ID: %s", homekit_server->accessory_id);
-    }
-
-    pairing_iterator_t *pairing_it = homekit_storage_pairing_iterator();
-    pairing_t *pairing;
-    while ((pairing = homekit_storage_next_pairing(pairing_it))) {
-        if (pairing->permissions & pairing_permissions_admin) {
-            break;
-        }
-        pairing_free(pairing);
-    }
-    homekit_storage_pairing_iterator_free(pairing_it);
-
-    if (pairing) {
-        HOMEKIT_INFO("Found %s. No pair setup", pairing->device_id);
-        pairing_free(pairing);
-        homekit_server->paired = true;
-    }
+    vTaskDelay(500 / portTICK_PERIOD_MS);
     
     homekit_mdns_init();
     homekit_server->setup_finish = homekit_storage_finish_setup();
@@ -3702,6 +3668,8 @@ void homekit_server_task(void *args) {
 const static char hk_task_name[] = "HK";
 
 void homekit_server_init(homekit_server_config_t *config) {
+    HOMEKIT_INFO("Start HK");
+    
     homekit_accessories_init(config->accessories);
     
     homekit_server = server_new();
@@ -3710,8 +3678,48 @@ void homekit_server_init(homekit_server_config_t *config) {
     if (homekit_server->config->max_clients == 0) {
         homekit_server->config->max_clients = HOMEKIT_MAX_CLIENTS_DEFAULT;
     }
+
+    int r = homekit_storage_init();
+
+    if (r == 0) {
+        homekit_server->accessory_id = homekit_storage_load_accessory_id();
+        homekit_server->accessory_key = homekit_storage_load_accessory_key();
+    }
+    if (!homekit_server->accessory_id || !homekit_server->accessory_key) {
+        homekit_server->accessory_id = homekit_accessory_id_generate();
+        homekit_storage_save_accessory_id(homekit_server->accessory_id);
+
+        homekit_server->accessory_key = homekit_accessory_key_generate();
+        homekit_storage_save_accessory_key(homekit_server->accessory_key);
+    } else {
+        HOMEKIT_INFO("HomeKit ID: %s", homekit_server->accessory_id);
+    }
+
+    pairing_iterator_t *pairing_it = homekit_storage_pairing_iterator();
+    pairing_t *pairing;
+    while ((pairing = homekit_storage_next_pairing(pairing_it))) {
+        if (pairing->permissions & pairing_permissions_admin) {
+            break;
+        }
+        pairing_free(pairing);
+    }
+    homekit_storage_pairing_iterator_free(pairing_it);
+
+    if (pairing) {
+        HOMEKIT_INFO("Found %s", pairing->device_id);
+        pairing_free(pairing);
+        homekit_server->paired = true;
+    }
     
-    if (xTaskCreate(homekit_server_task, hk_task_name, SERVER_TASK_STACK, NULL, SERVER_TASK_PRIORITY, NULL) != pdPASS) {
+    int server_task_stack = SERVER_TASK_STACK_PAIR;
+
+#ifdef ESP_OPEN_RTOS
+    if (homekit_server->paired) {
+        server_task_stack = SERVER_TASK_STACK_NORMAL;
+    }
+#endif //ESP_OPEN_RTOS
+    
+    if (xTaskCreate(homekit_server_task, hk_task_name, server_task_stack, NULL, SERVER_TASK_PRIORITY, NULL) != pdPASS) {
         ERROR("Creating HK");
     }
 }
@@ -3729,23 +3737,7 @@ void homekit_mdns_announce_pause() {
 }
 
 bool homekit_is_paired() {
-    pairing_iterator_t *pairing_it = homekit_storage_pairing_iterator();
-    pairing_t *pairing;
-    while ((pairing = homekit_storage_next_pairing(pairing_it))) {
-        if (pairing->permissions & pairing_permissions_admin) {
-            break;
-        }
-        pairing_free(pairing);
-    };
-    homekit_storage_pairing_iterator_free(pairing_it);
-    
-    int paired = false;
-    if (pairing) {
-        paired = true;
-        pairing_free(pairing);
-    }
-
-    return paired;
+    return homekit_server->paired;
 }
 
 int homekit_get_accessory_id(char *buffer, size_t size) {

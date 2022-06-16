@@ -44,7 +44,7 @@
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_SETUP_OPTION HOMEKIT_CUSTOM_UUID("F0000101")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_SETUP_OPTION(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_SETUP_OPTION, \
-    .format = HOMETKIT_FORMAT_STRING, \
+    .format = HOMEKIT_FORMAT_STRING, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_PAIRED_WRITE \
                 | HOMEKIT_PERMISSIONS_HIDDEN, \
@@ -55,7 +55,7 @@
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_HISTORICAL_DATA HOMEKIT_CUSTOM_EXTRA_UUID("F9900000")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_HISTORICAL_DATA(_value, _size, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_HISTORICAL_DATA, \
-    .format = HOMETKIT_FORMAT_DATA, \
+    .format = HOMEKIT_FORMAT_DATA, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_HIDDEN, \
     .value = HOMEKIT_DATA_(_value, _size), \
@@ -66,7 +66,7 @@
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_FREE_VALUE(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_FREE_VALUE, \
     .description = "Value", \
-    .format = HOMETKIT_FORMAT_FLOAT, \
+    .format = HOMEKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_NOTIFY, \
     .value = HOMEKIT_FLOAT_(_value), \
@@ -77,7 +77,7 @@
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_VOLT(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_VOLT, \
     .description = "Voltage", \
-    .format = HOMETKIT_FORMAT_FLOAT, \
+    .format = HOMEKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_NOTIFY, \
     .value = HOMEKIT_FLOAT_(_value), \
@@ -87,7 +87,7 @@
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_AMPERE(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_AMPERE, \
     .description = "Current", \
-    .format = HOMETKIT_FORMAT_FLOAT, \
+    .format = HOMEKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_NOTIFY, \
     .value = HOMEKIT_FLOAT_(_value), \
@@ -97,7 +97,7 @@
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_WATT(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_WATT, \
     .description = "Power", \
-    .format = HOMETKIT_FORMAT_FLOAT, \
+    .format = HOMEKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_NOTIFY, \
     .value = HOMEKIT_FLOAT_(_value), \
@@ -107,7 +107,7 @@
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_CONSUMP(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_CONSUMP, \
     .description = "Consumption", \
-    .format = HOMETKIT_FORMAT_FLOAT, \
+    .format = HOMEKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_NOTIFY, \
     .value = HOMEKIT_FLOAT_(_value), \
@@ -117,7 +117,7 @@
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_CONSUMP_RESET_DATE(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_CONSUMP_RESET_DATE, \
     .description = "Last Reset", \
-    .format = HOMETKIT_FORMAT_INT, \
+    .format = HOMEKIT_FORMAT_INT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_NOTIFY \
                 | HOMEKIT_PERMISSIONS_HIDDEN, \
@@ -128,7 +128,7 @@
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_CONSUMP_BEFORE_RESET(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_CONSUMP_BEFORE_RESET, \
     .description = "Last Consumption", \
-    .format = HOMETKIT_FORMAT_FLOAT, \
+    .format = HOMEKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_NOTIFY, \
     .value = HOMEKIT_FLOAT_(_value), \
@@ -138,7 +138,7 @@
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_CONSUMP_RESET(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_CONSUMP_RESET, \
     .description = "Reset", \
-    .format = HOMETKIT_FORMAT_STRING, \
+    .format = HOMEKIT_FORMAT_STRING, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_PAIRED_WRITE \
                 | HOMEKIT_PERMISSIONS_HIDDEN, \

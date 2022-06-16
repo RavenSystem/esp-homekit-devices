@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "10.6.0"
+#define FIRMWARE_VERSION                    "10.7.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -716,6 +716,8 @@
 #define RANDOM_DELAY_MS                     (8000)
 
 #define ACCESSORIES_WITHOUT_BRIDGE          (4)     // Max number of accessories before using a dedicated HomeKit bridge
+
+#define NTP_SERVER_FALLBACK                 "pool.ntp.org"
 
 #define WOL_PACKET_LEN                      (102)
 

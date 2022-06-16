@@ -8,24 +8,24 @@
 
 
 typedef uint8_t homekit_format_t;                       // 4 bits
-#define HOMETKIT_FORMAT_BOOL                            (0)
-#define HOMETKIT_FORMAT_UINT8                           (1)
-#define HOMETKIT_FORMAT_UINT16                          (2)
-#define HOMETKIT_FORMAT_UINT32                          (3)
-#define HOMETKIT_FORMAT_UINT64                          (4)
-#define HOMETKIT_FORMAT_INT                             (5)
-#define HOMETKIT_FORMAT_FLOAT                           (6)
-#define HOMETKIT_FORMAT_STRING                          (7)
-#define HOMETKIT_FORMAT_TLV                             (8)
-#define HOMETKIT_FORMAT_DATA                            (9)
+#define HOMEKIT_FORMAT_BOOL                            (0)
+#define HOMEKIT_FORMAT_UINT8                           (1)
+#define HOMEKIT_FORMAT_UINT16                          (2)
+#define HOMEKIT_FORMAT_UINT32                          (3)
+#define HOMEKIT_FORMAT_UINT64                          (4)
+#define HOMEKIT_FORMAT_INT                             (5)
+#define HOMEKIT_FORMAT_FLOAT                           (6)
+#define HOMEKIT_FORMAT_STRING                          (7)
+#define HOMEKIT_FORMAT_TLV                             (8)
+#define HOMEKIT_FORMAT_DATA                            (9)
 
 typedef uint8_t homekit_unit_t;                         // 3 bits
-#define HOMETKIT_UNIT_NONE                              (0)
-#define HOMETKIT_UNIT_CELSIUS                           (1)
-#define HOMETKIT_UNIT_PERCENTAGE                        (2)
-#define HOMETKIT_UNIT_ARCDEGREES                        (3)
-#define HOMETKIT_UNIT_LUX                               (4)
-#define HOMETKIT_UNIT_SECONDS                           (5)
+#define HOMEKIT_UNIT_NONE                              (0)
+#define HOMEKIT_UNIT_CELSIUS                           (1)
+#define HOMEKIT_UNIT_PERCENTAGE                        (2)
+#define HOMEKIT_UNIT_ARCDEGREES                        (3)
+#define HOMEKIT_UNIT_LUX                               (4)
+#define HOMEKIT_UNIT_SECONDS                           (5)
 
 typedef uint8_t homekit_permissions_t;                  // 6 bits
 #define HOMEKIT_PERMISSIONS_PAIRED_READ                 (1)
@@ -104,47 +104,47 @@ void homekit_value_free(homekit_value_t *value);
 
 
 #define HOMEKIT_NULL_(...) \
-    {.format=HOMETKIT_FORMAT_BOOL, .is_null=true, ##__VA_ARGS__}
+    {.format=HOMEKIT_FORMAT_BOOL, .is_null=true, ##__VA_ARGS__}
 #define HOMEKIT_NULL(...) (homekit_value_t) HOMEKIT_NULL_( __VA_ARGS__ )
 
 #define HOMEKIT_BOOL_(value, ...) \
-    {.format=HOMETKIT_FORMAT_BOOL, .bool_value=(value), ##__VA_ARGS__}
+    {.format=HOMEKIT_FORMAT_BOOL, .bool_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_BOOL(value, ...) (homekit_value_t) HOMEKIT_BOOL_(value, __VA_ARGS__)
 
 #define HOMEKIT_INT_(value, ...) \
-    {.format=HOMETKIT_FORMAT_INT, .int_value=(value), ##__VA_ARGS__}
+    {.format=HOMEKIT_FORMAT_INT, .int_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_INT(value, ...) (homekit_value_t) HOMEKIT_INT_(value, ##__VA_ARGS__)
 
 #define HOMEKIT_UINT8_(value, ...) \
-    {.format=HOMETKIT_FORMAT_UINT8, .int_value=(value), ##__VA_ARGS__}
+    {.format=HOMEKIT_FORMAT_UINT8, .int_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_UINT8(value, ...) (homekit_value_t) HOMEKIT_UINT8_(value, ##__VA_ARGS__)
 
 #define HOMEKIT_UINT16_(value, ...) \
-    {.format=HOMETKIT_FORMAT_UINT16, .int_value=(value), ##__VA_ARGS__}
+    {.format=HOMEKIT_FORMAT_UINT16, .int_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_UINT16(value, ...) (homekit_value_t) HOMEKIT_UINT16_(value, ##__VA_ARGS__)
 
 #define HOMEKIT_UINT32_(value, ...) \
-    {.format=HOMETKIT_FORMAT_UINT32, .int_value=(value), ##__VA_ARGS__}
+    {.format=HOMEKIT_FORMAT_UINT32, .int_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_UINT32(value, ...) (homekit_value_t) HOMEKIT_UINT32_(value, ##__VA_ARGS__)
 
 #define HOMEKIT_UINT64_(value, ...) \
-    {.format=HOMETKIT_FORMAT_UINT64, .int_value=(value), ##__VA_ARGS__}
+    {.format=HOMEKIT_FORMAT_UINT64, .int_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_UINT64(value, ...) (homekit_value_t) HOMEKIT_UINT64_(value, ##__VA_ARGS__)
 
 #define HOMEKIT_FLOAT_(value, ...) \
-    {.format=HOMETKIT_FORMAT_FLOAT, .float_value=(value), ##__VA_ARGS__}
+    {.format=HOMEKIT_FORMAT_FLOAT, .float_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_FLOAT(value, ...) (homekit_value_t) HOMEKIT_FLOAT_(value, ##__VA_ARGS__)
 
 #define HOMEKIT_STRING_(value, ...) \
-    {.format=HOMETKIT_FORMAT_STRING, .string_value=(value), ##__VA_ARGS__}
+    {.format=HOMEKIT_FORMAT_STRING, .string_value=(value), ##__VA_ARGS__}
 #define HOMEKIT_STRING(value, ...) (homekit_value_t) HOMEKIT_STRING_(value, ##__VA_ARGS__)
 
 #define HOMEKIT_TLV_(value, ...) \
-    {.format=HOMETKIT_FORMAT_TLV, .tlv_values=(value), ##__VA_ARGS__}
+    {.format=HOMEKIT_FORMAT_TLV, .tlv_values=(value), ##__VA_ARGS__}
 #define HOMEKIT_TLV(value, ...) (homekit_value_t) HOMEKIT_TLV_(value, ##__VA_ARGS__)
 
 #define HOMEKIT_DATA_(value, size, ...) \
-    {.format=HOMETKIT_FORMAT_DATA, .data_value=(value), .data_size=(size), ##__VA_ARGS__}
+    {.format=HOMEKIT_FORMAT_DATA, .data_value=(value), .data_size=(size), ##__VA_ARGS__}
 #define HOMEKIT_DATA(value, size, ...) (homekit_value_t) HOMEKIT_DATA_(value, size, ##__VA_ARGS__)
 
 
@@ -268,7 +268,7 @@ struct _homekit_accessory {
 //     );
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM(...) \
     .format = HOMEKIT_FORMAT_UINT8, \
-    .unit = HOMETKIT_UNIT_NONE, \
+    .unit = HOMEKIT_UNIT_NONE, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ, \
     ##__VA_ARGS__
 

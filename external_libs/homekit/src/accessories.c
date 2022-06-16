@@ -10,19 +10,19 @@ bool homekit_value_equal(homekit_value_t *a, homekit_value_t *b) {
         return false;
 
     switch (a->format) {
-        case HOMETKIT_FORMAT_BOOL:
+        case HOMEKIT_FORMAT_BOOL:
             return a->bool_value == b->bool_value;
-        case HOMETKIT_FORMAT_UINT8:
-        case HOMETKIT_FORMAT_UINT16:
-        case HOMETKIT_FORMAT_UINT32:
-        case HOMETKIT_FORMAT_UINT64:
-        case HOMETKIT_FORMAT_INT:
+        case HOMEKIT_FORMAT_UINT8:
+        case HOMEKIT_FORMAT_UINT16:
+        case HOMEKIT_FORMAT_UINT32:
+        case HOMEKIT_FORMAT_UINT64:
+        case HOMEKIT_FORMAT_INT:
             return a->int_value == b->int_value;
-        case HOMETKIT_FORMAT_FLOAT:
+        case HOMEKIT_FORMAT_FLOAT:
             return a->float_value == b->float_value;
-        case HOMETKIT_FORMAT_STRING:
+        case HOMEKIT_FORMAT_STRING:
             return !strcmp(a->string_value, b->string_value);
-        case HOMETKIT_FORMAT_TLV: {
+        case HOMEKIT_FORMAT_TLV: {
             if (!a->tlv_values && !b->tlv_values)
                 return true;
             if (!a->tlv_values || !b->tlv_values)
@@ -39,7 +39,7 @@ bool homekit_value_equal(homekit_value_t *a, homekit_value_t *b) {
 
             return (!ta && !tb);
         }
-        case HOMETKIT_FORMAT_DATA:
+        case HOMEKIT_FORMAT_DATA:
             if (!a->data_value && !b->data_value)
                 return true;
 
@@ -63,20 +63,20 @@ void homekit_value_copy(homekit_value_t *dst, homekit_value_t *src) {
 
     if (!src->is_null) {
         switch (src->format) {
-            case HOMETKIT_FORMAT_BOOL:
+            case HOMEKIT_FORMAT_BOOL:
                 dst->bool_value = src->bool_value;
                 break;
-            case HOMETKIT_FORMAT_UINT8:
-            case HOMETKIT_FORMAT_UINT16:
-            case HOMETKIT_FORMAT_UINT32:
-            case HOMETKIT_FORMAT_UINT64:
-            case HOMETKIT_FORMAT_INT:
+            case HOMEKIT_FORMAT_UINT8:
+            case HOMEKIT_FORMAT_UINT16:
+            case HOMEKIT_FORMAT_UINT32:
+            case HOMEKIT_FORMAT_UINT64:
+            case HOMEKIT_FORMAT_INT:
                 dst->int_value = src->int_value;
                 break;
-            case HOMETKIT_FORMAT_FLOAT:
+            case HOMEKIT_FORMAT_FLOAT:
                 dst->float_value = src->float_value;
                 break;
-            case HOMETKIT_FORMAT_STRING:
+            case HOMEKIT_FORMAT_STRING:
                 if (src->is_static) {
                     dst->string_value = src->string_value;
                     dst->is_static = true;
@@ -84,7 +84,7 @@ void homekit_value_copy(homekit_value_t *dst, homekit_value_t *src) {
                     dst->string_value = strdup(src->string_value);
                 }
                 break;
-            case HOMETKIT_FORMAT_TLV: {
+            case HOMEKIT_FORMAT_TLV: {
                 if (src->is_static) {
                     dst->tlv_values = src->tlv_values;
                     dst->is_static = true;
@@ -96,7 +96,7 @@ void homekit_value_copy(homekit_value_t *dst, homekit_value_t *src) {
                 }
                 break;
             }
-            case HOMETKIT_FORMAT_DATA:
+            case HOMEKIT_FORMAT_DATA:
                 if (src->is_static) {
                     dst->data_value = src->data_value;
                     dst->data_size = src->data_size;
@@ -123,15 +123,15 @@ homekit_value_t *homekit_value_clone(homekit_value_t *value) {
 void homekit_value_destruct(homekit_value_t *value) {
     if (!value->is_null) {
         switch (value->format) {
-            case HOMETKIT_FORMAT_STRING:
+            case HOMEKIT_FORMAT_STRING:
                 if (!value->is_static && value->string_value)
                     free(value->string_value);
                 break;
-            case HOMETKIT_FORMAT_TLV:
+            case HOMEKIT_FORMAT_TLV:
                 if (!value->is_static && value->tlv_values)
                     tlv_free(value->tlv_values);
                 break;
-            case HOMETKIT_FORMAT_DATA:
+            case HOMEKIT_FORMAT_DATA:
                 if (!value->is_static && value->data_value) {
                     free(value->data_value);
                     value->data_size = 0;
