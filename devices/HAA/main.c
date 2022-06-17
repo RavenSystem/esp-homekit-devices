@@ -678,7 +678,7 @@ void ntp_timer_worker(TimerHandle_t xTimer) {
             raven_ntp_get_time_t();
         }
     } else {
-        ERROR("NTP: HK pairing");
+        ERROR("NTP: HK pair");
         raven_ntp_get_time_t();
     }
 }
@@ -895,7 +895,7 @@ void ping_task_timer_worker() {
             homekit_remove_oldest_client();
         }
     } else {
-        ERROR("PING busy %i, HK pairing %i", main_config.network_is_busy, homekit_is_pairing());
+        ERROR("PING busy %i, HK pair %i", main_config.network_is_busy, homekit_is_pairing());
     }
 }
 
@@ -1438,7 +1438,7 @@ void power_monitor_timer_worker(TimerHandle_t xTimer) {
                 homekit_remove_oldest_client();
             }
         } else {
-            ERROR("PM: HK pairing");
+            ERROR("PM: HK pair");
         }
     }
 }
@@ -1709,10 +1709,14 @@ void set_zones_task(void* args) {
 }
 
 void set_zones_timer_worker(TimerHandle_t xTimer) {
-    if (xTaskCreate(set_zones_task, "ZNE", SET_ZONES_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), SET_ZONES_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("Creating ZNE");
-        homekit_remove_oldest_client();
-        esp_timer_start(xTimer);
+    if (!homekit_is_pairing()) {
+        if (xTaskCreate(set_zones_task, "ZNE", SET_ZONES_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), SET_ZONES_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("Creating ZNE");
+            homekit_remove_oldest_client();
+            esp_timer_start(xTimer);
+        }
+    } else {
+        ERROR("zones_task: HK pair");
     }
 }
 
@@ -2464,166 +2468,167 @@ void temperature_task(void* args) {
     }
     
     while (ch_group) {
-        if (TH_SENSOR_GPIO != -1) {
-            get_temp = false;
-            
-            if (iairzoning == 0 || (ch_group->serv_type == SERV_TYPE_THERMOSTAT && iairzoning == (uint8_t) TH_IAIRZONING_CONTROLLER)) {
-                INFO("<%i> TH sensor", ch_group->serv_index);
+        if (ch_group->serv_type >= SERV_TYPE_THERMOSTAT &&
+            ch_group->serv_type <= SERV_TYPE_HUMIDIFIER_WITH_TEMP) {
+            const unsigned int sensor_type = TH_SENSOR_TYPE;
+            const int sensor_gpio = TH_SENSOR_GPIO;
+            if (sensor_gpio != -1 || sensor_type >= 5) {
+                get_temp = false;
                 
-                const unsigned int sensor_type = TH_SENSOR_TYPE;
-                const int sensor_gpio = TH_SENSOR_GPIO;
-                
-                if (sensor_type != 3 && sensor_type < 5) {
-                    dht_sensor_type_t current_sensor_type = DHT_TYPE_DHT22; // sensor_type == 2
+                if (iairzoning == 0 || (iairzoning == (uint8_t) TH_IAIRZONING_CONTROLLER)) {
+                    INFO("<%i> TH sensor", ch_group->serv_index);
                     
-                    if (sensor_type == 1) {
-                        current_sensor_type = DHT_TYPE_DHT11;
-                    } else if (sensor_type == 4) {
-                        current_sensor_type = DHT_TYPE_SI7021;
-                    }
-                    
-                    get_temp = dht_read_float_data(current_sensor_type, sensor_gpio, &humidity_value, &temperature_value);
-                    
-                } else if (sensor_type == 3) {
-                    const unsigned int sensor_index = TH_SENSOR_INDEX;
-                    ds18b20_addr_t ds18b20_addrs[sensor_index];
-                    
-                    taskENTER_CRITICAL();
-                    const int scaned_devices = ds18b20_scan_devices(sensor_gpio, ds18b20_addrs, sensor_index);
-                    taskEXIT_CRITICAL();
-                    
-                    if (scaned_devices >= sensor_index) {
-                        ds18b20_addr_t ds18b20_addr;
-                        ds18b20_addr = ds18b20_addrs[sensor_index - 1];
+                    if (sensor_type != 3 && sensor_type < 5) {
+                        dht_sensor_type_t current_sensor_type = DHT_TYPE_DHT22; // sensor_type == 2
+                        
+                        if (sensor_type == 1) {
+                            current_sensor_type = DHT_TYPE_DHT11;
+                        } else if (sensor_type == 4) {
+                            current_sensor_type = DHT_TYPE_SI7021;
+                        }
+                        
+                        get_temp = dht_read_float_data(current_sensor_type, sensor_gpio, &humidity_value, &temperature_value);
+                        
+                    } else if (sensor_type == 3) {
+                        const unsigned int sensor_index = TH_SENSOR_INDEX;
+                        ds18b20_addr_t ds18b20_addrs[sensor_index];
                         
                         taskENTER_CRITICAL();
-                        ds18b20_measure_and_read_multi(sensor_gpio, &ds18b20_addr, 1, &temperature_value);
+                        const int scaned_devices = ds18b20_scan_devices(sensor_gpio, ds18b20_addrs, sensor_index);
                         taskEXIT_CRITICAL();
                         
-                        if (temperature_value < 130.f && temperature_value > -60.f) {
-                            get_temp = true;
-                        }
-                    }
-                    
-                } else {
-                    const float adc = sdk_system_adc_read();
-                    if (sensor_type == 5) {
-                        // https://github.com/arendst/Tasmota/blob/7177c7d8e003bb420d8cae39f544c2b8a9af09fe/tasmota/xsns_02_analog.ino#L201
-                        temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 + taylor_log(((32000 * adc) / ((1024 * 3.3) - adc)) / 10000))) - 15;
-                        
-                    } else if (sensor_type == 6) {
-                        temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 - taylor_log(((32000 * adc) / ((1024 * 3.3) - adc)) / 10000))) + 15;
-                        
-                    } else if (sensor_type == 7) {
-                        temperature_value = 1024 - adc;
-                        
-                    } else if (sensor_type == 8) {
-                        temperature_value = adc;
-                        
-                    } else if (sensor_type == 9){
-                        humidity_value = 1024 - adc;
-                        
-                    } else {    // th_sensor_type == 10
-                        humidity_value = adc;
-                    }
-                    
-                    if (sensor_type >= 9) {
-                        humidity_value *= 0.09765625f;  // (100 / 1024)
-                    }
-                    
-                    if (TH_SENSOR_HUM_OFFSET != 0.000000f && sensor_type < 9) {
-                        temperature_value *= TH_SENSOR_HUM_OFFSET;
-                        
-                    } else if (TH_SENSOR_TEMP_OFFSET != 0.000000f && sensor_type >= 9) {
-                        humidity_value *= TH_SENSOR_TEMP_OFFSET;
-                    }
-                    
-                    get_temp = true;
-                }
-                
-                /*
-                 * Only for tests. Keep comment for releases
-                 */
-                //get_temp = true; temperature_value = 23; humidity_value = 68;
-                
-                if (get_temp) {
-                    TH_SENSOR_ERROR_COUNT = 0;
-                    
-                    if (ch_group->chs > 0 && ch_group->ch[0]) {
-                        temperature_value += TH_SENSOR_TEMP_OFFSET;
-                        if (temperature_value < -100.f) {
-                            temperature_value = -100.f;
-                        } else if (temperature_value > 200.f) {
-                            temperature_value = 200.f;
-                        }
-                        
-                        temperature_value *= 10.f;
-                        temperature_value = ((int) temperature_value) / 10.0f;
-                        
-                        INFO("<%i> TEMP %.1fC", ch_group->serv_index, temperature_value);
-                        
-                        if (temperature_value != ch_group->ch[0]->value.float_value) {
-                            ch_group->ch[0]->value.float_value = temperature_value;
-                            homekit_characteristic_notify_safe(ch_group->ch[0]);
+                        if (scaned_devices >= sensor_index) {
+                            ds18b20_addr_t ds18b20_addr;
+                            ds18b20_addr = ds18b20_addrs[sensor_index - 1];
                             
-                            if (ch_group->chs > 4) {
-                                hkc_th_setter(ch_group->ch[0], ch_group->ch[0]->value);
+                            taskENTER_CRITICAL();
+                            ds18b20_measure_and_read_multi(sensor_gpio, &ds18b20_addr, 1, &temperature_value);
+                            taskEXIT_CRITICAL();
+                            
+                            if (temperature_value < 130.f && temperature_value > -60.f) {
+                                get_temp = true;
                             }
-                            
-                            do_wildcard_actions(ch_group, 0, temperature_value);
                         }
+                        
+                    } else {
+                        const float adc = sdk_system_adc_read();
+                        if (sensor_type == 5) {
+                            // https://github.com/arendst/Tasmota/blob/7177c7d8e003bb420d8cae39f544c2b8a9af09fe/tasmota/xsns_02_analog.ino#L201
+                            temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 + taylor_log(((32000 * adc) / ((1024 * 3.3) - adc)) / 10000))) - 15;
+                            
+                        } else if (sensor_type == 6) {
+                            temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 - taylor_log(((32000 * adc) / ((1024 * 3.3) - adc)) / 10000))) + 15;
+                            
+                        } else if (sensor_type == 7) {
+                            temperature_value = 1024 - adc;
+                            
+                        } else if (sensor_type == 8) {
+                            temperature_value = adc;
+                            
+                        } else if (sensor_type == 9){
+                            humidity_value = 1024 - adc;
+                            
+                        } else {    // th_sensor_type == 10
+                            humidity_value = adc;
+                        }
+                        
+                        if (sensor_type >= 9) {
+                            humidity_value *= 0.09765625f;  // (100 / 1024)
+                        }
+                        
+                        if (TH_SENSOR_HUM_OFFSET != 0.000000f && sensor_type < 9) {
+                            temperature_value *= TH_SENSOR_HUM_OFFSET;
+                            
+                        } else if (TH_SENSOR_TEMP_OFFSET != 0.000000f && sensor_type >= 9) {
+                            humidity_value *= TH_SENSOR_TEMP_OFFSET;
+                        }
+                        
+                        get_temp = true;
                     }
                     
-                    if (ch_group->chs > 1 && ch_group->ch[1]) {
-                        humidity_value += TH_SENSOR_HUM_OFFSET;
-                        if (humidity_value < 0.f) {
-                            humidity_value = 0.f;
-                        } else if (humidity_value > 100.f) {
-                            humidity_value = 100.f;
-                        }
-
-                        const unsigned int humidity_value_int = humidity_value;
-                        
-                        INFO("<%i> HUM %i", ch_group->serv_index, humidity_value_int);
-                        
-                        if (humidity_value_int != (uint8_t) ch_group->ch[1]->value.float_value) {
-                            ch_group->ch[1]->value.float_value = humidity_value_int;
-                            homekit_characteristic_notify_safe(ch_group->ch[1]);
-                            
-                            if (ch_group->chs > 4) {
-                                hkc_humidif_setter(ch_group->ch[1], ch_group->ch[1]->value);
-                            }
-                            
-                            do_wildcard_actions(ch_group, 1, humidity_value_int);
-                        }
-                    }
+                    /*
+                     * Only for tests. Keep comment for releases
+                     */
+                    //get_temp = true; temperature_value = 23; humidity_value = 68;
                     
-                } else {
-                    led_blink(5);
-                    ERROR("<%i> Sensor", ch_group->serv_index);
-                    
-                    TH_SENSOR_ERROR_COUNT++;
-
-                    if (TH_SENSOR_ERROR_COUNT > TH_SENSOR_MAX_ALLOWED_ERRORS) {
+                    if (get_temp) {
                         TH_SENSOR_ERROR_COUNT = 0;
                         
                         if (ch_group->chs > 0 && ch_group->ch[0]) {
-                            ch_group->ch[0]->value.float_value = 0;
-                            homekit_characteristic_notify_safe(ch_group->ch[0]);
+                            temperature_value += TH_SENSOR_TEMP_OFFSET;
+                            if (temperature_value < -100.f) {
+                                temperature_value = -100.f;
+                            } else if (temperature_value > 200.f) {
+                                temperature_value = 200.f;
+                            }
+                            
+                            temperature_value *= 10.f;
+                            temperature_value = ((int) temperature_value) / 10.0f;
+                            
+                            INFO("<%i> TEMP %.1fC", ch_group->serv_index, temperature_value);
+                            
+                            if (temperature_value != ch_group->ch[0]->value.float_value) {
+                                ch_group->ch[0]->value.float_value = temperature_value;
+                                homekit_characteristic_notify_safe(ch_group->ch[0]);
+                                
+                                if (ch_group->chs > 4) {
+                                    hkc_th_setter(ch_group->ch[0], ch_group->ch[0]->value);
+                                }
+                                
+                                do_wildcard_actions(ch_group, 0, temperature_value);
+                            }
                         }
                         
                         if (ch_group->chs > 1 && ch_group->ch[1]) {
-                            ch_group->ch[1]->value.float_value = 0;
-                            homekit_characteristic_notify_safe(ch_group->ch[1]);
+                            humidity_value += TH_SENSOR_HUM_OFFSET;
+                            if (humidity_value < 0.f) {
+                                humidity_value = 0.f;
+                            } else if (humidity_value > 100.f) {
+                                humidity_value = 100.f;
+                            }
+
+                            const unsigned int humidity_value_int = humidity_value;
+                            
+                            INFO("<%i> HUM %i", ch_group->serv_index, humidity_value_int);
+                            
+                            if (humidity_value_int != (uint8_t) ch_group->ch[1]->value.float_value) {
+                                ch_group->ch[1]->value.float_value = humidity_value_int;
+                                homekit_characteristic_notify_safe(ch_group->ch[1]);
+                                
+                                if (ch_group->chs > 4) {
+                                    hkc_humidif_setter(ch_group->ch[1], ch_group->ch[1]->value);
+                                }
+                                
+                                do_wildcard_actions(ch_group, 1, humidity_value_int);
+                            }
                         }
-
-                        do_actions(ch_group, THERMOSTAT_ACTION_SENSOR_ERROR);
+                        
+                    } else {
+                        led_blink(5);
+                        ERROR("<%i> Read", ch_group->serv_index);
+                        
+                        TH_SENSOR_ERROR_COUNT++;
+                        
+                        if (TH_SENSOR_ERROR_COUNT > TH_SENSOR_MAX_ALLOWED_ERRORS) {
+                            TH_SENSOR_ERROR_COUNT = 0;
+                            
+                            if (ch_group->chs > 0 && ch_group->ch[0]) {
+                                ch_group->ch[0]->value.float_value = 0;
+                                homekit_characteristic_notify_safe(ch_group->ch[0]);
+                            }
+                            
+                            if (ch_group->chs > 1 && ch_group->ch[1]) {
+                                ch_group->ch[1]->value.float_value = 0;
+                                homekit_characteristic_notify_safe(ch_group->ch[1]);
+                            }
+                            
+                            do_actions(ch_group, THERMOSTAT_ACTION_SENSOR_ERROR);
+                        }
                     }
-
                 }
             }
         }
-            
+        
         if (iairzoning > 0) {
             if (ch_group->serv_type == SERV_TYPE_THERMOSTAT && iairzoning == (uint8_t) TH_IAIRZONING_CONTROLLER) {
                 vTaskDelay(MS_TO_TICKS(100));
@@ -2646,7 +2651,7 @@ void temperature_timer_worker(TimerHandle_t xTimer) {
             homekit_remove_oldest_client();
         }
     } else {
-        ERROR("temp_task: HK pairing");
+        ERROR("temp_task: HK pair");
     }
 }
 
@@ -4113,7 +4118,7 @@ void light_sensor_timer_worker(TimerHandle_t xTimer) {
             homekit_remove_oldest_client();
         }
     } else {
-        ERROR("LUX: HK pairing");
+        ERROR("LUX: HK pair");
     }
 }
 
@@ -4865,7 +4870,7 @@ void free_monitor_timer_worker(TimerHandle_t xTimer) {
                 homekit_remove_oldest_client();
             }
         } else {
-            ERROR("FM: HK pairing");
+            ERROR("FM: HK pair");
         }
     }
 }
