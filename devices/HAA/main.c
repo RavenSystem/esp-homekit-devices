@@ -734,6 +734,8 @@ void wifi_reconnection_task(void* args) {
             main_config.wifi_channel = sdk_wifi_get_channel();
             main_config.wifi_ip = new_ip;
             
+            wifi_config_resend_arp();
+            
             random_task_delay();
             
             homekit_mdns_announce();
@@ -1051,7 +1053,7 @@ void hkc_custom_consumption_reset_setter(homekit_characteristic_t* ch, const hom
     }
 }
 
-// --- ON
+// --- SWITCH / OUTLET
 void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
@@ -4026,6 +4028,8 @@ void hkc_fan_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     if (ch_group->main_enabled) {
         INFO("<%i> Setter FAN", ch_group->serv_index);
         
+        const int old_on_value = ch_group->ch[0]->value.bool_value;
+        
         ch->value = value;
         
         if (FAN_SET_DELAY_TIMER) {
@@ -4034,7 +4038,7 @@ void hkc_fan_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
             process_fan_task((void*) ch_group);
         }
         
-        if (ch == ch_group->ch[0]) {
+        if (ch == ch_group->ch[0] && ch->value.bool_value != old_on_value) {
             setup_mode_toggle_upcount();
             
             if (ch_group->ch[0]->value.bool_value) {
@@ -6470,6 +6474,8 @@ void run_homekit_server() {
     
     FREEHEAP();
     
+    wifi_config_resend_arp();
+    
     if (main_config.enable_homekit_server) {
         random_task_delay();
         homekit_server_init(&config);
@@ -6501,6 +6507,8 @@ void run_homekit_server() {
     led_blink(4);
     
     vTaskDelay(MS_TO_TICKS(500));
+    
+    wifi_config_resend_arp();
     
     WIFI_WATCHDOG_TIMER = esp_timer_create(WIFI_WATCHDOG_POLL_PERIOD_MS, true, NULL, wifi_watchdog);
     esp_timer_start_forced(WIFI_WATCHDOG_TIMER);

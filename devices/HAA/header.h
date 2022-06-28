@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "10.7.1"
+#define FIRMWARE_VERSION                    "10.7.2"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -713,7 +713,7 @@
 #define STATUS_LED_DURATION_OFF             (120)
 
 #define SAVE_STATES_DELAY_MS                (5000)
-#define RANDOM_DELAY_MS                     (8000)
+#define RANDOM_DELAY_MS                     (3500)
 
 #define ACCESSORIES_WITHOUT_BRIDGE          (4)     // Max number of accessories before using a dedicated HomeKit bridge
 
