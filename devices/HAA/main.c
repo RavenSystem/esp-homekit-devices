@@ -338,7 +338,7 @@ void free_heap_watchdog() {
 #endif  // HAA_DEBUG
 
 void random_task_delay() {
-    vTaskDelay(hwrand() % MS_TO_TICKS(RANDOM_DELAY_MS));
+    vTaskDelay( ( hwrand() % MS_TO_TICKS(RANDOM_DELAY_MS) ) + MS_TO_TICKS(100) );
 }
 
 void disable_emergency_setup(TimerHandle_t xTimer) {
@@ -11119,7 +11119,6 @@ void normal_mode_init() {
     main_config.wifi_mode = (uint8_t) wifi_mode;
     
     random_task_delay();
-    vTaskDelay(MS_TO_TICKS(1000));
     
     //main_config.wifi_status = WIFI_STATUS_CONNECTING;     // Not needed
     
