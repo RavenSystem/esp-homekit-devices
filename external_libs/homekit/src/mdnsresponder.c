@@ -466,7 +466,7 @@ void mdns_buffer_deinit() {
 }
 
 void mdns_clear() {
-    esp_timer_stop(mdns_announce_timer);
+    esp_timer_stop_forced(mdns_announce_timer);
     
     if (!xSemaphoreTake(gDictMutex, portMAX_DELAY))
         return;
@@ -613,7 +613,7 @@ void mdns_announce() {
 }
 
 void mdns_announce_pause() {
-    esp_timer_stop(mdns_announce_timer);
+    esp_timer_stop_forced(mdns_announce_timer);
     mdns_status = MDNS_STATUS_WORKING;
 }
 

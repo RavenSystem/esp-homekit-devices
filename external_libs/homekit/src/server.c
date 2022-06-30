@@ -389,7 +389,7 @@ void pairing_context_free(pairing_context_t *context) {
     free(context);
 }
 
-static inline int IRAM homekit_low_dram() {
+static int IRAM homekit_low_dram() {
     const uint32_t free_heap = xPortGetFreeHeapSize();
     if (free_heap < HOMEKIT_MIN_FREEHEAP) {
         HOMEKIT_ERROR("LOW DRAM Free HEAP: %i", free_heap);

@@ -342,7 +342,7 @@ void random_task_delay() {
 }
 
 void disable_emergency_setup(TimerHandle_t xTimer) {
-    INFO("Disarming Emergency Setup Mode");
+    INFO("Disarming Setup");
     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
     esp_timer_delete(xTimer);
 }
@@ -726,8 +726,6 @@ void wifi_reconnection_task(void* args) {
         
         const int new_ip = wifi_config_get_ip();
         if (new_ip >= 0) {
-            vTaskDelay(MS_TO_TICKS(1000));
-            
             main_config.wifi_status = WIFI_STATUS_CONNECTED;
             main_config.wifi_error_count = 0;
             main_config.wifi_arp_count = 0;
@@ -739,7 +737,7 @@ void wifi_reconnection_task(void* args) {
             random_task_delay();
             
             homekit_mdns_announce();
-
+            
             do_actions(ch_group_find_by_acc(SERV_TYPE_ROOT_DEVICE), 3);
             
             esp_timer_start_forced(WIFI_WATCHDOG_TIMER);
@@ -904,7 +902,7 @@ void ping_task_timer_worker() {
 // -----
 
 void setup_mode_call(const uint16_t gpio, void* args, const uint8_t param) {
-    INFO("Setup mode call");
+    INFO("Setup call");
     
     if (main_config.setup_mode_time == 0 || xTaskGetTickCountFromISR() < main_config.setup_mode_time * (1000 / portTICK_PERIOD_MS)) {
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
@@ -917,7 +915,7 @@ void setup_mode_call(const uint16_t gpio, void* args, const uint8_t param) {
 void setup_mode_toggle_upcount() {
     if (main_config.setup_mode_toggle_counter_max > 0) {
         main_config.setup_mode_toggle_counter++;
-        INFO("Setup mode trigger %i/%i", main_config.setup_mode_toggle_counter, main_config.setup_mode_toggle_counter_max);
+        INFO("Setup trigger %i/%i", main_config.setup_mode_toggle_counter, main_config.setup_mode_toggle_counter_max);
         
         if (main_config.setup_mode_toggle_counter == main_config.setup_mode_toggle_counter_max) {
             setup_mode_call(99, NULL, 0);
@@ -961,14 +959,14 @@ void save_states() {
         }
         
         if (status != SYSPARAM_OK) {
-            ERROR("Flash saving for Ch%s", last_state->id);
+            ERROR("Saving Ch%s", last_state->id);
         }
         
         last_state = last_state->next;
     }
 }
 
-inline void save_states_callback() {
+void save_states_callback() {
     esp_timer_start(SAVE_STATES_TIMER);
 }
 
@@ -4655,7 +4653,6 @@ void free_monitor_task(void* args) {
                                             str = new_str;
                                             memcpy(str + total_recv, recv_buffer, read_byte);
                                             total_recv += read_byte;
-                                            str[total_recv] = 0;
                                         }
                                     } while (read_byte > 0 && total_recv < 2048);
                                     
@@ -4669,12 +4666,15 @@ void free_monitor_task(void* args) {
                                 main_config.network_is_busy = false;
                                 
                                 if (total_recv > 0) {
+                                    str[total_recv] = 0;
+                                    
                                     if (fm_sensor_type == FM_SENSOR_TYPE_NETWORK || fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_TEXT) {
                                         INFO("%s", str);
                                     }
                                     
                                     uint8_t* found = str;
                                     if (action_network->method_n < 3 &&
+                                        total_recv > 10 &&
                                         (fm_sensor_type == FM_SENSOR_TYPE_NETWORK ||
                                          fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_TEXT)) {
                                         found = (uint8_t*) strstr((char*) str, "\r\n\r\n");
@@ -6841,7 +6841,7 @@ void normal_mode_init() {
                             gpio_enable(action_binary_output->gpio, GPIO_OUTPUT);
                             gpio_write(action_binary_output->gpio, initial_value);
                             
-                            INFO("New Binary Output GPIO %i", action_binary_output->gpio);
+                            INFO("New BinOut GPIO %i", action_binary_output->gpio);
                         }
                         
                         if (cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME) != NULL) {
@@ -6851,7 +6851,7 @@ void normal_mode_init() {
                         action_binary_output->next = last_action;
                         last_action = action_binary_output;
                         
-                        INFO("New Binary Output Action %i: g %i, v %i, i %i", new_int_action, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
+                        INFO("New BinOut Action %i: g %i, v %i, i %i", new_int_action, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
                     }
                 }
             }
@@ -6868,7 +6868,7 @@ void normal_mode_init() {
         ch_group->action_binary_output = last_action;
     }
     
-    // Accessory Manager
+    // Service Manager
     inline void new_action_serv_manager(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
         action_serv_manager_t* last_action = ch_group->action_serv_manager;
         
@@ -6904,7 +6904,7 @@ void normal_mode_init() {
                             }
                         }
                         
-                        INFO("New Serv Manager Act %i: s %i, v %g", new_int_action, action_serv_manager->serv_index, action_serv_manager->value);
+                        INFO("New ServMan Act %i: s %i, v %g", new_int_action, action_serv_manager->serv_index, action_serv_manager->value);
                     }
                 }
             }
@@ -6944,7 +6944,7 @@ void normal_mode_init() {
                         action_system->next = last_action;
                         last_action = action_system;
                         
-                        INFO("New System Action %i: v %i", new_int_action, action_system->value);
+                        INFO("New Sys Action %i: v %i", new_int_action, action_system->value);
                     }
                 }
             }
@@ -7012,7 +7012,7 @@ void normal_mode_init() {
                             action_network->content = strdup("");
                         }
                         
-                        INFO("New Network Action %i: %s:%i", new_int_action, action_network->host, action_network->port_n);
+                        INFO("New Net Action %i: %s:%i", new_int_action, action_network->host, action_network->port_n);
                         
                         if (action_network->method_n ==  3 ||
                             action_network->method_n == 13) {
@@ -7095,7 +7095,7 @@ void normal_mode_init() {
                         action_irrf_tx->next = last_action;
                         last_action = action_irrf_tx;
                         
-                        INFO("New IR/RF Action %i: r %i, p %i", new_int_action, action_irrf_tx->repeats, action_irrf_tx->pause);
+                        INFO("New IRRF Action %i: r %i, p %i", new_int_action, action_irrf_tx->repeats, action_irrf_tx->pause);
                     }
                 }
             }
@@ -7370,7 +7370,7 @@ void normal_mode_init() {
                     speed = (uint32_t) cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_SPEED)->valuedouble;
                 }
                 
-                unsigned int stopbits = 0;
+                unsigned int stopbits = 1;
                 if (cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_STOPBITS) != NULL) {
                     stopbits = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_STOPBITS)->valuedouble;
                 }

@@ -98,6 +98,11 @@ typedef struct _client {
 static void wifi_config_station_connect();
 static void wifi_config_softap_start();
 
+static void wifi_station_connect_no_sleep() {
+    sdk_wifi_station_connect();
+    sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
+}
+
 void wifi_config_remove_sys_param() {
     unsigned char* sector = malloc(SPI_FLASH_SECTOR_SIZE);
     
@@ -259,7 +264,7 @@ static void wifi_smart_connect_task(void* arg) {
     sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
     wifi_config_toggle_phy_mode(phy_mode);
     
-    sdk_wifi_station_connect();
+    wifi_station_connect_no_sleep();
     
     free(wifi_ssid);
     free(best_bssid);
@@ -275,7 +280,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
     if (status != SCAN_OK) {
         ERROR("Wifi smart connect scan");
         if (wifi_config_get_ip() < 0) {
-            sdk_wifi_station_connect();
+            wifi_station_connect_no_sleep();
         }
     }
 
@@ -311,7 +316,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
     
     if (best_rssi == INT8_MIN) {
         free(wifi_ssid);
-        sdk_wifi_station_connect();
+        wifi_station_connect_no_sleep();
         return;
     }
     
@@ -327,7 +332,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
             INFO("Best BSSID is the same");
             free(wifi_bssid);
             if (wifi_config_get_ip() < 0) {
-                sdk_wifi_station_connect();
+                wifi_station_connect_no_sleep();
             }
             return;
         }
@@ -344,7 +349,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
         free(wifi_bssid);
     }
     
-    sdk_wifi_station_connect();
+    wifi_station_connect_no_sleep();
 }
 
 static void wifi_scan_sc_task(void* arg) {
@@ -360,7 +365,7 @@ void wifi_config_smart_connect() {
     
     if (wifi_mode < 2 || xTaskCreate(wifi_scan_sc_task, "sma", 384, NULL, (tskIDLE_PRIORITY + 2), NULL) != pdPASS) {
         if (wifi_config_get_ip() < 0) {
-            sdk_wifi_station_connect();
+            wifi_station_connect_no_sleep();
         }
     }
 }
@@ -378,7 +383,7 @@ void wifi_config_reset() {
     
     sdk_wifi_station_set_config(&sta_config);
     sdk_wifi_station_set_auto_connect(false);
-    sdk_wifi_station_connect();
+    wifi_station_connect_no_sleep();
 }
 
 static void wifi_networks_free() {
@@ -1140,7 +1145,7 @@ uint8_t wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool wi
 
             wifi_config_toggle_phy_mode(phy);
             
-            sdk_wifi_station_connect();
+            wifi_station_connect_no_sleep();
             
         } else {
             INFO("Wifi Mode: Roaming");
