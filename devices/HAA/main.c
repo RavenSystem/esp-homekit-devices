@@ -338,7 +338,7 @@ void free_heap_watchdog() {
 #endif  // HAA_DEBUG
 
 void random_task_delay() {
-    vTaskDelay( ( hwrand() % MS_TO_TICKS(RANDOM_DELAY_MS) ) + MS_TO_TICKS(100) );
+    vTaskDelay( ( hwrand() % MS_TO_TICKS(RANDOM_DELAY_MS) ) + MS_TO_TICKS(200) );
 }
 
 void disable_emergency_setup(TimerHandle_t xTimer) {
@@ -624,6 +624,17 @@ void ntp_task() {
     unsigned int tries = 0;
     char* ntp_host = main_config.ntp_host;
     
+    if (!ntp_host) {
+        struct ip_info info;
+        if (sdk_wifi_get_ip_info(STATION_IF, &info)) {
+            char gw_host[16];
+            snprintf(gw_host, 16, IPSTR, IP2STR(&info.gw));
+            ntp_host = strdup(gw_host);
+        } else {
+            return;
+        }
+    }
+    
     for (;;) {
         tries++;
         
@@ -636,13 +647,17 @@ void ntp_task() {
         
         main_config.network_is_busy = false;
         
-        INFO("NTP upd (%i)", result);
+        INFO("NTP %s (%i)", ntp_host, result);
         
         if (result != 0 && tries < 4) {
             if (tries == 2) {
+                if (ntp_host != main_config.ntp_host) {
+                    free(ntp_host);
+                }
                 ntp_host = strdup(NTP_SERVER_FALLBACK);
             }
             vTaskDelay(MS_TO_TICKS(8000));
+            
         } else {
             if (!main_config.clock_ready && result == 0) {
                 main_config.clock_ready = true;
@@ -710,7 +725,7 @@ void wifi_reconnection_task(void* args) {
     esp_timer_stop_forced(WIFI_WATCHDOG_TIMER);
     homekit_mdns_announce_pause();
     
-    INFO("Wifi reconnection process started");
+    INFO("Wifi recon started");
     
     do_actions(ch_group_find_by_acc(SERV_TYPE_ROOT_DEVICE), 4);
 
@@ -742,12 +757,12 @@ void wifi_reconnection_task(void* args) {
             
             esp_timer_start_forced(WIFI_WATCHDOG_TIMER);
             
-            INFO("Wifi reconnection OK");
+            INFO("Wifi recon OK");
             
             break;
             
         } else if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
-            INFO("Wifi reconnecting...");
+            INFO("Wifi recon...");
             main_config.wifi_status = WIFI_STATUS_CONNECTING;
             int8_t phy_mode = 3;
             sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
@@ -756,7 +771,7 @@ void wifi_reconnection_task(void* args) {
         } else {
             main_config.wifi_error_count++;
             if (main_config.wifi_error_count > WIFI_DISCONNECTED_LONG_TIME) {
-                ERROR("Wifi disconnected for a long time");
+                ERROR("Wifi discon long time");
                 main_config.wifi_error_count = 0;
                 main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
                 
@@ -794,7 +809,7 @@ void wifi_watchdog() {
         
         if (main_config.wifi_channel != current_channel) {
             main_config.wifi_channel = current_channel;
-            INFO("Wifi new Ch: %i", current_channel);
+            INFO("Wifi new Ch %i", current_channel);
             homekit_mdns_announce();
             do_actions(ch_group_find_by_acc(SERV_TYPE_ROOT_DEVICE), 6);
         }
@@ -6482,22 +6497,11 @@ void run_homekit_server() {
         FREEHEAP();
     }
     
-    if (!main_config.ntp_host) {
-        struct ip_info info;
-        if (sdk_wifi_get_ip_info(STATION_IF, &info)) {
-            char gw_host[16];
-            snprintf(gw_host, 16, IPSTR, IP2STR(&info.gw));
-            main_config.ntp_host = strdup(gw_host);
-        }
-    }
+    ntp_timer_worker(NULL);
+    esp_timer_start_forced(esp_timer_create(NTP_POLL_PERIOD_MS, true, NULL, ntp_timer_worker));
     
-    if (main_config.ntp_host) {
-        ntp_timer_worker(NULL);
-        esp_timer_start_forced(esp_timer_create(NTP_POLL_PERIOD_MS, true, NULL, ntp_timer_worker));
-        
-        if (main_config.timetable_actions) {
-            esp_timer_start_forced(esp_timer_create(1000, true, NULL, timetable_actions_timer_worker));
-        }
+    if (main_config.timetable_actions) {
+        esp_timer_start_forced(esp_timer_create(1000, true, NULL, timetable_actions_timer_worker));
     }
     
     vTaskDelay(MS_TO_TICKS(500));
