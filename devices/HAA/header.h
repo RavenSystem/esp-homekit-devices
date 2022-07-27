@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "10.7.5"
+#define FIRMWARE_VERSION                    "10.8.0"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -428,6 +428,14 @@
 #define FAN_SET_DELAY_TIMER                 ch_group->timer
 #define FAN_CURRENT_ACTION                  ch_group->num_i[0]
 
+#define BATTERY_LOW_THRESHOLD_SET           "l"
+#define BATTERY_LOW_THRESHOLD_DEFAULT       (20)
+#define BATTERY_LOW_THRESHOLD               ch_group->num_i[0]
+#define BATTERY_LEVEL_CH                    ch_group->ch[0]
+#define BATTERY_LEVEL_CH_INT                ch_group->ch[0]->value.int_value
+#define BATTERY_STATUS_LOW_CH               ch_group->ch[1]
+#define BATTERY_STATUS_LOW_CH_INT           ch_group->ch[1]->value.int_value
+
 #define PM_SENSOR_TYPE_SET                  "n"
 #define PM_SENSOR_TYPE_DEFAULT              (0)
 #define PM_SENSOR_TYPE                      ch_group->num_i[0]
@@ -665,10 +673,11 @@
 #define SERV_TYPE_SECURITY_SYSTEM           (55)
 #define SERV_TYPE_TV                        (60)
 #define SERV_TYPE_FAN                       (65)
+#define SERV_TYPE_BATTERY                   (70)
 #define SERV_TYPE_POWER_MONITOR             (75)
 #define SERV_TYPE_FREE_MONITOR              (80)
 #define SERV_TYPE_FREE_MONITOR_ACCUMULATVE  (81)
-#define SERV_TYPE_HISTORICAL                (95)
+#define SERV_TYPE_DATA_HISTORY              (95)
 #define SERV_TYPE_IAIRZONING                (99)
 
 #define SERIAL_STRING                       "sn"
@@ -696,13 +705,14 @@
 
 #define SAVE_STATES_TIMER                   ch_group_find_by_acc(SERV_TYPE_ROOT_DEVICE)->timer
 #define WIFI_WATCHDOG_TIMER                 ch_group_find_by_acc(SERV_TYPE_ROOT_DEVICE)->timer2
-#define WIFI_STATUS_DISCONNECTED            (0)
-#define WIFI_STATUS_CONNECTING              (1)
-#define WIFI_STATUS_CONNECTED               (2)
+#define WIFI_STATUS_LONG_DISCONNECTED       (0)
+#define WIFI_STATUS_DISCONNECTED            (1)
+#define WIFI_STATUS_CONNECTING              (2)
+#define WIFI_STATUS_CONNECTED               (3)
 #define WIFI_PING_ERRORS                    "w"
 
 #define WIFI_RECONNECTION_POLL_PERIOD_MS    (5000)
-#define WIFI_DISCONNECTED_LONG_TIME         (24)    // * WIFI_RECONNECTION_POLL_PERIOD_MS
+#define WIFI_DISCONNECTED_LONG_TIME         (120)   // * WIFI_RECONNECTION_POLL_PERIOD_MS
 
 #define WIFI_WATCHDOG_POLL_PERIOD_MS        (1500)
 #define WIFI_WATCHDOG_ARP_PERIOD_SET        "e"

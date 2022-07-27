@@ -1641,7 +1641,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
                 send_tlv_error_response(context, 2, TLVError_Unknown);
                 break;
             }
-
+            
             CLIENT_DEBUG(context, "Generating Curve25519 shared secret");
             size_t shared_secret_size = 0;
             crypto_curve25519_shared_secret(my_key, device_key, NULL, &shared_secret_size);
@@ -2199,8 +2199,8 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
         *dot = 0;
         int aid = atoi(ch_id);
         int iid = atoi(dot+1);
-
-        CLIENT_DEBUG(context, "Requested characteristic info for %d.%d", aid, iid);
+        
+        CLIENT_INFO(context, "for %d.%d", aid, iid);
         homekit_characteristic_t *ch = homekit_characteristic_by_aid_and_iid(homekit_server->config->accessories, aid, iid);
         if (!ch) {
             write_characteristic_error(json, aid, iid, HAPStatus_NoResource);
@@ -2255,7 +2255,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 
     cJSON *characteristics = cJSON_GetObjectItem(json, "characteristics");
     if (!characteristics) {
-        CLIENT_ERROR(context, "No \"characteristics\" field");
+        CLIENT_ERROR(context, "No \"characteristics\"");
         cJSON_Delete(json);
         send_json_error_response(context, 400, HAPStatus_InvalidValue);
         return;
@@ -2271,7 +2271,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
     HAPStatus process_characteristics_update(const cJSON *j_ch) {
         cJSON *j_aid = cJSON_GetObjectItem(j_ch, "aid");
         if (!j_aid) {
-            CLIENT_ERROR(context, "No \"aid\" field");
+            CLIENT_ERROR(context, "No \"aid\"");
             return HAPStatus_NoResource;
         }
         if (j_aid->type != cJSON_Number) {
@@ -2281,7 +2281,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
         
         cJSON *j_iid = cJSON_GetObjectItem(j_ch, "iid");
         if (!j_iid) {
-            CLIENT_ERROR(context, "No \"iid\" field");
+            CLIENT_ERROR(context, "No \"iid\"");
             return HAPStatus_NoResource;
         }
         if (j_iid->type != cJSON_Number) {
@@ -2296,7 +2296,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
             homekit_server->config->accessories, aid, iid
         );
         if (!ch) {
-            CLIENT_ERROR(context, "Update %d.%d: no ch", aid, iid);
+            CLIENT_ERROR(context, "for %d.%d: no ch", aid, iid);
             return HAPStatus_NoResource;
         }
         
@@ -2305,7 +2305,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
             homekit_value_t h_value = HOMEKIT_NULL();
 
             if (!(ch->permissions & HOMEKIT_PERMISSIONS_PAIRED_WRITE)) {
-                CLIENT_ERROR(context, "Update %d.%d: no pw permission", aid, iid);
+                CLIENT_ERROR(context, "for %d.%d: no PW", aid, iid);
                 return HAPStatus_ReadOnly;
             }
 
@@ -2320,12 +2320,12 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                             (j_value->valueint == 0 || j_value->valueint == 1)) {
                         value = j_value->valueint == 1;
                     } else {
-                        CLIENT_ERROR(context, "Update %d.%d: no boolean or 0/1", aid, iid);
+                        CLIENT_ERROR(context, "for %d.%d: no bool or 0/1", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 
-                    CLIENT_DEBUG(context, "Updating ch %d.%d with %s", aid, iid, value ? "true" : "false");
-
+                    CLIENT_INFO(context, "for %d.%d=%i", aid, iid, value);
+                    
                     h_value = HOMEKIT_BOOL(value);
                     if (ch->setter_ex) {
                         ch->setter_ex(ch, h_value);
@@ -2341,7 +2341,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                 case HOMEKIT_FORMAT_INT: {
                     // We accept boolean values here in order to fix a bug in HomeKit. HomeKit sometimes sends a boolean instead of an integer of value 0 or 1.
                     if (j_value->type != cJSON_Number && j_value->type != cJSON_False && j_value->type != cJSON_True) {
-                        CLIENT_ERROR(context, "Update %d.%d: no number", aid, iid);
+                        CLIENT_ERROR(context, "for %d.%d: no number", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 
@@ -2428,7 +2428,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         }
 
                         if (!matches) {
-                            CLIENT_ERROR(context, "Update %d.%d: invalid values", aid, iid);
+                            CLIENT_ERROR(context, "for %d.%d: invalid values", aid, iid);
                             return HAPStatus_InvalidValue;
                         }
                     }
@@ -2444,12 +2444,12 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         }
 
                         if (!matches) {
-                            CLIENT_ERROR(context, "Update %d.%d: not in valid values range", aid, iid);
+                            CLIENT_ERROR(context, "for %d.%d: range", aid, iid);
                             return HAPStatus_InvalidValue;
                         }
                     }
 
-                    CLIENT_DEBUG(context, "Updating ch %d.%d with integer %d", aid, iid, value);
+                    CLIENT_INFO(context, "for %d.%d=%d", aid, iid, value);
 
                     // Old style
                     h_value = HOMEKIT_INT(value);
@@ -2489,18 +2489,18 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                 }
                 case HOMEKIT_FORMAT_FLOAT: {
                     if (j_value->type != cJSON_Number) {
-                        CLIENT_ERROR(context, "Update %d.%d: not a number", aid, iid);
+                        CLIENT_ERROR(context, "for %d.%d: no number", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 
                     float value = j_value->valuedouble;
                     if ((ch->min_value && value < *ch->min_value) ||
                             (ch->max_value && value > *ch->max_value)) {
-                        CLIENT_ERROR(context, "Update %d.%d: not in range", aid, iid);
+                        CLIENT_ERROR(context, "for %d.%d: out range", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 
-                    CLIENT_DEBUG(context, "Updating ch %d.%d with %g", aid, iid, value);
+                    CLIENT_INFO(context, "for %d.%d=%g", aid, iid, value);
 
                     h_value = HOMEKIT_FLOAT(value);
                     if (ch->setter_ex) {
@@ -2512,7 +2512,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                 }
                 case HOMEKIT_FORMAT_STRING: {
                     if (j_value->type != cJSON_String) {
-                        CLIENT_ERROR(context, "Update %d.%d: not a string", aid, iid);
+                        CLIENT_ERROR(context, "for %d.%d: no string", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 
@@ -2524,12 +2524,12 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     
 #ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
                     if (strlen(value) > max_len) {
-                        CLIENT_ERROR(context, "Update %d.%d: too long", aid, iid);
+                        CLIENT_ERROR(context, "for %d.%d: too long", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 #endif //HOMEKIT_DISABLE_MAXLEN_CHECK
 
-                    CLIENT_DEBUG(context, "Updating ch %d.%d with \"%s\"", aid, iid, value);
+                    CLIENT_INFO(context, "for %d.%d=\"%s\"", aid, iid, value);
 
                     h_value = HOMEKIT_STRING(value);
                     if (ch->setter_ex) {
@@ -2542,7 +2542,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                 }
                 case HOMEKIT_FORMAT_TLV: {
                     if (j_value->type != cJSON_String) {
-                        CLIENT_ERROR(context, "Update %d.%d: not a string", aid, iid);
+                        CLIENT_ERROR(context, "for %d.%d: no string", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 
@@ -2555,7 +2555,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     
 #ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
                     if (value_len > max_len) {
-                        CLIENT_ERROR(context, "Update %d.%d: too long", aid, iid);
+                        CLIENT_ERROR(context, "for %d.%d: too long", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 #endif //HOMEKIT_DISABLE_MAXLEN_CHECK
@@ -2564,7 +2564,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     byte *tlv_data = malloc(tlv_size);
                     if (base64_decode((byte*) value, value_len, tlv_data) < 0) {
                         free(tlv_data);
-                        CLIENT_ERROR(context, "Update %d.%d: Base64", aid, iid);
+                        CLIENT_ERROR(context, "for %d.%d: Base64", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 
@@ -2573,11 +2573,11 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     free(tlv_data);
                     
                     if (r) {
-                        CLIENT_ERROR(context, "Update %d.%d: error parsing TLV", aid, iid);
+                        CLIENT_ERROR(context, "for %d.%d: parsing TLV", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 
-                    CLIENT_DEBUG(context, "Updating ch %d.%d with TLV:", aid, iid);
+                    CLIENT_DEBUG(context, "for %d.%d with TLV:", aid, iid);
                     for (tlv_t *t=tlv_values->head; t; t=t->next) {
                         char *escaped_payload = binary_to_string(t->value, t->size);
                         CLIENT_DEBUG(context, " Type %d value (%d bytes): %s", t->type, t->size, escaped_payload);
@@ -2597,7 +2597,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                 }
                 case HOMEKIT_FORMAT_DATA: {
                     if (j_value->type != cJSON_String) {
-                        CLIENT_ERROR(context, "Update %d.%d: not a string", aid, iid);
+                        CLIENT_ERROR(context, "for %d.%d: no string", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
                     
@@ -2612,7 +2612,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     
 #ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
                     if (value_len > max_len) {
-                        CLIENT_ERROR(context, "Update %d.%d: too long", aid, iid);
+                        CLIENT_ERROR(context, "for %d.%d: too long", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 #endif //HOMEKIT_DISABLE_MAXLEN_CHECK
@@ -2620,23 +2620,23 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     size_t data_size = base64_decoded_size((unsigned char*) value, value_len);
                     byte *data = malloc(data_size);
                     if (!data) {
-                        CLIENT_ERROR(context, "Update %d.%d: allocating %d bytes", aid, iid, data_size);
+                        CLIENT_ERROR(context, "for %d.%d: allocating %d", aid, iid, data_size);
                         return HAPStatus_InvalidValue;
                     }
 
                     if (base64_decode((byte*) value, value_len, data) < 0) {
                         free(data);
-                        CLIENT_ERROR(context, "Update %d.%d: Base64 decoding", aid, iid);
+                        CLIENT_ERROR(context, "for %d.%d: Base64 decoding", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
 
-                    CLIENT_DEBUG(context, "Updating ch %d.%d", aid, iid);
+                    CLIENT_INFO(context, "for %d.%d", aid, iid);
 
                     h_value = HOMEKIT_DATA(data, data_size);
                     break;
                 }
                 default: {
-                    CLIENT_ERROR(context, "Update %d.%d: unknown format %d", aid, iid, ch->format);
+                    CLIENT_ERROR(context, "Update %d.%d: format %d", aid, iid, ch->format);
                     return HAPStatus_InvalidValue;
                 }
             }
@@ -2645,7 +2645,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
         cJSON *j_events = cJSON_GetObjectItem(j_ch, "ev");
         if (j_events) {
             if (!(ch->permissions & HOMEKIT_PERMISSIONS_NOTIFY)) {
-                CLIENT_ERROR(context, "Notification for %d.%d: not supported", aid, iid);
+                CLIENT_ERROR(context, "Notification for %d.%d: no supported", aid, iid);
                 return HAPStatus_NotificationsUnsupported;
             }
 

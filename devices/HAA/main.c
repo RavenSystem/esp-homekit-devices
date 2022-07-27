@@ -81,7 +81,6 @@ main_config_t main_config = {
     
     .ping_poll_period = PING_POLL_PERIOD_DEFAULT,
     
-    .setpwm_bool_semaphore = false,
     .setpwm_is_running = false,
     
     .clock_ready = false,
@@ -500,7 +499,7 @@ void save_historical_data(homekit_characteristic_t* ch_target) {
     
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
-        if (ch_group->serv_type == SERV_TYPE_HISTORICAL && ch_group->ch_target == ch_target && ch_group->main_enabled) {
+        if (ch_group->serv_type == SERV_TYPE_DATA_HISTORY && ch_group->ch_target == ch_target && ch_group->main_enabled) {
             float value = 0;
             switch (ch_target->value.format) {
                 case HOMEKIT_FORMAT_BOOL:
@@ -664,7 +663,7 @@ void ntp_task() {
                 
                 ch_group_t* ch_group = main_config.ch_groups;
                 while (ch_group) {
-                    if (ch_group->serv_type == SERV_TYPE_HISTORICAL && ch_group->child_enabled) {
+                    if (ch_group->serv_type == SERV_TYPE_DATA_HISTORY && ch_group->child_enabled) {
                         save_historical_data(ch_group->ch_target);
                     }
                     
@@ -749,6 +748,8 @@ void wifi_reconnection_task(void* args) {
             
             wifi_config_resend_arp();
             
+            save_last_working_phy();
+            
             random_task_delay();
             
             homekit_mdns_announce();
@@ -761,11 +762,14 @@ void wifi_reconnection_task(void* args) {
             
             break;
             
-        } else if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
+        } else if (main_config.wifi_status <= WIFI_STATUS_DISCONNECTED) {
             INFO("Wifi recon...");
             main_config.wifi_status = WIFI_STATUS_CONNECTING;
-            int8_t phy_mode = 3;
-            sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
+            int8_t phy_mode = 4;    // main_config.wifi_status == WIFI_DISCONNECTED_LONG_TIME
+            if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
+                phy_mode = 3;
+                sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
+            }
             wifi_config_connect(1, phy_mode, true);
             
         } else {
@@ -773,7 +777,7 @@ void wifi_reconnection_task(void* args) {
             if (main_config.wifi_error_count > WIFI_DISCONNECTED_LONG_TIME) {
                 ERROR("Wifi discon long time");
                 main_config.wifi_error_count = 0;
-                main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
+                main_config.wifi_status = WIFI_STATUS_LONG_DISCONNECTED;
                 
                 led_blink(3);
                 
@@ -2670,7 +2674,7 @@ void temperature_timer_worker(TimerHandle_t xTimer) {
     }
 }
 
-// --- LIGHTBULBS
+// --- LIGHTBULB
 void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
     // * All credits and thanks to Kevin John Cutler    *
     // * https://github.com/kevinjohncutler/colormixing *
@@ -3180,96 +3184,87 @@ void white2hsi(uint16_t t, ch_group_t* ch_group) {
 }
 */
 void IRAM rgbw_set_timer_worker() {
-    if (!main_config.setpwm_bool_semaphore) {
-        main_config.setpwm_bool_semaphore = true;
-        
-        int all_channels_ready = true;
-        
-        lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
-        
-        while (main_config.setpwm_is_running && lightbulb_group) {
-            if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL) {
-                lightbulb_group->has_changed = false;
-                for (int i = 0; i < LIGHTBULB_CHANNELS; i++) {
-                    if (abs(lightbulb_group->target[i] - lightbulb_group->current[i]) > abs(LIGHTBULB_STEP_VALUE[i])) {
-                        all_channels_ready = false;
-                        lightbulb_group->current[i] += LIGHTBULB_STEP_VALUE[i];
-                        lightbulb_group->has_changed = true;
-                        
-                        if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM) {
-                            adv_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i], LIGHTBULB_PWM_DITHER);
-                        }
-                    } else if (lightbulb_group->current[i] != lightbulb_group->target[i]) {
-                        lightbulb_group->current[i] = lightbulb_group->target[i];
-                        lightbulb_group->has_changed = true;
-                        
-                        if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM) {
-                            adv_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i], LIGHTBULB_PWM_DITHER);
-                        }
+    int all_channels_ready = true;
+    
+    lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
+    
+    while (main_config.setpwm_is_running && lightbulb_group) {
+        if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL) {
+            lightbulb_group->has_changed = false;
+            for (int i = 0; i < LIGHTBULB_CHANNELS; i++) {
+                if (abs(lightbulb_group->target[i] - lightbulb_group->current[i]) > abs(LIGHTBULB_STEP_VALUE[i])) {
+                    all_channels_ready = false;
+                    lightbulb_group->current[i] += LIGHTBULB_STEP_VALUE[i];
+                    lightbulb_group->has_changed = true;
+                    
+                    if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM) {
+                        adv_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i], LIGHTBULB_PWM_DITHER);
                     }
-                }
-                
-                if (lightbulb_group->has_changed && LIGHTBULB_TYPE == LIGHTBULB_TYPE_MY92X1) {
-                    //
-                    // TO-DO
-                    //
+                } else if (lightbulb_group->current[i] != lightbulb_group->target[i]) {
+                    lightbulb_group->current[i] = lightbulb_group->target[i];
+                    lightbulb_group->has_changed = true;
+                    
+                    if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM) {
+                        adv_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i], LIGHTBULB_PWM_DITHER);
+                    }
                 }
             }
             
-            lightbulb_group = lightbulb_group->next;
+            //if (lightbulb_group->has_changed && LIGHTBULB_TYPE == LIGHTBULB_TYPE_MY92X1) {
+                //
+                // TO-DO
+                //
+            //}
         }
         
-        addressled_t* addressled = main_config.addressleds;
-        while (addressled) {
-            uint8_t* colors = malloc(addressled->max_range);
-            memset(colors, 0, addressled->max_range);
-            if (colors) {
-                bool has_changed = false;
-                
-                lightbulb_group = main_config.lightbulb_groups;
-                while (lightbulb_group) {
-                    if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_NRZ && lightbulb_group->gpio[0] == addressled->gpio) {
-                        if (lightbulb_group->has_changed) {
-                            has_changed = true;
-                        }
-                        
-                        for (int p = LIGHTBULB_RANGE_START; p < LIGHTBULB_RANGE_END; p = p + LIGHTBULB_CHANNELS) {
-                            for (int i = 0; i < LIGHTBULB_CHANNELS; i++) {
-                                uint8_t color = lightbulb_group->current[addressled->map[i]] >> 8;
-                                memcpy(colors + p + i, &color, 1);
-                            }
-                        }
+        lightbulb_group = lightbulb_group->next;
+    }
+    
+    addressled_t* addressled = main_config.addressleds;
+    while (addressled) {
+        uint8_t* colors = malloc(addressled->max_range);
+        memset(colors, 0, addressled->max_range);
+        if (colors) {
+            bool has_changed = false;
+            
+            lightbulb_group = main_config.lightbulb_groups;
+            while (lightbulb_group) {
+                if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_NRZ && lightbulb_group->gpio[0] == addressled->gpio) {
+                    if (lightbulb_group->has_changed) {
+                        has_changed = true;
                     }
                     
-                    lightbulb_group = lightbulb_group->next;
+                    for (int p = LIGHTBULB_RANGE_START; p < LIGHTBULB_RANGE_END; p = p + LIGHTBULB_CHANNELS) {
+                        for (int i = 0; i < LIGHTBULB_CHANNELS; i++) {
+                            uint8_t color = lightbulb_group->current[addressled->map[i]] >> 8;
+                            memcpy(colors + p + i, &color, 1);
+                        }
+                    }
                 }
                 
-                if (has_changed) {
-                    taskENTER_CRITICAL();
-                    nrzled_set(addressled->gpio, addressled->time_0, addressled->time_1, addressled->period, colors, addressled->max_range);
-                    taskEXIT_CRITICAL();
-                }
-                
-                free(colors);
-            } else {
-                homekit_remove_oldest_client();
-                break;
+                lightbulb_group = lightbulb_group->next;
             }
             
-            addressled = addressled->next;
-        }
-        
-        if (all_channels_ready) {
-            main_config.setpwm_is_running = false;
-            esp_timer_stop(main_config.set_lightbulb_timer);
+            if (has_changed) {
+                taskENTER_CRITICAL();
+                nrzled_set(addressled->gpio, addressled->time_0, addressled->time_1, addressled->period, colors, addressled->max_range);
+                taskEXIT_CRITICAL();
+            }
             
-            INFO("Color fixed");
+            free(colors);
+        } else {
+            homekit_remove_oldest_client();
+            break;
         }
         
-        main_config.setpwm_bool_semaphore = false;
+        addressled = addressled->next;
+    }
+    
+    if (all_channels_ready) {
+        main_config.setpwm_is_running = false;
+        esp_timer_stop(main_config.set_lightbulb_timer);
         
-    } else {
-        ERROR("Color set");
+        INFO("Color fixed");
     }
 }
 
@@ -3703,7 +3698,7 @@ void garage_door_timer_worker(TimerHandle_t xTimer) {
     ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
     
     void halt_timer() {
-        esp_timer_stop(GARAGE_DOOR_WORKER_TIMER);
+        esp_timer_stop(xTimer);
         
         if (GARAGE_DOOR_TIME_MARGIN > 0 && GD_CURRENT_DOOR_STATE_INT > 1) {
             garage_door_obstruction(99, ch_group, 3);
@@ -3721,7 +3716,7 @@ void garage_door_timer_worker(TimerHandle_t xTimer) {
             halt_timer();
         }
         
-    } else {    // GARAGE_DOOR_CLOSING
+    } else if (GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_CLOSING) {
         GARAGE_DOOR_CURRENT_TIME -= GARAGE_DOOR_CLOSE_TIME_FACTOR;
         
         if (GARAGE_DOOR_CURRENT_TIME <= GARAGE_DOOR_TIME_MARGIN && GARAGE_DOOR_HAS_F3 == 0) {
@@ -3730,6 +3725,9 @@ void garage_door_timer_worker(TimerHandle_t xTimer) {
         } else if (GARAGE_DOOR_CURRENT_TIME <= 0 && GARAGE_DOOR_HAS_F3 == 1) {
             halt_timer();
         }
+        
+    } else {
+        esp_timer_stop(xTimer);
     }
     
     INFO("<%i> GD Pos %g/%g", ch_group->serv_index, GARAGE_DOOR_CURRENT_TIME, GARAGE_DOOR_WORKING_TIME);
@@ -4339,6 +4337,63 @@ void hkc_tv_input_configured_name(homekit_characteristic_t* ch, const homekit_va
     homekit_characteristic_notify_safe(ch);
 }
 
+// --- BATTERY
+void battery_manager(homekit_characteristic_t* ch, int value, bool is_free_monitor) {
+    ch_group_t* ch_group = ch_group_find(ch);
+    
+    if (ch_group->main_enabled) {
+        INFO("<%i> Bat %i%%", ch_group->serv_index, value);
+        
+        if (value < 0 && !is_free_monitor) {
+            if (value < 100) {
+                value = BATTERY_LEVEL_CH_INT + value + 100;
+            } else {
+                value = BATTERY_LEVEL_CH_INT - value;
+            }
+        }
+        
+        if (value > 100) {
+            value = 100;
+        } else if (value < 0) {
+            value = 0;
+        }
+        
+        if (BATTERY_LEVEL_CH_INT != value || is_free_monitor) {
+            BATTERY_LEVEL_CH_INT = value;
+            
+            do_wildcard_actions(ch_group, 0, value);
+            
+            save_historical_data(ch);
+            
+            if (!is_free_monitor) {
+                homekit_characteristic_notify_safe(ch);
+            }
+            
+            int status_low_changed = false;
+            if (value <= BATTERY_LOW_THRESHOLD &&
+                BATTERY_STATUS_LOW_CH_INT == 0) {
+                BATTERY_STATUS_LOW_CH_INT = 1;
+                status_low_changed = true;
+                
+            } else if (value > BATTERY_LOW_THRESHOLD &&
+                BATTERY_STATUS_LOW_CH_INT == 1) {
+                BATTERY_STATUS_LOW_CH_INT = 0;
+                status_low_changed = true;
+            }
+            
+            if (status_low_changed) {
+                INFO("<%i> Low Bat %i", ch_group->serv_index, BATTERY_STATUS_LOW_CH_INT);
+                
+                save_historical_data(BATTERY_STATUS_LOW_CH);
+                
+                do_actions(ch_group, BATTERY_STATUS_LOW_CH_INT);
+                
+                homekit_characteristic_notify_safe(BATTERY_STATUS_LOW_CH);
+            }
+        }
+    }
+}
+
 // --- FREE MONITOR
 bool find_patterns(pattern_t* pattern_base, uint8_t** bytes, int bytes_len) {
     pattern_t* pattern = pattern_base;
@@ -4858,8 +4913,12 @@ void free_monitor_task(void* args) {
                             
                             if (ch_target_group->serv_type == SERV_TYPE_THERMOSTAT) {
                                 hkc_th_setter(ch_group->ch_target, ch_group->ch_target->value);
+                                
                             } else if (ch_target_group->serv_type == SERV_TYPE_HUMIDIFIER) {
                                 hkc_humidif_setter(ch_group->ch_target, ch_group->ch_target->value);
+                                
+                            } else if (ch_target_group->serv_type == SERV_TYPE_BATTERY) {
+                                battery_manager(ch_group->ch_target, ch_group->ch_target->value.int_value, true);
                             }
                         }
                     }
@@ -6251,7 +6310,11 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             }
                             break;
                             
-                        case SERV_TYPE_HISTORICAL:
+                        case SERV_TYPE_BATTERY:
+                            battery_manager(BATTERY_LEVEL_CH, value_int, false);
+                            break;
+                            
+                        case SERV_TYPE_DATA_HISTORY:
                             if (value_int == 0) {
                                 save_historical_data(ch_group->ch_target);
                             }
@@ -10366,7 +10429,57 @@ void normal_mode_init() {
         }
     }
     
-    // *** POWER MONITOR
+    // *** NEW BATTERY
+    void new_battery(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+        ch_group_t* ch_group = new_ch_group(2, 1, 0, 1);
+        ch_group->serv_index = service_numerator;
+        set_killswitch(ch_group, json_context);
+        int homekit_enabled = acc_homekit_enabled(json_context);
+        ch_group->homekit_enabled = homekit_enabled;
+        
+        if (service == 0) {
+            new_accessory(accessory, total_services, ch_group->homekit_enabled, json_context);
+        }
+        
+        service++;
+        
+        int battery_low = BATTERY_LOW_THRESHOLD_DEFAULT;
+        if (cJSON_GetObjectItemCaseSensitive(json_context, BATTERY_LOW_THRESHOLD_SET) != NULL) {
+            battery_low = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, BATTERY_LOW_THRESHOLD_SET)->valuedouble;
+        }
+        
+        BATTERY_LOW_THRESHOLD = battery_low;
+        
+        BATTERY_LEVEL_CH = NEW_HOMEKIT_CHARACTERISTIC(BATTERY_LEVEL, 0);
+        BATTERY_STATUS_LOW_CH = NEW_HOMEKIT_CHARACTERISTIC(STATUS_LOW_BATTERY, 0);
+        
+        ch_group->serv_type = SERV_TYPE_BATTERY;
+        register_actions(ch_group, json_context, 0);
+        set_accessory_ir_protocol(ch_group, json_context);
+        register_wildcard_actions(ch_group, json_context);
+        
+        if (ch_group->homekit_enabled) {
+            accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
+            accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
+            //accessories[accessory]->services[service]->id = service_iid;
+            accessories[accessory]->services[service]->primary = !(service - 1);
+            accessories[accessory]->services[service]->hidden = homekit_enabled - 1;
+            
+            if (homekit_enabled == 2) {
+                accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_CUSTOM_HAA_HIDDEN_BATTERY_SERVICE;
+            } else {
+                accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_BATTERY_SERVICE;
+            }
+            
+            accessories[accessory]->services[service]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[service]->characteristics[0] = BATTERY_LEVEL_CH;
+            accessories[accessory]->services[service]->characteristics[1] = BATTERY_STATUS_LOW_CH;
+            
+            //service_iid += 3;
+        }
+    }
+    
+    // *** NEW POWER MONITOR
     void new_power_monitor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
         ch_group_t* ch_group = new_ch_group(7, 3, 8, 4);
         ch_group->serv_type = SERV_TYPE_POWER_MONITOR;
@@ -10512,7 +10625,7 @@ void normal_mode_init() {
         esp_timer_start_forced(esp_timer_create(PM_POLL_PERIOD * 1000, true, (void*) ch_group, power_monitor_timer_worker));
     }
     
-    // *** FREE MONITOR
+    // *** NEW FREE MONITOR
     void new_free_monitor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context, const uint8_t serv_type) {
         int fm_sensor_type = FM_SENSOR_TYPE_DEFAULT;
         
@@ -10783,8 +10896,8 @@ void normal_mode_init() {
         }
     }
     
-    // *** HISTORICAL
-    void new_history(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+    // *** NEW DATA HISTORY
+    void new_data_history(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
         cJSON* data_array = cJSON_GetObjectItemCaseSensitive(json_context, HIST_DATA_ARRAY_SET);
         
         const unsigned int hist_accessory = get_absolut_index(service_numerator, cJSON_GetArrayItem(data_array, 0)->valuedouble);
@@ -10794,7 +10907,7 @@ void normal_mode_init() {
         INFO("Serv %i, Ch %i, Size %i", hist_accessory, hist_ch, hist_size * HIST_REGISTERS_BY_BLOCK);
         
         ch_group_t* ch_group = new_ch_group(hist_size, 0, 1, 0);
-        ch_group->serv_type = SERV_TYPE_HISTORICAL;
+        ch_group->serv_type = SERV_TYPE_DATA_HISTORY;
         ch_group->serv_index = service_numerator;
         set_killswitch(ch_group, json_context);
         ch_group->homekit_enabled = true;
@@ -10816,7 +10929,7 @@ void normal_mode_init() {
         //accessories[accessory]->services[service]->id = service_iid;
         accessories[accessory]->services[service]->primary = !(service - 1);
         accessories[accessory]->services[service]->hidden = true;
-        accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_CUSTOM_HISTORICAL_DATA;
+        accessories[accessory]->services[service]->type = HOMEKIT_SERVICE_CUSTOM_DATA_HISTORY;
         
         accessories[accessory]->services[service]->characteristics = calloc(hist_size + 1, sizeof(homekit_characteristic_t*));
         
@@ -10824,7 +10937,7 @@ void normal_mode_init() {
         
         for (int i = 0; i < hist_size; i++) {
             // Each block uses 132 + HIST_BLOCK_SIZE bytes
-            ch_group->ch[i] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_HISTORICAL_DATA, NULL, 0);
+            ch_group->ch[i] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_DATA_HISTORY, NULL, 0);
             char index[4];
             itoa(i, index, 10);
             if (i < 10) {
@@ -10934,6 +11047,9 @@ void normal_mode_init() {
         } else if (serv_type == SERV_TYPE_FAN) {
             new_fan(acc_count, serv_count, total_services, json_accessory);
             
+        } else if (serv_type == SERV_TYPE_BATTERY) {
+            new_battery(acc_count, serv_count, total_services, json_accessory);
+            
         } else if (serv_type == SERV_TYPE_POWER_MONITOR) {
             new_power_monitor(acc_count, serv_count, total_services, json_accessory);
             
@@ -10941,8 +11057,8 @@ void normal_mode_init() {
                    serv_type == SERV_TYPE_FREE_MONITOR_ACCUMULATVE) {
             new_free_monitor(acc_count, serv_count, total_services, json_accessory, serv_type);
             
-        } else if (serv_type == SERV_TYPE_HISTORICAL) {
-            new_history(acc_count, serv_count, total_services, json_accessory);
+        } else if (serv_type == SERV_TYPE_DATA_HISTORY) {
+            new_data_history(acc_count, serv_count, total_services, json_accessory);
             
         } else if (serv_type == SERV_TYPE_IAIRZONING) {
             new_iairzoning(json_accessory);

@@ -205,10 +205,11 @@ void wifi_config_resend_arp() {
 
 static void wifi_config_toggle_phy_mode(const uint8_t phy) {
     switch (phy) {
+        /* Not used
         case 1:
             sdk_wifi_set_phy_mode(PHY_MODE_11B);
             break;
-            
+        */
         case 2:
             sdk_wifi_set_phy_mode(PHY_MODE_11G);
             break;
@@ -1001,6 +1002,14 @@ static void wifi_config_softap_start() {
     xTaskCreate(http_task, "http", 640, NULL, (tskIDLE_PRIORITY + 1), NULL);
 }
 
+void save_last_working_phy() {
+    int8_t phy_mode = 3;
+    if (sdk_wifi_get_phy_mode() == PHY_MODE_11G) {
+        phy_mode = 2;
+    }
+    sysparam_set_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, phy_mode);
+}
+
 static void wifi_config_sta_connect_timeout_task() {
     if (context->custom_hostname) {
         struct netif* netif = NULL;
@@ -1020,11 +1029,7 @@ static void wifi_config_sta_connect_timeout_task() {
         vTaskDelay(MS_TO_TICKS(1000));
         
         if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
-            int8_t phy_mode = 3;
-            if (sdk_wifi_get_phy_mode() == PHY_MODE_11G) {
-                phy_mode = 2;
-            }
-            sysparam_set_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, phy_mode);
+            save_last_working_phy();
             
             if (context->on_wifi_ready) {
                 context->on_wifi_ready();

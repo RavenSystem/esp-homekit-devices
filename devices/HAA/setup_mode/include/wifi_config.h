@@ -6,4 +6,5 @@ void wifi_config_smart_connect();
 void wifi_config_reset();
 void wifi_config_resend_arp();
 void wifi_config_remove_sys_param();
+void save_last_working_phy();
 int wifi_config_get_ip();

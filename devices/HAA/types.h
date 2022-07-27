@@ -299,10 +299,10 @@ typedef struct _main_config {
     uint8_t wifi_status: 2;
     uint8_t wifi_channel: 4;
     bool ir_tx_inv: 1;
-    bool setpwm_bool_semaphore: 1;
-    uint8_t ir_tx_gpio: 6;
     bool setpwm_is_running: 1;
+    uint8_t ir_tx_gpio: 6;
     bool timetable_ready: 1;
+    
     int8_t setup_mode_toggle_counter;
     int8_t setup_mode_toggle_counter_max;
     

@@ -73,3 +73,43 @@ TimerHandle_t esp_timer_create(const uint32_t period_ms, const bool auto_reload,
     
     return result;
 }
+
+BaseType_t esp_timer_start(TimerHandle_t xTimer) {
+    return esp_timer_manager(TIMER_MANAGER_START, xTimer, 0);
+}
+
+BaseType_t esp_timer_stop(TimerHandle_t xTimer) {
+    return esp_timer_manager(TIMER_MANAGER_STOP, xTimer, 0);
+}
+
+BaseType_t esp_timer_delete(TimerHandle_t xTimer) {
+    return esp_timer_manager(TIMER_MANAGER_DELETE, xTimer, 0);
+}
+
+BaseType_t esp_timer_change_period(TimerHandle_t xTimer, const uint32_t new_period_ms) {
+    return esp_timer_change_period_manager(xTimer, new_period_ms, 0);
+}
+
+BaseType_t esp_timer_start_forced(TimerHandle_t xTimer) {
+    return esp_timer_manager(TIMER_MANAGER_START, xTimer, portMAX_DELAY);
+}
+
+BaseType_t esp_timer_stop_forced(TimerHandle_t xTimer) {
+    return esp_timer_manager(TIMER_MANAGER_STOP, xTimer, portMAX_DELAY);
+}
+
+BaseType_t esp_timer_delete_forced(TimerHandle_t xTimer) {
+    return esp_timer_manager(TIMER_MANAGER_DELETE, xTimer, portMAX_DELAY);
+}
+
+BaseType_t esp_timer_change_period_forced(TimerHandle_t xTimer, const uint32_t new_period_ms) {
+    return esp_timer_change_period_manager(xTimer, new_period_ms, portMAX_DELAY);
+}
+
+BaseType_t IRAM esp_timer_start_from_ISR(TimerHandle_t xTimer) {
+    return esp_timer_manager_from_ISR(TIMER_MANAGER_START, xTimer);
+}
+
+BaseType_t IRAM esp_timer_stop_from_ISR(TimerHandle_t xTimer) {
+    return esp_timer_manager_from_ISR(TIMER_MANAGER_STOP, xTimer);
+}
