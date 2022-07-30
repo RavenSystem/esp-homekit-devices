@@ -1,6 +1,6 @@
 # HAA - Home Accessory Architect
 
-[![Release](https://img.shields.io/github/v/tag/RavenSystem/haa?color=red&label=release)](https://github.com/RavenSystem/haa/releases/latest)
+[![Release](https://img.shields.io/github/v/tag/RavenSystem/haa?color=red&label=release)](https://github.com/RavenSystem/esp-homekit-devices/releases/latest)
 [![GitHub download](https://img.shields.io/github/downloads/RavenSystem/haa/total.svg)](https://github.com/RavenSystem/haa/releases/latest)
 [![Donate](https://img.shields.io/badge/donate-PayPal-blue.svg)](https://paypal.me/ravensystem)
 
