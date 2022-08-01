@@ -258,7 +258,8 @@ void ota_task(void *arg) {
     } else {
         ERROR("HAAMAIN, fixing\n");
         sysparam_set_data(USER_VERSION_SYSPARAM, NULL, 0, false);
-        sysparam_set_string(USER_VERSION_SYSPARAM, "0.0.0");
+        sysparam_set_string(USER_VERSION_SYSPARAM, "00.00.00");
+        sysparam_compact();
     }
     
     ota_reboot();
