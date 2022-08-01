@@ -9,7 +9,7 @@ assignees: ''
 
 **Detailed steps to reproduce it**
 
-**JSON String**
+**MEPLHAA Script**
 
 **Used device**
 
