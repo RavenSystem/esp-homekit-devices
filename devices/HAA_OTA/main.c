@@ -51,7 +51,7 @@ void ota_task(void *arg) {
     
     vTaskDelay(MS_TO_TICKS(1000));
     
-    INFO("\n\nHAA Installer v%s\n\n", OTAVERSION);
+    INFO("\n\nHAA Installer v"INSTALLER_VERSION"\n\n");
     
 #ifdef HAABOOT
     sysparam_set_string(USER_VERSION_SYSPARAM, "0.0.0");
@@ -177,7 +177,7 @@ void ota_task(void *arg) {
             static char otaversionfile[] = OTAVERSIONFILE;
             ota_version = ota_get_version(user_repo, otaversionfile, port, is_ssl);
             
-            if (ota_version && strcmp(ota_version, OTAVERSION) != 0) {
+            if (ota_version && strcmp(ota_version, INSTALLER_VERSION) != 0) {
                 static char otabootfile[] = OTABOOTFILE;
                 do {
                     tries_partial_count++;

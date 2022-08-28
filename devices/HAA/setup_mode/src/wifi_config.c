@@ -104,31 +104,8 @@ static void wifi_station_connect_no_sleep() {
 }
 
 void wifi_config_remove_sys_param() {
-    unsigned char* sector = malloc(SPI_FLASH_SECTOR_SIZE);
-    
-    if (sector) {
-        for (int i = 0; i < SYSPARAMSIZE; i++) {
-            if (!spiflash_erase_sector(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE))) {
-                ERROR("Erasing sysparam");
-                break;
-            }
-            
-            memset(sector, 0xFF, SPI_FLASH_SECTOR_SIZE);
-            if (!spiflash_write(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE), sector, SPI_FLASH_SECTOR_SIZE)) {
-                ERROR("Format sysparam (1/2)");
-                break;
-            }
-            
-            memset(sector, 0x0, SPI_FLASH_SECTOR_SIZE);
-            if (!spiflash_write(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE), sector, SPI_FLASH_SECTOR_SIZE)) {
-                ERROR("Format sysparam (2/2)");
-                break;
-            }
-        }
-        
-        free(sector);
-    } else {
-        ERROR("Remove sysparam. No DRAM");
+    for (int i = 0; i < SYSPARAMSIZE; i++) {
+        sdk_spi_flash_erase_sector((SYSPARAMSECTOR / SPI_FLASH_SECTOR_SIZE) + i);
     }
 }
 
@@ -487,13 +464,24 @@ static void wifi_config_server_on_settings(client_t *client) {
         "Transfer-Encoding: chunked\r\n"
         "Connection: close\r\n"
         "\r\n";
-
+    
     client_send(client, http_prologue, sizeof(http_prologue) - 1);
     client_send_chunk(client, html_settings_header);
+    client_send_chunk(client, HAA_FIRMWARE_VERSION""HAA_FIRMWARE_BETA_REVISION" "HAA_FIRMWARE_CODENAME);
+    client_send_chunk(client, html_settings_haa_firmware_version);
     
     char *text = NULL;
     sysparam_status_t status;
-    status = sysparam_get_string(HAA_JSON_SYSPARAM, &text);
+    
+    status = sysparam_get_string(OTA_VERSION_SYSPARAM, &text);
+    if (text) {
+        client_send_chunk(client, text);
+        free(text);
+        text = NULL;
+    }
+    client_send_chunk(client, html_settings_installer_version);
+    
+    status = sysparam_get_string(HAA_SCRIPT_SYSPARAM, &text);
     if (status == SYSPARAM_OK) {
         client_send_chunk(client, text);
         free(text);
@@ -503,21 +491,28 @@ static void wifi_config_server_on_settings(client_t *client) {
     
     if (context->param >= 100) {
         context->param -= 100;
-        client_send_chunk(client, "<div style=\"color:red\">Invalid JSON!</div>");
+        client_send_chunk(client, "<div style=\"color:red\">Invalid Script!</div>");
     }
     
     if (context->param == 1) {
-        client_send_chunk(client, "<div style=\"color:red\">FLASH corrupted! Reset settings recommended</div>");
+        client_send_chunk(client, "<div style=\"color:red\">FLASH Error!</div>");
     }
-    client_send_chunk(client, html_settings_flash_error);
     
-    status = sysparam_get_string(OTA_VERSION_SYSPARAM, &text);
-    if (text) {
-        client_send_chunk(client, text);
-        free(text);
-        text = NULL;
+    client_send_chunk(client, html_settings_pairings);
+    
+    const int homekit_pairings = homekit_pairing_count();
+    char homekit_pairings_text[3];
+    itoa(homekit_pairings, homekit_pairings_text, 10);
+    
+    client_send_chunk(client, homekit_pairings_text);
+    
+    client_send_chunk(client, html_settings_pairings_count);
+    
+    if (homekit_pairings > 0 && homekit_pairings < 48) {
+        client_send_chunk(client, html_settings_extra_pairing);
     }
-    client_send_chunk(client, html_settings_otaversion);
+    
+    client_send_chunk(client, html_settings_reset_homekit_id);
     
     bool auto_ota = false;
     status = sysparam_get_bool(AUTO_OTA_SYSPARAM, &auto_ota);
@@ -638,7 +633,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     client_free(client);
     
     if (!form) {
-        ERROR("No memory. Rebooting...");
+        ERROR("DRAM. Rebooting...");
         vTaskDelay(MS_TO_TICKS(3000));
         sdk_system_restart();
     }
@@ -655,6 +650,8 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         
     } else {
         form_param_t *conf_param = form_params_find(form, "conf");
+        form_param_t *re_pair_param = form_params_find(form, "re_pair");
+        form_param_t *rm_re_pair_param = form_params_find(form, "rm_re_pair");
         form_param_t *nowifi_param = form_params_find(form, "nowifi");
         form_param_t *ota_param = form_params_find(form, "ota");
         form_param_t *autoota_param = form_params_find(form, "autoota");
@@ -678,15 +675,35 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         }
         
         if (conf_param && conf_param->value) {
-            sysparam_set_string(HAA_JSON_SYSPARAM, conf_param->value);
+            sysparam_set_string(HAA_SCRIPT_SYSPARAM, conf_param->value);
         } else {
-            sysparam_set_string(HAA_JSON_SYSPARAM, "");
+            sysparam_set_data(HAA_SCRIPT_SYSPARAM, NULL, 0, false);
         }
         
         if (autoota_param) {
             sysparam_set_bool(AUTO_OTA_SYSPARAM, true);
         } else {
-            sysparam_set_bool(AUTO_OTA_SYSPARAM, false);
+            sysparam_set_data(AUTO_OTA_SYSPARAM, NULL, 0, false);
+        }
+        
+        if (re_pair_param) {
+            const int8_t re_pair_int = 1;
+            sysparam_set_int8(HOMEKIT_RE_PAIR_SYSPARAM, re_pair_int);
+            
+            int8_t count = 0;
+            sysparam_get_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, &count);
+            if (count == 0) {
+                count = homekit_pairing_count();
+                sysparam_set_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, count);
+            }
+        } else {
+            sysparam_set_data(HOMEKIT_RE_PAIR_SYSPARAM, NULL, 0, false);
+        }
+        
+        if (rm_re_pair_param) {
+            int8_t count = 2;
+            sysparam_get_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, &count);
+            homekit_remove_extra_pairing(count);
         }
         
         if (ota_param) {
@@ -724,7 +741,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         if (reposerver_param && reposerver_param->value) {
             sysparam_set_string(CUSTOM_REPO_SYSPARAM, reposerver_param->value);
         } else {
-            sysparam_set_string(CUSTOM_REPO_SYSPARAM, "");
+            sysparam_set_data(CUSTOM_REPO_SYSPARAM, NULL, 0, false);
         }
         
         if (repoport_param && repoport_param->value) {
@@ -766,8 +783,6 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                 sysparam_set_string(WIFI_PASSWORD_SYSPARAM, "");
             }
         }
-        
-        sysparam_compact();
         
         if (wifimode_param && wifimode_param->value) {
             int8_t current_wifi_mode = 0;
@@ -1207,7 +1222,7 @@ static void wifi_config_station_connect() {
                 context->auto_reboot_timer = esp_timer_create(AUTO_REBOOT_TIMEOUT, false, NULL, auto_reboot_run);
                 esp_timer_start_forced(context->auto_reboot_timer);
             } else if (setup_mode == 2) {
-                ERROR("Invalid JSON");
+                ERROR("Script");
                 context->param += 100;
             }
             

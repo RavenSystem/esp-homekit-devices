@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * Copyright 2020-2021 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2020-2022 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -18,9 +18,11 @@
 #define WIFI_MODE_SYSPARAM                  "wifi_mode"
 #define WIFI_BSSID_SYSPARAM                 "wifi_bssid"
 #define WIFI_LAST_WORKING_PHY_SYSPARAM      "wifi_phy"
+#define HOMEKIT_RE_PAIR_SYSPARAM            "re_pair"
+#define HOMEKIT_PAIRING_COUNT_SYSPARAM      "pair_count"
 #define AUTO_OTA_SYSPARAM                   "aota"
 #define TOTAL_SERV_SYSPARAM                 "total_ac"
-#define HAA_JSON_SYSPARAM                   "haa_conf"
+#define HAA_SCRIPT_SYSPARAM                 "haa_conf"
 #define HAA_SETUP_MODE_SYSPARAM             "setup"
 #define LAST_CONFIG_NUMBER_SYSPARAM         "hkcf"
 
@@ -41,8 +43,6 @@
 #define ERROR(message, ...)                 printf("! " message "\n", ##__VA_ARGS__)
 
 #define MS_TO_TICKS(x)                      ((x) / portTICK_PERIOD_MS)
-
-#define FREEHEAP()                          printf("Free Heap %d\n", xPortGetFreeHeapSize())
 
 #define CHAR_IS_NUMBER(c)                   ((c) >= '0' && (c) <= '9')
 

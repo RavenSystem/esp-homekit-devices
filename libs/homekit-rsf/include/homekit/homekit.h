@@ -34,6 +34,7 @@ typedef struct {
     homekit_device_category_t category: 6;
     uint8_t max_clients: 5;
     bool insecure: 1;
+    bool re_pair: 1;
     
 #ifdef HOMEKIT_SERVER_ON_RESOURCE_ENABLE
     // Callback for "POST /resource" to get snapshot image from camera
@@ -59,6 +60,9 @@ void homekit_remove_oldest_client();
 
 // Reset HomeKit accessory server, removing all pairings
 void homekit_server_reset();
+
+void homekit_remove_extra_pairing(const int last_keep);
+int homekit_pairing_count();
 
 void homekit_mdns_announce();
 void homekit_mdns_announce_pause();

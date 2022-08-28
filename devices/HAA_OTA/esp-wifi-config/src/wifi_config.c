@@ -86,31 +86,8 @@ static void wifi_config_station_connect();
 static void wifi_config_softap_start();
 
 void wifi_config_remove_sys_param() {
-    unsigned char* sector = malloc(SPI_FLASH_SECTOR_SIZE);
-    
-    if (sector) {
-        for (int i = 0; i < SYSPARAMSIZE; i++) {
-            if (!spiflash_erase_sector(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE))) {
-                ERROR("Erasing sysparam");
-                break;
-            }
-            
-            memset(sector, 0xFF, SPI_FLASH_SECTOR_SIZE);
-            if (!spiflash_write(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE), sector, SPI_FLASH_SECTOR_SIZE)) {
-                ERROR("Format sysparam (1/2)");
-                break;
-            }
-            
-            memset(sector, 0x0, SPI_FLASH_SECTOR_SIZE);
-            if (!spiflash_write(SYSPARAMSECTOR + (i * SPI_FLASH_SECTOR_SIZE), sector, SPI_FLASH_SECTOR_SIZE)) {
-                ERROR("Format sysparam (2/2)");
-                break;
-            }
-        }
-        
-        free(sector);
-    } else {
-        ERROR("Remove sysparam. No DRAM");
+    for (int i = 0; i < SYSPARAMSIZE; i++) {
+        sdk_spi_flash_erase_sector((SYSPARAMSECTOR / SPI_FLASH_SECTOR_SIZE) + i);
     }
 }
 
@@ -439,10 +416,12 @@ static void wifi_config_server_on_settings(client_t *client) {
 
     client_send(client, http_prologue, sizeof(http_prologue) - 1);
     client_send_chunk(client, html_settings_header);
+    client_send_chunk(client, INSTALLER_VERSION);
+    client_send_chunk(client, html_settings_installer_version);
     
     char *text = NULL;
     sysparam_status_t status;
-    status = sysparam_get_string(HAA_JSON_SYSPARAM, &text);
+    status = sysparam_get_string(HAA_SCRIPT_SYSPARAM, &text);
     if (status == SYSPARAM_OK) {
         client_send_chunk(client, text);
         free(text);
@@ -605,15 +584,15 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
         
         if (conf_param && conf_param->value) {
-            sysparam_set_string(HAA_JSON_SYSPARAM, conf_param->value);
+            sysparam_set_string(HAA_SCRIPT_SYSPARAM, conf_param->value);
         } else {
-            sysparam_set_string(HAA_JSON_SYSPARAM, "");
+            sysparam_set_data(HAA_SCRIPT_SYSPARAM, NULL, 0, false);
         }
         
         if (autoota_param) {
             sysparam_set_bool(AUTO_OTA_SYSPARAM, true);
         } else {
-            sysparam_set_bool(AUTO_OTA_SYSPARAM, false);
+            sysparam_set_data(AUTO_OTA_SYSPARAM, NULL, 0, false);
         }
         
         if (nowifi_param) {
@@ -627,7 +606,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         if (reposerver_param && reposerver_param->value) {
             sysparam_set_string(CUSTOM_REPO_SYSPARAM, reposerver_param->value);
         } else {
-            sysparam_set_string(CUSTOM_REPO_SYSPARAM, "");
+            sysparam_set_data(CUSTOM_REPO_SYSPARAM, NULL, 0, false);
         }
         
         if (repoport_param && repoport_param->value) {
@@ -669,8 +648,6 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                 sysparam_set_string(WIFI_PASSWORD_SYSPARAM, "");
             }
         }
-        
-        sysparam_compact();
         
         if (wifimode_param && wifimode_param->value) {
             int8_t current_wifi_mode = 0;
@@ -929,7 +906,7 @@ static void wifi_config_sta_connect_timeout_task() {
 }
 
 static uint8_t wifi_config_connect(const uint8_t phy) {
-    sysparam_set_string(OTA_VERSION_SYSPARAM, OTAVERSION);
+    sysparam_set_string(OTA_VERSION_SYSPARAM, INSTALLER_VERSION);
     
     char *wifi_ssid = NULL;
     sysparam_get_string(WIFI_SSID_SYSPARAM, &wifi_ssid);

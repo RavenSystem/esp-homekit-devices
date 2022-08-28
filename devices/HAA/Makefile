@@ -7,7 +7,7 @@ EXTRA_COMPONENTS = \
 	$(abspath ../../external_libs/http-parser) \
     $(abspath ../../external_libs/wolfssl) \
     $(abspath ../../external_libs/cJSON) \
-    $(abspath ../../external_libs/homekit) \
+    $(abspath ../../libs/homekit-rsf) \
 	$(abspath ../../libs/adv_i2c) \
     $(abspath ../../libs/adv_button) \
     $(abspath ../../libs/adv_hlw) \
@@ -47,6 +47,7 @@ EXTRA_CFLAGS += -I../.. -DHOMEKIT_SHORT_APPLE_UUIDS
 EXTRA_CFLAGS += -DHOMEKIT_OVERCLOCK_PAIR_VERIFY
 EXTRA_CFLAGS += -DHOMEKIT_OVERCLOCK_PAIR_SETUP
 EXTRA_CFLAGS += -DHOMEKIT_DISABLE_MAXLEN_CHECK
+EXTRA_CFLAGS += -DHOMEKIT_DISABLE_VALUE_RANGES
 #EXTRA_CFLAGS += -DHOMEKIT_NOTIFY_EVENT_ENABLE
 #EXTRA_CFLAGS += -DHOMEKIT_SERVER_ON_RESOURCE_ENABLE
 #EXTRA_CFLAGS += -DHOMEKIT_CHANGE_MAX_CLIENTS
@@ -75,8 +76,8 @@ EXTRA_CFLAGS += -DconfigMAX_TASK_NAME_LEN=8
 EXTRA_CFLAGS += -DconfigCHECK_FOR_STACK_OVERFLOW=2
 EXTRA_CFLAGS += -DconfigMINIMAL_STACK_SIZE=256
 #EXTRA_CFLAGS += -DconfigTIMER_TASK_PRIORITY=\(configMAX_PRIORITIES-1\)
-EXTRA_CFLAGS += -DconfigTIMER_TASK_PRIORITY=\(tskIDLE_PRIORITY+5\)
-EXTRA_CFLAGS += -DconfigTIMER_QUEUE_LENGTH=35
+EXTRA_CFLAGS += -DconfigTIMER_TASK_PRIORITY=\(tskIDLE_PRIORITY+6\)
+EXTRA_CFLAGS += -DconfigTIMER_QUEUE_LENGTH=15
 EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=736
 
 ## HAA DEBUG
@@ -103,7 +104,7 @@ EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=736
 ## mDNS Responder DEBUG
 #EXTRA_CFLAGS += -DqDebugLog -DqLogIncoming -DqLogAllTraffic
 
-include $(abspath ../../sdk/esp-open-rtos/common.mk)
+include $(abspath ../../sdk/esp-open-rtos-rsf/common.mk)
 
 LIBS += m
 

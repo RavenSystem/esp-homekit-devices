@@ -23,16 +23,16 @@ input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
 .nonetworks{text-align:center;margin:1em 0;}
 .field{margin-bottom:0.5em;}
 .field.required label::before{content:"*";color:red;}
-</style></head><body><div class="container"><h1>Home Accessory Architect<br>Installer v6.1.1</h1>
+</style></head><body><div class="container"><h1>Home Accessory Architect<br>Installer <!-- part HTML_SETTINGS_INSTALLER_VERSION --></h1>
 <form action="/settings" method="post">
 <div class="field required conf">
-<label for="conf">MEPLHAA Script:</label>
+<label for="conf"> MEPLHAA Script:</label>
 <textarea id="conf" name="conf" autocorrect="off" autocomplete="off" autocapitalize="off" spellcheck="false">
 <!-- part HTML_SETTINGS_MIDDLE --></textarea><br>
 <input type="checkbox" name="reset_sys" value="y"> Reset Settings<br>
 <input type="checkbox" name="nowifi" value="y"> Remove WiFi Settings<br>
 <input type="checkbox" name="autoota" value="y" <!-- part HTML_SETTINGS_AUTOOTA -->> Auto OTA Updates<br>
-<label for="wifimode"> WiFi connection mode <select name="wifimode">
+<label for="wifimode"> WiFi Mode <select name="wifimode">
 <option value="0" <!-- part HTML_WIFI_MODE_0 -->>Normal</option>
 <option value="1" <!-- part HTML_WIFI_MODE_1 -->>Force BSSID</option>
 <option value="2" <!-- part HTML_WIFI_MODE_2 -->>Passive Roaming</option>
@@ -71,7 +71,7 @@ No networks found
 </div>
 </form>
 <center>© 2018-2022 Jos&eacute; A. Jim&eacute;nez Campos</center>
-<h2>IMPORTANT: If you have paid for this firmware or for a device with it installed, you have been scammed. You must report the fraud to the authorities and claim the amount paid. <a href="https://raw.githubusercontent.com/RavenSystem/esp-homekit-devices/master/LICENSE">LICENSE</a><h2>
+<h2>If you have paid for this firmware or for a device with it installed, you have been scammed. You must report the fraud to the authorities and claim the amount paid. <a href="https://raw.githubusercontent.com/RavenSystem/esp-homekit-devices/master/LICENSE">LICENSE</a><h2>
 </div>
 <script>
 var ssid_field, bssid_field, password_block, password_field, join_button;

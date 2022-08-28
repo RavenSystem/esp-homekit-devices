@@ -525,6 +525,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
             json_array_end(json);
         }
 
+#ifndef HOMEKIT_DISABLE_VALUE_RANGES
         if (ch->valid_values_ranges.count) {
             json_string(json, "valid-values-range"); json_array_start(json);
 
@@ -539,6 +540,8 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
 
             json_array_end(json);
         }
+#endif //HOMEKIT_DISABLE_VALUE_RANGES
+        
     }
     
     if (ch->permissions & HOMEKIT_PERMISSIONS_PAIRED_READ) {
@@ -2432,7 +2435,8 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                             return HAPStatus_InvalidValue;
                         }
                     }
-
+                    
+#ifndef HOMEKIT_DISABLE_VALUE_RANGES
                     if (ch->valid_values_ranges.count) {
                         int matches = false;
                         for (int i = 0; i < ch->valid_values_ranges.count; i++) {
@@ -2448,7 +2452,8 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                             return HAPStatus_InvalidValue;
                         }
                     }
-
+#endif //HOMEKIT_DISABLE_VALUE_RANGES
+                    
                     CLIENT_INFO(context, "for %d.%d=%d", aid, iid, value);
 
                     // Old style
@@ -3665,8 +3670,6 @@ void homekit_server_task(void *args) {
 #define ISDIGIT(x)      isdigit((unsigned char)(x))
 #define ISBASE36(x)     (isdigit((unsigned char)(x)) || (x >= 'A' && x <= 'Z'))
 
-const static char hk_task_name[] = "HK";
-
 void homekit_server_init(homekit_server_config_t *config) {
     HOMEKIT_INFO("Start HK");
     
@@ -3696,12 +3699,14 @@ void homekit_server_init(homekit_server_config_t *config) {
     }
 
     pairing_iterator_t *pairing_it = homekit_storage_pairing_iterator();
-    pairing_t *pairing;
-    while ((pairing = homekit_storage_next_pairing(pairing_it))) {
-        if (pairing->permissions & pairing_permissions_admin) {
-            break;
+    pairing_t *pairing = NULL;
+    if (!homekit_server->config->re_pair) {
+        while ((pairing = homekit_storage_next_pairing(pairing_it))) {
+            if (pairing->permissions & pairing_permissions_admin) {
+                break;
+            }
+            pairing_free(pairing);
         }
-        pairing_free(pairing);
     }
     homekit_storage_pairing_iterator_free(pairing_it);
 
@@ -3719,13 +3724,21 @@ void homekit_server_init(homekit_server_config_t *config) {
     }
 #endif //ESP_OPEN_RTOS
     
-    if (xTaskCreate(homekit_server_task, hk_task_name, server_task_stack, NULL, SERVER_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("Creating HK");
+    if (xTaskCreate(homekit_server_task, "HK", server_task_stack, NULL, SERVER_TASK_PRIORITY, NULL) != pdPASS) {
+        ERROR("New HK");
     }
 }
 
 void homekit_server_reset() {
     homekit_storage_reset();
+}
+
+void homekit_remove_extra_pairing(const int last_keep) {
+    homekit_storage_remove_extra_pairing(last_keep);
+}
+
+int homekit_pairing_count() {
+    return homekit_storage_pairing_count();
 }
 
 void homekit_mdns_announce() {

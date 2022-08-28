@@ -11,7 +11,9 @@
 #include "../common/common_headers.h"
 
 // Version
-#define FIRMWARE_VERSION                    "10.8.3"
+#define HAA_FIRMWARE_VERSION                "11.0.0"
+#define HAA_FIRMWARE_BETA_REVISION          ""
+#define HAA_FIRMWARE_CODENAME               "Peregrine"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -330,9 +332,9 @@
 #define LIGHTBULB_FLUX_ARRAY_SET            "fa"
 #define LIGHTBULB_COORDINATE_ARRAY_SET      "ca"
 #define LIGHTBULB_WHITE_POINT_SET           "wp"
-#define RGBW_PERIOD                         (20)
+#define RGBW_PERIOD                         (30)
 #define RGBW_STEP_SET                       "st"
-#define RGBW_STEP_DEFAULT                   (2048)
+#define RGBW_STEP_DEFAULT                   (102.4 * RGBW_PERIOD)
 #define PWM_SCALE                           (UINT16_MAX)
 #define COLOR_TEMP_MIN                      (71)
 #define COLOR_TEMP_MAX                      (400)
@@ -372,7 +374,6 @@
 #define GARAGE_DOOR_TIME_CLOSE_SET          "c"
 #define GARAGE_DOOR_TIME_MARGIN_SET         "e"
 #define GARAGE_DOOR_TIME_MARGIN_DEFAULT     (0)
-#define GARAGE_DOOR_AUTOCLOSE_TIME_SET      "k"
 #define GARAGE_DOOR_CURRENT_TIME            ch_group->num_f[0]
 #define GARAGE_DOOR_WORKING_TIME            ch_group->num_f[1]
 #define GARAGE_DOOR_CLOSE_TIME_FACTOR       ch_group->num_f[2]
@@ -472,6 +473,7 @@
 #define FM_SENSOR_TYPE_FREE                 (1)
 #define FM_SENSOR_TYPE_PULSE_FREQ           (2)
 #define FM_SENSOR_TYPE_PULSE_US_TIME        (3)
+#define FM_SENSOR_TYPE_MATHS                (5)
 #define FM_SENSOR_TYPE_ADC                  (10)
 #define FM_SENSOR_TYPE_ADC_INV              (11)
 #define FM_SENSOR_TYPE_NETWORK              (15)
@@ -499,6 +501,34 @@
 #define FM_LIMIT_ARRAY_SET                  "l"
 #define FM_LIMIT_LOWER                      ch_group->num_f[4]
 #define FM_LIMIT_UPPER                      ch_group->num_f[5]
+#define FM_MATHS_OPERATION_NONE             (0)
+#define FM_MATHS_OPERATION_ADD              (1)
+#define FM_MATHS_OPERATION_SUB              (2)
+#define FM_MATHS_OPERATION_SUB_INV          (3)
+#define FM_MATHS_OPERATION_MUL              (4)
+#define FM_MATHS_OPERATION_DIV              (5)
+#define FM_MATHS_OPERATION_DIV_INV          (6)
+#define FM_MATHS_OPERATION_MOD              (7)
+#define FM_MATHS_OPERATION_MOD_INV          (8)
+#define FM_MATHS_OPERATION_POW              (9)
+#define FM_MATHS_OPERATION_POW_INV          (10)
+#define FM_MATHS_OPERATION_INV              (11)
+#define FM_MATHS_OPERATION_ABS              (12)
+#define FM_MATHS_GET_TIME_HOUR              (-1)
+#define FM_MATHS_GET_TIME_MINUTE            (-2)
+#define FM_MATHS_GET_TIME_SECOND            (-3)
+#define FM_MATHS_GET_TIME_DAYWEEK           (-4)
+#define FM_MATHS_GET_TIME_DAYMONTH          (-5)
+#define FM_MATHS_GET_TIME_MONTH             (-6)
+#define FM_MATHS_GET_TIME_DAYYEAR           (-7)
+#define FM_MATHS_GET_TIME_YEAR              (-8)
+#define FM_MATHS_GET_TIME_IS_SAVING         (-9)
+#define FM_MATHS_GEN_RANDOM_NUMBER          (-10)
+#define FM_MATHS_OPERATIONS                 ch_group->num_i[1]
+#define FM_MATHS_FIRST_OPERATION            (2)
+#define FM_MATHS_INT                        ch_group->num_i
+#define FM_MATHS_FLOAT_FIRST                (4)
+#define FM_MATHS_FLOAT                      ch_group->num_f
 #define FM_VAL_LEN                          ch_group->num_i[1]
 #define FM_VAL_TYPE                         ch_group->num_i[2]
 #define FM_BUFFER_LEN_ARRAY_SET             "bl"
@@ -703,8 +733,8 @@
 #define ACTION_TASK_TYPE_IRRF               (2)
 #define ACTION_TASK_MAX_ERRORS              (10)
 
-#define SAVE_STATES_TIMER                   ch_group_find_by_acc(SERV_TYPE_ROOT_DEVICE)->timer
-#define WIFI_WATCHDOG_TIMER                 ch_group_find_by_acc(SERV_TYPE_ROOT_DEVICE)->timer2
+#define SAVE_STATES_TIMER                   ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE)->timer
+#define WIFI_WATCHDOG_TIMER                 ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE)->timer2
 #define WIFI_STATUS_LONG_DISCONNECTED       (0)
 #define WIFI_STATUS_DISCONNECTED            (1)
 #define WIFI_STATUS_CONNECTING              (2)
@@ -724,6 +754,8 @@
 
 #define SAVE_STATES_DELAY_MS                (5000)
 #define RANDOM_DELAY_MS                     (4000)
+
+#define HOMEKIT_RE_PAIR_TIME_MS             (300000)
 
 #define ACCESSORIES_WITHOUT_BRIDGE          (4)     // Max number of accessories without dedicated HomeKit bridge
 

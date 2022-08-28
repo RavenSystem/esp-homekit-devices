@@ -85,6 +85,7 @@ typedef struct {
     bool is_null: 1;
     bool is_static: 1;
     homekit_format_t format: 4;
+    int _align: 10;
     uint16_t data_size;
     union {
         bool bool_value;
@@ -153,17 +154,17 @@ typedef struct {
     uint8_t* values;
 } homekit_valid_values_t;
 
-
+#ifndef HOMEKIT_DISABLE_VALUE_RANGES
 typedef struct {
     uint8_t start;
     uint8_t end;
 } homekit_valid_values_range_t;
 
-
 typedef struct {
     int count;
     homekit_valid_values_range_t *ranges;
 } homekit_valid_values_ranges_t;
+#endif //HOMEKIT_DISABLE_VALUE_RANGES
 
 typedef struct _homekit_characteristic_subscription {
     void *context;
@@ -177,14 +178,13 @@ struct _homekit_characteristic {
     const char *description;
     
     uint16_t id;
-    
     homekit_format_t format: 4;
     homekit_unit_t unit: 3;
-    
     homekit_permissions_t permissions: 6;
+    int _align: 3;
     
     homekit_value_t value;
-
+    
     float *min_value;
     float *max_value;
     float *min_step;
@@ -195,14 +195,15 @@ struct _homekit_characteristic {
 #endif //HOMEKIT_DISABLE_MAXLEN_CHECK
 
     homekit_valid_values_t valid_values;
+    
+#ifndef HOMEKIT_DISABLE_VALUE_RANGES
     homekit_valid_values_ranges_t valid_values_ranges;
+#endif //HOMEKIT_DISABLE_VALUE_RANGES
     
     homekit_characteristic_subscription_t* subscriptions;
-
+    
     homekit_value_t (*getter_ex)(const homekit_characteristic_t *ch);
     void (*setter_ex)(homekit_characteristic_t *ch, const homekit_value_t value);
-
-    void *context;
 };
 
 struct _homekit_service {

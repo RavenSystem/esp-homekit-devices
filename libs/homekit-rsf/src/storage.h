@@ -18,6 +18,8 @@ bool homekit_storage_finish_setup();
 int homekit_storage_add_pairing(const char *device_id, const ed25519_key *device_key, byte permissions);
 int homekit_storage_update_pairing(const char *device_id, byte permissions);
 int homekit_storage_remove_pairing(const char *device_id);
+int homekit_storage_remove_extra_pairing(const int last_keep);
+int homekit_storage_pairing_count();
 pairing_t *homekit_storage_find_pairing(const char *device_id);
 
 struct _pairing_iterator;

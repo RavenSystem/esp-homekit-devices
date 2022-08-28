@@ -1,7 +1,7 @@
 <!-- part HTML_SETTINGS_HEADER --><!DOCTYPE html><html><head><title>HAA</title><style type="text/css">
 html,input,textarea{font-size:38px;font-family:Arial;}
-h1{font-size:120%;text-align:center;}
-h2{font-size:75%;text-align:center;}
+h1{font-size:120%;text-align:center;margin:0;}
+h2{font-size:75%;text-align:center;margin:0;}
 body .container{width:22em;margin:0 auto;padding:0.5em;}
 label{display:block;}
 input[type=text],input[type=password]{width:100%;box-sizing:border-box;}
@@ -22,25 +22,29 @@ input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
 .nonetworks{text-align:center;margin:1em 0;}
 .field{margin-bottom:0.5em;}
 .field.required label::before{content:"*";color:red;}
-</style></head><body><div class="container"><h1>Home Accessory Architect v10.8.3 Kestrel</h1>
+</style></head><body><div class="container"><h1>Home Accessory Architect<br><!-- part HTML_SETTINGS_HAA_FIRMWARE_VERSION --></h1>
+<h2>(Installer <!-- part HTML_SETTINGS_INSTALLER_VERSION -->)</h2>
 <form action="/settings" method="post">
 <div class="field required conf">
-<label for="conf">MEPLHAA Script:</label>
+<label for="conf"> MEPLHAA Script:</label>
 <textarea id="conf" name="conf" autocorrect="off" autocomplete="off" autocapitalize="off" spellcheck="false">
 <!-- part HTML_SETTINGS_MIDDLE --></textarea><br>
-<!-- part HTML_SETTINGS_FLASH_ERROR --><input type="checkbox" name="reset" value="y"> Reset HomeKit ID<br>
+<!-- part HTML_SETTINGS_PAIRINGS -->Pairings <!-- part HTML_SETTINGS_PAIRINGS_COUNT -->/48<br>
+<!-- part HTML_SETTINGS_EXTRA_PAIRING --><input type="checkbox" name="re_pair" value="y"> Add Extra Pairing<br>
+<input type="checkbox" name="rm_re_pair" value="y"> Remove All Extra Pairings<br>
+<!-- part HTML_SETTINGS_RESET_HOMEKIT_ID --><input type="checkbox" name="reset" value="y"> Reset HomeKit ID<br>
 <input type="checkbox" name="reset_sys" value="y"> Reset Settings<br>
 <input type="checkbox" name="nowifi" value="y"> Remove WiFi Settings<br>
-<input type="checkbox" name="ota" value="y"> Update all now (HAA OTA v<!-- part HTML_SETTINGS_OTAVERSION -->)<br>
+<input type="checkbox" name="ota" value="y"> Firmware Update<br>
 <input type="checkbox" name="autoota" value="y" <!-- part HTML_SETTINGS_AUTOOTA -->> Auto OTA Updates<br>
-<label for="wifimode"> WiFi connection mode <select name="wifimode">
+<label for="wifimode"> WiFi Mode <select name="wifimode">
 <option value="0" <!-- part HTML_WIFI_MODE_0 -->>Normal</option>
 <option value="1" <!-- part HTML_WIFI_MODE_1 -->>Force BSSID</option>
 <option value="2" <!-- part HTML_WIFI_MODE_2 -->>Passive Roaming</option>
 <option value="3" <!-- part HTML_WIFI_MODE_3 -->>Active Roaming</option>
 <option value="4" <!-- part HTML_WIFI_MODE_4 -->>Roaming at boot</option>
 </select></label>
-<label for="irrx"> IR/RF capture GPIO <select name="irrx">
+<label for="irrx"> IR/RF Capture GPIO <select name="irrx">
 <option value="-1" selected>-</option>
 <option value="0">0</option>
 <option value="2">2</option>
@@ -85,7 +89,7 @@ No networks found
 </div>
 </form>
 <center>© 2018-2022 Jos&eacute; A. Jim&eacute;nez Campos</center>
-<h2>IMPORTANT: If you have paid for this firmware or for a device with it installed, you have been scammed. You must report the fraud to the authorities and claim the amount paid. <a href="https://raw.githubusercontent.com/RavenSystem/esp-homekit-devices/master/LICENSE">LICENSE</a><h2>
+<h2>If you have paid for this firmware or for a device with it installed, you have been scammed. You must report the fraud to the authorities and claim the amount paid. <a href="https://raw.githubusercontent.com/RavenSystem/esp-homekit-devices/master/LICENSE">LICENSE</a><h2>
 </div>
 <script>
 var ssid_field, bssid_field, password_block, password_field, join_button;

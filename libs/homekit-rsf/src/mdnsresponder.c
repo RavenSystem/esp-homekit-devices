@@ -404,7 +404,7 @@ static int mdns_str2labels(const char* name, u8_t* lseq, int max)
         while (name[idx] != '.' && name[idx] != 0) idx++;
         n = idx - sdx;
         if (lc + 1 + n > max) {
-            printf(">>> mdns_str2labels: oversize (%d)\n", lc + 1 + n);
+            printf("! mDNS oversize (%d)\n", lc + 1 + n);
             return 0;
         }
         *lseq++ = n;
@@ -448,7 +448,7 @@ int mdns_buffer_init(uint16_t new_size) {
     }
     
     if (mdns_response == NULL) {
-        printf(">>> mdns_buffer_init: error allocating %i\n", mdns_responder_reply_size);
+        printf("! mDNS buffer %i\n", mdns_responder_reply_size);
         return -1;
     }
     
@@ -492,14 +492,14 @@ void mdns_TXT_append(char* txt, size_t txt_size, const char* record, size_t reco
 
     if (record_size > 255) {
         char *s = strndup(record, record_size);
-        printf(">>> mdns_txt_add: record %s section is longer than 255\n", s);
+        printf("! mDNS record %s section is longer than 255\n", s);
         free(s);
         return;
     }
 
     if (txt_len + record_size + 2 > txt_size) {  // extra 2 is for length and terminator
         char *s = strndup(record, record_size);
-        printf(">>> mdns_txt_add: not enough space to add TXT record %s\n", s);
+        printf("! mDNS space to add TXT record %s\n", s);
         free(s);
         return;
     }
@@ -520,7 +520,7 @@ static void mdns_add_response(const char* vKey, u16_t vType, u32_t ttl, const vo
     recSize = sizeof(mdns_rsrc) - kDummyDataSize + keyLen + vDataSize;
     rsrcP = (mdns_rsrc*)malloc(recSize);
     if (rsrcP == NULL) {
-        printf(">>> mdns_add_response: couldn't alloc %d\n",recSize);
+        printf("! mDNS alloc %d\n",recSize);
     } else {
         rsrcP->rType = vType;
         rsrcP->rTTL = ttl;
@@ -592,14 +592,14 @@ void mdns_announce() {
     if (mdns_status == MDNS_STATUS_WORKING) {
         mdns_status = MDNS_STATUS_PROBING_1;
         esp_timer_change_period(mdns_announce_timer, MDNS_TTL_SAFE_MARGIN * MDNS_TTL_MULTIPLIER_MS);
-        printf(">>> mDNS probing 1\n");
+        printf(">>> mDNS prob 1\n");
     } else if (mdns_status == MDNS_STATUS_PROBING_2) {
         mdns_status = MDNS_STATUS_PROBE_OK;
-        printf(">>> mDNS probing 2\n");
+        printf(">>> mDNS prob 2\n");
     } else if (mdns_status == MDNS_STATUS_PROBE_OK) {
         mdns_status = MDNS_STATUS_WORKING;
         esp_timer_change_period(mdns_announce_timer, (mdns_ttl_period - MDNS_TTL_SAFE_MARGIN) * MDNS_TTL_MULTIPLIER_MS);
-        printf(">>> mDNS working TTL %i each %is\n", mdns_ttl, mdns_ttl_period);
+        printf(">>> mDNS TTL %i each %is\n", mdns_ttl, mdns_ttl_period);
     }
     
     struct netif *netif = sdk_system_get_netif(STATION_IF);
@@ -735,7 +735,7 @@ static int mdns_add_to_answer(mdns_rsrc* rsrcP, u8_t* resp, int respLen)
     }
     if ((len + SIZEOF_DNS_ANSWER + rsrcP->rDataSize) > rem) {
         // Overflow, skip this answer.
-        printf(">>> mDNS_add_to_answer: oversize (%d)\n", len + SIZEOF_DNS_ANSWER + rsrcP->rDataSize);
+        printf("! mDNS oversize (%d)\n", len + SIZEOF_DNS_ANSWER + rsrcP->rDataSize);
         return respLen;
     }
     respLen += len;
@@ -805,10 +805,10 @@ static void mdns_send_mcast(struct netif* netif, const ip_addr_t *addr, u8_t* ms
              */
         } else {
             mdns_status = MDNS_STATUS_WORKING;
-            printf(">>> mDNS_send failed (%d)\n", err);
+            printf("! mDNS send (%d)\n", err);
         }
     } else {
-        printf(">>> mDNS_send alloc failed [%d]\n", nBytes);
+        printf(">! mDNS alloc [%d]\n", nBytes);
     }
 }
     
@@ -1027,7 +1027,7 @@ static void mdns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_a
             p->tot_len < (SIZEOF_DNS_HDR + SIZEOF_DNS_QUERY + 1)) {
             char addr_str[IPADDR_STRLEN_MAX];
             ipaddr_ntoa_r(addr, addr_str, IPADDR_STRLEN_MAX);
-            printf(">>> mDNS_recv: wrong size %i from %s\n", p->tot_len, addr_str);
+            printf("! mDNS size %i from %s\n", p->tot_len, addr_str);
         } else {
             struct mdns_hdr* hdrP = (struct mdns_hdr*) p->payload;
     #ifdef qLogAllTraffic
@@ -1051,7 +1051,7 @@ void mdns_init()
 
     struct netif *netif = sdk_system_get_netif(STATION_IF);
     if (netif == NULL) {
-        printf(">>> mDNS_init: wifi opmode not station\n");
+        printf("! mDNS wifi opmode\n");
         return;
     }
 
@@ -1062,7 +1062,7 @@ void mdns_init()
         netif->flags |= NETIF_FLAG_IGMP;
         err = igmp_start(netif);
         if (err != ERR_OK) {
-            printf(">>> mDNS_init: igmp_start on %c%c failed %d\n", netif->name[0], netif->name[1], err);
+            printf("! mDNS igmp_start on %c%c %d\n", netif->name[0], netif->name[1], err);
             UNLOCK_TCPIP_CORE();
             return;
         }
@@ -1070,7 +1070,7 @@ void mdns_init()
 
     gDictMutex = xSemaphoreCreateBinary();
     if (!gDictMutex) {
-        printf(">>> mDNS_init: failed to initialize mutex\n");
+        printf("! mDNS mutex\n");
         UNLOCK_TCPIP_CORE();
         return;
     }
@@ -1078,27 +1078,27 @@ void mdns_init()
     
     gMDNS_pcb = udp_new_ip_type(IPADDR_TYPE_ANY);
     if (!gMDNS_pcb) {
-        printf(">>> mDNS_init: udp_new failed\n");
+        printf("! mDNS udp_new\n");
         UNLOCK_TCPIP_CORE();
         return;
     }
 
     if ((err = igmp_joingroup_netif(netif, ip_2_ip4(&gMulticastV4Addr))) != ERR_OK) {
-        printf(">>> mDNS_init: igmp_join failed %d\n", err);
+        printf("! mDNS_init igmp_join %d\n", err);
         UNLOCK_TCPIP_CORE();
         return;
     }
 
 #if LWIP_IPV6
     if ((err = mld6_joingroup_netif(netif, ip_2_ip6(&gMulticastV6Addr))) != ERR_OK) {
-        printf(">>> mDNS_init: igmp_join failed %d\n", err);
+        printf("! mDNS_init igmp_join %d\n", err);
         UNLOCK_TCPIP_CORE();
         return;
     }
 #endif
 
     if ((err = udp_bind(gMDNS_pcb, IP_ANY_TYPE, LWIP_IANA_PORT_MDNS)) != ERR_OK) {
-        printf(">>> mDNS_init: udp_bind failed %d\n", err);
+        printf("! mDNS udp_bind %d\n", err);
         UNLOCK_TCPIP_CORE();
         return;
     }

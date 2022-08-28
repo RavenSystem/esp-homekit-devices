@@ -111,7 +111,7 @@ void json_object_start(json_stream *json) {
             json->nesting[json->nesting_idx++] = JSON_NESTING_OBJECT;
             break;
         default:
-            ERROR("Unexpected object start");
+            ERROR("Object start");
             DEBUG_STATE(json);
             json->state = JSON_STATE_ERROR;
     }
@@ -143,7 +143,7 @@ void json_object_end(json_stream *json) {
             }
             break;
         default:
-            ERROR("Unexpected object end");
+            ERROR("Object end");
             DEBUG_STATE(json);
             json->state = JSON_STATE_ERROR;
     }
@@ -167,7 +167,7 @@ void json_array_start(json_stream *json) {
             json->nesting[json->nesting_idx++] = JSON_NESTING_ARRAY;
             break;
         default:
-            ERROR("Unexpected array start");
+            ERROR("Array start");
             DEBUG_STATE(json);
             json->state = JSON_STATE_ERROR;
     }
@@ -199,7 +199,7 @@ void json_array_end(json_stream *json) {
             }
             break;
         default:
-            ERROR("Unexpected array end");
+            ERROR("Array end");
             DEBUG_STATE(json);
             json->state = JSON_STATE_ERROR;
     }
@@ -231,7 +231,7 @@ void json_integer(json_stream *json, long long x) {
             json->state = JSON_STATE_OBJECT_VALUE;
             break;
         default:
-            ERROR("Unexpected integer");
+            ERROR("Integer");
             DEBUG_STATE(json);
             json->state = JSON_STATE_ERROR;
     }
@@ -264,7 +264,7 @@ void json_float(json_stream *json, float x) {
             json->state = JSON_STATE_OBJECT_VALUE;
             break;
         default:
-            ERROR("Unexpected float");
+            ERROR("Float");
             DEBUG_STATE(json);
             json->state = JSON_STATE_ERROR;
     }
@@ -304,7 +304,7 @@ void json_string(json_stream *json, const char *x) {
             json->state = JSON_STATE_OBJECT_VALUE;
             break;
         default:
-            ERROR("Unexpected string");
+            ERROR("String");
             DEBUG_STATE(json);
             json->state = JSON_STATE_ERROR;
     }
@@ -336,7 +336,7 @@ void json_boolean(json_stream *json, bool x) {
             json->state = JSON_STATE_OBJECT_VALUE;
             break;
         default:
-            ERROR("Unexpected boolean");
+            ERROR("Boolean");
             DEBUG_STATE(json);
             json->state = JSON_STATE_ERROR;
     }
@@ -368,7 +368,7 @@ void json_null(json_stream *json) {
             json->state = JSON_STATE_OBJECT_VALUE;
             break;
         default:
-            ERROR("Unexpected null");
+            ERROR("Null");
             DEBUG_STATE(json);
             json->state = JSON_STATE_ERROR;
     }

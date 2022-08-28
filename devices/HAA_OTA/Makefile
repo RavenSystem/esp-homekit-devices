@@ -98,7 +98,7 @@ EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=600
 
 #EXTRA_CFLAGS += -DLWIP_DEBUG
 
-include $(abspath ../../sdk/esp-open-rtos/common.mk)
+include $(abspath ../../sdk/esp-open-rtos-rsf/common.mk)
 
 monitor:
 	$(FILTEROUTPUT) --port $(ESPPORT) --baud 115200 --elf $(PROGRAM_OUT)

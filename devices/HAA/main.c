@@ -58,6 +58,10 @@
 #include "header.h"
 #include "types.h"
 
+static void show_freeheap() {
+    INFO("Free Heap %d", xPortGetFreeHeapSize());
+}
+
 main_config_t main_config = {
     .wifi_status = WIFI_STATUS_DISCONNECTED,
     .wifi_channel = 0,
@@ -106,7 +110,7 @@ main_config_t main_config = {
 
 // https://martin.ankerl.com/2012/01/25/optimized-approximative-pow-in-c-and-cpp/
 double fast_precise_pow(double a, double b) {
-    int e = abs((int)b);
+    int e = abs((int) b);
     
     union {
         double d;
@@ -257,7 +261,7 @@ void led_create(const uint8_t gpio, const bool inverted) {
 }
 
 const char http_header1[] = " HTTP/1.1\r\nHost: ";
-const char http_header2[] = "\r\nUser-Agent: HAA/"FIRMWARE_VERSION" esp8266\r\nConnection: close\r\n";
+const char http_header2[] = "\r\nUser-Agent: HAA/"HAA_FIRMWARE_VERSION"\r\nConnection: close\r\n";
 const char http_header_len[] = "Content-length: ";
 
 int new_net_con(char* host, uint16_t port_n, bool is_udp, uint8_t* payload, size_t payload_len, int* s, uint8_t rcvtimeout_s, int rcvtimeout_us) {
@@ -346,6 +350,18 @@ void disable_emergency_setup(TimerHandle_t xTimer) {
     esp_timer_delete(xTimer);
 }
 
+uint16_t get_absolut_index(const uint16_t base, const int16_t rel_index) {
+    if (rel_index > 7000) {
+        return base + rel_index - 7000;
+    }
+    
+    if (rel_index <= 0) {
+        return base + rel_index;
+    }
+    
+    return rel_index;
+}
+
 int process_hexstr(const char* string, uint8_t** output_hex_string) {
     const int len = strlen(string) >> 1;
     uint8_t* hex_string = malloc(len);
@@ -425,7 +441,7 @@ ch_group_t* IRAM ch_group_find(homekit_characteristic_t* ch) {
     return NULL;
 }
 
-ch_group_t* IRAM ch_group_find_by_acc(uint16_t accessory) {
+ch_group_t* IRAM ch_group_find_by_serv(uint16_t accessory) {
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group &&
            ch_group->serv_index != accessory) {
@@ -490,7 +506,26 @@ addressled_t* new_addressled(const uint8_t gpio, const uint16_t max_range) {
     return addressled;
 }
 
-void save_historical_data(homekit_characteristic_t* ch_target) {
+float get_hkch_value(homekit_characteristic_t* ch) {
+    switch (ch->value.format) {
+        case HOMEKIT_FORMAT_BOOL:
+            return (uint8_t) ch->value.bool_value;
+            
+        case HOMEKIT_FORMAT_UINT8:
+        case HOMEKIT_FORMAT_UINT16:
+        case HOMEKIT_FORMAT_UINT32:
+        case HOMEKIT_FORMAT_UINT64:
+        case HOMEKIT_FORMAT_INT:
+            return ch->value.int_value;
+            
+        case HOMEKIT_FORMAT_FLOAT:
+            return ch->value.float_value;
+    }
+    
+    return 0;
+}
+
+void save_data_history(homekit_characteristic_t* ch_target) {
     if (!main_config.clock_ready) {
         return;
     }
@@ -500,27 +535,7 @@ void save_historical_data(homekit_characteristic_t* ch_target) {
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
         if (ch_group->serv_type == SERV_TYPE_DATA_HISTORY && ch_group->ch_target == ch_target && ch_group->main_enabled) {
-            float value = 0;
-            switch (ch_target->value.format) {
-                case HOMEKIT_FORMAT_BOOL:
-                    value = (uint8_t) ch_target->value.bool_value;
-                    break;
-                    
-                case HOMEKIT_FORMAT_UINT8:
-                case HOMEKIT_FORMAT_UINT16:
-                case HOMEKIT_FORMAT_UINT32:
-                case HOMEKIT_FORMAT_UINT64:
-                case HOMEKIT_FORMAT_INT:
-                    value = ch_target->value.int_value;
-                    break;
-                    
-                case HOMEKIT_FORMAT_FLOAT:
-                    value = ch_target->value.float_value;
-                    break;
-                    
-                default:
-                    return;
-            }
+            float value = get_hkch_value(ch_target);
             
             uint32_t final_time = time;
             int32_t final_data = value * FLOAT_FACTOR_SAVE_AS_INT;
@@ -553,9 +568,9 @@ void save_historical_data(homekit_characteristic_t* ch_target) {
     }
 }
 
-void historical_timer_worker(TimerHandle_t xTimer) {
+void data_history_timer_worker(TimerHandle_t xTimer) {
     homekit_characteristic_t* ch = (homekit_characteristic_t*) pvTimerGetTimerID(xTimer);
-    save_historical_data(ch);
+    save_data_history(ch);
 }
 
 int ping_host(char* host) {
@@ -613,7 +628,7 @@ void reboot_task() {
 
 void reboot_haa() {
     if (xTaskCreate(reboot_task, "Reb", REBOOT_TASK_SIZE, NULL, REBOOT_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("Creating Reb");
+        ERROR("New Reb");
         homekit_remove_oldest_client();
     }
 }
@@ -664,7 +679,7 @@ void ntp_task() {
                 ch_group_t* ch_group = main_config.ch_groups;
                 while (ch_group) {
                     if (ch_group->serv_type == SERV_TYPE_DATA_HISTORY && ch_group->child_enabled) {
-                        save_historical_data(ch_group->ch_target);
+                        save_data_history(ch_group->ch_target);
                     }
                     
                     ch_group = ch_group->next;
@@ -687,12 +702,12 @@ void ntp_timer_worker(TimerHandle_t xTimer) {
         if (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
             raven_ntp_get_time_t();
         } else if (xTaskCreate(ntp_task, "NTP", NTP_TASK_SIZE, NULL, NTP_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating NTP");
+            ERROR("New NTP");
             homekit_remove_oldest_client();
             raven_ntp_get_time_t();
         }
     } else {
-        ERROR("NTP: HK pair");
+        ERROR("NTP HK pair");
         raven_ntp_get_time_t();
     }
 }
@@ -726,7 +741,7 @@ void wifi_reconnection_task(void* args) {
     
     INFO("Wifi recon started");
     
-    do_actions(ch_group_find_by_acc(SERV_TYPE_ROOT_DEVICE), 4);
+    do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 4);
 
     led_blink(3);
     
@@ -754,7 +769,7 @@ void wifi_reconnection_task(void* args) {
             
             homekit_mdns_announce();
             
-            do_actions(ch_group_find_by_acc(SERV_TYPE_ROOT_DEVICE), 3);
+            do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 3);
             
             esp_timer_start_forced(WIFI_WATCHDOG_TIMER);
             
@@ -764,12 +779,14 @@ void wifi_reconnection_task(void* args) {
             
         } else if (main_config.wifi_status <= WIFI_STATUS_DISCONNECTED) {
             INFO("Wifi recon...");
-            main_config.wifi_status = WIFI_STATUS_CONNECTING;
             int8_t phy_mode = 4;    // main_config.wifi_status == WIFI_DISCONNECTED_LONG_TIME
             if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
                 phy_mode = 3;
                 sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
             }
+            
+            main_config.wifi_status = WIFI_STATUS_CONNECTING;
+            
             wifi_config_connect(1, phy_mode, true);
             
         } else {
@@ -783,7 +800,7 @@ void wifi_reconnection_task(void* args) {
                 
                 vTaskDelay(MS_TO_TICKS(600));
                 
-                do_actions(ch_group_find_by_acc(SERV_TYPE_ROOT_DEVICE), 5);
+                do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 5);
             }
         }
     }
@@ -815,13 +832,13 @@ void wifi_watchdog() {
             main_config.wifi_channel = current_channel;
             INFO("Wifi new Ch %i", current_channel);
             homekit_mdns_announce();
-            do_actions(ch_group_find_by_acc(SERV_TYPE_ROOT_DEVICE), 6);
+            do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 6);
         }
         
         if (main_config.wifi_ip != current_ip) {
             main_config.wifi_ip = current_ip;
             homekit_mdns_announce();
-            do_actions(ch_group_find_by_acc(SERV_TYPE_ROOT_DEVICE), 7);
+            do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 7);
         }
         
         main_config.wifi_arp_count++;
@@ -832,7 +849,7 @@ void wifi_watchdog() {
         
         if (main_config.wifi_ping_max_errors != 255 && !homekit_is_pairing() && !main_config.network_is_busy) {
             if (xTaskCreate(wifi_ping_gw_task, "GWP", WIFI_PING_GW_TASK_SIZE, NULL, WIFI_PING_GW_TASK_PRIORITY, NULL) != pdPASS) {
-                ERROR("Creating GWP");
+                ERROR("New GWP");
                 homekit_remove_oldest_client();
             }
         }
@@ -848,7 +865,7 @@ void wifi_watchdog() {
         main_config.wifi_error_count = 0;
         
         if (xTaskCreate(wifi_reconnection_task, "RCN", WIFI_RECONNECTION_TASK_SIZE, (void*) force_disconnect, WIFI_RECONNECTION_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating RCN");
+            ERROR("New RCN");
             homekit_remove_oldest_client();
         }
     }
@@ -910,7 +927,7 @@ void ping_task() {
 void ping_task_timer_worker() {
     if (!main_config.network_is_busy && !homekit_is_pairing()) {
         if (xTaskCreate(ping_task, "PIN", PING_TASK_SIZE, NULL, PING_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating PIN");
+            ERROR("New PIN");
             homekit_remove_oldest_client();
         }
     } else {
@@ -1033,7 +1050,7 @@ void hkc_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch->value = value;
     homekit_characteristic_notify_safe(ch);
     
-    save_historical_data(ch);
+    save_data_history(ch);
     
     save_states_callback();
 }
@@ -1055,7 +1072,7 @@ void pm_custom_consumption_reset(ch_group_t* ch_group) {
     
     save_states_callback();
     
-    save_historical_data(ch_group->ch[4]);
+    save_data_history(ch_group->ch[4]);
     
     homekit_characteristic_notify_safe(ch_group->ch[3]);
     homekit_characteristic_notify_safe(ch_group->ch[4]);
@@ -1101,7 +1118,7 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
                 homekit_characteristic_notify_safe(ch_group->ch[2]);
             }
             
-            save_historical_data(ch);
+            save_data_history(ch);
             
             do_actions(ch_group, (uint8_t) ch->value.bool_value);
         }
@@ -1114,7 +1131,7 @@ void hkc_on_status_setter(homekit_characteristic_t* ch, const homekit_value_t va
     if (ch->value.bool_value != value.bool_value) {
         led_blink(1);
         ch_group_t* ch_group = ch_group_find(ch);
-        INFO("<%i> Setter Status ON %i", ch_group->serv_index, value.bool_value);
+        INFO("<%i> Setter St ON %i", ch_group->serv_index, value.bool_value);
         ch->value.bool_value = value.bool_value;
     }
     
@@ -1155,7 +1172,7 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
             setup_mode_toggle_upcount();
             save_states_callback();
             
-            save_historical_data(ch);
+            save_data_history(ch);
             
             do_actions(ch_group, (uint8_t) ch->value.int_value);
         }
@@ -1170,7 +1187,7 @@ void hkc_lock_status_setter(homekit_characteristic_t* ch, const homekit_value_t 
     if (ch->value.int_value != value.int_value) {
         led_blink(1);
         
-        INFO("<%i> Setter Status LOCK %i", ch_group->serv_index, value.int_value);
+        INFO("<%i> Setter St LOCK %i", ch_group->serv_index, value.int_value);
         
         ch->value.int_value = value.int_value;
         
@@ -1192,7 +1209,7 @@ void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
         ch_group->ch[0]->value.int_value = event_type;
         homekit_characteristic_notify_safe(ch_group->ch[0]);
         
-        save_historical_data(ch_group->ch[0]);
+        save_data_history(ch_group->ch[0]);
         
         do_actions(ch_group, event_type);
         
@@ -1206,7 +1223,7 @@ void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
             ch_group->ch[1]->value.int_value = doorbell_last_state;
             homekit_characteristic_notify_safe(ch_group->ch[1]);
             
-            save_historical_data(ch_group->ch[1]);
+            save_data_history(ch_group->ch[1]);
         }
         
         setup_mode_toggle_upcount();
@@ -1257,7 +1274,7 @@ void binary_sensor(const uint16_t gpio, void* args, uint8_t type) {
                     esp_timer_stop(AUTOOFF_TIMER);
                 }
                 
-                save_historical_data(ch_group->ch[0]);
+                save_data_history(ch_group->ch[0]);
                 
                 do_actions(ch_group, type);
             }
@@ -1380,7 +1397,7 @@ void power_monitor_task(void* args) {
         }
     }
     
-    if (voltage < 400.f) {
+    if (voltage < 500.f && voltage > -500.f) {
         do_wildcard_actions(ch_group, 0, voltage);
         
         if (voltage != ch_group->ch[0]->value.float_value) {
@@ -1395,7 +1412,7 @@ void power_monitor_task(void* args) {
         ERROR("<%i> PM Voltage", ch_group->serv_index);
     }
     
-    if (current < 150.f) {
+    if (current < 150.f && current > -150.f) {
         do_wildcard_actions(ch_group, 1, current);
         
         if (current != ch_group->ch[1]->value.float_value) {
@@ -1412,7 +1429,7 @@ void power_monitor_task(void* args) {
     
     PM_LAST_SAVED_CONSUPTION += PM_POLL_PERIOD;
     
-    if (power < 50000.f) {
+    if (power < 50000.f && power > -50000.f) {
         do_wildcard_actions(ch_group, 2, power);
         
         if (power != ch_group->ch[2]->value.float_value) {
@@ -1453,11 +1470,11 @@ void power_monitor_timer_worker(TimerHandle_t xTimer) {
     if (((ch_group_t*) pvTimerGetTimerID(xTimer))->main_enabled) {
         if (!homekit_is_pairing()) {
             if (xTaskCreate(power_monitor_task, "PM", POWER_MONITOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), POWER_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
-                ERROR("Creating PM");
+                ERROR("New PM");
                 homekit_remove_oldest_client();
             }
         } else {
-            ERROR("PM: HK pair");
+            ERROR("PM HK pair");
         }
     }
 }
@@ -1494,7 +1511,7 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
                 homekit_characteristic_notify_safe(ch_group->ch[3]);
             }
             
-            save_historical_data(ch);
+            save_data_history(ch);
             
             do_actions(ch_group, (uint8_t) ch->value.int_value);
         }
@@ -1513,7 +1530,7 @@ void hkc_valve_status_setter(homekit_characteristic_t* ch, const homekit_value_t
         
         ch_group->ch[1]->value.int_value = value.int_value;
         
-        INFO("<%i> Setter Status VALVE", ch_group->serv_index);
+        INFO("<%i> Setter St VALVE", ch_group->serv_index);
     }
     
     homekit_characteristic_notify_safe(ch);
@@ -1537,7 +1554,7 @@ void valve_timer_worker(TimerHandle_t xTimer) {
 void set_zones_task(void* args) {
     ch_group_t* iairzoning_group = args;
     
-    INFO("<%i> iAirZoning eval", iairzoning_group->serv_index);
+    INFO("<%i> iAZ", iairzoning_group->serv_index);
 
     int iairzoning_final_main_mode = IAIRZONING_LAST_ACTION;
     
@@ -1612,7 +1629,7 @@ void set_zones_task(void* args) {
         ch_group = ch_group->next;
     }
     
-    INFO("<%i> iAirZoning All OFF: %i, all IDLE: %i, all soft ON: %i, force IDLE: %i",
+    INFO("<%i> iAZ: all OFF: %i, all IDLE: %i, all soft ON: %i, force IDLE: %i",
          iairzoning_group->serv_index,
          thermostat_all_off,
          thermostat_all_idle,
@@ -1719,7 +1736,7 @@ void set_zones_task(void* args) {
     }
     
     if (iairzoning_final_main_mode != IAIRZONING_LAST_ACTION) {
-        INFO("<%i> iAirZoning set mode %i", iairzoning_group->serv_index, iairzoning_final_main_mode);
+        INFO("<%i> iAZ mode %i", iairzoning_group->serv_index, iairzoning_final_main_mode);
         IAIRZONING_LAST_ACTION = iairzoning_final_main_mode;
         do_actions(iairzoning_group, iairzoning_final_main_mode);
     }
@@ -1729,13 +1746,13 @@ void set_zones_task(void* args) {
 
 void set_zones_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
-        if (xTaskCreate(set_zones_task, "ZNE", SET_ZONES_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), SET_ZONES_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating ZNE");
+        if (xTaskCreate(set_zones_task, "iAZ", SET_ZONES_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), SET_ZONES_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("New iAZ");
             homekit_remove_oldest_client();
             esp_timer_start(xTimer);
         }
     } else {
-        ERROR("zones_task: HK pair");
+        ERROR("iAZ HK pair");
     }
 }
 
@@ -1954,19 +1971,19 @@ void process_th_task(void* args) {
     homekit_characteristic_notify_safe(ch_group->ch[4]);
     
     if (TH_IAIRZONING_CONTROLLER != 0 && mode_has_changed) {
-        esp_timer_start(ch_group_find_by_acc((uint8_t) TH_IAIRZONING_CONTROLLER)->timer2);
+        esp_timer_start(ch_group_find_by_serv((uint8_t) TH_IAIRZONING_CONTROLLER)->timer2);
     }
     
     save_states_callback();
     
-    save_historical_data(ch_group->ch[3]);
+    save_data_history(ch_group->ch[3]);
     
     vTaskDelete(NULL);
 }
 
 void process_th_timer(TimerHandle_t xTimer) {
     if (xTaskCreate(process_th_task, "TH", PROCESS_TH_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_TH_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("Creating TH");
+        ERROR("New TH");
         homekit_remove_oldest_client();
         esp_timer_start(xTimer);
     }
@@ -1987,7 +2004,7 @@ void hkc_th_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
         esp_timer_start(ch_group->timer2);
         
         if (ch != ch_group->ch[0]) {
-            save_historical_data(ch);
+            save_data_history(ch);
         }
         
     } else {
@@ -2305,14 +2322,14 @@ void process_hum_task(void* args) {
     
     save_states_callback();
     
-    save_historical_data(ch_group->ch[3]);
+    save_data_history(ch_group->ch[3]);
     
     vTaskDelete(NULL);
 }
 
 void process_humidif_timer(TimerHandle_t xTimer) {
     if (xTaskCreate(process_hum_task, "HUM", PROCESS_HUMIDIF_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_HUMIDIF_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("Creating HUM");
+        ERROR("New HUM");
         homekit_remove_oldest_client();
         esp_timer_start(xTimer);
     }
@@ -2333,7 +2350,7 @@ void hkc_humidif_setter(homekit_characteristic_t* ch, const homekit_value_t valu
         esp_timer_start(ch_group->timer2);
 
         if (ch != ch_group->ch[1]) {
-            save_historical_data(ch);
+            save_data_history(ch);
         }
         
     } else {
@@ -2481,7 +2498,7 @@ void temperature_task(void* args) {
     unsigned int iairzoning = 0;
     
     if (ch_group->serv_type == SERV_TYPE_IAIRZONING) {
-        INFO("<%i> iAirZoning sensors", ch_group->serv_index);
+        INFO("<%i> iAZ sensors", ch_group->serv_index);
         iairzoning = ch_group->serv_index;
         ch_group = main_config.ch_groups;
     }
@@ -2666,11 +2683,11 @@ void temperature_task(void* args) {
 void temperature_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
         if (xTaskCreate(temperature_task, "TEM", TEMPERATURE_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), TEMPERATURE_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating TEM");
+            ERROR("New TEM");
             homekit_remove_oldest_client();
         }
     } else {
-        ERROR("temp_task: HK pair");
+        ERROR("TEM HK pair");
     }
 }
 
@@ -3306,7 +3323,7 @@ void lightbulb_no_task(ch_group_t* ch_group) {
                 target_color = PWM_SCALE;
                 
             } else if (ch_group->ch[2]->value.int_value > COLOR_TEMP_MIN + 1) { // Conversion based on @seritos curve
-                target_color = PWM_SCALE * (((0.09 + sqrt(0.18 + (0.1352 * (ch_group->ch[2]->value.int_value - COLOR_TEMP_MIN - 1)))) / 0.0676) - 1) / 100;
+                target_color = PWM_SCALE * (((0.09 + fast_precise_pow(0.18 + (0.1352 * (ch_group->ch[2]->value.int_value - COLOR_TEMP_MIN - 1)), 0.5)) / 0.0676) - 1) / 100;
             }
             
             if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM_CWWW) {
@@ -3415,7 +3432,7 @@ void lightbulb_task_timer(TimerHandle_t xTimer) {
         ch_group_t* ch_group = (void*) pvTimerGetTimerID(xTimer);
         lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_group->ch[0]);
         lightbulb_group->lightbulb_task_running = false;
-        ERROR("Creating LB");
+        ERROR("New LB");
         homekit_remove_oldest_client();
         esp_timer_start(xTimer);
     }
@@ -3457,7 +3474,7 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
             lightbulb_task_timer(LIGHTBULB_SET_DELAY_TIMER);
         }
         
-        save_historical_data(ch);
+        save_data_history(ch);
 
     } else {
         homekit_characteristic_notify_safe(ch_group->ch[0]);
@@ -3563,7 +3580,7 @@ void autodimmer_call(homekit_characteristic_t* ch0, const homekit_value_t value)
             esp_timer_stop(LIGHTBULB_AUTODIMMER_TIMER);
             
             if (xTaskCreate(autodimmer_task, "Dim", AUTODIMMER_TASK_SIZE, (void*) ch0, AUTODIMMER_TASK_PRIORITY, NULL) != pdPASS) {
-                ERROR("<%i> Creating Dim", ch_group->serv_index);
+                ERROR("<%i> New Dim", ch_group->serv_index);
                 homekit_remove_oldest_client();
             }
         } else {
@@ -3579,13 +3596,13 @@ void garage_door_stop(const uint16_t gpio, void* args, const uint8_t type) {
     
     if (GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_OPENING || GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_CLOSING) {
         led_blink(1);
-        INFO("<%i> GD stop", ch_group->serv_index);
+        INFO("<%i> GD Stop", ch_group->serv_index);
         
         GD_CURRENT_DOOR_STATE_INT = GARAGE_DOOR_STOPPED;
         
         esp_timer_stop(GARAGE_DOOR_WORKER_TIMER);
         
-        save_historical_data(ch_group->ch[0]);
+        save_data_history(ch_group->ch[0]);
         
         do_actions(ch_group, 10);
         
@@ -3598,14 +3615,14 @@ void garage_door_obstruction(const uint16_t gpio, void* args, const uint8_t type
     ch_group_t* ch_group = args;
     
     led_blink(1);
-    INFO("<%i> GD obstr %i", ch_group->serv_index, type);
+    INFO("<%i> GD Obs %i", ch_group->serv_index, type);
     
     GD_OBSTRUCTION_DETECTED_BOOL = (bool) type;
     esp_timer_stop(AUTOOFF_TIMER);
     
     homekit_characteristic_notify_safe(GD_OBSTRUCTION_DETECTED);
     
-    save_historical_data(ch_group->ch[2]);
+    save_data_history(ch_group->ch[2]);
     
     do_actions(ch_group, type + 8);
 }
@@ -3632,7 +3649,7 @@ void garage_door_sensor(const uint16_t gpio, void* args, const uint8_t type) {
             GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_TIME_MARGIN;
         }
         
-        if (GD_OBSTRUCTION_DETECTED_BOOL) {
+        if (GD_OBSTRUCTION_DETECTED_BOOL) {     // Remove obstruction
             garage_door_obstruction(99, ch_group, 0);
         }
     }
@@ -3640,7 +3657,7 @@ void garage_door_sensor(const uint16_t gpio, void* args, const uint8_t type) {
     homekit_characteristic_notify_safe(GD_TARGET_DOOR_STATE);
     homekit_characteristic_notify_safe(GD_CURRENT_DOOR_STATE);
     
-    save_historical_data(ch_group->ch[0]);
+    save_data_history(ch_group->ch[0]);
     
     do_actions(ch_group, type + 4);
 }
@@ -3687,7 +3704,7 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
             homekit_characteristic_notify_safe(ch1);
         }
         
-        save_historical_data(ch1);
+        save_data_history(ch1);
         
     } else {
         homekit_characteristic_notify_safe(ch1);
@@ -3708,7 +3725,7 @@ void garage_door_timer_worker(TimerHandle_t xTimer) {
     if (GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_OPENING) {
         GARAGE_DOOR_CURRENT_TIME++;
 
-        if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN && GARAGE_DOOR_HAS_F2 == 0) {
+        if (GARAGE_DOOR_CURRENT_TIME >= (GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN) && GARAGE_DOOR_HAS_F2 == 0) {
             esp_timer_start(AUTOOFF_TIMER);
             garage_door_sensor(99, ch_group, GARAGE_DOOR_OPENED);
             
@@ -3774,7 +3791,7 @@ void window_cover_stop(ch_group_t* ch_group) {
             break;
     }
     
-    INFO("<%i> WC Motor %f, HomeKit %f", ch_group->serv_index, WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_HOMEKIT_POSITION);
+    INFO("<%i> WC Mt %f HK %f", ch_group->serv_index, WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_HOMEKIT_POSITION);
     
     normalize_position(ch_group);
     
@@ -3801,9 +3818,9 @@ void window_cover_stop(ch_group_t* ch_group) {
     
     setup_mode_toggle_upcount();
     
-    save_historical_data(ch_group->ch[0]);
-    save_historical_data(ch_group->ch[1]);
-    save_historical_data(ch_group->ch[2]);
+    save_data_history(ch_group->ch[0]);
+    save_data_history(ch_group->ch[1]);
+    save_data_history(ch_group->ch[2]);
     
     save_states_callback();
 }
@@ -3812,7 +3829,7 @@ void window_cover_obstruction(const uint16_t gpio, void* args, const uint8_t typ
     ch_group_t* ch_group = args;
     
     led_blink(1);
-    INFO("<%i> WC obstr %i", ch_group->serv_index, type);
+    INFO("<%i> WC Obs %i", ch_group->serv_index, type);
     
     WINDOW_COVER_CH_OBSTRUCTION->value.bool_value = (bool) type;
     
@@ -3822,7 +3839,7 @@ void window_cover_obstruction(const uint16_t gpio, void* args, const uint8_t typ
         WINDOW_COVER_VIRTUAL_STOP = 1;
     }
     
-    save_historical_data(ch_group->ch[3]);
+    save_data_history(ch_group->ch[3]);
     
     homekit_characteristic_notify_safe(ch_group->ch[3]);
 }
@@ -3856,7 +3873,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
     
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("<%i> Setter WC: Current: %i, Target: %i", ch_group->serv_index, WINDOW_COVER_CH_CURRENT_POSITION->value.int_value, value.int_value);
+        INFO("<%i> Setter WC %i->%i", ch_group->serv_index, WINDOW_COVER_CH_CURRENT_POSITION->value.int_value, value.int_value);
         
         ch1->value.int_value = value.int_value;
         
@@ -3925,7 +3942,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
         
         do_wildcard_actions(ch_group, 0, value.int_value);
         
-        save_historical_data(ch1);
+        save_data_history(ch1);
     }
     
     if (WINDOW_COVER_VIRTUAL_STOP == 2) {
@@ -4003,7 +4020,7 @@ void process_fan_task(void* args) {
     
     led_blink(1);
     
-    INFO("<%i> FAN %i Speed %g", ch_group->serv_index, ch_group->ch[0]->value.bool_value, ch_group->ch[1]->value.float_value);
+    INFO("<%i> FAN %i Sp %g", ch_group->serv_index, ch_group->ch[0]->value.bool_value, ch_group->ch[1]->value.float_value);
     
     if (FAN_CURRENT_ACTION != ch_group->ch[0]->value.bool_value) {
         FAN_CURRENT_ACTION = ch_group->ch[0]->value.bool_value;
@@ -4028,7 +4045,7 @@ void process_fan_task(void* args) {
 
 void process_fan_timer(TimerHandle_t xTimer) {
     if (xTaskCreate(process_fan_task, "Fan", PROCESS_FAN_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_FAN_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("Creating Fan");
+        ERROR("New Fan");
         homekit_remove_oldest_client();
         esp_timer_start(xTimer);
     }
@@ -4059,7 +4076,7 @@ void hkc_fan_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
             }
         }
         
-        save_historical_data(ch);
+        save_data_history(ch);
 
     } else {
         homekit_characteristic_notify_safe(ch);
@@ -4071,7 +4088,7 @@ void hkc_fan_status_setter(homekit_characteristic_t* ch0, const homekit_value_t 
         led_blink(1);
         ch_group_t* ch_group = ch_group_find(ch0);
         
-        INFO("<%i> Setter Status FAN %i", ch_group->serv_index, value.bool_value);
+        INFO("<%i> Setter St FAN %i", ch_group->serv_index, value.bool_value);
         
         ch0->value.bool_value = value.bool_value;
         
@@ -4128,12 +4145,12 @@ void light_sensor_task(void* args) {
 
 void light_sensor_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
-        if (xTaskCreate(light_sensor_task, "Lux", LIGHT_SENSOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), LIGHT_SENSOR_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("Creating Lux");
+        if (xTaskCreate(light_sensor_task, "LUX", LIGHT_SENSOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), LIGHT_SENSOR_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("New LUX");
             homekit_remove_oldest_client();
         }
     } else {
-        ERROR("LUX: HK pair");
+        ERROR("LUX HK pair");
     }
 }
 
@@ -4155,8 +4172,8 @@ void hkc_sec_system(homekit_characteristic_t* ch, const homekit_value_t value) {
             setup_mode_toggle_upcount();
             save_states_callback();
             
-            save_historical_data(ch);
-            save_historical_data(SEC_SYSTEM_CH_CURRENT_STATE);
+            save_data_history(ch);
+            save_data_history(SEC_SYSTEM_CH_CURRENT_STATE);
         }
     }
     
@@ -4168,7 +4185,7 @@ void hkc_sec_system_status(homekit_characteristic_t* ch, const homekit_value_t v
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch->value.int_value != value.int_value) {
         led_blink(1);
-        INFO("<%i> Setter Status SEC SYSTEM %i", ch_group->serv_index, value.int_value);
+        INFO("<%i> Setter St SEC SYSTEM %i", ch_group->serv_index, value.int_value);
         
         esp_timer_stop(SEC_SYSTEM_REC_ALARM_TIMER);
         
@@ -4177,8 +4194,8 @@ void hkc_sec_system_status(homekit_characteristic_t* ch, const homekit_value_t v
         
         save_states_callback();
         
-        save_historical_data(ch);
-        save_historical_data(SEC_SYSTEM_CH_CURRENT_STATE);
+        save_data_history(ch);
+        save_data_history(SEC_SYSTEM_CH_CURRENT_STATE);
     }
     
     homekit_characteristic_notify_safe(ch);
@@ -4212,7 +4229,7 @@ void hkc_tv_active(homekit_characteristic_t* ch0, const homekit_value_t value) {
             setup_mode_toggle_upcount();
             save_states_callback();
             
-            save_historical_data(ch0);
+            save_data_history(ch0);
         }
     }
     
@@ -4224,13 +4241,13 @@ void hkc_tv_status_active(homekit_characteristic_t* ch0, const homekit_value_t v
         led_blink(1);
         ch_group_t* ch_group = ch_group_find(ch0);
         
-        INFO("<%i> Setter Status TV ON %i", ch_group->serv_index, value.int_value);
+        INFO("<%i> Setter St TV ON %i", ch_group->serv_index, value.int_value);
         
         ch0->value.int_value = value.int_value;
         
         save_states_callback();
         
-        save_historical_data(ch0);
+        save_data_history(ch0);
     }
     
     homekit_characteristic_notify_safe(ch0);
@@ -4247,7 +4264,7 @@ void hkc_tv_active_identifier(homekit_characteristic_t* ch, const homekit_value_
 
             do_actions(ch_group, (MAX_ACTIONS - 1) + value.int_value);
             
-            save_historical_data(ch);
+            save_data_history(ch);
         }
     }
     
@@ -4264,7 +4281,7 @@ void hkc_tv_key(homekit_characteristic_t* ch, const homekit_value_t value) {
         
         do_actions(ch_group, value.int_value + 2);
         
-        save_historical_data(ch);
+        save_data_history(ch);
     }
     
     homekit_characteristic_notify_safe(ch);
@@ -4280,7 +4297,7 @@ void hkc_tv_power_mode(homekit_characteristic_t* ch, const homekit_value_t value
         
         do_actions(ch_group, value.int_value + 30);
         
-        save_historical_data(ch);
+        save_data_history(ch);
     }
     
     homekit_characteristic_notify_safe(ch);
@@ -4296,7 +4313,7 @@ void hkc_tv_mute(homekit_characteristic_t* ch, const homekit_value_t value) {
         
         do_actions(ch_group, value.int_value + 20);
         
-        save_historical_data(ch);
+        save_data_history(ch);
     }
     
     homekit_characteristic_notify_safe(ch);
@@ -4312,7 +4329,7 @@ void hkc_tv_volume(homekit_characteristic_t* ch, const homekit_value_t value) {
         
         do_actions(ch_group, value.int_value + 22);
         
-        save_historical_data(ch);
+        save_data_history(ch);
     }
     
     homekit_characteristic_notify_safe(ch);
@@ -4363,7 +4380,7 @@ void battery_manager(homekit_characteristic_t* ch, int value, bool is_free_monit
             
             do_wildcard_actions(ch_group, 0, value);
             
-            save_historical_data(ch);
+            save_data_history(ch);
             
             if (!is_free_monitor) {
                 homekit_characteristic_notify_safe(ch);
@@ -4384,7 +4401,7 @@ void battery_manager(homekit_characteristic_t* ch, int value, bool is_free_monit
             if (status_low_changed) {
                 INFO("<%i> Low Bat %i", ch_group->serv_index, BATTERY_STATUS_LOW_CH_INT);
                 
-                save_historical_data(BATTERY_STATUS_LOW_CH);
+                save_data_history(BATTERY_STATUS_LOW_CH);
                 
                 do_actions(ch_group, BATTERY_STATUS_LOW_CH_INT);
                 
@@ -4501,7 +4518,7 @@ void free_monitor_task(void* args) {
     if (args) {
         ch_group = args;
     } else {
-        printf("<%i> UART RECV: ", ch_group->serv_index);
+        printf("UART RECV ");
         for (int i = 0; i < main_config.uart_buffer_len; i++) {
             printf("%02x", main_config.uart_buffer[i]);
         }
@@ -4551,6 +4568,139 @@ void free_monitor_task(void* args) {
                     }
                     
                     FM_OVERRIDE_VALUE = NO_LAST_WILDCARD_ACTION;
+                    
+                } else if (fm_sensor_type == FM_SENSOR_TYPE_MATHS) {
+                    int float_index = FM_MATHS_FLOAT_FIRST + (FM_SENSOR_TYPE < 0 ? 2 : 0);
+                    int int_index = FM_MATHS_FIRST_OPERATION;
+                    for (int i = 0; i < FM_MATHS_OPERATIONS; i++) {
+                        const int operation = FM_MATHS_INT[int_index];
+                        int_index++;
+                        const int read_service = FM_MATHS_INT[int_index];
+                        
+                        if (i == 0) {
+                            if (operation == FM_MATHS_OPERATION_NONE) {
+                                value = 0;
+                            } else {
+                                value = ch_group->ch[0]->value.float_value;
+                            }
+                        }
+                        
+                        float read_value;
+                        if (read_service == 0) {
+                            read_value = FM_MATHS_FLOAT[float_index];
+                            
+                        } else if (read_service > 0) {
+                            read_value = get_hkch_value(ch_group_find_by_serv(read_service)->ch[(uint8_t) FM_MATHS_FLOAT[float_index]]);
+                            
+                        } else {
+                            if (!main_config.clock_ready && read_service <=FM_MATHS_GET_TIME_IS_SAVING) {
+                                get_value = false;
+                                break;
+                            }
+                            
+                            struct tm* timeinfo;
+                            time_t time = raven_ntp_get_time_t();
+                            timeinfo = localtime(&time);
+                            
+                            switch (read_service) {
+                                case FM_MATHS_GET_TIME_HOUR:
+                                    read_value = timeinfo->tm_hour;
+                                    break;
+                                    
+                                case FM_MATHS_GET_TIME_MINUTE:
+                                    read_value = timeinfo->tm_min;
+                                    break;
+                                    
+                                case FM_MATHS_GET_TIME_SECOND:
+                                    read_value = timeinfo->tm_sec;
+                                    break;
+                                    
+                                case FM_MATHS_GET_TIME_DAYWEEK:
+                                    read_value = timeinfo->tm_wday;
+                                    break;
+                                    
+                                case FM_MATHS_GET_TIME_DAYMONTH:
+                                    read_value = timeinfo->tm_mday;
+                                    break;
+                                    
+                                case FM_MATHS_GET_TIME_MONTH:
+                                    read_value = timeinfo->tm_mon;
+                                    break;
+                                    
+                                case FM_MATHS_GET_TIME_YEAR:
+                                    read_value = timeinfo->tm_year;
+                                    break;
+                                    
+                                case FM_MATHS_GET_TIME_DAYYEAR:
+                                    read_value = timeinfo->tm_yday;
+                                    break;
+                                    
+                                case FM_MATHS_GET_TIME_IS_SAVING:
+                                    read_value = timeinfo->tm_isdst;
+                                    break;
+                                    
+                                default:    // case FM_MATHS_GEN_RANDOM_NUMBER:
+                                    read_value = hwrand() % (((uint32_t) FM_MATHS_FLOAT[float_index]) + 1);
+                                    break;
+                            }
+                        }
+                        
+                        switch (operation) {
+                            case FM_MATHS_OPERATION_SUB:
+                                value = value - read_value;
+                                break;
+                                
+                            case FM_MATHS_OPERATION_SUB_INV:
+                                value = read_value - value;
+                                break;
+                                
+                            case FM_MATHS_OPERATION_MUL:
+                                value = value * read_value;
+                                break;
+                                
+                            case FM_MATHS_OPERATION_DIV:
+                                value = value / read_value;
+                                break;
+                                
+                            case FM_MATHS_OPERATION_DIV_INV:
+                                value = read_value / value;
+                                break;
+                                
+                            case FM_MATHS_OPERATION_MOD:
+                                value = ((int) value) % ((int) read_value);
+                                break;
+                                
+                            case FM_MATHS_OPERATION_MOD_INV:
+                                value = ((int) read_value) % ((int) value);
+                                break;
+                                
+                            case FM_MATHS_OPERATION_POW:
+                                value = fast_precise_pow(value, read_value);
+                                break;
+                                
+                            case FM_MATHS_OPERATION_POW_INV:
+                                value = fast_precise_pow(read_value, value);
+                                break;
+                                
+                            case FM_MATHS_OPERATION_INV:
+                                value = 1 / value;
+                                break;
+                                
+                            case FM_MATHS_OPERATION_ABS:
+                                value = fabs(value);
+                                break;
+                                
+                            default:    // case FM_MATHS_OPERATION_NONE:
+                                        // case FM_MATHS_OPERATION_ADD:
+                                value = value + read_value;
+                                break;
+                        }
+
+                        int_index++;
+                        float_index++;
+                        
+                        get_value = true;
+                    }
                     
                 } else if (fm_sensor_type == FM_SENSOR_TYPE_ADC ||
                          fm_sensor_type == FM_SENSOR_TYPE_ADC_INV) {
@@ -4619,7 +4769,7 @@ void free_monitor_task(void* args) {
                                             }
                                         }
                                         
-                                        action_network->len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(action_network->host) +  strlen(action_network->url) + strlen(action_network->header) + content_len_n;
+                                        action_network->len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(HAA_FIRMWARE_VERSION) + strlen(action_network->host) +  strlen(action_network->url) + strlen(action_network->header) + content_len_n;
                                         
                                         req = malloc(action_network->len);
                                         
@@ -4658,7 +4808,9 @@ void free_monitor_task(void* args) {
                                             free(method_req);
                                         }
                                         
-                                        strcat(req, action_network->content);
+                                        if (action_network->method_n > 0) {
+                                            strcat(req, action_network->content);
+                                        }
                                     }
                                     
                                     result = new_net_con(action_network->host,
@@ -4944,11 +5096,11 @@ void free_monitor_timer_worker(TimerHandle_t xTimer) {
     if (((ch_group_t*) pvTimerGetTimerID(xTimer))->main_enabled) {
         if (!homekit_is_pairing()) {
             if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), FREE_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
-                ERROR("Creating FM");
+                ERROR("New FM");
                 homekit_remove_oldest_client();
             }
         } else {
-            ERROR("FM: HK pair");
+            ERROR("FM HK pair");
         }
     }
 }
@@ -4983,7 +5135,7 @@ void recv_uart_task() {
     if (main_config.uart_buffer_len >= main_config.uart_min_len) {
         if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, NULL, FREE_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
             reset_uart_buffer();
-            ERROR("Creating FM");
+            ERROR("New FM");
             homekit_remove_oldest_client();
         }
     } else {
@@ -5233,7 +5385,7 @@ void net_action_task(void* pvParameters) {
                 ch_group_t* ch_group_found = action_task->ch_group;
                 
                 if (acc_number > 0) {
-                    ch_group_found = ch_group_find_by_acc(acc_number);
+                    ch_group_found = ch_group_find_by_serv(acc_number);
                 }
                 
                 buffer[0] = content_search[7];
@@ -5326,7 +5478,7 @@ void net_action_task(void* pvParameters) {
             action_network->is_running = true;
 
             while (main_config.network_is_busy) {
-                vTaskDelay(MS_TO_TICKS(100));
+                vTaskDelay(MS_TO_TICKS(50));
             }
             
             INFO("<%i> Net Action %s:%i", action_task->ch_group->serv_index, action_network->host, action_network->port_n);
@@ -5361,7 +5513,7 @@ void net_action_task(void* pvParameters) {
                         }
                     }
                     
-                    action_network->len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(FIRMWARE_VERSION) + strlen(action_network->host) +  strlen(action_network->url) + strlen(action_network->header) + content_len_n;
+                    action_network->len = 61 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(HAA_FIRMWARE_VERSION) + strlen(action_network->host) +  strlen(action_network->url) + strlen(action_network->header) + content_len_n;
                     
                     req = malloc(action_network->len);
                     
@@ -5381,7 +5533,8 @@ void net_action_task(void* pvParameters) {
                     free(method);
                 }
                 
-                if (action_network->method_n < 4) {
+                if (action_network->method_n > 0 &&
+                    action_network->method_n < 4) {
                     if (action_network->method_n == 3) {
                         action_network->len = content_len_n;
                         req = malloc(content_len_n + 1);
@@ -5526,7 +5679,7 @@ void net_action_task(void* pvParameters) {
             
             INFO("<%i> Net Action done", action_task->ch_group->serv_index);
             
-            vTaskDelay(MS_TO_TICKS(20));
+            vTaskDelay(1);
         }
         
         action_network = action_network->next;
@@ -5562,7 +5715,7 @@ void irrf_tx_task(void* pvParameters) {
                 } else if (action_task->ch_group->ir_protocol) {
                     prot = action_task->ch_group->ir_protocol;
                 } else {
-                    prot = ch_group_find_by_acc(SERV_TYPE_ROOT_DEVICE)->ir_protocol;
+                    prot = ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE)->ir_protocol;
                 }
                 
                 // Decoding protocol based IR code length
@@ -5910,7 +6063,11 @@ void uart_action_task(void* pvParameters) {
 
     while (action_uart) {
         if (action_uart->action == action_task->action) {
-            INFO("<%i> UART Action %i", action_task->ch_group->serv_index, action_task->action);
+            printf("<%i> UART%i SEND ", action_task->ch_group->serv_index, action_uart->uart);
+            for (int i = 0; i < action_uart->len; i++) {
+                printf("%02x", action_uart->command[i]);
+            }
+            INFO("");
             
             taskENTER_CRITICAL();
             
@@ -5923,9 +6080,7 @@ void uart_action_task(void* pvParameters) {
             taskEXIT_CRITICAL();
         }
         
-        if (action_uart->pause > 0) {
-            vTaskDelay(action_uart->pause);
-        }
+        vTaskDelay(action_uart->pause);
         
         action_uart = action_uart->next;
     }
@@ -5939,7 +6094,7 @@ void autoswitch_timer(TimerHandle_t xTimer) {
     action_binary_output_t* action_binary_output = (action_binary_output_t*) pvTimerGetTimerID(xTimer);
     
     extended_gpio_write(action_binary_output->gpio, !action_binary_output->value);
-    INFO("AutoSw digO GPIO %i -> %i", action_binary_output->gpio, !action_binary_output->value);
+    INFO("Auto DigO %i->%i", action_binary_output->gpio, !action_binary_output->value);
     
     esp_timer_delete(xTimer);
 }
@@ -5956,7 +6111,7 @@ void action_task_timer(TimerHandle_t xTimer) {
         action_task->errors++;
         homekit_remove_oldest_client();
         
-        ERROR("<%i> Creating AT %i", action_task->ch_group->serv_index, action_task->type);
+        ERROR("<%i> New AT %i", action_task->ch_group->serv_index, action_task->type);
         
         if (action_task->errors < ACTION_TASK_MAX_ERRORS) {
             esp_timer_change_period(xTimer, 110);
@@ -5970,7 +6125,7 @@ void action_task_timer(TimerHandle_t xTimer) {
 }
 
 void do_actions(ch_group_t* ch_group, uint8_t action) {
-    INFO("<%i> Exec Act %i", ch_group->serv_index, action);
+    INFO("<%i> Run A%i", ch_group->serv_index, action);
     
     // Copy actions
     action_copy_t* action_copy = ch_group->action_copy;
@@ -5988,7 +6143,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     while(action_binary_output) {
         if (action_binary_output->action == action) {
             extended_gpio_write(action_binary_output->gpio, action_binary_output->value);
-            INFO("<%i> Bin Out: g %i, v %i, i %i", ch_group->serv_index, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
+            INFO("<%i> DigO %i->%i (%i)", ch_group->serv_index, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
             
             if (action_binary_output->inching > 0) {
                 esp_timer_start(esp_timer_create(action_binary_output->inching, false, (void*) action_binary_output, autoswitch_timer));
@@ -6002,9 +6157,9 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     action_serv_manager_t* action_serv_manager = ch_group->action_serv_manager;
     while(action_serv_manager) {
         if (action_serv_manager->action == action) {
-            ch_group_t* ch_group = ch_group_find_by_acc(action_serv_manager->serv_index);
+            ch_group_t* ch_group = ch_group_find_by_serv(action_serv_manager->serv_index);
             if (ch_group) {
-                INFO("Serv Notif: t %i, v %g", action_serv_manager->serv_index, action_serv_manager->value);
+                INFO("<%i> ServNot %i->%g", ch_group->serv_index, action_serv_manager->serv_index, action_serv_manager->value);
                 
                 int value_int = action_serv_manager->value;
                 
@@ -6254,14 +6409,14 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = SEC_SYSTEM_CH_TARGET_STATE->value.int_value;
                                 do_actions(ch_group, 8);
                                 homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
-                                save_historical_data(SEC_SYSTEM_CH_CURRENT_STATE);
+                                save_data_history(SEC_SYSTEM_CH_CURRENT_STATE);
                                 
                             } else if ((value_int == 4 && SEC_SYSTEM_CH_TARGET_STATE->value.int_value != SEC_SYSTEM_OFF) ||
                                        SEC_SYSTEM_CH_TARGET_STATE->value.int_value == value_int - 5) {
                                 SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = 4;
                                 do_actions(ch_group, value_int);
                                 homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);
-                                save_historical_data(SEC_SYSTEM_CH_CURRENT_STATE);
+                                save_data_history(SEC_SYSTEM_CH_CURRENT_STATE);
                                 if (alarm_recurrent) {
                                     INFO("<%i> Rec alarm", ch_group->serv_index);
                                     esp_timer_start(SEC_SYSTEM_REC_ALARM_TIMER);
@@ -6294,9 +6449,9 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             break;
                             
                         case SERV_TYPE_POWER_MONITOR:
-                            if (value_int == 0) {
+                            //if (value_int == 0) {
                                 pm_custom_consumption_reset(ch_group);
-                            }
+                            //}
                             break;
                             
                         case SERV_TYPE_FREE_MONITOR:
@@ -6304,7 +6459,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             if (ch_group->main_enabled) {
                                 FM_OVERRIDE_VALUE = action_serv_manager->value;
                                 if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
-                                    ERROR("Creating FM");
+                                    ERROR("New FM");
                                     homekit_remove_oldest_client();
                                 }
                             }
@@ -6315,9 +6470,9 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             break;
                             
                         case SERV_TYPE_DATA_HISTORY:
-                            if (value_int == 0) {
-                                save_historical_data(ch_group->ch_target);
-                            }
+                            //if (value_int == 0) {
+                                save_data_history(ch_group->ch_target);
+                            //}
                             break;
                             
                         default:    // ON Type ch
@@ -6360,7 +6515,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     action_system_t* action_system = ch_group->action_system;
     while(action_system) {
         if (action_system->action == action) {
-            INFO("<%i> Sys Act %i", ch_group->serv_index, action_system->value);
+            INFO("<%i> Sys %i", ch_group->serv_index, action_system->value);
             switch (action_system->value) {
                 case SYSTEM_ACTION_SETUP_MODE:
                     setup_mode_call(99, NULL, 0);
@@ -6445,7 +6600,7 @@ void do_wildcard_actions(ch_group_t* ch_group, uint8_t index, const float action
     if (last_wildcard_action != NULL) {
         if (ch_group->last_wildcard_action[index] != last_value || last_wildcard_action->repeat) {
             ch_group->last_wildcard_action[index] = last_value;
-            INFO("<%i> Wilcard %i %.2f", ch_group->serv_index, index, last_value);
+            INFO("<%i> Wild %i->%.2f", ch_group->serv_index, index, last_value);
             do_actions(ch_group, last_wildcard_action->target_action);
         }
     }
@@ -6479,7 +6634,7 @@ void timetable_actions_timer_worker(TimerHandle_t xTimer) {
             (timetable_action->wday == ALL_WDAYS || timetable_action->wday == timeinfo->tm_wday)
             ) {
             
-            do_actions(ch_group_find_by_acc(SERV_TYPE_ROOT_DEVICE), timetable_action->action);
+            do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), timetable_action->action);
         }
         
         timetable_action = timetable_action->next;
@@ -6509,7 +6664,7 @@ void delayed_sensor_task() {
             ch_group->serv_type <= SERV_TYPE_HUMIDIFIER_WITH_TEMP) {
             vTaskDelay(MS_TO_TICKS(3500));
             
-            INFO("<%i> Starting TH sensor", ch_group->serv_index);
+            INFO("<%i> Start TH", ch_group->serv_index);
             
             temperature_timer_worker(ch_group->timer);
             esp_timer_start_forced(ch_group->timer);
@@ -6523,7 +6678,7 @@ void delayed_sensor_task() {
         if (ch_group->serv_type == SERV_TYPE_IAIRZONING) {
             vTaskDelay(MS_TO_TICKS(9500));
             
-            INFO("<%i> Starting iAirZoning", ch_group->serv_index);
+            INFO("<%i> Start iAZ", ch_group->serv_index);
             
             temperature_timer_worker(ch_group->timer);
             esp_timer_start_forced(ch_group->timer);
@@ -6537,9 +6692,9 @@ void delayed_sensor_task() {
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, NULL);
 homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, "José A. Jiménez Campos");
-homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "RavenSystem HAA Kestrel");
+homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "RavenSystem HAA "HAA_FIRMWARE_CODENAME);
 homekit_characteristic_t identify_function = HOMEKIT_CHARACTERISTIC_(IDENTIFY, identify);
-homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, FIRMWARE_VERSION);
+homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, HAA_FIRMWARE_VERSION);
 homekit_characteristic_t hap_version = HOMEKIT_CHARACTERISTIC_(VERSION, "1.1.0");
 homekit_characteristic_t haa_custom_setup_option = HOMEKIT_CHARACTERISTIC_(CUSTOM_SETUP_OPTION, "", .setter_ex=hkc_custom_setup_setter);
 
@@ -6550,14 +6705,14 @@ void run_homekit_server() {
     main_config.wifi_status = WIFI_STATUS_CONNECTED;
     main_config.wifi_ip = wifi_config_get_ip();
     
-    FREEHEAP();
+    show_freeheap();
     
     wifi_config_resend_arp();
     
     if (main_config.enable_homekit_server) {
         random_task_delay();
         homekit_server_init(&config);
-        FREEHEAP();
+        show_freeheap();
     }
     
     ntp_timer_worker(NULL);
@@ -6569,7 +6724,11 @@ void run_homekit_server() {
     
     vTaskDelay(MS_TO_TICKS(500));
     
-    do_actions(ch_group_find_by_acc(SERV_TYPE_ROOT_DEVICE), 2);
+    if (homekit_pairing_count() == 0) {
+        sysparam_set_data(HOMEKIT_PAIRING_COUNT_SYSPARAM, NULL, 0, false);
+    }
+    
+    do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 2);
     
     led_blink(4);
     
@@ -6586,9 +6745,7 @@ void run_homekit_server() {
 }
 
 void printf_header() {
-    INFO("\n\n");
-    INFO("Home Accessory Architect v"FIRMWARE_VERSION);
-    INFO("(c) 2018-2022 José Antonio Jiménez Campos\n");
+    INFO("\n\nHome Accessory Architect "HAA_FIRMWARE_VERSION""HAA_FIRMWARE_BETA_REVISION"\n(c) 2018-2022 José A. Jiménez Campos\n");
     
 #ifdef HAA_DEBUG
     INFO("HAA DEBUG ENABLED\n");
@@ -6603,9 +6760,17 @@ void reset_uart() {
     uart_set_baud(0, 115200);
 }
 
+void homekit_re_pair_timer(TimerHandle_t xTimer) {
+    if (!homekit_is_paired()) {
+        reboot_haa();
+    }
+    
+    esp_timer_delete(xTimer);
+}
+
 void normal_mode_init() {
     char* txt_config = NULL;
-    sysparam_get_string(HAA_JSON_SYSPARAM, &txt_config);
+    sysparam_get_string(HAA_SCRIPT_SYSPARAM, &txt_config);
 
     cJSON* json_haa = cJSON_Parse(txt_config);
 
@@ -6826,18 +6991,6 @@ void normal_mode_init() {
         return state;
     }
     
-    uint16_t get_absolut_index(const uint16_t base, const int16_t rel_index) {
-        if (rel_index > 7000) {
-            return base + rel_index - 7000;
-        }
-        
-        if (rel_index <= 0) {
-            return base + rel_index;
-        }
-        
-        return rel_index;
-    }
-    
     // REGISTER ACTIONS
     // Copy actions
     inline void new_action_copy(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
@@ -6858,7 +7011,7 @@ void normal_mode_init() {
                     action_copy->next = last_action;
                     last_action = action_copy;
                     
-                    INFO("New Copy Action %i: v %i", new_int_action, action_copy->new_action);
+                    INFO("New Copy A%i: v %i", new_int_action, action_copy->new_action);
                 }
             }
         }
@@ -6918,7 +7071,7 @@ void normal_mode_init() {
                         action_binary_output->next = last_action;
                         last_action = action_binary_output;
                         
-                        INFO("New BinOut Action %i: g %i, v %i, i %i", new_int_action, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
+                        INFO("New BinOut A%i: g %i, v %i, i %i", new_int_action, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
                     }
                 }
             }
@@ -6971,7 +7124,7 @@ void normal_mode_init() {
                             }
                         }
                         
-                        INFO("New ServMan Act %i: s %i, v %g", new_int_action, action_serv_manager->serv_index, action_serv_manager->value);
+                        INFO("New ServNot A%i: %i->%g", new_int_action, action_serv_manager->serv_index, action_serv_manager->value);
                     }
                 }
             }
@@ -7011,7 +7164,7 @@ void normal_mode_init() {
                         action_system->next = last_action;
                         last_action = action_system;
                         
-                        INFO("New Sys Action %i: v %i", new_int_action, action_system->value);
+                        INFO("New Sys A%i: v %i", new_int_action, action_system->value);
                     }
                 }
             }
@@ -7048,12 +7201,6 @@ void normal_mode_init() {
                         
                         action_network->host = strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_HOST)->valuestring);
                         
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_URL) != NULL) {
-                            action_network->url = strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_URL)->valuestring);
-                        } else {
-                            action_network->url = strdup("");
-                        }
-                        
                         action_network->port_n = 80;
                         if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_PORT) != NULL) {
                             action_network->port_n = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_PORT)->valuedouble;
@@ -7067,30 +7214,40 @@ void normal_mode_init() {
                             action_network->method_n = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_METHOD)->valuedouble;
                         }
                         
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_HEADER) != NULL) {
-                            action_network->header = strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_HEADER)->valuestring);
-                        } else {
-                            action_network->header = strdup("Content-type: text/html\r\n");
-                        }
-                        
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT) != NULL) {
-                            action_network->content = strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT)->valuestring);
-                        } else {
-                            action_network->content = strdup("");
-                        }
-                        
-                        INFO("New Net Action %i: %s:%i", new_int_action, action_network->host, action_network->port_n);
-                        
-                        if (action_network->method_n ==  3 ||
-                            action_network->method_n == 13) {
-                            action_network->len = strlen(action_network->content);
-                        } else if (action_network->method_n ==  4 ||
-                                   action_network->method_n == 12 ||
-                                   action_network->method_n == 14) {
+                        if (action_network->method_n < 3) {
+                            if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_URL) != NULL) {
+                                action_network->url = strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_URL)->valuestring);
+                            } else {
+                                action_network->url = strdup("");
+                            }
                             
-                            free(action_network->content);
-                            action_network->len = process_hexstr(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT)->valuestring, &action_network->raw);
+                            if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_HEADER) != NULL) {
+                                action_network->header = strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_HEADER)->valuestring);
+                            } else {
+                                action_network->header = strdup("Content-type: text/html\r\n");
+                            }
                         }
+                        
+                        if (action_network->method_n > 0) {
+                            if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT) != NULL) {
+                                action_network->content = strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT)->valuestring);
+                            } else {
+                                action_network->content = strdup("");
+                            }
+                            
+                            if (action_network->method_n ==  3 ||
+                                action_network->method_n == 13) {
+                                action_network->len = strlen(action_network->content);
+                            } else if (action_network->method_n ==  4 ||
+                                       action_network->method_n == 12 ||
+                                       action_network->method_n == 14) {
+                                
+                                free(action_network->content);
+                                action_network->len = process_hexstr(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT)->valuestring, &action_network->raw);
+                            }
+                        }
+                        
+                        INFO("New Net A%i: %s:%i", new_int_action, action_network->host, action_network->port_n);
                         
                         action_network->next = last_action;
                         last_action = action_network;
@@ -7162,7 +7319,7 @@ void normal_mode_init() {
                         action_irrf_tx->next = last_action;
                         last_action = action_irrf_tx;
                         
-                        INFO("New IRRF Action %i: r %i, p %i", new_int_action, action_irrf_tx->repeats, action_irrf_tx->pause);
+                        INFO("New IRRF A%i: r %i, p %i", new_int_action, action_irrf_tx->repeats, action_irrf_tx->pause);
                     }
                 }
             }
@@ -7221,7 +7378,7 @@ void normal_mode_init() {
                         action_uart->next = last_action;
                         last_action = action_uart;
                         
-                        INFO("New UART Action %i: u %i, p %i, l %i", new_int_action, action_uart->uart, action_uart->pause, action_uart->len);
+                        INFO("New UART A%i: u %i, p %i, l %i", new_int_action, action_uart->uart, action_uart->pause, action_uart->len);
                     }
                 }
             }
@@ -7352,7 +7509,7 @@ void normal_mode_init() {
         if (cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_POLL_PERIOD) != NULL) {
             poll_period = (float) cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_POLL_PERIOD)->valuedouble;
             
-            if (poll_period < TH_SENSOR_POLL_PERIOD_MIN) {
+            if (poll_period < TH_SENSOR_POLL_PERIOD_MIN && poll_period > 0.00f) {
                 poll_period = TH_SENSOR_POLL_PERIOD_MIN;
             }
         }
@@ -7399,9 +7556,7 @@ void normal_mode_init() {
     // ----- CONFIG SECTION
     
     // UART configuration
-    bool used_uart[2];
-    used_uart[0] = false;
-    used_uart[1] = false;
+    bool used_uart[2] = { false, false };
     int is_uart_swap = false;
 
     if (cJSON_GetObjectItemCaseSensitive(json_config, UART_CONFIG_ARRAY) != NULL) {
@@ -7516,8 +7671,10 @@ void normal_mode_init() {
     adv_logger_init(log_output_type, log_output_target);
     free(log_output_target);
     
-    printf_header();
-    INFO("NORMAL\n\nJSON:\n %s\n", txt_config);
+    if (log_output_type > 0) {
+        printf_header();
+        INFO("%s\n", txt_config);
+    }
     
     free(txt_config);
     
@@ -7526,7 +7683,6 @@ void normal_mode_init() {
     if (cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME) != NULL) {
         custom_hostname = strdup(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring);
     }
-    INFO("Hostname %s", custom_hostname);
     
     // Custom NTP Host
     if (cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_NTP_HOST) != NULL) {
@@ -7546,31 +7702,15 @@ void normal_mode_init() {
             cJSON* json_i2c = cJSON_GetArrayItem(json_i2cs, i);
 
             unsigned int i2c_scl_gpio = (uint8_t) cJSON_GetArrayItem(json_i2c, 0)->valuedouble;
-            if (get_used_gpio(i2c_scl_gpio)) {
-                ERROR("I2C bus %i: scl %i", i, i2c_scl_gpio);
-                i2c_scl_gpio = MAX_GPIOS;
-                break;
-            }
             set_used_gpio(i2c_scl_gpio);
 
             unsigned int i2c_sda_gpio = (uint8_t) cJSON_GetArrayItem(json_i2c, 1)->valuedouble;
-            if (get_used_gpio(i2c_sda_gpio)) {
-                ERROR("I2C bus %i: sda %i", i, i2c_sda_gpio);
-                i2c_sda_gpio = MAX_GPIOS;
-                break;
-            }
             set_used_gpio(i2c_sda_gpio);
 
             uint32_t i2c_freq_hz = (uint32_t) (cJSON_GetArrayItem(json_i2c, 2)->valuedouble * 1000.f);
-            
-            if (i2c_scl_gpio < MAX_GPIOS &&
-                i2c_sda_gpio < MAX_GPIOS &&
-                i2c_freq_hz > 0) {
-                const unsigned int i2c_res = i2c_init_hz(i, i2c_scl_gpio, i2c_sda_gpio, i2c_freq_hz);
-                INFO("I2C bus %i: scl %i, sda %i, f %i, r %i", i, i2c_scl_gpio, i2c_sda_gpio, i2c_freq_hz, i2c_res);
-            } else {
-                ERROR("I2C JSON");
-            }
+
+            const unsigned int i2c_res = i2c_init_hz(i, i2c_scl_gpio, i2c_sda_gpio, i2c_freq_hz);
+            INFO("I2C bus %i: scl %i, sda %i, f %i, r %i", i, i2c_scl_gpio, i2c_sda_gpio, i2c_freq_hz, i2c_res);
         }
     }
     
@@ -8008,7 +8148,7 @@ void normal_mode_init() {
             snprintf(serial_str, serial_prefix_len, "%s%s%02X%02X%02X-%i", serial_prefix ? serial_prefix : "", serial_prefix ? "-" : "", macaddr[3], macaddr[4], macaddr[5], serial_index);
         }
         
-        INFO("Serial %s", serial_str);
+        INFO("SN %s", serial_str);
         
         accessories[accessory] = calloc(1, sizeof(homekit_accessory_t));
         accessories[accessory]->id = accessory + 1;
@@ -8061,7 +8201,7 @@ void normal_mode_init() {
         ch_group->main_enabled = killswitch & 0b01;
         ch_group->child_enabled = killswitch & 0b10;
         
-        INFO("KS main %i child %i", ch_group->main_enabled, ch_group->child_enabled);
+        INFO("KS %i%i", ch_group->main_enabled, ch_group->child_enabled);
     }
     
     void set_accessory_ir_protocol(ch_group_t* ch_group, cJSON* json_context) {
@@ -8076,7 +8216,7 @@ void normal_mode_init() {
             exec_actions_on_boot = (bool) cJSON_GetObjectItemCaseSensitive(json_context, EXEC_ACTIONS_ON_BOOT)->valuedouble;
         }
         
-        INFO("Exec Ac on Boot %i", exec_actions_on_boot);
+        INFO("Run Ac Boot %i", exec_actions_on_boot);
         
         return exec_actions_on_boot;
     }
@@ -9529,7 +9669,7 @@ void normal_mode_init() {
                 }
             }
             
-            INFO("Flux %g, %g, %g, %g, %g", lightbulb_group->flux[0], lightbulb_group->flux[1], lightbulb_group->flux[2], lightbulb_group->flux[3], lightbulb_group->flux[4]);
+            //INFO("Flux %g, %g, %g, %g, %g", lightbulb_group->flux[0], lightbulb_group->flux[1], lightbulb_group->flux[2], lightbulb_group->flux[3], lightbulb_group->flux[4]);
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_RGB_ARRAY_SET) != NULL) {
                 cJSON* rgb_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_RGB_ARRAY_SET);
@@ -9538,7 +9678,7 @@ void normal_mode_init() {
                 }
             }
             
-            INFO("Target RGB %g, %g, %g, %g, %g, %g", lightbulb_group->rgb[0][0], lightbulb_group->rgb[0][1], lightbulb_group->rgb[1][0], lightbulb_group->rgb[1][1], lightbulb_group->rgb[2][0], lightbulb_group->rgb[2][1]);
+            //INFO("Target RGB %g, %g, %g, %g, %g, %g", lightbulb_group->rgb[0][0], lightbulb_group->rgb[0][1], lightbulb_group->rgb[1][0], lightbulb_group->rgb[1][1], lightbulb_group->rgb[2][0], lightbulb_group->rgb[2][1]);
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CMY_ARRAY_SET) != NULL) {
                 cJSON* cmy_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CMY_ARRAY_SET);
@@ -9547,9 +9687,9 @@ void normal_mode_init() {
                 }
             }
             
-            INFO("Target CMY %g, %g, %g, %g, %g, %g", lightbulb_group->cmy[0][0], lightbulb_group->cmy[0][1], lightbulb_group->cmy[1][0], lightbulb_group->cmy[1][1], lightbulb_group->cmy[2][0], lightbulb_group->cmy[2][1]);
+            //INFO("Target CMY %g, %g, %g, %g, %g, %g", lightbulb_group->cmy[0][0], lightbulb_group->cmy[0][1], lightbulb_group->cmy[1][0], lightbulb_group->cmy[1][1], lightbulb_group->cmy[2][0], lightbulb_group->cmy[2][1]);
             
-            INFO("CMY [%g, %g, %g], [%g, %g, %g]", lightbulb_group->cmy[0][0], lightbulb_group->cmy[0][1], lightbulb_group->cmy[0][2], lightbulb_group->cmy[1][0], lightbulb_group->cmy[1][1], lightbulb_group->cmy[1][2]);
+            //INFO("CMY [%g, %g, %g], [%g, %g, %g]", lightbulb_group->cmy[0][0], lightbulb_group->cmy[0][1], lightbulb_group->cmy[0][2], lightbulb_group->cmy[1][0], lightbulb_group->cmy[1][1], lightbulb_group->cmy[1][2]);
             
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY_SET) != NULL) {
                 cJSON* coordinate_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY_SET);
@@ -9570,20 +9710,20 @@ void normal_mode_init() {
                     lightbulb_group->ww[1] = (float) cJSON_GetArrayItem(coordinate_array, 9)->valuedouble;
                 }
             }
-
+            /*
             INFO("Coordinate [%g, %g], [%g, %g], [%g, %g], [%g, %g], [%g, %g]", lightbulb_group->r[0], lightbulb_group->r[1],
                                                                                         lightbulb_group->g[0], lightbulb_group->g[1],
                                                                                         lightbulb_group->b[0], lightbulb_group->b[1],
                                                                                         lightbulb_group->cw[0], lightbulb_group->cw[1],
                                                                                         lightbulb_group->ww[0], lightbulb_group->ww[1]);
-            
+            */
             if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_WHITE_POINT_SET) != NULL) {
                 cJSON* white_point = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_WHITE_POINT_SET);
                 lightbulb_group->wp[0] = (float) cJSON_GetArrayItem(white_point, 0)->valuedouble;
                 lightbulb_group->wp[1] = (float) cJSON_GetArrayItem(white_point, 1)->valuedouble;
             }
             
-            INFO("White point [%g, %g]", lightbulb_group->wp[0], lightbulb_group->wp[1]);
+            //INFO("White point [%g, %g]", lightbulb_group->wp[0], lightbulb_group->wp[1]);
         }
         
         if (cJSON_GetObjectItemCaseSensitive(json_context, RGBW_STEP_SET) != NULL) {
@@ -9781,7 +9921,7 @@ void normal_mode_init() {
             GARAGE_DOOR_CLOSE_TIME_FACTOR = GARAGE_DOOR_WORKING_TIME / cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_CLOSE_SET)->valuedouble;
         }
         
-        GARAGE_DOOR_WORKING_TIME += (GARAGE_DOOR_TIME_MARGIN * 2);
+        GARAGE_DOOR_WORKING_TIME += (GARAGE_DOOR_TIME_MARGIN << 1);
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
@@ -10688,7 +10828,14 @@ void normal_mode_init() {
             is_val_data = 2;
         }
         
+        int maths_operations = 0;
+        if (fm_sensor_type == FM_SENSOR_TYPE_MATHS) {
+            cJSON* val_data = cJSON_GetObjectItemCaseSensitive(json_context, FM_READ_COMMAND_DATA_ARRAY);
+            maths_operations = cJSON_GetArraySize(val_data) / 3;
+        }
+        
         ch_group_t* ch_group = new_ch_group(1 + ( pattern_base ? 1 : 0 ),
+                                            
                                             1 +
                                             ( fm_sensor_type == FM_SENSOR_TYPE_PULSE_FREQ ) +
                                             ( fm_sensor_type == FM_SENSOR_TYPE_PULSE_US_TIME ? 3 : 0 ) +
@@ -10696,8 +10843,13 @@ void normal_mode_init() {
                                             ( fm_sensor_type >= FM_SENSOR_TYPE_NETWORK ? 2 : 0 ) +
                                             ( fm_sensor_type >= FM_SENSOR_TYPE_NETWORK && fm_sensor_type <= FM_SENSOR_TYPE_NETWORK_PATTERN_HEX ? 2 : 0 ) +
                                             ( fm_sensor_type == FM_SENSOR_TYPE_I2C ? 8 : 0 ) +
-                                            ( fm_sensor_type == FM_SENSOR_TYPE_I2C_TRIGGER ? 18 : 0 ),
-                                            4 + has_limits,
+                                            ( fm_sensor_type == FM_SENSOR_TYPE_I2C_TRIGGER ? 18 : 0 ) +
+                                            (maths_operations << 1),
+                                            
+                                            4 +
+                                            has_limits +
+                                            maths_operations,
+                                            
                                             1);
         
         FM_OVERRIDE_VALUE = NO_LAST_WILDCARD_ACTION;
@@ -10718,6 +10870,30 @@ void normal_mode_init() {
         int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
+        if (fm_sensor_type == FM_SENSOR_TYPE_MATHS) {
+            FM_MATHS_OPERATIONS = maths_operations;
+            
+            cJSON* val_data = cJSON_GetObjectItemCaseSensitive(json_context, FM_READ_COMMAND_DATA_ARRAY);
+            
+            int float_index = FM_MATHS_FLOAT_FIRST + has_limits;
+            int int_index = FM_MATHS_FIRST_OPERATION;
+            for (int i = 0; i < (maths_operations * 3); i++) {
+                for (int j = 0; j < 2; j++) {
+                    FM_MATHS_INT[int_index] = cJSON_GetArrayItem(val_data, i)->valuedouble;
+                    int_index++;
+                    i++;
+                }
+                //FM_MATHS_INT[int_index] = cJSON_GetArrayItem(val_data, i)->valuedouble;
+                //int_index++;
+                //i++;
+                //FM_MATHS_INT[int_index] = cJSON_GetArrayItem(val_data, i)->valuedouble;
+                //int_index++;
+                //i++;
+                FM_MATHS_FLOAT[float_index] = cJSON_GetArrayItem(val_data, i)->valuedouble;
+                float_index++;
+            }
+        }
+        
         if (service == 0) {
             new_accessory(accessory, total_services, ch_group->homekit_enabled, json_context);
         }
@@ -10731,7 +10907,7 @@ void normal_mode_init() {
         ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_FREE_VALUE, 0);
         
         if (tg_serv != 0) {
-            ch_group->ch_target = ch_group_find_by_acc(get_absolut_index(service_numerator, tg_serv))->ch[tg_ch];
+            ch_group->ch_target = ch_group_find_by_serv(get_absolut_index(service_numerator, tg_serv))->ch[tg_ch];
         }
         
         if (pattern_base) {
@@ -10892,7 +11068,9 @@ void normal_mode_init() {
         if (fm_sensor_type > FM_SENSOR_TYPE_FREE &&
             fm_sensor_type < FM_SENSOR_TYPE_UART) {
             const float poll_period = sensor_poll_period(json_context, FM_POLL_PERIOD_DEFAULT);
-            esp_timer_start_forced(esp_timer_create(poll_period * 1000, true, (void*) ch_group, free_monitor_timer_worker));
+            if (poll_period > 0) {
+                esp_timer_start_forced(esp_timer_create(poll_period * 1000, true, (void*) ch_group, free_monitor_timer_worker));
+            }
         }
     }
     
@@ -10922,7 +11100,7 @@ void normal_mode_init() {
         
         service++;
         
-        ch_group->ch_target = ch_group_find_by_acc(hist_accessory)->ch[hist_ch];
+        ch_group->ch_target = ch_group_find_by_serv(hist_accessory)->ch[hist_ch];
         
         accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
         accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
@@ -10958,7 +11136,7 @@ void normal_mode_init() {
         
         const float poll_period = sensor_poll_period(json_context, 0);
         if (poll_period > 0.00f) {
-            esp_timer_start_forced(esp_timer_create(poll_period * 1000, true, (void*) ch_group->ch_target, historical_timer_worker));
+            esp_timer_start_forced(esp_timer_create(poll_period * 1000, true, (void*) ch_group->ch_target, data_history_timer_worker));
         }
     }
     
@@ -10971,22 +11149,24 @@ void normal_mode_init() {
     // Saved States Timer Function
     root_device_ch_group->timer = esp_timer_create(SAVE_STATES_DELAY_MS, false, NULL, save_states);
     
-    // Exec action 0 from root device
+    // Run action 0 from root device
     do_actions(root_device_ch_group, 0);
     
     // Initial delay
     if (cJSON_GetObjectItemCaseSensitive(json_config, ACC_CREATION_DELAY) != NULL) {
         vTaskDelay(cJSON_GetObjectItemCaseSensitive(json_config, ACC_CREATION_DELAY)->valuedouble * MS_TO_TICKS(1000));
+    } else {
+        vTaskDelay(1);
     }
     
     // Bridge
     if (bridge_needed) {
-        INFO("\n** ACCESSORY BRIDGE");
+        INFO("\n** BRIDGE");
         new_accessory(0, 2, true, NULL);
         acc_count++;
     }
     
-    // Creating HomeKit Accessory
+    // New HomeKit Service
     void new_service(const uint16_t acc_count, uint16_t serv_count, const uint16_t total_services, cJSON* json_accessory, const uint8_t serv_type) {
         service_numerator++;
         
@@ -11067,7 +11247,7 @@ void normal_mode_init() {
             new_switch(acc_count, serv_count, total_services, json_accessory, serv_type);
         }
         
-        FREEHEAP();
+        show_freeheap();
     }
     
     for (int i = 0; i < total_accessories; i++) {
@@ -11131,7 +11311,7 @@ void normal_mode_init() {
     } else {
         int first_serv_type = 0;
         for (int i = 1; i <= service_numerator; i++) {
-            ch_group_t* ch_group = ch_group_find_by_acc(i);
+            ch_group_t* ch_group = ch_group_find_by_serv(i);
             if (ch_group->homekit_enabled) {
                 first_serv_type = ch_group->serv_type;
                 break;
@@ -11218,10 +11398,16 @@ void normal_mode_init() {
     
     //set_unused_gpios();
     
-    INFO("Device Category: %i\n", config.category);
-    
     config.accessories = accessories;
     config.config_number = (uint16_t) last_config_number;
+    
+    int8_t re_pair = 0;
+    sysparam_get_int8(HOMEKIT_RE_PAIR_SYSPARAM, &re_pair);
+    if (re_pair == 1) {
+        config.re_pair = true;
+        sysparam_set_data(HOMEKIT_RE_PAIR_SYSPARAM, NULL, 0, false);
+        esp_timer_start_forced(esp_timer_create(HOMEKIT_RE_PAIR_TIME_MS, false, NULL, homekit_re_pair_timer));
+    }
     
     main_config.setup_mode_toggle_counter = 0;
     
@@ -11374,7 +11560,7 @@ void init_task() {
         arming();
         
         if (haa_setup != 1) {
-            sysparam_compact();
+            sysparam_compact_alt();
             arming();
         }
         

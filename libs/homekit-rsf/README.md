@@ -1,8 +1,8 @@
-# esp-homekit
-Apple HomeKit accessory server library for
-[ESP-OPEN-RTOS](https://github.com/SuperHouse/esp-open-rtos).
+# ESP-HomeKit RavenSystem's Fork
 
-See [esp-homekit-demo](https://github.com/maximkulkin/esp-homekit-demo) for examples.
+This fork is focused on DRAM and CPU optimizations, adapted to HAA firmware.
+
+Apple HomeKit accessory server library for [ESP-OPEN-RTOS](https://github.com/SuperHouse/esp-open-rtos).
 
 ## QR code pairing
 

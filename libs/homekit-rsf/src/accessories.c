@@ -190,9 +190,12 @@ homekit_characteristic_t* homekit_characteristic_clone(homekit_characteristic_t*
      
     if (ch->valid_values.count)
         size += align_size(sizeof(uint8_t) * ch->valid_values.count);
+    
+#ifndef HOMEKIT_DISABLE_VALUE_RANGES
     if (ch->valid_values_ranges.count)
         size += align_size(sizeof(homekit_valid_values_range_t) * ch->valid_values_ranges.count);
-
+#endif //HOMEKIT_DISABLE_VALUE_RANGES
+    
     uint8_t* p = calloc(1, size);
 
     homekit_characteristic_t* clone = (homekit_characteristic_t*) p;
@@ -259,6 +262,7 @@ homekit_characteristic_t* homekit_characteristic_clone(homekit_characteristic_t*
         p += align_size(sizeof(uint8_t) * ch->valid_values.count);
     }
 
+#ifndef HOMEKIT_DISABLE_VALUE_RANGES
     if (ch->valid_values_ranges.count) {
         int c = ch->valid_values_ranges.count;
         clone->valid_values_ranges.count = c;
@@ -267,11 +271,11 @@ homekit_characteristic_t* homekit_characteristic_clone(homekit_characteristic_t*
 
         p += align_size(sizeof(homekit_valid_values_range_t*) * c);
     }
+#endif //HOMEKIT_DISABLE_VALUE_RANGES
     
-    clone->subscriptions = ch->subscriptions;
+    //clone->subscriptions = ch->subscriptions;
     clone->getter_ex = ch->getter_ex;
     clone->setter_ex = ch->setter_ex;
-    clone->context = ch->context;
 
     return clone;
 }
