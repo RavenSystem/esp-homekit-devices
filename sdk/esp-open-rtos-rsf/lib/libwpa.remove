@@ -1,0 +1,2 @@
+# Object files to be removed from libwpa
+os_xtensa.o

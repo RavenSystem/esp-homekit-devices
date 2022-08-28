@@ -1,0 +1,1 @@
+This file will go to SPIFFS image.

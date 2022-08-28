@@ -1,0 +1,91 @@
+"<!DOCTYPE html><html lang=\"en\">"
+"<head>"
+"<link rel=\"stylesheet\" type=\"text/css\" href=\"/style.css\">"
+"<script src=\"/script.js\"></script>"
+"<title>",
+"</title>"
+"<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">"
+"</head>"
+"<body>"
+"<ul class=\"topnav\" id=\"myTopnav\">"
+"<li><a href=\"/\">Home</a></li>"
+"<li><a href=\"/wificfg/\">WiFi Config</a></li>"
+"<li><a href=\"/wificfg/sta.html\">WiFi Station</a></li>"
+"<li class=\"active\"><a href=\"/wificfg/ap.html\">WiFi Access Point</a></li>"
+"<li class=\"icon\">"
+"<a href=\"javascript:void(0);\" onclick=\"myFunction()\">&#9776;</a>"
+"</li>"
+"</ul>"
+"<form action=\"/wificfg/ap.html\" method=\"post\">"
+"<fieldset>"
+"<legend>WiFi Access Point configuration</legend>"
+"<dl class=\"dlh\">"
+"<dt><label for=\"enable\">Enable AP mode</label></dt>"
+"<dd><input id=\"enable\" type=\"checkbox\" name=\"ap_enable\" value=\"1\" ",
+" /></dd>"
+"<dt><label for=\"disable_if_sta\">Auto disable if station connection</label></dt>"
+"<dd><input id=\"hidden\" type=\"checkbox\" name=\"ap_disable_if_sta\" value=\"1\" ",
+" /></dd>"
+"<dt><label for=\"disabled_restarts\">Disabled restarts</label></dt>"
+"<dd><input id=\"disabled_restarts\" type=\"number\" size=\"2\" min=\"0\" step=\"1\" "
+"name=\"ap_disabled_restarts\" placeholder=\"0\" value=\"",
+"\"/></dd>"
+"<dt><label for=\"ssid\">SSID</label></dt>"
+"<dd><input id=\"ssid\" type=\"text\" minlength=\"1\" maxlength=\"31\" name=\"ap_ssid\" "
+"placeholder=\"my access point\" value=\"",
+"\"></dd>"
+"<dt><label for=\"ap\">Password</label></dt>"
+"<dd><input id=\"ap\" type=\"text\" minlength=\"8\" maxlength=\"63\" name=\"ap_password\" "
+"placeholder=\"password\" value=\"",
+"\"></dd>"
+"<dt><label for=\"hidden\">SSID Hidden</label></dt>"
+"<dd><input id=\"hidden\" type=\"checkbox\" name=\"ap_ssid_hidden\" value=\"1\" ",
+" /></dd>"
+"<dt><label for=\"ch\">Channel</label></dt>"
+"<dd><input id=\"ch\" type=\"number\" size=\"2\" min=\"1\" max=\"14\" step=\"1\" "
+"name=\"ap_channel\" placeholder=\"6\" value=\"",
+"\"></dd>"
+"<dt><label for=\"am\">Authentication Mode</label></dt>"
+"<dd><select id=\"am\" name=\"ap_authmode\">"
+"<option value=\"0\"",
+">Open</option>"
+"<option value=\"2\"",
+">WPA_PSK</option>"
+"<option value=\"3\"",
+">WPA2_PSK</option>"
+"<option value=\"4\"",
+">WPA_WPA2_PSK</option></select></dd>"
+"<dt><label for=\"mc\">Max connections</label></dt>"
+"<dd><input id=\"mc\" type=\"number\" size=\"2\" min=\"1\" max=\"8\" step=\"1\" "
+"name=\"ap_max_conn\" placeholder=\"3\" value=\"",
+"\"></dd>"
+"<dt><label for=\"bi\">Beacon interval</label></dt>"
+"<dd><input id=\"bi\" type=\"number\" size=\"6\" min=\"0\" max=\"10000\" step=\"1\" "
+"name=\"ap_beacon_interval\" placeholder=\"100\" value=\"",
+"\"></dd>"
+"<dt><label for=\"ip\">IP Address</label></dt>"
+"<dd><input id=\"ip\" type=\"text\" maxlength=\"15\" size=\"15\" "
+"pattern=\"(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)_*(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)_*){3}\" "
+"name=\"ap_ip_addr\" placeholder=\"192.168.4.1\" value=\"",
+"\"></dd>"
+"<dt><label for=\"nm\">Netmask</label></dt>"
+"<dd><input id=\"nm\" type=\"text\" maxlength=\"15\" size=\"15\" "
+"pattern=\"(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)_*(\\.(25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)_*){3}\" "
+"name=\"ap_netmask\" placeholder=\"255.255.255.0\" value=\"",
+"\"></dd>"
+"<dt><label for=\"dhcp\">DHCP Server Max Leases</label></dt>"
+"<dd><input id=\"dhcp\" type=\"number\" size=\"2\" min=\"0\" max=\"16\" step=\"1\" "
+"name=\"ap_dhcp_leases\" placeholder=\"4\" value=\"",
+"\"></dd>"
+"<dt><label for=\"dns_en\">DNS enabled</label></dt>"
+"<dd><input id=\"dns_en\" type=\"checkbox\" name=\"ap_dns\" value=\"1\" ",
+" /></dd>"
+"<dt><label for=\"dns_en\">mDNS enabled</label></dt>"
+"<dd><input id=\"dns_en\" type=\"checkbox\" name=\"ap_mdns\" value=\"1\" ",
+" /></dd>"
+"</dl>"
+"<center><input type=\"reset\">&nbsp;<input type=\"submit\" value=\"Save\"></center>"
+"</fieldset>"
+"<input type=\"hidden\" name=\"done\">"
+"</form>"
+"</body></html>"

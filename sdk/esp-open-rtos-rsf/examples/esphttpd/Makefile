@@ -1,0 +1,16 @@
+PROGRAM = esphttpd
+EXTRA_COMPONENTS = extras/dhcpserver extras/rboot-ota extras/libesphttpd
+
+ESP_IP ?= 192.168.4.1
+
+#Tag for OTA images. 0-27 characters. Change to eg your projects title.
+LIBESPHTTPD_OTA_TAGNAME ?= generic
+
+LIBESPHTTPD_MAX_CONNECTIONS ?= 8
+LIBESPHTTPD_STACKSIZE ?= 2048
+
+PROGRAM_CFLAGS += -DFREERTOS -DLIBESPHTTPD_OTA_TAGNAME="\"$(LIBESPHTTPD_OTA_TAGNAME)\"" -DFLASH_SIZE=$(FLASH_SIZE)
+EXTRA_CFLAGS += -DMEMP_NUM_NETCONN=$(LIBESPHTTPD_MAX_CONNECTIONS)
+
+include ../../common.mk
+

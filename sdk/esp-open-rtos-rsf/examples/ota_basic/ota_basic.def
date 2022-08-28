@@ -1,0 +1,9 @@
+cpu xtensa
+
+# Show up to this many raw bytes of code/data
+show bytes 4
+
+# ELF file
+# See example.def if you want to load raw binaries instead
+load build/ota_basic.out elf
+

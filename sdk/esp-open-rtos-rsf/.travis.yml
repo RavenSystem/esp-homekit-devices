@@ -1,0 +1,50 @@
+language: c
+sudo: false
+env:
+  # Target commit for https://github.com/pfalcon/esp-open-sdk/
+  OPENSDK_COMMIT=b069537
+  CROSS_ROOT="${HOME}/toolchain-${OPENSDK_COMMIT}"
+  CROSS_BINDIR="${CROSS_ROOT}/bin"
+  CROSS="ccache xtensa-lx106-elf-"
+  MAKE_CMD="make WARNINGS_AS_ERRORS=1 -C examples/ build-examples"
+  PATH=${PATH}:${CROSS_BINDIR}
+cache:
+  directories:
+    - ${CROSS_ROOT}
+addons:
+  apt:
+    packages:
+    - make
+    - unrar
+    - autoconf
+    - automake
+    - libtool
+    - gcc
+    - g++
+    - gperf
+    - flex
+    - bison
+    - texinfo
+    - gawk
+    - libncurses5-dev
+    - libexpat1-dev
+    - python
+    - python-pip
+    - sed
+    - git
+    - help2man
+    - vim-common
+    - zlib1g-dev
+
+before_install:
+  - pip install --user pyserial
+  - travis_wait 30 utils/travis_build/install_toolchain.sh
+
+script:
+  - cd ${TRAVIS_BUILD_DIR}
+  # Remove ssid_config requirement for examples
+  - echo -e '#define WIFI_SSID "mywifissid"\n#define WIFI_PASS "my secret password"\n' > include/private_ssid_config.h
+  # Don't verbose-build all examples (too much output), only verbose-build errors
+  - ( ${MAKE_CMD} ) || ( ${MAKE_CMD} V=1 )
+  # build bootloader
+  - make -C bootloader/

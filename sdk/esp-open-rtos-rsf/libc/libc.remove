@@ -1,0 +1,13 @@
+# Object files to remove from libc.a
+# These are provided by the ROM.
+lib_a-bzero.o
+lib_a-memcmp.o
+lib_a-memcpy.o
+lib_a-memmove.o
+lib_a-memset.o
+lib_a-strcmp.o
+lib_a-strcpy.o
+lib_a-strlen.o
+lib_a-strncmp.o
+lib_a-strncpy.o
+lib_a-strstr.o

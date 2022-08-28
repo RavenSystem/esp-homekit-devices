@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no">
+		<link rel="stylesheet" type="text/css" href="css/siimple.min.css">
+		<link rel="stylesheet" type="text/css" href="css/style.css">
+		<link rel="shortcut icon" href="img/favicon.png">
+		<title>HTTP Server</title>
+	</head>
+	<body>
+		<ul class="navbar">
+			<li><a href="/">Home</a></li>
+			<li><a class="active" href="websockets">WebSockets</a></li>
+			<li><a href="about">About</a></li>
+		</ul>
+
+		<div class="grid main">
+			<h1>WebSockets Demo</h1>
+			<div id="status_box" class="alert alert-info">Loading..</div>
+			<p>This page is similar to the home page but uses WebSockets for real-time updates.</p>
+			<div class="cover" align="center">
+				<canvas id="chartCanvas" width="512" height="100"></canvas>
+				<p/>
+				<p>LED Control</p>
+				<div class="onoffswitch">
+					<input type="checkbox" name="onoffswitch" class="onoffswitch-checkbox" id="led-switch" onclick="gpio()">
+					<label class="onoffswitch-label" for="led-switch">
+						<span class="onoffswitch-inner"></span>
+						<span class="onoffswitch-switch"></span>
+					</label>
+				</div>
+			</div>
+
+			<h1>Server Status</h1>
+			<table class="table table-striped">
+				<tr>
+					<td><b>Uptime:</b></td>
+					<td id="uptime"></td>
+				</tr>
+				<tr>
+					<td><b>Free heap:</b></td>
+					<td id="heap"></td>
+				</tr>
+				<tr>
+					<td><b>LED state:</b></td>
+					<td id="led"></td>
+				</tr>
+			</table>
+
+			<h1>How it works</h1>
+			<p>This demo uses 2 WebScokets. Status parameters are streamed by the server in JSON format every 2 seconds.
+				A <code>websocket_task</code> is created each time a specific URI is requested.</p>
+			<p>ADC values are being continuously polled by the client (i.e. your browser).
+				Each time a WebSocket frame is received on the server side, <code>websocket_cb</code> function is being called.</p>
+		</div>
+
+		<script type="text/javascript" src="js/smoothie_min.js"></script>
+		<script>
+			var ws;
+			var retries;
+			var series = new TimeSeries();
+			window.onload = function() {
+				wsOpen();
+				startPolling();
+			}
+			function setMsg(cls, text) {
+				sbox = document.getElementById('status_box');
+				sbox.className = "alert alert-" + cls;
+				sbox.innerHTML = text;
+				console.log(text);
+			}
+			function startPolling() {
+				var chart = new SmoothieChart({millisPerPixel:11,grid:{fillStyle:'#ffffff',strokeStyle:'#ffffff',borderVisible:false},
+					labels:{fillStyle:'#000000'},maxValue:1024,minValue:0});
+				chart.addTimeSeries(series, {lineWidth:2,strokeStyle:'#03a9f4',fillStyle:'#f1f5fa'});
+				chart.streamTo(document.getElementById("chartCanvas"), 500);
+				setInterval(function() { wsWrite('A'); }, 500);
+			}
+			function onMessage(evt) {
+				retries = 0;
+				var dv = new DataView(evt.data);
+				var val = dv.getUint16(0);
+				if (val == 0xBEEF || val == 0xDEAD)
+					console.log("LED switched");
+				else
+					series.append(new Date().getTime(), val);
+			}
+			function wsOpen() {
+				if (ws === undefined || ws.readyState != 0) {
+					if (retries)
+						setMsg("error", "WebSocket timeout, retrying..");
+					else
+						setMsg("info", "Opening WebSocket..");
+					ws = new WebSocket("ws://" + location.host);
+					ws.binaryType = 'arraybuffer';
+					ws.onopen = function(evt) { retries = 0; setMsg("done", "WebSocket is open."); };
+					ws.onerror = function(evt) { setMsg("error", "WebSocket error!"); };
+					ws.onmessage = function(evt) { onMessage(evt); };
+					wsOpenStream();
+					retries = 0;
+				}
+			}
+			function wsOpenStream() {
+				var uri = "/stream"
+				var ws = new WebSocket("ws://" + location.host + uri);
+				ws.onmessage = function(evt) {
+					console.log(evt.data);
+					var stats = JSON.parse(evt.data);
+					console.log(stats);
+					document.getElementById('uptime').innerHTML = stats.uptime + ' seconds';
+					document.getElementById('heap').innerHTML = stats.heap + ' bytes';
+					document.getElementById('led').innerHTML = (stats.led == 1) ? 'On' : 'Off';
+				};
+			}
+			function wsWrite(data) {
+				if (ws.readyState == 3 || retries++ > 5)
+					wsOpen();
+				else if (ws.readyState == 1)
+					ws.send(data);
+			}
+			function gpio() {
+				if (document.getElementById('led-switch').checked)
+					wsWrite('E');
+				else
+					wsWrite('D');
+			}
+		</script>
+	</body>
+</html>

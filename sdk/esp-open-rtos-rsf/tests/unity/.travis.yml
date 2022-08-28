@@ -1,0 +1,19 @@
+language: c
+
+matrix:
+ include:
+    - os: osx
+      compiler: clang
+      osx_image: xcode7.3
+    - os: linux
+      dist: trusty
+      compiler: gcc
+
+before_install:
+  - if [ "$TRAVIS_OS_NAME" == "osx" ]; then rvm install 2.1 && rvm use 2.1 && ruby -v; fi
+script:
+  - cd test && rake ci
+  - make -s
+  - cd ../extras/fixture/test && rake ci
+  - make -s default noStdlibMalloc
+  - make -s C89
