@@ -288,7 +288,6 @@ void user_init(void) {
         }
         
         gpio_enable(i, GPIO_INPUT);
-        gpio_set_pullup(i, false, false);
     }
     
     sdk_wifi_station_set_auto_connect(false);

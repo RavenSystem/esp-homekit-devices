@@ -154,7 +154,7 @@ void set_used_gpio(const int16_t gpio) {
         main_config.used_gpio |= bit;
     }
 }
-/*
+
 void set_unused_gpios() {
     for (int i = 0; i < 17; i++) {
         if (i == 6) {
@@ -162,11 +162,12 @@ void set_unused_gpios() {
         }
         
         if (!get_used_gpio(i)) {
-            gpio_enable(i, GPIO_INPUT);
+            //gpio_enable(i, GPIO_INPUT);
+            gpio_set_pullup(i, false, false);
         }
     }
 }
-*/
+
 mcp23017_t* mcp_find_by_index(const int index) {
     mcp23017_t* mcp23017 = main_config.mcp23017s;
     while (mcp23017 && mcp23017->index != index) {
@@ -11491,7 +11492,7 @@ void normal_mode_init() {
     
     xTaskCreate(delayed_sensor_task, "DS", DELAYED_SENSOR_START_TASK_SIZE, NULL, DELAYED_SENSOR_START_TASK_PRIORITY, NULL);
     
-    //set_unused_gpios();
+    set_unused_gpios();
     
     config.accessories = accessories;
     config.config_number = (uint16_t) last_config_number;
@@ -11688,7 +11689,6 @@ void user_init(void) {
         }
         
         gpio_enable(i, GPIO_INPUT);
-        gpio_set_pullup(i, false, false);
     }
     
     sdk_wifi_station_set_auto_connect(false);

@@ -268,7 +268,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
     int i = 0;
     while (i < MAX_302_JUMPS) {
         i++;
-        INFO("*** FORWARDING: %s:%i/%s", last_host, port, last_location);
+        INFO("*** FORWARDING %s:%i/%s", last_host, port, last_location);
         
         ota_conn_result = ota_connect(last_host, port, &socket, &ssl, is_ssl);  //release socket and ssl when ready
         
@@ -329,7 +329,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
                     ret = buffer_len;
                     buffer[ret] = 0;
                     
-                    INFO("GOT %i Bytes:\n%s\n", ret, buffer);
+                    INFO("GOT %i Bytes\n%s\n", ret, buffer);
                     
                     location = strstr_lc(buffer, "http/1.1 ");
                     if (location) {
@@ -484,7 +484,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
         return -1;
     }
     
-    INFO("*** FINAL LOC: %s:%i/%s\n", last_host, port, last_location);
+    INFO("*** FINAL %s:%i/%s\n", last_host, port, last_location);
     
     int new_connection() {
         int tries = 0;
@@ -622,7 +622,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
                             if (sector) { // Write to flash
                                 connection_tries = 0;
                                 if (writespace < ret) {
-                                    printf("0x%05X ", sector + collected);
+                                    printf("0x%02X ", (sector + collected) / SPI_FLASH_SECTOR_SIZE);
                                     if (!spiflash_erase_sector(sector + collected)) {
                                         free(recv_buf);
                                         return -6; // Erase error
@@ -682,7 +682,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
                     }
                 } while (recv_bytes < clength);
                 
-                INFO("- %d Bytes", collected);
+                INFO("- %d", collected);
                 
             } else {
                 ERROR("Write %i", ret);
