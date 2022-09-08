@@ -24,9 +24,9 @@ input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
 .field.required label::before{content:"*";color:red;}
 </style></head><body><div class="container"><h1>Home Accessory Architect<br><!-- part HTML_SETTINGS_HAA_FIRMWARE_VERSION --></h1>
 <h2>(Installer <!-- part HTML_SETTINGS_INSTALLER_VERSION -->)</h2>
-<form action="/settings" method="post">
+<form action="/set" method="post">
 <div class="field required conf">
-<label for="conf"> MEPLHAA Script:</label>
+<label for="conf"> MEPLHAA Script</label>
 <textarea id="conf" name="conf" autocorrect="off" autocomplete="off" autocapitalize="off" spellcheck="false">
 <!-- part HTML_SETTINGS_MIDDLE --></textarea><br>
 <!-- part HTML_SETTINGS_PAIRINGS -->Pairings <!-- part HTML_SETTINGS_PAIRINGS_COUNT -->/48<br>
@@ -58,9 +58,9 @@ input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
 <option value="16">16</option>
 </select></label></div>
 <input type="submit" id="join" value="Save" /><br><br>
-<input type="button" id="refresh" value="⟲ WiFi Networks" onClick="window.location.reload(true)"/>
+<input type="button" id="refresh" value="⟲ Search WiFi" onClick="window.location.reload(true)"/>
 <div class="nonetworks" style="display:none;">
-No networks found
+None found
 </div>
 <label class="networkheader">WiFi SSID (RSSI Channel) BSSID</label><ul id="networks" class="networks">
 <!-- part HTML_NETWORK_ITEM -->{% for network in networks %}

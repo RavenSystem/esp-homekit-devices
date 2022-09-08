@@ -59,7 +59,10 @@ typedef struct _adv_logger_data {
 } adv_logger_data_t;
 
 static adv_logger_data_t* adv_logger_data = NULL;
+
+#ifdef ADV_LOGGER_REMOVE
 static _WriteFunction* adv_logger_original_write_function = NULL;
+#endif
 
 static ssize_t adv_logger_none(struct _reent* r, int fd, const void* ptr, size_t len) {
     return len;
@@ -190,61 +193,58 @@ static void adv_logger_init_task(void* args) {
     char* destination = (char*) args;
     
     struct ip_info info;
-
+    
     while (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
         vTaskDelay(pdMS_TO_TICKS(200));
     }
     
-    if (sdk_wifi_get_ip_info(STATION_IF, &info)) {
-        uint8_t macaddr[6];
-        sdk_wifi_get_macaddr(STATION_IF, macaddr);
-        snprintf(adv_logger_data->header, HEADER_LEN, IPSTR"-%02X%02X%02X", IP2STR(&info.ip), macaddr[3], macaddr[4], macaddr[5]);
-        
-        const struct addrinfo hints = {
-            .ai_family = AF_UNSPEC,
-            .ai_socktype = SOCK_DGRAM,
-        };
-        
-        char* dest_port = strchr(destination, ':');
-        dest_port[0] = 0;
-        dest_port += 1;
-
-        while (getaddrinfo(destination, dest_port, &hints, &adv_logger_data->res) != 0) {
-            vTaskDelay(pdMS_TO_TICKS(200));
-        }
-        
-        while (adv_logger_data->socket < 0) {
-            adv_logger_data->socket = socket(adv_logger_data->res->ai_family, adv_logger_data->res->ai_socktype, 0);
-            vTaskDelay(pdMS_TO_TICKS(200));
-        }
-        
-        if (adv_logger_data->is_buffered) {
-            adv_logger_data->udplogstring = malloc(UDP_LOG_LEN);
-        } else {
-            adv_logger_data->udplogstring_size = 63;
-            adv_logger_data->udplogstring = malloc(adv_logger_data->udplogstring_size);
-        }
-        adv_logger_data->udplogstring[0] = 0;
-        
-        strcat(adv_logger_data->udplogstring, "\r\nAdvanced ESP Logger (c) 2022 José A. Jiménez Campos\r\n\r\n");
-        adv_logger_data->udplogstring_len = strlen(adv_logger_data->udplogstring);
-
-        if (adv_logger_data->is_buffered) {
-            xTaskCreate(adv_logger_buffered_task, "LOG", ADV_LOGGER_BUFFERED_TASK_SIZE, NULL, ADV_LOGGER_BUFFERED_TASK_PRIORITY, &adv_logger_data->xHandle);
-        }
-        
-        adv_logger_data->is_new_line = true;
-        adv_logger_data->ready_to_send = true;
-
-    } else {
-        adv_logger_remove();
+    sdk_wifi_get_ip_info(STATION_IF, &info);
+    
+    uint8_t macaddr[6];
+    sdk_wifi_get_macaddr(STATION_IF, macaddr);
+    snprintf(adv_logger_data->header, HEADER_LEN, IPSTR"-%02X%02X%02X", IP2STR(&info.ip), macaddr[3], macaddr[4], macaddr[5]);
+    
+    const struct addrinfo hints = {
+        .ai_family = AF_UNSPEC,
+        .ai_socktype = SOCK_DGRAM,
+    };
+    
+    char* dest_port = strchr(destination, ':');
+    dest_port[0] = 0;
+    dest_port += 1;
+    
+    while (getaddrinfo(destination, dest_port, &hints, &adv_logger_data->res) != 0) {
+        vTaskDelay(pdMS_TO_TICKS(200));
     }
+    
+    while ((adv_logger_data->socket = socket(adv_logger_data->res->ai_family, adv_logger_data->res->ai_socktype, 0)) < 0) {
+        adv_logger_data->socket = socket(adv_logger_data->res->ai_family, adv_logger_data->res->ai_socktype, 0);
+    }
+    
+    if (adv_logger_data->is_buffered) {
+        adv_logger_data->udplogstring = malloc(UDP_LOG_LEN);
+    } else {
+        adv_logger_data->udplogstring_size = 63;
+        adv_logger_data->udplogstring = malloc(adv_logger_data->udplogstring_size);
+    }
+    adv_logger_data->udplogstring[0] = 0;
+    
+    strcat(adv_logger_data->udplogstring, "\r\nAdvanced ESP Logger (c) 2022 José A. Jiménez Campos\r\n\r\n");
+    adv_logger_data->udplogstring_len = strlen(adv_logger_data->udplogstring);
+
+    if (adv_logger_data->is_buffered) {
+        xTaskCreate(adv_logger_buffered_task, "LOG", ADV_LOGGER_BUFFERED_TASK_SIZE, NULL, ADV_LOGGER_BUFFERED_TASK_PRIORITY, &adv_logger_data->xHandle);
+    }
+    
+    adv_logger_data->is_new_line = true;
+    adv_logger_data->ready_to_send = true;
     
     free(args);
     
     vTaskDelete(NULL);
 }
 
+#ifdef ADV_LOGGER_REMOVE
 int adv_logger_remove() {
     if (adv_logger_original_write_function) {
         set_write_stdout(adv_logger_original_write_function);
@@ -267,15 +267,18 @@ int adv_logger_remove() {
     
     return -1;
 }
+#endif
 
 void adv_logger_init(const int log_type, char* dest_addr) {
+#ifdef ADV_LOGGER_REMOVE
     adv_logger_remove();
     
     adv_logger_original_write_function = get_write_stdout();
+#endif
     
     if (log_type == ADV_LOGGER_NONE) {
         set_write_stdout(adv_logger_none);
-
+        
     } else if (log_type > ADV_LOGGER_UART0) {
         adv_logger_data = malloc(sizeof(adv_logger_data_t));
         memset(adv_logger_data, 0, sizeof(*adv_logger_data));

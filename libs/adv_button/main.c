@@ -1,7 +1,7 @@
 /*
  * Advanced Button Manager Example
  *
- * Copyright 2019-2020 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2022 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 

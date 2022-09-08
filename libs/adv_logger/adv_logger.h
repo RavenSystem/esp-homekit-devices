@@ -29,7 +29,9 @@ extern "C" {
 
 void adv_logger_init(const int log_type, char* dest_addr);
 
+#ifdef ADV_LOGGER_REMOVE
 int adv_logger_remove();
+#endif
 
 #ifdef __cplusplus
 }

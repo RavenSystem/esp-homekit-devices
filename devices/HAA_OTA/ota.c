@@ -622,7 +622,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
                             if (sector) { // Write to flash
                                 connection_tries = 0;
                                 if (writespace < ret) {
-                                    printf("Sector 0x%05X ", sector + collected);
+                                    printf("0x%05X ", sector + collected);
                                     if (!spiflash_erase_sector(sector + collected)) {
                                         free(recv_buf);
                                         return -6; // Erase error

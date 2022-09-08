@@ -103,10 +103,13 @@ static void wifi_station_connect_no_sleep() {
     sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
 }
 
-void wifi_config_remove_sys_param() {
+void setup_mode_reset_sysparam() {
     for (int i = 0; i < SYSPARAMSIZE; i++) {
         sdk_spi_flash_erase_sector((SYSPARAMSECTOR / SPI_FLASH_SECTOR_SIZE) + i);
     }
+    
+    sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
+    sysparam_init(SYSPARAMSECTOR, 0);
 }
 
 static void body_malloc(client_t* client) {
@@ -471,9 +474,7 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send_chunk(client, html_settings_haa_firmware_version);
     
     char *text = NULL;
-    sysparam_status_t status;
-    
-    status = sysparam_get_string(OTA_VERSION_SYSPARAM, &text);
+    sysparam_get_string(OTA_VERSION_SYSPARAM, &text);
     if (text) {
         client_send_chunk(client, text);
         free(text);
@@ -481,7 +482,7 @@ static void wifi_config_server_on_settings(client_t *client) {
     }
     client_send_chunk(client, html_settings_installer_version);
     
-    status = sysparam_get_string(HAA_SCRIPT_SYSPARAM, &text);
+    sysparam_status_t status = sysparam_get_string(HAA_SCRIPT_SYSPARAM, &text);
     if (status == SYSPARAM_OK) {
         client_send_chunk(client, text);
         free(text);
@@ -633,7 +634,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     client_free(client);
     
     if (!form) {
-        ERROR("DRAM. Rebooting...");
+        ERROR("DRAM");
         vTaskDelay(MS_TO_TICKS(3000));
         sdk_system_restart();
     }
@@ -646,7 +647,28 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             homekit_server_reset();
         }
         
-        wifi_config_remove_sys_param();
+        char* ota_version_string = NULL;
+        sysparam_get_string(OTA_VERSION_SYSPARAM, &ota_version_string);
+        
+        int8_t saved_pairing_count = -1;
+        sysparam_get_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, &saved_pairing_count);
+        
+        int last_config_number = 0;
+        sysparam_get_int32(LAST_CONFIG_NUMBER_SYSPARAM, &last_config_number);
+        
+        setup_mode_reset_sysparam();
+        
+        if (ota_version_string) {
+            sysparam_set_string(OTA_VERSION_SYSPARAM, ota_version_string);
+        }
+        
+        if (saved_pairing_count > -1) {
+            sysparam_set_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, saved_pairing_count);
+        }
+        
+        if (last_config_number > 0) {
+            sysparam_set_int32(LAST_CONFIG_NUMBER_SYSPARAM, last_config_number);
+        }
         
     } else {
         form_param_t *conf_param = form_params_find(form, "conf");
@@ -808,13 +830,13 @@ static int wifi_config_server_on_url(http_parser *parser, const char *data, size
 
     client->endpoint = ENDPOINT_UNKNOWN;
     if (parser->method == HTTP_GET) {
-        if (!strncmp(data, "/settings", length)) {
+        if (!strncmp(data, "/set", length)) {
             client->endpoint = ENDPOINT_SETTINGS;
         } else if (!strncmp(data, "/", length)) {
             client->endpoint = ENDPOINT_INDEX;
         }
     } else if (parser->method == HTTP_POST) {
-        if (!strncmp(data, "/settings", length)) {
+        if (!strncmp(data, "/set", length)) {
             client->endpoint = ENDPOINT_SETTINGS_UPDATE;
         }
     }
@@ -842,17 +864,16 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
     client_t *client = parser->data;
 
     switch(client->endpoint) {
-        case ENDPOINT_INDEX: {
-            client_send_redirect(client, 301, "/settings");
+        case ENDPOINT_INDEX:
+        case ENDPOINT_UNKNOWN:
+            client_send_redirect(client, 301, "/set");
             break;
-        }
             
-        case ENDPOINT_SETTINGS: {
+        case ENDPOINT_SETTINGS:
             wifi_config_server_on_settings(client);
             break;
-        }
         
-        case ENDPOINT_SETTINGS_UPDATE: {
+        case ENDPOINT_SETTINGS_UPDATE:
             esp_timer_change_period_forced(context->auto_reboot_timer, AUTO_REBOOT_LONG_TIMEOUT);
             if (context->sta_connect_timeout) {
                 vTaskDelete(context->sta_connect_timeout);
@@ -869,13 +890,12 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
             
             xTaskCreate(wifi_config_server_on_settings_update_task, "upd", 512, client, (tskIDLE_PRIORITY + 1), NULL);
             return 0;
-        }
-        
-        case ENDPOINT_UNKNOWN: {
+        /*
+        case ENDPOINT_UNKNOWN:
             INFO("Unknown");
-            client_send_redirect(client, 302, "http://192.168.4.1:4567/settings");
+            client_send_redirect(client, 302, "http://192.168.4.1:4567/set");
             break;
-        }
+        */
     }
 
     if (client->body) {

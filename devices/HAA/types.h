@@ -112,6 +112,17 @@ typedef struct _action_uart {
     struct _action_uart* next;
 } action_uart_t;
 
+typedef struct _action_set_ch {
+    uint8_t action;
+    
+    uint8_t source_serv;
+    uint8_t source_ch;
+    uint8_t target_serv;
+    uint8_t target_ch;
+    
+    struct _action_set_ch* next;
+} action_set_ch_t;
+
 typedef struct _wildcard_action {
     uint8_t index;
     uint8_t target_action;
@@ -140,7 +151,6 @@ typedef struct _ch_group {
     uint8_t serv_type: 7;
     
     homekit_characteristic_t** ch;
-    homekit_characteristic_t* ch_target;
     
     int8_t* num_i;
     float* num_f;
@@ -158,6 +168,7 @@ typedef struct _ch_group {
     action_network_t* action_network;
     action_irrf_tx_t* action_irrf_tx;
     action_uart_t* action_uart;
+    action_set_ch_t* action_set_ch;
     
     wildcard_action_t* wildcard_action;
     

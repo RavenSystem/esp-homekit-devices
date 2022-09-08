@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "11.0.0"
+#define HAA_FIRMWARE_VERSION                "11.1.0"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Peregrine"
 
@@ -154,8 +154,6 @@
 #define BUTTON_MODE                         "m"
 #define PULLUP_RESISTOR                     "p"
 #define VALUE                               "v"
-#define MANAGE_OTHERS_ACC_ARRAY             "m"
-#define ACCESSORY_INDEX                     "g"
 #define AUTOSWITCH_TIME                     "i"
 #define PIN_GPIO                            "g"
 #define INITIAL_STATE                       "s"
@@ -619,6 +617,8 @@
 #define INITIAL_VALUE                       "n"
 #define SYSTEM_ACTIONS_ARRAY                "s"
 #define NETWORK_ACTIONS_ARRAY               "h"
+#define SERVICE_MANAGER_ACTIONS_ARRAY       "m"
+#define SET_CH_ACTIONS_ARRAY                "c"
 #define IRRF_ACTIONS_ARRAY                  "i"
 #define IRRF_ACTION_PROTOCOL                "p"
 #define IRRF_ACTION_PROTOCOL_LEN_2BITS      (14)

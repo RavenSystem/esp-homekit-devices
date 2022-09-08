@@ -599,7 +599,7 @@ void mdns_announce() {
     } else if (mdns_status == MDNS_STATUS_PROBE_OK) {
         mdns_status = MDNS_STATUS_WORKING;
         esp_timer_change_period(mdns_announce_timer, (mdns_ttl_period - MDNS_TTL_SAFE_MARGIN) * MDNS_TTL_MULTIPLIER_MS);
-        printf(">>> mDNS TTL %i each %is\n", mdns_ttl, mdns_ttl_period);
+        printf(">>> mDNS TTL %i/%is\n", mdns_ttl, mdns_ttl_period);
     }
     
     struct netif *netif = sdk_system_get_netif(STATION_IF);
@@ -677,6 +677,8 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
     free(fullName);
     free(devName);
 
+    mdns_announce_timer = esp_timer_create((MDNS_TTL_SAFE_MARGIN * MDNS_TTL_MULTIPLIER_MS), true, NULL, mdns_announce);
+    
     mdns_announce();
 }
 
@@ -1102,11 +1104,8 @@ void mdns_init()
         UNLOCK_TCPIP_CORE();
         return;
     }
-
-    mdns_announce_timer = esp_timer_create((MDNS_TTL_SAFE_MARGIN * MDNS_TTL_MULTIPLIER_MS), true, NULL, mdns_announce);
     
     udp_bind_netif(gMDNS_pcb, netif);
-
     udp_recv(gMDNS_pcb, mdns_recv, NULL);
     
     UNLOCK_TCPIP_CORE();

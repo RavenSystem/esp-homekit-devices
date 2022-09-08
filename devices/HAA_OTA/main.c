@@ -54,7 +54,7 @@ void ota_task(void *arg) {
     INFO("\n\nHAA Installer v"INSTALLER_VERSION"\n\n");
     
 #ifdef HAABOOT
-    sysparam_set_string(USER_VERSION_SYSPARAM, "0.0.0");
+    sysparam_set_string(USER_VERSION_SYSPARAM, "0");
 #endif  // HAABOOT
     
     sysparam_status_t status;
@@ -257,9 +257,8 @@ void ota_task(void *arg) {
         }
     } else {
         ERROR("HAAMAIN, fixing\n");
-        sysparam_set_data(USER_VERSION_SYSPARAM, NULL, 0, false);
-        sysparam_set_string(USER_VERSION_SYSPARAM, "00.00.00");
-        sysparam_compact();
+        sysparam_set_string(USER_VERSION_SYSPARAM, "0");
+        sysparam_compact_alt();
     }
     
     ota_reboot();
@@ -269,25 +268,9 @@ void init_task() {
     uart_set_baud(0, 115200);
     adv_logger_init(ADV_LOGGER_UART0_UDP_BUFFERED, NULL);
     
-    sysparam_status_t status;
-    
-    status = sysparam_init(SYSPARAMSECTOR, 0);
+    sysparam_status_t status = sysparam_init(SYSPARAMSECTOR, 0);
     if (status != SYSPARAM_OK) {
-        INFO("No sysparam");
-        
-        wifi_config_remove_sys_param();
-        
-        status = sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
-        if (status == SYSPARAM_OK) {
-            INFO("Sysparam created");
-            status = sysparam_init(SYSPARAMSECTOR, 0);
-        }
-    }
-    
-    if (status == SYSPARAM_OK) {
-        INFO("Sysparam OK\n");
-    } else {
-        ERROR("Sysparam %d", status);
+        setup_mode_reset_sysparam();
     }
     
     wifi_config_init("HAA", xHandle);
@@ -305,6 +288,7 @@ void user_init(void) {
         }
         
         gpio_enable(i, GPIO_INPUT);
+        gpio_set_pullup(i, false, false);
     }
     
     sdk_wifi_station_set_auto_connect(false);

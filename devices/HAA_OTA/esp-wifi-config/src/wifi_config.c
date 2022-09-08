@@ -85,10 +85,13 @@ typedef struct _client {
 static void wifi_config_station_connect();
 static void wifi_config_softap_start();
 
-void wifi_config_remove_sys_param() {
+void setup_mode_reset_sysparam() {
     for (int i = 0; i < SYSPARAMSIZE; i++) {
         sdk_spi_flash_erase_sector((SYSPARAMSECTOR / SPI_FLASH_SECTOR_SIZE) + i);
     }
+    
+    sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
+    sysparam_init(SYSPARAMSECTOR, 0);
 }
 
 static void body_malloc(client_t* client) {
@@ -547,17 +550,38 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     free(client->body);
     
     if (!form) {
-        ERROR("No memory");
+        ERROR("DRAM");
         body_malloc(client);
         client->body_length = 0;
-        client_send_redirect(client, 302, "/settings");
+        client_send_redirect(client, 302, "/set");
         return;
     }
     
     form_param_t *reset_sys_param = form_params_find(form, "reset_sys");
     
     if (reset_sys_param) {
-        wifi_config_remove_sys_param();
+        char* ota_version_string = NULL;
+        sysparam_get_string(OTA_VERSION_SYSPARAM, &ota_version_string);
+        
+        int8_t saved_pairing_count = -1;
+        sysparam_get_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, &saved_pairing_count);
+        
+        int last_config_number = 0;
+        sysparam_get_int32(LAST_CONFIG_NUMBER_SYSPARAM, &last_config_number);
+        
+        setup_mode_reset_sysparam();
+        
+        if (ota_version_string) {
+            sysparam_set_string(OTA_VERSION_SYSPARAM, ota_version_string);
+        }
+        
+        if (saved_pairing_count > -1) {
+            sysparam_set_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, saved_pairing_count);
+        }
+        
+        if (last_config_number > 0) {
+            sysparam_set_int32(LAST_CONFIG_NUMBER_SYSPARAM, last_config_number);
+        }
         
     } else {
         form_param_t *conf_param = form_params_find(form, "conf");
@@ -669,13 +693,13 @@ static int wifi_config_server_on_url(http_parser *parser, const char *data, size
 
     client->endpoint = ENDPOINT_UNKNOWN;
     if (parser->method == HTTP_GET) {
-        if (!strncmp(data, "/settings", length)) {
+        if (!strncmp(data, "/set", length)) {
             client->endpoint = ENDPOINT_SETTINGS;
         } else if (!strncmp(data, "/", length)) {
             client->endpoint = ENDPOINT_INDEX;
         }
     } else if (parser->method == HTTP_POST) {
-        if (!strncmp(data, "/settings", length)) {
+        if (!strncmp(data, "/set", length)) {
             client->endpoint = ENDPOINT_SETTINGS_UPDATE;
         }
     }
@@ -703,17 +727,16 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
     client_t *client = parser->data;
 
     switch(client->endpoint) {
-        case ENDPOINT_INDEX: {
-            client_send_redirect(client, 301, "/settings");
+        case ENDPOINT_INDEX:
+        case ENDPOINT_UNKNOWN:
+            client_send_redirect(client, 301, "/set");
             break;
-        }
             
-        case ENDPOINT_SETTINGS: {
+        case ENDPOINT_SETTINGS:
             wifi_config_server_on_settings(client);
             break;
-        }
             
-        case ENDPOINT_SETTINGS_UPDATE: {
+        case ENDPOINT_SETTINGS_UPDATE:
             esp_timer_change_period_forced(context->auto_reboot_timer, AUTO_REBOOT_LONG_TIMEOUT);
             if (context->sta_connect_timeout) {
                 vTaskDelete(context->sta_connect_timeout);
@@ -721,13 +744,13 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
             
             xTaskCreate(wifi_config_server_on_settings_update_task, "upd", 512, client, (tskIDLE_PRIORITY + 1), NULL);
             return 0;
-        }
-            
-        case ENDPOINT_UNKNOWN: {
+        
+        /*
+        case ENDPOINT_UNKNOWN:
             INFO("Unknown");
-            client_send_redirect(client, 302, "http://192.168.4.1:4567/settings");
+            client_send_redirect(client, 302, "http://192.168.4.1:4567/set");
             break;
-        }
+        */
     }
 
     if (client->body) {

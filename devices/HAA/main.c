@@ -430,7 +430,10 @@ ch_group_t* IRAM ch_group_find(homekit_characteristic_t* ch) {
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
         for (int i = 0; i < ch_group->chs; i++) {
-            if (ch_group->ch[i] == ch) {
+            if (ch_group->ch[i] == ch &&
+                ch_group->serv_type != SERV_TYPE_DATA_HISTORY &&
+                (ch_group->serv_type != SERV_TYPE_FREE_MONITOR ||
+                 (ch_group->serv_type == SERV_TYPE_FREE_MONITOR && i == 0))) {
                 return ch_group;
             }
         }
@@ -441,10 +444,10 @@ ch_group_t* IRAM ch_group_find(homekit_characteristic_t* ch) {
     return NULL;
 }
 
-ch_group_t* IRAM ch_group_find_by_serv(uint16_t accessory) {
+ch_group_t* IRAM ch_group_find_by_serv(const uint16_t service) {
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group &&
-           ch_group->serv_index != accessory) {
+           ch_group->serv_index != service) {
         ch_group = ch_group->next;
     }
 
@@ -534,7 +537,7 @@ void save_data_history(homekit_characteristic_t* ch_target) {
     
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
-        if (ch_group->serv_type == SERV_TYPE_DATA_HISTORY && ch_group->ch_target == ch_target && ch_group->main_enabled) {
+        if (ch_group->serv_type == SERV_TYPE_DATA_HISTORY && ch_group->ch[ch_group->chs - 1] == ch_target && ch_group->main_enabled) {
             float value = get_hkch_value(ch_target);
             
             uint32_t final_time = time;
@@ -547,7 +550,7 @@ void save_data_history(homekit_characteristic_t* ch_target) {
             uint32_t current_ch = last_register / HIST_BLOCK_SIZE;
             uint32_t current_pos = last_register % HIST_BLOCK_SIZE;
             
-            if (current_ch >= ch_group->chs) {
+            if (current_ch >= ch_group->chs - 1) {
                 current_ch = 0;
                 current_pos = 0;
             }
@@ -653,7 +656,7 @@ void ntp_task() {
         tries++;
         
         if (main_config.network_is_busy) {
-            vTaskDelay(MS_TO_TICKS(234));
+            vTaskDelay(MS_TO_TICKS(200));
         }
         main_config.network_is_busy = true;
         
@@ -670,16 +673,17 @@ void ntp_task() {
                 }
                 ntp_host = strdup(NTP_SERVER_FALLBACK);
             }
-            vTaskDelay(MS_TO_TICKS(8000));
+            vTaskDelay(MS_TO_TICKS(3000));
             
         } else {
             if (!main_config.clock_ready && result == 0) {
                 main_config.clock_ready = true;
                 
+                // Save Data Histories when clock is ready
                 ch_group_t* ch_group = main_config.ch_groups;
                 while (ch_group) {
                     if (ch_group->serv_type == SERV_TYPE_DATA_HISTORY && ch_group->child_enabled) {
-                        save_data_history(ch_group->ch_target);
+                        save_data_history(ch_group->ch[ch_group->chs - 1]);
                     }
                     
                     ch_group = ch_group->next;
@@ -707,7 +711,7 @@ void ntp_timer_worker(TimerHandle_t xTimer) {
             raven_ntp_get_time_t();
         }
     } else {
-        ERROR("NTP HK pair");
+        ERROR("HK pair");
         raven_ntp_get_time_t();
     }
 }
@@ -739,7 +743,7 @@ void wifi_reconnection_task(void* args) {
     esp_timer_stop_forced(WIFI_WATCHDOG_TIMER);
     homekit_mdns_announce_pause();
     
-    INFO("Wifi recon started");
+    INFO("Recon start");
     
     do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 4);
 
@@ -773,12 +777,12 @@ void wifi_reconnection_task(void* args) {
             
             esp_timer_start_forced(WIFI_WATCHDOG_TIMER);
             
-            INFO("Wifi recon OK");
+            INFO("Recon OK");
             
             break;
             
         } else if (main_config.wifi_status <= WIFI_STATUS_DISCONNECTED) {
-            INFO("Wifi recon...");
+            INFO("Recon...");
             int8_t phy_mode = 4;    // main_config.wifi_status == WIFI_DISCONNECTED_LONG_TIME
             if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
                 phy_mode = 3;
@@ -792,7 +796,7 @@ void wifi_reconnection_task(void* args) {
         } else {
             main_config.wifi_error_count++;
             if (main_config.wifi_error_count > WIFI_DISCONNECTED_LONG_TIME) {
-                ERROR("Wifi discon long time");
+                ERROR("Discon long time");
                 main_config.wifi_error_count = 0;
                 main_config.wifi_status = WIFI_STATUS_LONG_DISCONNECTED;
                 
@@ -1474,7 +1478,7 @@ void power_monitor_timer_worker(TimerHandle_t xTimer) {
                 homekit_remove_oldest_client();
             }
         } else {
-            ERROR("PM HK pair");
+            ERROR("HK pair");
         }
     }
 }
@@ -1752,7 +1756,7 @@ void set_zones_timer_worker(TimerHandle_t xTimer) {
             esp_timer_start(xTimer);
         }
     } else {
-        ERROR("iAZ HK pair");
+        ERROR("HK pair");
     }
 }
 
@@ -2687,7 +2691,7 @@ void temperature_timer_worker(TimerHandle_t xTimer) {
             homekit_remove_oldest_client();
         }
     } else {
-        ERROR("TEM HK pair");
+        ERROR("HK pair");
     }
 }
 
@@ -3068,7 +3072,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
             L_DEBUG("mat2 = { {%g, %g}, {%g, %g} }", mat2[0][0], mat2[0][1], mat2[1][0], mat2[1][1]);
             
         }
-        INFO("New chromaticity: [%g, %g]", p[0], p[1]);
+        INFO("Chrom %g, %g", p[0], p[1]);
     }
   
     float targetRGB[3];
@@ -3281,7 +3285,7 @@ void IRAM rgbw_set_timer_worker() {
         main_config.setpwm_is_running = false;
         esp_timer_stop(main_config.set_lightbulb_timer);
         
-        INFO("Color fixed");
+        INFO("RGBW done");
     }
 }
 
@@ -3289,16 +3293,16 @@ void lightbulb_no_task(ch_group_t* ch_group) {
     lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_group->ch[0]);
     
     led_blink(1);
-    INFO("<%i> Lightbulb setter ON %i, BRI %i", ch_group->serv_index, ch_group->ch[0]->value.bool_value, ch_group->ch[1]->value.int_value);
+    INFO("<%i> LB ON %i BRI %i", ch_group->serv_index, ch_group->ch[0]->value.bool_value, ch_group->ch[1]->value.int_value);
     if (LIGHTBULB_CHANNELS == 2) {
-        INFO("<%i> Lightbulb setter TEMP %i", ch_group->serv_index, ch_group->ch[2]->value.int_value);
+        INFO("<%i> LB TEMP %i", ch_group->serv_index, ch_group->ch[2]->value.int_value);
     } else if (LIGHTBULB_CHANNELS >= 3) {
         /*
         if (lightbulb_group->temp_changed) {
-            INFO("<%i> Lightbulb setter TEMP %i", ch_group->serv_index, ch_group->ch[4]->value.int_value);
+            INFO("<%i> LB setter TEMP %i", ch_group->serv_index, ch_group->ch[4]->value.int_value);
         } else {
         */
-            INFO("<%i> Lightbulb setter HUE %g, SAT %g", ch_group->serv_index, ch_group->ch[2]->value.float_value, ch_group->ch[3]->value.float_value);
+            INFO("<%i> LB HUE %g SAT %g", ch_group->serv_index, ch_group->ch[2]->value.float_value, ch_group->ch[3]->value.float_value);
         //}
     }
     
@@ -3356,11 +3360,11 @@ void lightbulb_no_task(ch_group_t* ch_group) {
     
     homekit_characteristic_notify_safe(ch_group->ch[0]);
     
-    INFO("<%i> Target Color = %i, %i, %i, %i, %i", ch_group->serv_index, lightbulb_group->target[0],
-                                                                        lightbulb_group->target[1],
-                                                                        lightbulb_group->target[2],
-                                                                        lightbulb_group->target[3],
-                                                                        lightbulb_group->target[4]);
+    INFO("<%i> RGBW %i, %i, %i, %i, %i", ch_group->serv_index, lightbulb_group->target[0],
+                                                                 lightbulb_group->target[1],
+                                                                 lightbulb_group->target[2],
+                                                                 lightbulb_group->target[3],
+                                                                 lightbulb_group->target[4]);
     
     // Turn ON
     if (lightbulb_group->target[0] != lightbulb_group->current[0] ||
@@ -4150,7 +4154,7 @@ void light_sensor_timer_worker(TimerHandle_t xTimer) {
             homekit_remove_oldest_client();
         }
     } else {
-        ERROR("LUX HK pair");
+        ERROR("HK pair");
     }
 }
 
@@ -4411,6 +4415,58 @@ void battery_manager(homekit_characteristic_t* ch, int value, bool is_free_monit
     }
 }
 
+bool set_hkch_value(homekit_characteristic_t* ch_target, const float value) {
+    int has_changed = false;
+    
+    switch (ch_target->value.format) {
+        case HOMEKIT_FORMAT_BOOL:
+            if (ch_target->value.bool_value != ((bool) ((int) value))) {
+                ch_target->value.bool_value = (bool) ((int) value);
+                has_changed = true;
+            }
+            break;
+            
+        case HOMEKIT_FORMAT_UINT8:
+        case HOMEKIT_FORMAT_UINT16:
+        case HOMEKIT_FORMAT_UINT32:
+        case HOMEKIT_FORMAT_UINT64:
+        case HOMEKIT_FORMAT_INT:
+            if (ch_target->value.int_value != ((int) value)) {
+                ch_target->value.int_value = value;
+                has_changed = true;
+            }
+            break;
+            
+        case HOMEKIT_FORMAT_FLOAT:
+            if (((int) (ch_target->value.float_value * 1000)) != ((int) (value * 1000))) {
+                ch_target->value.float_value = value;
+                has_changed = true;
+            }
+            break;
+            
+        default:
+            break;
+    }
+    
+    if (has_changed) {
+        homekit_characteristic_notify_safe(ch_target);
+        
+        ch_group_t* ch_target_group = ch_group_find(ch_target);
+        
+        if (ch_target_group->serv_type == SERV_TYPE_THERMOSTAT) {
+            hkc_th_setter(ch_target, ch_target->value);
+            
+        } else if (ch_target_group->serv_type == SERV_TYPE_HUMIDIFIER) {
+            hkc_humidif_setter(ch_target, ch_target->value);
+            
+        } else if (ch_target_group->serv_type == SERV_TYPE_BATTERY) {
+            battery_manager(ch_target, ch_target->value.int_value, true);
+        }
+    }
+    
+    return has_changed;
+}
+
 // --- FREE MONITOR
 bool find_patterns(pattern_t* pattern_base, uint8_t** bytes, int bytes_len) {
     pattern_t* pattern = pattern_base;
@@ -4487,6 +4543,17 @@ void IRAM fm_pulse_interrupt(const uint8_t gpio) {
         
         ch_group = ch_group->next;
     }
+}
+
+bool free_monitor_type_is_pattern(const uint8_t fm_sensor_type) {
+    if (fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_TEXT ||
+        fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_HEX ||
+        fm_sensor_type == FM_SENSOR_TYPE_UART_PATTERN_HEX ||
+        fm_sensor_type == FM_SENSOR_TYPE_UART_PATTERN_TEXT) {
+        return true;
+    }
+    
+    return false;
 }
 
 void free_monitor_task(void* args) {
@@ -5024,55 +5091,10 @@ void free_monitor_task(void* args) {
                     }
                     
                     // Target Characteristic
-                    if (ch_group->ch_target) {
-                        int has_changed = false;
-                        
-                        switch (ch_group->ch_target->value.format) {
-                            case HOMEKIT_FORMAT_BOOL:
-                                if (ch_group->ch_target->value.bool_value != ((bool) ((int) value))) {
-                                    ch_group->ch_target->value.bool_value = (bool) ((int) value);
-                                    has_changed = true;
-                                }
-                                break;
-                                
-                            case HOMEKIT_FORMAT_UINT8:
-                            case HOMEKIT_FORMAT_UINT16:
-                            case HOMEKIT_FORMAT_UINT32:
-                            case HOMEKIT_FORMAT_UINT64:
-                            case HOMEKIT_FORMAT_INT:
-                                if (ch_group->ch_target->value.int_value != ((int) value)) {
-                                    ch_group->ch_target->value.int_value = value;
-                                    has_changed = true;
-                                }
-                                break;
-                                
-                            case HOMEKIT_FORMAT_FLOAT:
-                                if (((int) (ch_group->ch_target->value.float_value * 1000)) != ((int) (value * 1000))) {
-                                    ch_group->ch_target->value.float_value = value;
-                                    has_changed = true;
-                                }
-                                break;
-                                
-                            default:
-                                ERROR("<%i> Tg Ch", ch_group->serv_index);
-                                break;
-                        }
-                        
-                        if (has_changed) {
-                            homekit_characteristic_notify_safe(ch_group->ch_target);
-                            
-                            ch_group_t* ch_target_group = ch_group_find(ch_group->ch_target);
-                            
-                            if (ch_target_group->serv_type == SERV_TYPE_THERMOSTAT) {
-                                hkc_th_setter(ch_group->ch_target, ch_group->ch_target->value);
-                                
-                            } else if (ch_target_group->serv_type == SERV_TYPE_HUMIDIFIER) {
-                                hkc_humidif_setter(ch_group->ch_target, ch_group->ch_target->value);
-                                
-                            } else if (ch_target_group->serv_type == SERV_TYPE_BATTERY) {
-                                battery_manager(ch_group->ch_target, ch_group->ch_target->value.int_value, true);
-                            }
-                        }
+                    if (ch_group->chs == 3 ||
+                        (ch_group->chs == 2 && !free_monitor_type_is_pattern(fm_sensor_type))) {
+                        homekit_characteristic_t* ch_target = ch_group->ch[ch_group->chs - 1];
+                        set_hkch_value(ch_target, value);
                     }
                 }
             }
@@ -5100,7 +5122,7 @@ void free_monitor_timer_worker(TimerHandle_t xTimer) {
                 homekit_remove_oldest_client();
             }
         } else {
-            ERROR("FM HK pair");
+            ERROR("HK pair");
         }
     }
 }
@@ -5476,12 +5498,12 @@ void net_action_task(void* pvParameters) {
     while (action_network) {
         if (action_network->action == action_task->action && !action_network->is_running) {
             action_network->is_running = true;
-
+            
             while (main_config.network_is_busy) {
                 vTaskDelay(MS_TO_TICKS(50));
             }
             
-            INFO("<%i> Net Action %s:%i", action_task->ch_group->serv_index, action_network->host, action_network->port_n);
+            INFO("<%i> Net %s:%i", action_task->ch_group->serv_index, action_network->host, action_network->port_n);
             
             str_ch_value_t* str_ch_value_first = NULL;
             
@@ -5630,7 +5652,7 @@ void net_action_task(void* pvParameters) {
                         close(socket);
                         
                         if (result > 0) {
-                            INFO("<%i> Payload:\n%s", action_task->ch_group->serv_index, req);
+                            INFO("<%i> Payload\n%s", action_task->ch_group->serv_index, req);
                         }
                     }
                     
@@ -5677,7 +5699,7 @@ void net_action_task(void* pvParameters) {
             main_config.network_is_busy = false;
             action_network->is_running = false;
             
-            INFO("<%i> Net Action done", action_task->ch_group->serv_index);
+            INFO("<%i> Net done", action_task->ch_group->serv_index);
             
             vTaskDelay(1);
         }
@@ -5727,7 +5749,6 @@ void irrf_tx_task(void* pvParameters) {
                 
                 switch (ir_action_protocol_len) {
                     case IRRF_ACTION_PROTOCOL_LEN_4BITS:
-                        INFO("4");
                         for (int i = 0; i < json_ir_code_len; i++) {
                             char* found = strchr(baseUC_dic, action_irrf_tx->prot_code[i]);
                             if (found) {
@@ -5748,7 +5769,6 @@ void irrf_tx_task(void* pvParameters) {
                         break;
                         
                     case IRRF_ACTION_PROTOCOL_LEN_6BITS:
-                        INFO("6");
                         for (int i = 0; i < json_ir_code_len; i++) {
                             char* found = strchr(baseUC_dic, action_irrf_tx->prot_code[i]);
                             if (found) {
@@ -5773,7 +5793,6 @@ void irrf_tx_task(void* pvParameters) {
                         break;
                         
                     default:    // case IRRF_ACTION_PROTOCOL_LEN_2BITS:
-                        INFO("2");
                         for (int i = 0; i < json_ir_code_len; i++) {
                             char* found = strchr(baseUC_dic, action_irrf_tx->prot_code[i]);
                             if (found) {
@@ -5799,7 +5818,7 @@ void irrf_tx_task(void* pvParameters) {
                     }
                 }
                 
-                INFO("<%i> IR Len: %i, Prot: %s", action_task->ch_group->serv_index, ir_code_len, prot);
+                INFO("<%i> IR Len %i, Prot %s", action_task->ch_group->serv_index, ir_code_len, prot);
                 
                 unsigned int bit0_mark = 0, bit0_space = 0, bit1_mark = 0, bit1_space = 0;
                 unsigned int bit2_mark = 0, bit2_space = 0, bit3_mark = 0, bit3_space = 0;
@@ -5958,7 +5977,7 @@ void irrf_tx_task(void* pvParameters) {
                     }
                 }
                 
-                INFO("\n<%i> IR code: %s", action_task->ch_group->serv_index, action_irrf_tx->prot_code);
+                INFO("\n<%i> IR code %s", action_task->ch_group->serv_index, action_irrf_tx->prot_code);
                 for (int i = 0; i < ir_code_len; i++) {
                     printf("%s%5d ", i & 1 ? "-" : "+", ir_code[i]);
                     if (i % 16 == 15) {
@@ -6471,7 +6490,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             
                         case SERV_TYPE_DATA_HISTORY:
                             //if (value_int == 0) {
-                                save_data_history(ch_group->ch_target);
+                                save_data_history(ch_group->ch[ch_group->chs - 1]);
                             //}
                             break;
                             
@@ -6541,6 +6560,18 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         }
         
         action_system = action_system->next;
+    }
+    
+    // Set Characteristic actions
+    action_set_ch_t* action_set_ch = ch_group->action_set_ch;
+    while(action_set_ch) {
+        if (action_set_ch->action == action) {
+            INFO("<%i> SetCh %i.%i->%i.%i", ch_group->serv_index, action_set_ch->source_serv, action_set_ch->source_ch, action_set_ch->target_serv, action_set_ch->target_ch);
+            const float value = get_hkch_value(ch_group_find_by_serv(action_set_ch->source_serv)->ch[action_set_ch->source_ch]);
+            set_hkch_value(ch_group_find_by_serv(action_set_ch->target_serv)->ch[action_set_ch->target_ch], value);
+        }
+        
+        action_set_ch = action_set_ch->next;
     }
     
     int timer_delay = 0;
@@ -6715,7 +6746,6 @@ void run_homekit_server() {
         show_freeheap();
     }
     
-    ntp_timer_worker(NULL);
     esp_timer_start_forced(esp_timer_create(NTP_POLL_PERIOD_MS, true, NULL, ntp_timer_worker));
     
     if (main_config.timetable_actions) {
@@ -6723,6 +6753,8 @@ void run_homekit_server() {
     }
     
     vTaskDelay(MS_TO_TICKS(500));
+    
+    ntp_timer_worker(NULL);
     
     if (homekit_pairing_count() == 0) {
         sysparam_set_data(HOMEKIT_PAIRING_COUNT_SYSPARAM, NULL, 0, false);
@@ -7096,8 +7128,8 @@ void normal_mode_init() {
             char action[3];
             itoa(new_int_action, action, 10);
             if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
-                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), MANAGE_OTHERS_ACC_ARRAY) != NULL) {
-                    cJSON* json_acc_managers = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), MANAGE_OTHERS_ACC_ARRAY);
+                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SERVICE_MANAGER_ACTIONS_ARRAY) != NULL) {
+                    cJSON* json_acc_managers = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SERVICE_MANAGER_ACTIONS_ARRAY);
                     
                     for (int i = cJSON_GetArraySize(json_acc_managers) - 1; i >= 0; i--) {
                         action_serv_manager_t* action_serv_manager = malloc(sizeof(action_serv_manager_t));
@@ -7139,6 +7171,66 @@ void normal_mode_init() {
         }
         
         ch_group->action_serv_manager = last_action;
+    }
+    
+    // Service Manager
+    inline void new_action_set_ch(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+        action_set_ch_t* last_action = ch_group->action_set_ch;
+        
+        void register_action(cJSON* json_accessory, uint8_t new_int_action) {
+            char action[3];
+            itoa(new_int_action, action, 10);
+            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SET_CH_ACTIONS_ARRAY) != NULL) {
+                    cJSON* json_set_chs = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SET_CH_ACTIONS_ARRAY);
+                    
+                    for (int i = cJSON_GetArraySize(json_set_chs) - 1; i >= 0; i--) {
+                        action_set_ch_t* action_set_ch = malloc(sizeof(action_set_ch_t));
+                        memset(action_set_ch, 0, sizeof(*action_set_ch));
+
+                        action_set_ch->action = new_int_action;
+                        
+                        action_set_ch->next = last_action;
+                        last_action = action_set_ch;
+                        
+                        cJSON* json_set_ch = cJSON_GetArrayItem(json_set_chs, i);
+                        for (int j = 0; j < 4; j++) {
+                            const int value = (uint8_t) cJSON_GetArrayItem(json_set_ch, j)->valuedouble;
+                            
+                            switch (j) {
+                                case 0:
+                                    action_set_ch->source_serv = get_absolut_index(ch_group->serv_index, value);
+                                    break;
+                                    
+                                case 1:
+                                    action_set_ch->source_ch = value;
+                                    break;
+                                    
+                                case 2:
+                                    action_set_ch->target_serv = get_absolut_index(ch_group->serv_index, value);
+                                    break;
+                                    
+                                case 3:
+                                    action_set_ch->target_ch = value;
+                                    break;
+                            }
+                        }
+                        
+                        INFO("New SetCh A%i: %i.%i->%i.%i", new_int_action, action_set_ch->source_serv, action_set_ch->source_ch, action_set_ch->target_serv, action_set_ch->target_ch);
+                    }
+                }
+            }
+        }
+        
+        if (fixed_action < MAX_ACTIONS) {
+            for (int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+                register_action(json_context, int_action);
+            }
+        } else {
+            register_action(json_context, fixed_action);
+        }
+        
+        ch_group->action_set_ch = last_action;
     }
     
     // System Actions
@@ -7403,6 +7495,7 @@ void normal_mode_init() {
         new_action_network(ch_group, json_accessory, fixed_action);
         new_action_irrf_tx(ch_group, json_accessory, fixed_action);
         new_action_uart(ch_group, json_accessory, fixed_action);
+        new_action_set_ch(ch_group, json_accessory, fixed_action);
     }
     
     void register_wildcard_actions(ch_group_t* ch_group, cJSON* json_accessory) {
@@ -10784,7 +10877,7 @@ void normal_mode_init() {
         
         pattern_t* pattern_base = NULL;
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, FM_PATTERN_ARRAY_SET) != NULL) {
+        if (free_monitor_type_is_pattern(fm_sensor_type)) {
             cJSON* pattern_array = cJSON_GetObjectItemCaseSensitive(json_context, FM_PATTERN_ARRAY_SET);
             for (int i = cJSON_GetArraySize(pattern_array) - 1; i >= 0; i--) {
                 pattern_t* new_pattern = malloc(sizeof(pattern_t));
@@ -10834,7 +10927,9 @@ void normal_mode_init() {
             maths_operations = cJSON_GetArraySize(val_data) / 3;
         }
         
-        ch_group_t* ch_group = new_ch_group(1 + ( pattern_base ? 1 : 0 ),
+        ch_group_t* ch_group = new_ch_group(1 +
+                                            ( pattern_base ? 1 : 0 ) +
+                                            ( tg_serv ? 1 : 0 ),
                                             
                                             1 +
                                             ( fm_sensor_type == FM_SENSOR_TYPE_PULSE_FREQ ) +
@@ -10907,7 +11002,7 @@ void normal_mode_init() {
         ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_FREE_VALUE, 0);
         
         if (tg_serv != 0) {
-            ch_group->ch_target = ch_group_find_by_serv(get_absolut_index(service_numerator, tg_serv))->ch[tg_ch];
+            ch_group->ch[ch_group->chs - 1] = ch_group_find_by_serv(get_absolut_index(service_numerator, tg_serv))->ch[tg_ch];
         }
         
         if (pattern_base) {
@@ -11084,7 +11179,7 @@ void normal_mode_init() {
         
         INFO("Serv %i, Ch %i, Size %i", hist_accessory, hist_ch, hist_size * HIST_REGISTERS_BY_BLOCK);
         
-        ch_group_t* ch_group = new_ch_group(hist_size, 0, 1, 0);
+        ch_group_t* ch_group = new_ch_group(hist_size + 1, 0, 1, 0);
         ch_group->serv_type = SERV_TYPE_DATA_HISTORY;
         ch_group->serv_index = service_numerator;
         set_killswitch(ch_group, json_context);
@@ -11100,7 +11195,7 @@ void normal_mode_init() {
         
         service++;
         
-        ch_group->ch_target = ch_group_find_by_serv(hist_accessory)->ch[hist_ch];
+        ch_group->ch[hist_size] = ch_group_find_by_serv(hist_accessory)->ch[hist_ch];
         
         accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
         accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
@@ -11136,7 +11231,7 @@ void normal_mode_init() {
         
         const float poll_period = sensor_poll_period(json_context, 0);
         if (poll_period > 0.00f) {
-            esp_timer_start_forced(esp_timer_create(poll_period * 1000, true, (void*) ch_group->ch_target, data_history_timer_worker));
+            esp_timer_start_forced(esp_timer_create(poll_period * 1000, true, (void*) ch_group->ch[hist_size], data_history_timer_worker));
         }
     }
     
@@ -11500,13 +11595,9 @@ void wifi_done() {
 
 void init_task() {
     // Sysparam starter
-    sysparam_status_t status;
-    status = sysparam_init(SYSPARAMSECTOR, 0);
+    sysparam_status_t status = sysparam_init(SYSPARAMSECTOR, 0);
     if (status != SYSPARAM_OK) {
-        wifi_config_remove_sys_param();
-        
-        sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
-        sysparam_init(SYSPARAMSECTOR, 0);
+        setup_mode_reset_sysparam();
     }
     
     uint8_t macaddr[6];
@@ -11597,6 +11688,7 @@ void user_init(void) {
         }
         
         gpio_enable(i, GPIO_INPUT);
+        gpio_set_pullup(i, false, false);
     }
     
     sdk_wifi_station_set_auto_connect(false);
