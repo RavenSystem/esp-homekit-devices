@@ -58,6 +58,9 @@
         "type": "object",
         "allOf": [
           {
+            "$ref": "./accessories/all-accessories.json"
+          },
+          {
             "properties": {
               "t": {
                 "description": "Service type",

@@ -1,17 +1,11 @@
 {
-  "$schema": "https://raw.githubusercontent.com/hennessyevan/esp-homekit-schema/main/meplhaa.json#",
+  "$schema": "./meplhaa.json",
   "c": {
     "r": [{ "n": 1 }]
   },
   "a": [
     {
-      "t": 3,
-      "f1": [
-        {
-          "g": 0,
-          "t": 1
-        }
-      ]
+      "t": 1
     }
   ]
 }

@@ -90,7 +90,7 @@
     },
 
     "ks": {
-      "$ref": "./ks.json"
+      "$ref": "../ks.json"
     }
   }
 }

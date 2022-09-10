@@ -10,7 +10,8 @@
           "description": "Copy Action\nShorthand format for copying an action\n\nNOTE: Within an action the copy action type \"a\" is mutually exclusive to all other actions and can only be used on its own. All other action types can be combined."
         }
       },
-      "required": ["a"]
+      "required": ["a"],
+      "maxProperties": 1
     },
     {
       "not": {
@@ -120,7 +121,19 @@
         },
 
         "c": {
-          "description": "Set Characteristic Actions\n\nRead value from a service characteristic and write it in other"
+          "description": "Set Characteristic Actions\n\nRead value from a service characteristic and write it in other",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 4,
+            "maxItems": 4,
+            "prefixItems": [
+              { "description": "Source Service", "type": "integer" },
+              { "description": "Source Characteristic", "type": "integer" },
+              { "description": "Target Service", "type": "integer" },
+              { "description": "Target Characteristic", "type": "integer" }
+            ]
+          }
         }
       }
     }

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "h": {
+      "description": "HomeKit Visibility\n\nIf this option is set to 0 the service will become invisible to HomeKit but will still function as a service. Its hardware will be fully functional, as well as its status. All actions will function as normal too.",
+      "type": "integer",
+      "default": 1,
+      "oneOf": [
+        { "const": 0, "description": "Service is not added to HomeKit" },
+        { "const": 1, "description": "Service is visible to HomeKit" },
+        {
+          "const": 2,
+          "description": "Service is hidden in Apple Home App, but is showed in HAA Home Manager and compatible Apps. It must be used with Services into Extra Services array."
+        }
+      ]
+    }
+  }
+}
