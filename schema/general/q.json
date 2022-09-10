@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Custom PWM Frequency (Hz)\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#custom-pwm-frequency",
+  "default": 305,
+  "type": "integer",
+  "minimum": 1,
+  "maximum": 2000
+}

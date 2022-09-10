@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Binary Output\n\nThe binary output array contains a list of GPIO level changes to perform when an action is invoked\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Accessory-Configuration#output-gpio",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "g": {
+      "description": "Output GPIO\n\nGPIO changed on result of an action\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Accessory-Configuration#output-gpio",
+      "type": "integer",
+      "minimum": 0
+    },
+
+    "i": {
+      "description": "Inching\n\nTime period in seconds before returning pin to previous state\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Accessory-Configuration#Inching",
+      "type": "number",
+      "minimum": 0.02
+    },
+
+    "v": {
+      "description": "Value\n\nBinary level to apply to the output GPIO\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Accessory-Configuration#Value",
+      "default": 0,
+      "type": "integer",
+      "oneOf": [
+        {
+          "const": 0,
+          "description": "Drive output Low"
+        },
+        {
+          "const": 1,
+          "description": "Drive output High"
+        }
+      ]
+    },
+
+    "n": {
+      "description": "Initial Value\n\nInitial value when is declared for first time",
+      "$ref": "#/properties/v"
+    }
+  },
+  "examples": [
+    { "g": 12, "v": 0 },
+    { "g": 12, "v": 1, "i": 2 }
+  ]
+}

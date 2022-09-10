@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "HAA Setup Service\nSet accessory number where HAA Setup Service will be\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#HAA-Setup-Service",
+  "default": 1,
+  "type": "integer",
+  "oneOf": [
+    { "const": 1, "description": "ENABLE" },
+    { "const": 0, "description": "DISABLE" }
+  ]
+}

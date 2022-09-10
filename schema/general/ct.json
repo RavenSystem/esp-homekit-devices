@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "integer",
+  "description": "Customized device category\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#HomeKit-Device-Category\n\n1\tOther\n2\tBridge\n3\tFan\n4\tGarage Door Opener\n5\tLightbulb\n6\tDoor Lock\n7\tOutlet\n8\tSwitch\n9\tThermostat\n10\tSensor\n11\tSecurity System\n12\tDoor\n13\tWindow\n14\tWindow Covering\n15\tProgrammable Switch\n16\tRange Extender\n17\tIP Camera\n18\tVideo Doorbell\n19\tAir Purifier\n20\tHeater\n21\tAir Conditioner\n22\tHumidifier\n23\tDehumidifier\n24\tApple TV\n25\tHomePod\n26\tSpeaker\n27\tAirport\n28\tSprinkler\n29\tFaucet\n30\tShower Head\n31\tTelevision\n32\tRemote Controller\n33\tWifi Router\n34\tAudio Receiver\n35\tTV Set Top Box\n36\tTV Streaming Stick",
+  "enum": [
+    1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+    22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36
+  ]
+}

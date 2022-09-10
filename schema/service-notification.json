@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "array",
+  "minimum": 1,
+  "maximum": 2,
+  "prefixItems": [
+    {
+      "type": "integer",
+      "description": "Service Index"
+    },
+    {
+      "type": "integer",
+      "default": 0,
+      "description": "Notification Type"
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Log Server\nHost and port to send UDP network logs\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#Log-server",
+  "type": "string",
+  "pattern": "^([a-zA-Z0-9\\-\\.]+):([0-9]{1,5})$"
+}

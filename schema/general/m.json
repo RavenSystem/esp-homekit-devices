@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Setup mode timeout\nTime after boot setup mode can be invoked\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#Setup-Mode-Timer",
+  "type": "integer",
+  "oneOf": [
+    {
+      "minimum": 0,
+      "maximum": 65535,
+      "description": "Integer value specifying number of seconds"
+    },
+    {
+      "const": 0,
+      "description": "Disable. Always respond to setup mode requests"
+    }
+  ],
+  "default": 0
+}

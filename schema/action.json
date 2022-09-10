@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Action\n\nAction keys define what the service should do when state changes occur due to changes in inputs, or when specific triggers occur. Actions can take the form of changes to GPIO lines, system actions (reboot), Network requests, ICMP Ping requests and IR transmissions etc. Multiple actions can be defined for each accessory. Actions are specified by using one or more of the action types listed below.\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Accessory-Configuration#actions",
+  "type": "object",
+  "oneOf": [
+    {
+      "properties": {
+        "a": {
+          "type": "integer",
+          "description": "Copy Action\nShorthand format for copying an action\n\nNOTE: Within an action the copy action type \"a\" is mutually exclusive to all other actions and can only be used on its own. All other action types can be combined."
+        }
+      },
+      "required": ["a"]
+    },
+    {
+      "not": {
+        "required": ["a"]
+      },
+      "properties": {
+        "r": {
+          "type": "array",
+          "description": "Binary Output Action\nChange state of a GPIO\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Accessory-Configuration#Binary-Outputs",
+          "items": {
+            "$ref": "./binary-output.json"
+          }
+        },
+
+        "m": {
+          "description": "Service Notification Action\n\nSend notification to a service within same device\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Accessory-Configuration#Service-Notifications",
+          "type": "array",
+          "items": {
+            "$ref": "./service-notification.json"
+          }
+        },
+
+        "s": {
+          "description": "System Action\n\nPerform a system action\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Accessory-Configuration#System-Actions",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "a": {
+                "type": "integer",
+                "description": "System Action Type",
+                "oneOf": [
+                  { "const": 0, "description": "Reboot the device" },
+                  { "const": 1, "description": "Enter device setup mode" },
+                  {
+                    "const": 2,
+                    "description": "Search for OTA firmware update (only if firmware installed via OTA method)"
+                  },
+                  {
+                    "const": 3,
+                    "description": "Disconnect and reconnect to Wifi"
+                  },
+                  {
+                    "const": 4,
+                    "description": "Reconnect to Wifi resetting network interface"
+                  }
+                ]
+              }
+            }
+          }
+        },
+
+        "h": {
+          "type": "array",
+          "items": {
+            "$ref": "./http-request.json"
+          }
+        },
+
+        "i": {
+          "type": "array",
+          "items": {
+            "$ref": "./ir-action.json"
+          }
+        },
+
+        "u": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "n": {
+                "description": "The UART Number defines the UART port to use.",
+                "type": "integer",
+                "oneOf": [
+                  {
+                    "const": 0,
+                    "description": "UART0 and HEX format command default"
+                  },
+                  { "const": 1, "description": "UART1 and HEX format command" },
+                  {
+                    "const": 10,
+                    "description": "UART0 and TEXT format command"
+                  },
+                  {
+                    "const": 11,
+                    "description": "UART1 and TEXT format command"
+                  }
+                ]
+              },
+
+              "v": {
+                "description": "Command\n\nThe command to transmit.",
+                "type": "string",
+                "examples": ["41424344"]
+              },
+
+              "d": {
+                "description": "Inter-command Delay\n\nDelay between each transmitted command",
+                "type": "integer",
+                "default": 0,
+                "minimum": 0,
+                "maximum": 65535
+              }
+            }
+          }
+        },
+
+        "c": {
+          "description": "Set Characteristic Actions\n\nRead value from a service characteristic and write it in other"
+        }
+      }
+    }
+  ]
+}

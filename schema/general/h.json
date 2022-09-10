@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "integer",
+  "oneOf": [
+    {
+      "minimum": 1,
+      "maximum": 20,
+      "description": "Number of simultaneous connections"
+    },
+    {
+      "const": 0,
+      "description": "Disable Homekit Server"
+    }
+  ],
+  "default": 20,
+  "description": "Maximum number of simultaneous HomeKit Clients.\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#HomeKit-Clients",
+  "examples": [0, 10, 20]
+}

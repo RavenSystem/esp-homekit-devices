@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Network Request Action\n\nSend Network request actions can be used to initiate a TCP or UDP request to a specified target host and URL when an action occurs.\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Accessory-Configuration#send-network-request-actions",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "h": {
+      "description": "Host\n\nTarget Host",
+      "type": "string"
+    },
+
+    "p": {
+      "description": "Port\n\nTarget Port",
+      "type": "integer",
+      "default": 80
+    },
+
+    "m": {
+      "description": "Method\n\nHTTP Method",
+      "type": "string",
+      "default": "GET",
+      "oneOf": [
+        { "const": 0, "description": "HTTP GET" },
+        { "const": 1, "description": "HTTP PUT" },
+        { "const": 2, "description": "HTTP POST" },
+        { "const": 3, "description": "TCP RAW" },
+        { "const": 4, "description": "TCP RAW (HEX format)" },
+        { "const": 12, "description": "Wake on LAN" },
+        { "const": 13, "description": "UDP RAW" },
+        { "const": 14, "description": "UDP RAW (HEX format)" }
+      ]
+    },
+
+    "e": {
+      "description": "Headers\n\nHTTP Headers",
+      "type": "string",
+      "default": "Content-Type:text/html\r\n"
+    },
+
+    "u": {
+      "description": "URL\n\nURL of HTTP request",
+      "type": "string",
+      "default": "/"
+    },
+
+    "c": {
+      "description": "Content\n\nContent to send in HTTP request",
+      "type": "string"
+    },
+
+    "w": {
+      "description": "Wait for response\n\nTime to wait for a response when a TCP/HTTP request is sent",
+      "type": "number",
+      "default": 0
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Invert Status LED",
+  "type": "integer",
+  "oneOf": [
+    {
+      "const": 0,
+      "description": "Do not Invert"
+    },
+    {
+      "const": 1,
+      "description": "Invert"
+    }
+  ],
+  "default": 1
+}

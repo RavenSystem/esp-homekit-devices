@@ -1,0 +1,7 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Ping Action Period\nTime between ping actions\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#Ping-Action-Period",
+  "type": "number",
+  "minimum": 0,
+  "default": 5
+}

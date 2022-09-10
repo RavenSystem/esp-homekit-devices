@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Timetable Actions\nActions that occur when configured time and date\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#timetable-actions",
+  "type": "array",
+  "items": {
+    "type": "array",
+    "prefixItems": [
+      {
+        "type": "string",
+        "description": "Device Action",
+        "enum": [
+          "0",
+          "1",
+          "2",
+          "3",
+          "4",
+          "5",
+          "6",
+          "7",
+          "8",
+          "9",
+          "10",
+          "11",
+          "12",
+          "13",
+          "14",
+          "15",
+          "16",
+          "17",
+          "18",
+          "19",
+          "20",
+          "21",
+          "22",
+          "23",
+          "24",
+          "25",
+          "26",
+          "27",
+          "28",
+          "29",
+          "30",
+          "31",
+          "32",
+          "33",
+          "34",
+          "35",
+          "36",
+          "37",
+          "38",
+          "39",
+          "40",
+          "41",
+          "42",
+          "43",
+          "44",
+          "45",
+          "46",
+          "47",
+          "48",
+          "49",
+          "50"
+        ]
+      },
+      {
+        "type": "integer",
+        "description": "Hour",
+        "minimum": -1,
+        "maximum": 23
+      },
+      {
+        "type": "integer",
+        "description": "Minute",
+        "minimum": -1,
+        "maximum": 59
+      },
+      {
+        "type": "integer",
+        "description": "Day of the week\n\n 0 (Sunday) to 6 (Saturday)",
+        "oneOf": [
+          { "const": -1, "description": "All Days" },
+          { "const": 0, "description": "Sunday" },
+          { "const": 1, "description": "Monday" },
+          { "const": 2, "description": "Tuesday" },
+          { "const": 3, "description": "Wednesday" },
+          { "const": 4, "description": "Thursday" },
+          { "const": 5, "description": "Friday" },
+          { "const": 6, "description": "Saturday" }
+        ]
+      },
+      {
+        "type": "integer",
+        "description": "Day of the month",
+        "minimum": -1,
+        "not": { "enum": [0] },
+        "maximum": 31,
+        "default": -1
+      },
+      {
+        "type": "integer",
+        "description": "Month\n\n 0 (January) to 11 (December)",
+        "oneOf": [
+          { "const": -1, "description": "All Months" },
+          { "const": 0, "description": "January" },
+          { "const": 1, "description": "February" },
+          { "const": 2, "description": "March" },
+          { "const": 3, "description": "April" },
+          { "const": 4, "description": "May" },
+          { "const": 5, "description": "June" },
+          { "const": 6, "description": "July" },
+          { "const": 7, "description": "August" },
+          { "const": 8, "description": "September" },
+          { "const": 9, "description": "October" },
+          { "const": 10, "description": "November" },
+          { "const": 11, "description": "December" }
+        ]
+      }
+    ]
+  }
+}

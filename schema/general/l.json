@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "GPIO line the status LED is connected to\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#status-led",
+  "type": "integer"
+}

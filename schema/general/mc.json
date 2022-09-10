@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "MCP23017 GPIO Expansion interface\n\nEach MCP23017 interface must be declared with an array:[ Bus, Address, Channel A, Channel B ]\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#MCP23017-Interface",
+  "type": "array",
+  "minItems": 1,
+  "maxItems": 16,
+  "items": {
+    "type": "array",
+    "maxItems": 4,
+    "minItems": 4,
+    "prefixItems": [
+      { "type": "integer", "enum": [0, 1], "description": "Bus" },
+      { "type": "integer", "minimum": 32, "description": "Address" },
+      {
+        "type": "integer",
+        "description": "Channel A",
+        "minimum": 0,
+        "maximum": 259,
+        "default": 0
+      },
+      {
+        "type": "integer",
+        "description": "Channel B",
+        "minimum": 0,
+        "maximum": 259,
+        "default": 0
+      }
+    ]
+  }
+}

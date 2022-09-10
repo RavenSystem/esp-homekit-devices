@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Ping Gateway Watchdog\nNumber of consecutive ping failures before reconnection\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#Ping-Gateway-Watchdog",
+  "type": "integer"
+}

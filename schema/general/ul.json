@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "UART Receiver Lengths\nUART Receiver minimum and maximum length\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#UART-Receiver-Lengths",
+  "type": "array",
+  "minItems": 2,
+  "maxItems": 2,
+  "default": [1, 128],
+  "prefixItems": [
+    { "type": "integer", "description": "minimum" },
+    { "type": "integer", "description": "maximum" }
+  ]
+}

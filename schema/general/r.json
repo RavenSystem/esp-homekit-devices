@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "UART Configuration\nArray of UARTs for use with UART Actions\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#UART-Configuration",
+  "type": "array",
+  "maxItems": 2,
+  "items": {
+    "type": "object",
+    "properties": {
+      "n": {
+        "type": "integer",
+        "description": "UART Number",
+        "oneOf": [
+          {
+            "const": 0,
+            "description": "UART0, using GPIO 1 (Tx) & 3 (Rx)"
+          },
+          { "const": 1, "description": "UART1, using GPIO 2 (Tx)" },
+          {
+            "const": 2,
+            "description": "UART0, using GPIO 15 (Tx) & 13 (Rx)"
+          }
+        ]
+      },
+
+      "s": {
+        "description": "Speed (Baud Rate)",
+        "type": "string",
+        "default": "115200",
+        "enum": [
+          "115200",
+          "57600",
+          "38400",
+          "19200",
+          "14400",
+          "9600",
+          "4800",
+          "2400",
+          "1200"
+        ]
+      },
+
+      "p": {
+        "description": "Parity",
+        "type": "integer",
+        "default": 0,
+        "oneOf": [
+          { "const": 0, "description": "Parity - NONE" },
+          { "const": 1, "description": "Parity - ODD" },
+          { "const": 2, "description": "Parity - EVEN" }
+        ]
+      },
+
+      "b": {
+        "description": "Stop Bits",
+        "type": "integer",
+        "default": 1,
+        "oneOf": [
+          { "const": 0, "description": "Stop Bits - 0" },
+          { "const": 1, "description": "Stop Bits - 1" },
+          { "const": 2, "description": "Stop Bits - 1.5" },
+          { "const": 3, "description": "Stop Bits - 2" }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "string",
+  "description": "String with desired NTP server (IP Address or FQDN)\n\nDefaults to Gateway IP address provided by DHCP server\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#ntp-server"
+}

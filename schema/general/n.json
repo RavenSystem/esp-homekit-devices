@@ -1,0 +1,6 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Custom Hostname\nCustom hostname to use for the device\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#Custom-Hostname",
+  "type": "string",
+  "default": "HAA-XXXXXX"
+}

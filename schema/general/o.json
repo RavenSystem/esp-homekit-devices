@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Log Output\nUART and network log output type\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#Log-output\n\n0\tDisable log output (default)\n1\tEnable UART0 log output\n2\tEnable UART1 log output\n3\tEnable Network log output.\n4\tEnable UART0 & Network log output\n5\tEnable UART1 & Network log output\n6\tEnable Network log output with buffer\n7\tEnable UART0 & Network log output with buffer\n8\tEnable UART1 & Network log output with buffer",
+  "default": 0,
+  "type": "integer",
+  "minimum": 0,
+  "maximum": 8
+}

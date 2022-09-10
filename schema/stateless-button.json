@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Switch\nA switch can be defined as a Switch or an Outlet. Both types have the same set of options available to them.\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Switches",
+  "type": "object",
+  "properties": {
+    "0": {
+      "description": "Single Press",
+      "$ref": "../action.json"
+    },
+    "1": {
+      "description": "Double Press",
+      "$ref": "../action.json"
+    },
+    "2": {
+      "description": "Long Press",
+      "$ref": "../action.json"
+    },
+
+    "f0": {
+      "description": "Single Press",
+      "type": "array",
+      "items": {
+        "$ref": "../binary-input.json"
+      },
+      "examples": [[{ "g": 0, "t": 1 }]]
+    },
+    "f1": {
+      "description": "Double Press",
+      "type": "array",
+      "items": {
+        "$ref": "../binary-input.json"
+      },
+      "examples": [[{ "g": 0, "t": 2 }]]
+    },
+    "f2": {
+      "description": "Long Press",
+      "type": "array",
+      "items": {
+        "$ref": "../binary-input.json"
+      },
+      "examples": [[{ "g": 0, "t": 3 }]]
+    },
+
+    "g0": {
+      "description": "Single Press",
+      "type": "array",
+      "items": {
+        "$ref": "../binary-output.json"
+      }
+    },
+
+    "g1": {
+      "description": "Double Press",
+      "type": "array",
+      "items": {
+        "$ref": "../binary-output.json"
+      }
+    },
+
+    "g2": {
+      "description": "Long Press",
+      "type": "array",
+      "items": {
+        "$ref": "../binary-output.json"
+      }
+    },
+
+    "m": {
+      "description": "Service Notifications",
+      "type": "array",
+      "items": {
+        "$ref": "../service-notification.json",
+        "prefixItems": [
+          {
+            "type": "integer",
+            "description": "Service Index"
+          },
+          {
+            "type": "integer",
+            "default": 0,
+            "description": "Notification Type",
+            "oneOf": [
+              { "const": 0, "description": "Single Press" },
+              { "const": 1, "description": "Double Press" },
+              { "const": 2, "description": "Long Press" }
+            ]
+          }
+        ]
+      }
+    },
+
+    "ks": {
+      "$ref": "./ks.json"
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Zero Cross GPIO\nEnables PWM to be used by Zero-Cross detection\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#zero-cross-gpio",
+  "type": "array",
+  "prefixItems": [
+    { "type": "integer", "description": "GPIO" },
+    {
+      "type": "integer",
+      "description": "Interrupt Type",
+      "oneOf": [
+        { "const": 1, "description": "Interrupt Type - LOW to HIGH" },
+        { "const": 2, "description": "Interrupt Type - HIGH to LOW" },
+        { "const": 3, "description": "Interrupt Type - BOTH" }
+      ]
+    },
+    {
+      "type": "integer",
+      "description": "Internal pullup resistor:",
+      "oneOf": [
+        { "const": 0, "description": "Internal pullup resistor - DISABLE" },
+        { "const": 1, "description": "Internal pullup resistor - ENABLE" }
+      ]
+    }
+  ]
+}

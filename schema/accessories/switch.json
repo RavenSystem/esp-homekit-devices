@@ -1,0 +1,148 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Switch\nA switch can be defined as a Switch or an Outlet. Both types have the same set of options available to them.\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Switches",
+  "type": "object",
+  "properties": {
+    "0": {
+      "description": "Action - Off\n\nThe default action after boot unless the Initial State has been set",
+      "$ref": "../action.json"
+    },
+    "1": {
+      "description": "Action - On",
+      "$ref": "../action.json"
+    },
+
+    "b": {
+      "description": "Digital Inputs\n\nGPIOs that invoke specific actions",
+      "type": "array",
+      "items": {
+        "$ref": "../binary-input.json"
+      }
+    },
+
+    "i": {
+      "description": "Inching Time (seconds)\n\nTime period before returning service to off state\n\nThe Inching Time is an accessory option that defines a time period for a service to return to the previous state e.g. If the inching time is set to 10 seconds a switch would turn off 10 seconds after turning on.",
+      "type": "number"
+    },
+
+    "f0": {
+      "description": "Perform Action - Off (0)\n\nThe action to perform when the switch is turned off",
+      "type": "array",
+      "items": {
+        "$ref": "../binary-input.json"
+      }
+    },
+
+    "f1": {
+      "description": "Perform Action - On (1)\n\nThe action to perform when the switch is turned on",
+      "type": "array",
+      "items": {
+        "$ref": "../binary-input.json"
+      }
+    },
+
+    "g0": {
+      "description": "Set service state - Off\n\n",
+      "$ref": "../binary-input.json"
+    },
+
+    "g1": {
+      "description": "Set service state - On\n\n",
+      "$ref": "../binary-input.json"
+    },
+
+    "p0": {
+      "description": "Perform action - Off (0)\n\nFrom ICMP Ping",
+      "$ref": "../binary-input.json"
+    },
+
+    "p1": {
+      "description": "Perform action - On (1)\n\nFrom ICMP Ping",
+      "$ref": "../binary-input.json"
+    },
+
+    "q0": {
+      "description": "Set service state - Off (0)\n\nFrom ICMP Ping",
+      "$ref": "../binary-input.json"
+    },
+
+    "q1": {
+      "description": "Set service state - On (1)\n\nFrom ICMP Ping",
+      "$ref": "../binary-input.json"
+    },
+
+    "m": {
+      "description": "Service Notifications",
+      "type": "array",
+      "items": {
+        "$ref": "../service-notification.json",
+        "prefixItems": [
+          {
+            "type": "integer",
+            "description": "Service Index"
+          },
+          {
+            "type": "integer",
+            "default": 0,
+            "description": "Notification Type",
+            "oneOf": [
+              { "const": 0, "description": "Switch OFF (default)" },
+              { "const": 1, "description": "Switch ON" },
+              { "const": 2, "description": "Switch state only OFF" },
+              { "const": 3, "description": "Switch state only ON" },
+              { "const": 4, "description": "Toggle switch" },
+              { "const": 5, "description": "Toggle switch state" },
+              { "const": -1, "description": "Reset inching and timer" },
+              {
+                "maximum": -2,
+                "description": "Set time to N - 2 seconds. If timer is working and new value is lower than current countdown, it will be reset."
+              }
+            ]
+          }
+        ]
+      }
+    },
+
+    "ks": {
+      "$ref": "./ks.json"
+    },
+
+    "s": {
+      "description": "Initial State\n\nThe initial state of the switch at boot",
+      "type": "integer",
+      "default": 0,
+      "oneOf": [
+        { "const": 0, "description": "Off" },
+        { "const": 1, "description": "On" },
+        { "const": 4, "description": "Defined by fixed state inputs" },
+        { "const": 5, "description": "Last state before restart" },
+        { "const": 6, "description": "Opposite to last state before restart" }
+      ]
+    },
+
+    "d": {
+      "description": "Maximum use time (seconds)\n\nMaximum time the service can be on",
+      "type": "integer",
+      "default": 0,
+      "minimum": 1
+    },
+
+    "xa": {
+      "description": "Actions on Boot\n\nActions to perform when the device boots",
+      "type": "integer",
+      "default": 1,
+      "oneOf": [
+        { "const": 0, "description": "Disabled" },
+        { "const": 1, "description": "Enabled" }
+      ]
+    }
+  },
+
+  "dependentRequired": {
+    "f0": ["0"],
+    "f1": ["1"],
+
+    "p0": ["0"],
+    "p1": ["1"]
+  }
+}

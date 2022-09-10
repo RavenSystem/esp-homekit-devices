@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "number",
+  "default": 60,
+  "description": "Set a custom Gratuitous ARP packet period\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#Gratuitous-ARP-Period",
+  "minimum": 1.5,
+  "maximum": 382.5
+}

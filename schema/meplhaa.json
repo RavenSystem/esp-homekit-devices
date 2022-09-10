@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "type": "object",
+  "version": "11.1.1",
+
+  "required": ["a"],
+
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+
+    "c": {
+      "type": "object",
+      "description": "The general configuration object\nThis section is optional, and default values will be used if you don't use it.\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration",
+      "properties": {
+        "b": { "$ref": "./general/b.json" },
+        "cd": { "$ref": "./general/cd.json" },
+        "ct": { "$ref": "./general/ct.json" },
+        "e": { "$ref": "./general/e.json" },
+        "f": { "$ref": "./general/f.json" },
+        "h": { "$ref": "./general/h.json" },
+        "i": { "$ref": "./general/i.json" },
+        "ic": { "$ref": "./general/ic.json" },
+        "l": { "$ref": "./general/l.json" },
+        "m": { "$ref": "./general/m.json" },
+        "mc": { "$ref": "./general/mc.json" },
+        "n": { "$ref": "./general/n.json" },
+        "ntp": { "$ref": "./general/ntp.json" },
+        "o": { "$ref": "./general/o.json" },
+        "ot": { "$ref": "./general/ot.json" },
+        "pt": { "$ref": "./general/pt.json" },
+        "q": { "$ref": "./general/q.json" },
+        "r": { "$ref": "./general/r.json" },
+        "s": { "$ref": "./general/s.json" },
+        "sn": { "$ref": "./general/sn.json" },
+        "tt": { "$ref": "./general/tt.json" },
+        "tz": { "$ref": "./general/tz.json" },
+        "ttl": { "$ref": "./general/ttl.json" },
+        "u": { "$ref": "./general/u.json" },
+        "ul": { "$ref": "./general/ul.json" },
+        "w": { "$ref": "./general/w.json" },
+        "z": { "$ref": "./general/z.json" },
+        "zc": { "$ref": "./general/zc.json" }
+      },
+
+      "dependentRequired": {
+        "mc": ["ic"]
+      }
+    },
+
+    "a": {
+      "description": "Accessory Configuration\nThis section is mandatory. It contains an array of HomeKit accessories that are available on your device.\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Accessory-Configuration",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "allOf": [
+          {
+            "properties": {
+              "t": {
+                "description": "Service type",
+                "type": "integer",
+                "default": 1,
+                "oneOf": [
+                  { "const": 1, "description": "Switch" },
+                  { "const": 2, "description": "Outlet" },
+                  { "const": 3, "description": "Stateless Button" },
+                  { "const": 4, "description": "Lock Mechanism" },
+                  { "const": 5, "description": "Contact Sensor" },
+                  { "const": 6, "description": "Occupancy Sensor" },
+                  { "const": 7, "description": "Leak Sensor" },
+                  { "const": 8, "description": "Smoke Sensor" },
+                  { "const": 9, "description": "Carbon Monoxide Sensor" },
+                  { "const": 10, "description": "Carbon Dioxide Sensor" },
+                  { "const": 11, "description": "Filter Change Sensor" },
+                  { "const": 12, "description": "Motion Sensor" },
+                  { "const": 13, "description": "Doorbell" },
+                  { "const": 15, "description": "Air Quality" },
+                  { "const": 20, "description": "Water Valve" },
+                  { "const": 21, "description": "HeaterCooler" },
+                  { "const": 22, "description": "Temperature Sensor" },
+                  { "const": 23, "description": "Humidity Sensor" },
+                  {
+                    "const": 24,
+                    "description": "Temperature & Humidity Sensor"
+                  },
+                  {
+                    "const": 25,
+                    "description": "HeaterCooler with Humidity Sensor"
+                  },
+                  { "const": 26, "description": "Humidifier" },
+                  {
+                    "const": 27,
+                    "description": "Humidifier with Temperature Sensor"
+                  },
+                  { "const": 30, "description": "Lightbulb" },
+                  { "const": 40, "description": "Garage Door" },
+                  { "const": 45, "description": "Window Covering" },
+                  { "const": 50, "description": "Light Sensor" },
+                  { "const": 55, "description": "Security System" },
+                  { "const": 60, "description": "TV Service" },
+                  { "const": 65, "description": "Fan" },
+                  { "const": 70, "description": "Battery" },
+                  { "const": 75, "description": "Power Measure" },
+                  { "const": 80, "description": "Free Monitor" },
+                  { "const": 81, "description": "Free Monitor Accumulative" },
+                  { "const": 95, "description": "Data History" },
+                  { "const": 99, "description": "HAA iAirZoning" }
+                ]
+              }
+            }
+          },
+
+          {
+            "if": { "properties": { "t": { "enum": [1, 2] } } },
+            "then": { "$ref": "./accessories/switch.json" }
+          },
+
+          {
+            "if": { "properties": { "t": { "enum": [3, 13] } } },
+            "then": { "$ref": "./accessories/stateless-button.json" }
+          }
+        ]
+      }
+    }
+  }
+}

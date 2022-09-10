@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Initial Lock State\n\nLock state at boot",
+  "type": "integer",
+  "default": 3,
+  "oneOf": [
+    { "const": 0, "description": "All locked" },
+    {
+      "const": 1,
+      "description": "Service unlocked. Physical controls locked"
+    },
+    {
+      "const": 2,
+      "description": "Service locked. Physical controls unlocked"
+    },
+    { "const": 3, "description": "All unlocked" }
+  ]
+}

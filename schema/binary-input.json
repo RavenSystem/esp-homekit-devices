@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Binary Input\nBinary inputs array e.g. buttons, are defined by the \"b\" key within an service object.\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Accessory-Configuration#Binary-Inputs",
+  "type": "object",
+  "properties": {
+    "g": {
+      "description": "GPIO\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Accessory-Configuration#Binary-Input-GPIO",
+      "type": "integer",
+      "minimum": 0
+    },
+
+    "p": {
+      "description": "Internal Pullup Resistor\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Accessory-Configuration#Internal-Pull-Up-Resistor",
+      "type": "integer",
+      "default": 1,
+      "oneOf": [
+        { "const": 0, "description": "No pull-up resistor required" },
+        { "const": 1, "description": "Enable Pull-up resistor" }
+      ]
+    },
+
+    "i": {
+      "description": "Inverted Binary Input\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Accessory-Configuration#Inverted-Binary-Input",
+      "type": "integer",
+      "default": 0,
+      "oneOf": [
+        { "const": 0, "description": "Normal input" },
+        { "const": 1, "description": "Inverted input" }
+      ]
+    },
+
+    "f": {
+      "description": "Binary Input Filter\n\nNOTE: The binary input filter value overrides the general option \"f\" when defined for a service.\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Accessory-Configuration#binary-input-filter",
+      "type": "integer",
+      "default": 4,
+      "minimum": 1,
+      "maximum": 255
+    },
+
+    "t": {
+      "description": "Press Type\n\nThis option defines the type of press required on an input to initiate an action.\n\nYou can have the same binary input / GPIO with different press types attached to different services or functions.",
+      "type": "integer",
+      "default": 1,
+      "oneOf": [
+        { "const": 0, "description": "Single press, opposite to 1" },
+        { "const": 1, "description": "Single press (default)" },
+        { "const": 2, "description": "Double press" },
+        { "const": 3, "description": "Long press" },
+        { "const": 4, "description": "Very long press" },
+        { "const": 5, "description": "Hold press during 8 seconds" }
+      ]
+    },
+
+    "m": {
+      "description": "Mode\n\nThis option defines the mode of the binary input signal.\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Accessory-Configuration#Mode",
+      "type": "integer",
+      "default": 0,
+      "oneOf": [
+        { "const": 0, "description": "Continuous" },
+        { "const": 1, "description": "Pulses" }
+      ]
+    }
+  },
+
+  "examples": [
+    {
+      "b": [
+        { "g": 14, "p": 1, "t": 1 },
+        { "g": 14, "t": 0 }
+      ]
+    }
+  ]
+}

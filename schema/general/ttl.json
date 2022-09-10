@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "version": "2.2.0",
+  "description": "mDNS TTL\nConfigurable option to set the TTL value of the mDNS entry held for the device.\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#homekit-mdns-ttl",
+  "type": "array",
+  "prefixItems": [
+    {
+      "description": "TTL",
+      "type": "integer",
+      "minimum": 16,
+      "maximum": 65535
+    },
+    {
+      "description": "Period\nIf period is not given, it will be same value as TTL.",
+      "type": "integer",
+      "minimum": 16,
+      "maximum": 65535
+    }
+  ],
+  "maxItems": 2,
+  "minItems": 1
+}

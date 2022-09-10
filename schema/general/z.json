@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "Setup Mode Toggle Count\nCount of times I/O must be toggled to enter setup mode\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/General-Configuration#Setup-Mode-Toggle-Count",
+  "type": "integer",
+  "default": 8,
+  "minimum": 0,
+  "maximum": 127
+}

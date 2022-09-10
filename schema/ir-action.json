@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "description": "IR Action\n\nSend IR Codes\n\nhttps://github.com/RavenSystem/esp-homekit-devices/wiki/Accessory-Configuration#Send-IR-Code-Actions",
+
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "x": {
+      "description": "Frequency\n\nIR frequency in KHz. Overrides the global setting defined in the General Configuration for this action only.",
+      "type": "integer",
+      "default": 38
+    },
+
+    "p": {
+      "description": "Protocol\n\nIR protocol.",
+      "type": "string",
+      "examples": [
+        "HHHH00001111FF",
+        "HHHH0000111122223333FF",
+        "HHHH000011112222333344445555FF"
+      ]
+    },
+
+    "r": {
+      "description": "Repeats\n\nNumber of times the IR code will be repeated.",
+      "type": "integer",
+      "default": 1,
+      "minimum": 0
+    },
+
+    "d": {
+      "description": "Inter-Repeat Delay (ms)\n\nDelay in milliseconds between repeats.",
+      "type": "integer",
+      "default": 100,
+      "minimum": 10,
+      "maximum": 65535
+    },
+
+    "c": {
+      "description": "Command\n\nIR command to transmit\n\nAt least one definition of the Protocol (\"p\") must exist, either in the General Configuration section, in the accessory (\"a\") object, in any extra service, or in the action (\"p\") object.",
+      "type": "string"
+    },
+
+    "w": {
+      "description": "Raw Code\n\nThe raw IR code in HAA format to transmit\n\nNOTE: If \"w\" and \"c\" options are defined for the same action then the \"c\" option will take precedence and the \"w\" definition will be ignored.",
+      "type": "string"
+    }
+  },
+
+  "dependentRequired": {
+    "d": ["r"]
+  }
+}
