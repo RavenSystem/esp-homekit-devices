@@ -1,0 +1,9 @@
+{
+  "name": "schema",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "@apidevtools/json-schema-ref-parser": "^9.0.9"
+  }
+}
