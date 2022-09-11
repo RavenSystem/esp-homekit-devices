@@ -154,7 +154,7 @@ void set_used_gpio(const int16_t gpio) {
         main_config.used_gpio |= bit;
     }
 }
-
+/*
 void set_unused_gpios() {
     for (int i = 0; i < 17; i++) {
         if (i == 6) {
@@ -162,12 +162,12 @@ void set_unused_gpios() {
         }
         
         if (!get_used_gpio(i)) {
-            //gpio_enable(i, GPIO_INPUT);
-            gpio_set_pullup(i, false, false);
+            gpio_enable(i, GPIO_INPUT);
+            //gpio_set_pullup(i, false, false);
         }
     }
 }
-
+*/
 mcp23017_t* mcp_find_by_index(const int index) {
     mcp23017_t* mcp23017 = main_config.mcp23017s;
     while (mcp23017 && mcp23017->index != index) {
@@ -9696,8 +9696,8 @@ void normal_mode_init() {
             adv_pwm_start();
             
         } else if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_SM16716) {
-            lightbulb_group->gpio[0] = cJSON_GetArrayItem(gpio_array, 0)->valuedouble;
-            lightbulb_group->gpio[1] = cJSON_GetArrayItem(gpio_array, 1)->valuedouble;
+            //lightbulb_group->gpio[0] = cJSON_GetArrayItem(gpio_array, 0)->valuedouble;
+            //lightbulb_group->gpio[1] = cJSON_GetArrayItem(gpio_array, 1)->valuedouble;
             
             //
             // TO-DO
@@ -11492,7 +11492,7 @@ void normal_mode_init() {
     
     xTaskCreate(delayed_sensor_task, "DS", DELAYED_SENSOR_START_TASK_SIZE, NULL, DELAYED_SENSOR_START_TASK_PRIORITY, NULL);
     
-    set_unused_gpios();
+    //set_unused_gpios();
     
     config.accessories = accessories;
     config.config_number = (uint16_t) last_config_number;
@@ -11610,9 +11610,9 @@ void init_task() {
     char *wifi_ssid = NULL;
     sysparam_get_string(WIFI_SSID_SYSPARAM, &wifi_ssid);
     
-    //sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);    // Force to enter always in setup mode. Only for tests. Keep comment for releases
+    //sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);    // Force to enter always in setup mode. Only for tests. Keep commented for releases
     
-    //sysparam_set_string("ota_repo", "1");             // Simulates Installation with OTA. Only for tests. Keep comment for releases
+    //sysparam_set_string("ota_repo", "1");             // Simulates Installation with OTA. Only for tests. Keep commented for releases
     
     void enter_setup(const int param) {
         reset_uart();
