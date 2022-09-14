@@ -1690,53 +1690,59 @@ void set_zones_task(void* args) {
             }
         }
         
-        ch_group = main_config.ch_groups;
-        while (ch_group) {
-            if (ch_group->serv_type == SERV_TYPE_THERMOSTAT && iairzoning_group->serv_index == (uint8_t) TH_IAIRZONING_CONTROLLER) {
-                const int th_current_action = THERMOSTAT_CURRENT_ACTION;
-                const int th_gate_current_state = TH_IAIRZONING_GATE_CURRENT_STATE;
-                switch (th_current_action) {
-                    case THERMOSTAT_ACTION_HEATER_ON:
-                    case THERMOSTAT_ACTION_COOLER_ON:
-                    case THERMOSTAT_ACTION_HEATER_SOFT_ON:
-                    case THERMOSTAT_ACTION_COOLER_SOFT_ON:
-                        if (th_gate_current_state != TH_IAIRZONING_GATE_OPEN) {
-                            TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_OPEN;
-                            do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
-                            vTaskDelay(IAIRZONING_DELAY_ACTION);
-                        }
-                        break;
-                        
-                    case THERMOSTAT_ACTION_HEATER_IDLE:
-                    case THERMOSTAT_ACTION_COOLER_IDLE:
-                    case THERMOSTAT_ACTION_HEATER_FORCE_IDLE:
-                    case THERMOSTAT_ACTION_COOLER_FORCE_IDLE:
-                        if (thermostat_all_idle) {
+        for (int i = 0; i < 2; i++) {
+            ch_group = main_config.ch_groups;
+            while (ch_group) {
+                if (ch_group->serv_type == SERV_TYPE_THERMOSTAT && iairzoning_group->serv_index == (uint8_t) TH_IAIRZONING_CONTROLLER) {
+                    const int th_current_action = THERMOSTAT_CURRENT_ACTION;
+                    const int th_gate_current_state = TH_IAIRZONING_GATE_CURRENT_STATE;
+                    switch (th_current_action) {
+                        case THERMOSTAT_ACTION_HEATER_ON:
+                        case THERMOSTAT_ACTION_COOLER_ON:
+                        case THERMOSTAT_ACTION_HEATER_SOFT_ON:
+                        case THERMOSTAT_ACTION_COOLER_SOFT_ON:
                             if (th_gate_current_state != TH_IAIRZONING_GATE_OPEN) {
                                 TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_OPEN;
                                 do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
                                 vTaskDelay(IAIRZONING_DELAY_ACTION);
                             }
-                        } else {
-                            if (th_gate_current_state != TH_IAIRZONING_GATE_CLOSE) {
+                            break;
+                            
+                        case THERMOSTAT_ACTION_HEATER_IDLE:
+                        case THERMOSTAT_ACTION_COOLER_IDLE:
+                        case THERMOSTAT_ACTION_HEATER_FORCE_IDLE:
+                        case THERMOSTAT_ACTION_COOLER_FORCE_IDLE:
+                            if (thermostat_all_idle) {
+                                if (th_gate_current_state != TH_IAIRZONING_GATE_OPEN) {
+                                    TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_OPEN;
+                                    do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
+                                    vTaskDelay(IAIRZONING_DELAY_ACTION);
+                                }
+                            } else {
+                                if (i == 1 && th_gate_current_state != TH_IAIRZONING_GATE_CLOSE) {
+                                    TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_CLOSE;
+                                    do_actions(ch_group, THERMOSTAT_ACTION_GATE_CLOSE);
+                                    vTaskDelay(IAIRZONING_DELAY_ACTION);
+                                }
+                            }
+                            break;
+                            
+                        default:    // THERMOSTAT_OFF
+                            if (i == 1 && th_gate_current_state != TH_IAIRZONING_GATE_CLOSE) {
                                 TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_CLOSE;
                                 do_actions(ch_group, THERMOSTAT_ACTION_GATE_CLOSE);
                                 vTaskDelay(IAIRZONING_DELAY_ACTION);
                             }
-                        }
-                        break;
-                        
-                    default:    // THERMOSTAT_OFF
-                        if (th_gate_current_state != TH_IAIRZONING_GATE_CLOSE) {
-                            TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_CLOSE;
-                            do_actions(ch_group, THERMOSTAT_ACTION_GATE_CLOSE);
-                            vTaskDelay(IAIRZONING_DELAY_ACTION);
-                        }
-                        break;
+                            break;
+                    }
                 }
+                
+                ch_group = ch_group->next;
             }
             
-            ch_group = ch_group->next;
+            if (i == 0) {
+                vTaskDelay(IAIRZONING_DELAY_AFT_CLOSE);
+            }
         }
     }
     
@@ -6131,7 +6137,7 @@ void action_task_timer(TimerHandle_t xTimer) {
         action_task->errors++;
         homekit_remove_oldest_client();
         
-        ERROR("<%i> New AT %i", action_task->ch_group->serv_index, action_task->type);
+        ERROR("<%i> AT %i", action_task->ch_group->serv_index, action_task->type);
         
         if (action_task->errors < ACTION_TASK_MAX_ERRORS) {
             esp_timer_change_period(xTimer, 110);
@@ -9192,7 +9198,7 @@ void normal_mode_init() {
     
     // *** NEW IAIRZONING
     void new_iairzoning(cJSON* json_context) {
-        ch_group_t* ch_group = new_ch_group(0, 2, 1, 0);
+        ch_group_t* ch_group = new_ch_group(0, 2, 2, 0);
         ch_group->serv_index = service_numerator;
         ch_group->serv_type = SERV_TYPE_IAIRZONING;
         ch_group->num_i[0] = -1;    // IAIRZONING_LAST_ACTION
@@ -9204,6 +9210,11 @@ void normal_mode_init() {
         IAIRZONING_DELAY_ACTION_CH_GROUP = IAIRZONING_DELAY_ACTION_DEFAULT * MS_TO_TICKS(1000);
         if (cJSON_GetObjectItemCaseSensitive(json_context, IAIRZONING_DELAY_ACTION_SET) != NULL) {
             IAIRZONING_DELAY_ACTION_CH_GROUP = cJSON_GetObjectItemCaseSensitive(json_context, IAIRZONING_DELAY_ACTION_SET)->valuedouble * MS_TO_TICKS(1000);
+        }
+        
+        IAIRZONING_DELAY_AFT_CLOSE_CH_GROUP = IAIRZONING_DELAY_AFT_CLOSE_DEFAULT * MS_TO_TICKS(1000);
+        if (cJSON_GetObjectItemCaseSensitive(json_context, IAIRZONING_DELAY_AFT_CLOSE_SET) != NULL) {
+            IAIRZONING_DELAY_AFT_CLOSE_CH_GROUP = cJSON_GetObjectItemCaseSensitive(json_context, IAIRZONING_DELAY_AFT_CLOSE_SET)->valuedouble * MS_TO_TICKS(1000);
         }
         
         ch_group->timer2 = esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, set_zones_timer_worker);
@@ -11535,14 +11546,14 @@ void normal_mode_init() {
 
 void irrf_capture_task(void* args) {
     const int irrf_capture_gpio = ((int) args) - 100;
-    INFO("\nCapture GPIO: %i\n", irrf_capture_gpio);
+    INFO("\nGPIO %i\n", irrf_capture_gpio);
     //set_used_gpio(irrf_capture_gpio);
     //gpio_enable(irrf_capture_gpio, GPIO_INPUT);
     //set_unused_gpios();
     
     int read, last = true;
     unsigned int i, c = 0;
-    uint16_t* buffer = malloc(1024 * sizeof(uint16_t));
+    uint16_t* buffer = malloc(2048 * sizeof(uint16_t));
     uint32_t now, new_time, current_time = sdk_system_get_time();
     
     for (;;) {
@@ -11559,19 +11570,18 @@ void irrf_capture_task(void* args) {
         if (now - current_time > UINT16_MAX) {
             current_time = now;
             if (c > 0) {
-                
-                INFO("Packets: %i", c - 1);
-                INFO("Standard");
+                INFO("Packets %i", c - 1);
                 for (i = 1; i < c; i++) {
-                    printf("%s%5d ", i & 1 ? "+" : "-", buffer[i]);
+                    printf("%s%5d ",
+                           i & 1 ? "+" : "-",
+                           i & 1 ? buffer[i] : (uint32_t) (buffer[i] * 1.06f));
                     
                     if ((i - 1) % 16 == 15) {
                         printf("\n");
                     }
                 }
-                INFO("\n");
+                INFO("\n\nRAW");
                 
-                INFO("RAW");
                 for (i = 1; i < c; i++) {
                     char haa_code[] = "00";
                     
@@ -11585,13 +11595,13 @@ void irrf_capture_task(void* args) {
                 c = 0;
             }
             
-            vTaskDelay(2);
+            vTaskDelay(10);
         }
     }
 }
 
 void wifi_done() {
-    adv_logger_init(ADV_LOGGER_UART0_UDP_BUFFERED, NULL);
+    adv_logger_init(ADV_LOGGER_UART0_UDP, NULL);
 }
 
 void init_task() {

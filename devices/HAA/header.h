@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "11.1.2"
+#define HAA_FIRMWARE_VERSION                "11.2.0"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Peregrine"
 
@@ -47,8 +47,8 @@
 #define WIFI_PING_GW_TASK_SIZE              (384)
 #define WIFI_RECONNECTION_TASK_SIZE         GLOBAL_TASK_SIZE
 #define RECV_UART_TASK_SIZE                 (384)
-#define IRRF_CAPTURE_TASK_SIZE              (384)
 #define REBOOT_TASK_SIZE                    (384)
+#define IRRF_CAPTURE_TASK_SIZE              (512)
 
 // Task Priorities
 #define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
@@ -71,8 +71,8 @@
 #define WIFI_PING_GW_TASK_PRIORITY          (tskIDLE_PRIORITY + 1)
 #define WIFI_RECONNECTION_TASK_PRIORITY     (tskIDLE_PRIORITY + 3)
 #define RECV_UART_TASK_PRIORITY             (tskIDLE_PRIORITY + 4)
-#define IRRF_CAPTURE_TASK_PRIORITY          (tskIDLE_PRIORITY + 8)
 #define REBOOT_TASK_PRIORITY                (tskIDLE_PRIORITY + 3)
+#define IRRF_CAPTURE_TASK_PRIORITY          (configMAX_PRIORITIES - 2)
 
 // Button Events
 #define SINGLEPRESS_EVENT                   (0)
@@ -238,10 +238,15 @@
 #define IAIRZONING_LAST_ACTION              iairzoning_group->num_i[0]
 #define IAIRZONING_MAIN_MODE                iairzoning_group->num_i[1]
 #define IAIRZONING_DELAY_ACTION_SET         "d"
-#define IAIRZONING_DELAY_ACTION_DEFAULT     (0.5f)
+#define IAIRZONING_DELAY_ACTION_DEFAULT     (0.1f)
 #define IAIRZONING_DELAY_ACTION_NUM         num_f[0]
 #define IAIRZONING_DELAY_ACTION             iairzoning_group->IAIRZONING_DELAY_ACTION_NUM
 #define IAIRZONING_DELAY_ACTION_CH_GROUP    ch_group->IAIRZONING_DELAY_ACTION_NUM
+#define IAIRZONING_DELAY_AFT_CLOSE_SET      "c"
+#define IAIRZONING_DELAY_AFT_CLOSE_DEFAULT  (0.f)
+#define IAIRZONING_DELAY_AFT_CLOSE_NUM      num_f[1]
+#define IAIRZONING_DELAY_AFT_CLOSE          iairzoning_group->IAIRZONING_DELAY_AFT_CLOSE_NUM
+#define IAIRZONING_DELAY_AFT_CLOSE_CH_GROUP ch_group->IAIRZONING_DELAY_AFT_CLOSE_NUM
 
 #define TEMPERATURE_SENSOR_GPIO             "g"
 #define TH_SENSOR_GPIO                      ch_group->num_i[0]
