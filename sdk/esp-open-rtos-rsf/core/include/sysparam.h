@@ -149,17 +149,6 @@ sysparam_status_t sysparam_get_info(uint32_t *base_addr, uint32_t *num_sectors);
  */
 sysparam_status_t sysparam_compact();
 
-/** Compact the sysparam area using an alternate way to erase sector.
- *
- *  This also flattens the log.
- *
- *  @retval ::SYSPARAM_OK           Completed successfully
- *  @retval ::SYSPARAM_ERR_NOINIT   No current sysparam area is active
- *  @retval ::SYSPARAM_ERR_CORRUPT  Sysparam region has bad/corrupted data
- *  @retval ::SYSPARAM_ERR_IO       I/O error reading/writing flash
- */
-sysparam_status_t sysparam_compact_alt();
-
 /** Get the value associated with a key
  *
  *  This is the core "get value" function.  It will retrieve the value for the

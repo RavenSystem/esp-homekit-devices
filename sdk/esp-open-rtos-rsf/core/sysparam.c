@@ -149,16 +149,6 @@ static sysparam_status_t _format_region(uint32_t addr, uint16_t num_sectors) {
     return SYSPARAM_OK;
 }
 
-static sysparam_status_t _format_region_alt(uint32_t addr, uint16_t num_sectors) {
-    int i;
-    addr = addr / SPI_FLASH_SECTOR_SIZE;
-    
-    for (i = 0; i < num_sectors; i++) {
-        sdk_spi_flash_erase_sector(addr + i);
-    }
-    return SYSPARAM_OK;
-}
-
 /** Write the magic data at the beginning of a region */
 static inline sysparam_status_t _write_region_header(uint32_t addr, uint32_t other, bool active) {
     struct region_header header;
@@ -430,7 +420,7 @@ static inline sysparam_status_t _delete_entry(uint32_t addr) {
  *  automatically update *key_id to contain the ID of this key in the new
  *  compacted result as well.
  */
-static sysparam_status_t _compact_params(struct sysparam_context *ctx, int *key_id, const bool alt_erase) {
+static sysparam_status_t _compact_params(struct sysparam_context *ctx, int *key_id) {
     uint32_t new_base = _sysparam_info.alt_base;
     sysparam_status_t status;
     uint32_t addr = new_base + REGION_HEADER_SIZE;
@@ -444,11 +434,7 @@ static sysparam_status_t _compact_params(struct sysparam_context *ctx, int *key_
             ctx ? ctx->compactable : 0,
             (ctx && ctx->unused_keys > 0) ? "+ (unused keys present)" : "");
 
-    if (alt_erase) {
-        status = _format_region_alt(new_base, num_sectors);
-    } else {
-        status = _format_region(new_base, num_sectors);
-    }
+    status = _format_region(new_base, num_sectors);
     
     if (status < 0) return status;
     status = sysparam_iter_start(&iter);
@@ -660,26 +646,18 @@ sysparam_status_t sysparam_get_info(uint32_t *base_addr, uint32_t *num_sectors) 
     return SYSPARAM_OK;
 }
 
-static sysparam_status_t sysparam_compact_port(const bool alt_erase) {
+sysparam_status_t sysparam_compact() {
     xSemaphoreTake(_sysparam_info.sem, portMAX_DELAY);
     sysparam_status_t status;
 
     if (_sysparam_info.cur_base) {
-        status = _compact_params(NULL, NULL, alt_erase);
+        status = _compact_params(NULL, NULL);
     } else {
         status = SYSPARAM_ERR_NOINIT;
     }
 
     xSemaphoreGive(_sysparam_info.sem);
     return status;
-}
-
-sysparam_status_t sysparam_compact() {
-    return sysparam_compact_port(false);
-}
-
-sysparam_status_t sysparam_compact_alt() {
-    return sysparam_compact_port(true);
 }
 
 sysparam_status_t sysparam_get_data(const char *key, uint8_t **destptr, size_t *actual_length, bool *is_binary) {
@@ -942,7 +920,7 @@ sysparam_status_t sysparam_set_data(const char *key, const uint8_t *value, size_
                 _find_entry(&ctx, ENTRY_ID_END, false);
                 if (needed_space <= free_space + ctx.compactable) {
                     // We should be able to get enough space by compacting.
-                    status = _compact_params(&ctx, &key_id, false);
+                    status = _compact_params(&ctx, &key_id);
                     if (status < 0) break;
                     old_value_addr = 0;
                 } else if (ctx.unused_keys > 0) {
@@ -950,7 +928,7 @@ sysparam_status_t sysparam_set_data(const char *key, const uint8_t *value, size_
                     // there are some keys that can be omitted too, but we
                     // don't know exactly how much that will gain, so all we
                     // can do is give it a try and see if it gives us enough.
-                    status = _compact_params(&ctx, &key_id, false);
+                    status = _compact_params(&ctx, &key_id);
                     if (status < 0) break;
                     old_value_addr = 0;
                 }
@@ -973,7 +951,7 @@ sysparam_status_t sysparam_set_data(const char *key, const uint8_t *value, size_
                 // region.
                 if (ctx.max_key_id >= MAX_KEY_ID) {
                     if (ctx.unused_keys > 0) {
-                        status = _compact_params(&ctx, &key_id, false);
+                        status = _compact_params(&ctx, &key_id);
                         if (status < 0) break;
                         old_value_addr = 0;
                     } else {
@@ -988,7 +966,7 @@ sysparam_status_t sysparam_set_data(const char *key, const uint8_t *value, size_
                 // We didn't need to compact above, but due to previously
                 // detected inconsistencies, we should compact anyway before
                 // writing anything new, so do that.
-                status = _compact_params(&ctx, &key_id, false);
+                status = _compact_params(&ctx, &key_id);
                 if (status < 0) break;
             }
 
