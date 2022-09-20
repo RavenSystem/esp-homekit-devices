@@ -1,4 +1,8 @@
-# esp-open-rtos
+# esp-open-rtos-rsf
+
+A fork of esp-open-rtos SDK focused on performance.
+
+-----
 
 A community developed open source [FreeRTOS](http://www.freertos.org/)-based framework for ESP8266 WiFi-enabled microcontrollers. Intended for use in both commercial and open source projects.
 
