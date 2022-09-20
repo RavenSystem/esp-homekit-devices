@@ -61,4 +61,8 @@ bool IRAM spiflash_write(uint32_t addr, uint8_t *buf, uint32_t size);
  */
 bool IRAM spiflash_erase_sector(uint32_t addr);
 
+
+//void IRAM user_spi_flash_dio_to_qio_pre_init();
+//void IRAM spi_flash_switch_to_dout_raw();
+
 #endif  // __SPIFLASH_H__
