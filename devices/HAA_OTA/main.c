@@ -141,6 +141,7 @@ void ota_task(void *arg) {
                 
                 void enable_setup_mode() {
                     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
+                    ota_reboot();
                 }
                 
                 result = ota_get_sign(user_repo, otamainfile, signature, port, is_ssl);
@@ -152,18 +153,16 @@ void ota_task(void *arg) {
                             INFO("\n* OTAMAIN installed");
                             sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
                             rboot_set_temp_rom(1);
+                            ota_reboot();
                         } else {
                             enable_setup_mode();
                         }
-                        
-                        ota_reboot();
                     } else if (result < 0) {
                         ERROR("Installing OTAMAIN %i", result);
                         enable_setup_mode();
-                        break;
                     }
                 } else {
-                    ERROR("OTAMAIN signature %i", result);
+                    ERROR("OTAMAIN sign %i", result);
                     enable_setup_mode();
                 }
             } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
@@ -196,7 +195,8 @@ void ota_task(void *arg) {
                             break;
                         }
                     } else {
-                        ERROR("HAABOOT signature %i", result);
+                        ERROR("HAABOOT sign %i", result);
+                        break;
                     }
                 } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
                 
@@ -241,7 +241,8 @@ void ota_task(void *arg) {
                             break;
                         }
                     } else {
-                        ERROR("HAAMAIN signature %i", result);
+                        ERROR("HAAMAIN sign %i", result);
+                        break;
                     }
                 } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
             }
@@ -258,7 +259,7 @@ void ota_task(void *arg) {
     } else {
         ERROR("HAAMAIN, fixing\n");
         sysparam_set_string(USER_VERSION_SYSPARAM, "0");
-        sysparam_compact_alt();
+        sysparam_compact();
     }
     
     ota_reboot();

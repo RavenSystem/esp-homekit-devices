@@ -107,7 +107,7 @@ typedef struct _adv_button_main_config {
 
 static adv_button_main_config_t* adv_button_main_config = NULL;
 
-static adv_button_t* IRAM button_find_by_gpio(const unsigned int gpio) {
+static adv_button_t* button_find_by_gpio(const unsigned int gpio) {
     if (adv_button_main_config) {
         adv_button_t* button = adv_button_main_config->buttons;
         
@@ -121,7 +121,7 @@ static adv_button_t* IRAM button_find_by_gpio(const unsigned int gpio) {
     return NULL;
 }
 
-static adv_button_mcp_t* IRAM mcp_find_by_index(const unsigned int index) {
+static adv_button_mcp_t* mcp_find_by_index(const unsigned int index) {
     if (adv_button_main_config) {
         adv_button_mcp_t* mcp = adv_button_main_config->mcps;
         
@@ -146,7 +146,7 @@ int adv_button_read_by_gpio(const unsigned int gpio) {
     return result;
 }
 
-static int IRAM adv_button_read_mcp_gpio(const unsigned int gpio) {
+static int adv_button_read_mcp_gpio(const unsigned int gpio) {
     adv_button_mcp_t* adv_button_mcp = mcp_find_by_index(gpio / 100);
     if (adv_button_mcp) {
         const int mcp_gpio = gpio % 100;
@@ -171,7 +171,7 @@ static void adv_button_run_callback_fn(adv_button_callback_fn_t* callbacks, cons
     }
 }
 
-static void IRAM push_down(const unsigned int used_gpio) {
+static void push_down(const unsigned int used_gpio) {
     const uint32_t now = xTaskGetTickCount();
     
     if (now - adv_button_main_config->disable_time > DISABLE_TIME / portTICK_PERIOD_MS) {
@@ -186,7 +186,7 @@ static void IRAM push_down(const unsigned int used_gpio) {
     }
 }
 
-static void inline IRAM push_up(const unsigned int used_gpio) {
+static void inline push_up(const unsigned int used_gpio) {
     const uint32_t now = xTaskGetTickCount();
     
     if (now - adv_button_main_config->disable_time > DISABLE_TIME / portTICK_PERIOD_MS) {
@@ -233,14 +233,14 @@ static void inline IRAM push_up(const unsigned int used_gpio) {
     }
 }
 
-static void inline IRAM adv_button_single_callback(TimerHandle_t xTimer) {
+static void inline adv_button_single_callback(TimerHandle_t xTimer) {
     adv_button_t *button = (adv_button_t*) pvTimerGetTimerID(xTimer);
     // Single button pressed
     button->press_count = 0;
     adv_button_run_callback_fn(button->singlepress_callback_fn, button->gpio);
 }
 
-static void inline IRAM adv_button_hold_callback(TimerHandle_t xTimer) {
+static void inline adv_button_hold_callback(TimerHandle_t xTimer) {
     adv_button_t* button = (adv_button_t*) pvTimerGetTimerID(xTimer);
     // Hold button pressed
     button->press_count = DISABLE_PRESS_COUNT;
@@ -277,7 +277,7 @@ static void IRAM adv_button_interrupt_normal(const uint8_t gpio) {
     }
 }
 
-static void IRAM button_evaluate_fn() {
+static void button_evaluate_fn() {
     if (!adv_button_main_config->button_evaluate_is_working) {
         adv_button_main_config->button_evaluate_is_working = true;
         

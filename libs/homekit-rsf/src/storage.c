@@ -48,8 +48,6 @@ int homekit_storage_init() {
     }
 
     if (strncmp(magic, magic1, 2)) {
-        INFO("Format at 0x%x", SPIFLASH_BASE_ADDR);
-        
         byte blank[64];
         memset(blank, 0, sizeof(blank));
         for (int i = 0; i < SPI_FLASH_SECTOR_SIZE; i += sizeof(blank)) {
@@ -72,7 +70,7 @@ int homekit_storage_init() {
         }
         
         if (!spiflash_write(MAGIC_ADDR, (byte *)magic, sizeof(magic))) {
-            ERROR("Init sector");
+            ERROR("Init sec");
             return -1;
         }
         

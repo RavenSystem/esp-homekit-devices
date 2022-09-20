@@ -12,6 +12,8 @@ EXTRA_COMPONENTS = \
 	$(abspath ../../libs/timers_helper)
 
 FLASH_SIZE ?= 1
+FLASH_MODE = dout
+FLASH_SPEED = 40
 
 EXTRA_WOLFSSL_CFLAGS = \
 	-DWOLFSSL_USER_SETTINGS \
@@ -67,7 +69,7 @@ EXTRA_WOLFSSL_CFLAGS = \
 
 esp-wolfssl_CFLAGS += $(EXTRA_WOLFSSL_CFLAGS)
 
-# Max HAA OTA Main Installer firmware size is 397296 bytes
+# Max HAA OTA MAIN Installer firmware size is 397296 bytes
 
 EXTRA_CFLAGS += $(EXTRA_WOLFSSL_CFLAGS)
 #EXTRA_CFLAGS += -DTCP_MSS=1460 -DTCP_WND=2920

@@ -177,7 +177,7 @@ mcp23017_t* mcp_find_by_index(const int index) {
     return mcp23017;
 }
 
-void IRAM extended_gpio_write(const int extended_gpio, bool value) {
+void extended_gpio_write(const int extended_gpio, bool value) {
     if (extended_gpio < 17) {
         gpio_write(extended_gpio, value);
         
@@ -427,7 +427,7 @@ ch_group_t* new_ch_group(const uint8_t chs, const uint8_t nums_i, const uint8_t 
     return ch_group;
 }
 
-ch_group_t* IRAM ch_group_find(homekit_characteristic_t* ch) {
+ch_group_t* ch_group_find(homekit_characteristic_t* ch) {
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
         for (int i = 0; i < ch_group->chs; i++) {
@@ -445,7 +445,7 @@ ch_group_t* IRAM ch_group_find(homekit_characteristic_t* ch) {
     return NULL;
 }
 
-ch_group_t* IRAM ch_group_find_by_serv(const uint16_t service) {
+ch_group_t* ch_group_find_by_serv(const uint16_t service) {
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group &&
            ch_group->serv_index != service) {
@@ -455,7 +455,7 @@ ch_group_t* IRAM ch_group_find_by_serv(const uint16_t service) {
     return ch_group;
 }
 
-lightbulb_group_t* IRAM lightbulb_group_find(homekit_characteristic_t* ch) {
+lightbulb_group_t* lightbulb_group_find(homekit_characteristic_t* ch) {
     lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
     while (lightbulb_group &&
            lightbulb_group->ch0 != ch) {
@@ -1011,7 +1011,7 @@ void save_states_callback() {
     esp_timer_start(SAVE_STATES_TIMER);
 }
 
-void IRAM homekit_characteristic_notify_safe(homekit_characteristic_t *ch) {
+void homekit_characteristic_notify_safe(homekit_characteristic_t *ch) {
     if (ch_group_find(ch)->homekit_enabled && main_config.wifi_status == WIFI_STATUS_CONNECTED && main_config.enable_homekit_server) {
         homekit_characteristic_notify(ch);
     }
@@ -3211,7 +3211,7 @@ void white2hsi(uint16_t t, ch_group_t* ch_group) {
     
 }
 */
-void IRAM rgbw_set_timer_worker() {
+void rgbw_set_timer_worker() {
     int all_channels_ready = true;
     
     lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
@@ -11574,7 +11574,7 @@ void irrf_capture_task(void* args) {
                 for (i = 1; i < c; i++) {
                     printf("%s%5d ",
                            i & 1 ? "+" : "-",
-                           i & 1 ? buffer[i] : (uint32_t) (buffer[i] * 1.06f));
+                           (uint32_t) (buffer[i] * 1.02f));
                     
                     if ((i - 1) % 16 == 15) {
                         printf("\n");
@@ -11662,7 +11662,7 @@ void init_task() {
         arming();
         
         if (haa_setup != 1) {
-            sysparam_compact_alt();
+            sysparam_compact();
             arming();
         }
         

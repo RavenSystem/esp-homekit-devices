@@ -389,7 +389,7 @@ void pairing_context_free(pairing_context_t *context) {
     free(context);
 }
 
-static int IRAM homekit_low_dram() {
+static int homekit_low_dram() {
     const uint32_t free_heap = xPortGetFreeHeapSize();
     if (free_heap < HOMEKIT_MIN_FREEHEAP) {
         HOMEKIT_ERROR("LOW DRAM Free HEAP: %i", free_heap);
@@ -3186,7 +3186,7 @@ static http_parser_settings homekit_http_parser_settings = {
 };
 
 
-inline static void IRAM homekit_client_process(client_context_t *context) {
+inline static void homekit_client_process(client_context_t *context) {
     int data_len = read(context->socket,
                         homekit_server->data + homekit_server->data_available,
                         RECEIVED_DATA_SIZE - homekit_server->data_available
@@ -3463,7 +3463,7 @@ static inline void homekit_server_close_clients() {
     }
 }
 
-static void IRAM homekit_run_server() {
+static void homekit_run_server() {
     HOMEKIT_DEBUG_LOG("Starting HTTP server");
     
     struct sockaddr_in serv_addr;
@@ -3695,7 +3695,7 @@ void homekit_server_init(homekit_server_config_t *config) {
         homekit_server->accessory_key = homekit_accessory_key_generate();
         homekit_storage_save_accessory_key(homekit_server->accessory_key);
     } else {
-        HOMEKIT_INFO("HomeKit ID: %s", homekit_server->accessory_id);
+        HOMEKIT_INFO("HK ID: %s", homekit_server->accessory_id);
     }
 
     pairing_iterator_t *pairing_it = homekit_storage_pairing_iterator();
