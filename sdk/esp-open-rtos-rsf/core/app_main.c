@@ -32,7 +32,8 @@
 #include "esplibs/libnet80211.h"
 #include "esplibs/libphy.h"
 #include "esplibs/libpp.h"
-#include "sysparam.h"
+//#include "sysparam.h"
+#include "spiflash.h"
 
 /* This is not declared in any header file (but arguably should be) */
 
@@ -150,8 +151,8 @@ void IRAM sdk_user_start(void) {
     uint32_t cksum_len;
     uint32_t cksum_value;
     uint32_t ic_flash_addr;
-    uint32_t sysparam_addr;
-    sysparam_status_t status;
+    //uint32_t sysparam_addr;
+    //sysparam_status_t status;
 
     SPI(0).USER0 |= SPI_USER0_CS_SETUP;
     sdk_SPIRead(0, buf32, 4);
@@ -202,6 +203,12 @@ void IRAM sdk_user_start(void) {
     flash_sectors = flash_size / sdk_flashchip.sector_size;
     sdk_flashchip.chip_size = flash_size;
     set_spi0_divisor(flash_speed_divisor);
+    
+    // Flash Mode QIO or QOUT
+    //if (buf8[2] == 0 || buf8[2] == 1) {
+        //user_spi_flash_dio_to_qio_pre_init();
+    //}
+    
     sdk_SPIRead(flash_size - 4096, buf32, BOOT_INFO_SIZE);
     boot_slot = buf8[0] ? 1 : 0;
     cksum_magic = buf32[1];
@@ -235,6 +242,7 @@ void IRAM sdk_user_start(void) {
 
     // By default, put the sysparam region just below the config sectors at the
     // top of the flash space, and allowing one extra sector spare.
+    /*
     sysparam_addr = flash_size - (5 + DEFAULT_SYSPARAM_SECTORS) * sdk_flashchip.sector_size;
     status = sysparam_init(sysparam_addr, flash_size);
     if (status == SYSPARAM_NOTFOUND) {
@@ -246,6 +254,7 @@ void IRAM sdk_user_start(void) {
     if (status != SYSPARAM_OK) {
         printf("WARNING: Could not initialize sysparams (%d)!\n", status);
     }
+    */
 
     user_start_phase2();
 }
