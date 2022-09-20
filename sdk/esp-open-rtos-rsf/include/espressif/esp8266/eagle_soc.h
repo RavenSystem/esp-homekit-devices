@@ -104,4 +104,12 @@
 #define PAD_XPD_DCDC_CONF               (REG_RTC_BASE + 0x0A0)
 //}}
 
+//CACHE{{
+#define CACHE_FLASH_CTRL_REG            (0x3ff00000 + 0x0c)
+#define CACHE_READ_EN_BIT               BIT8
+//}}
+
+#define REG_READ READ_PERI_REG
+#define REG_WRITE WRITE_PERI_REG
+
 #endif //_EAGLE_SOC_H_
