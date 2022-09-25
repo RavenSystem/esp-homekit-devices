@@ -1093,6 +1093,8 @@ static uint8_t wifi_config_connect(const uint8_t phy) {
 }
 
 static void wifi_config_station_connect() {
+    vTaskDelay(1);
+    
     int8_t setup_mode = 3;
     sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &setup_mode);
     

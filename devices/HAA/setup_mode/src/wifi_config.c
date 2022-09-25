@@ -1172,6 +1172,8 @@ uint8_t wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool wi
 }
 
 static void wifi_config_station_connect() {
+    vTaskDelay(1);
+    
     int8_t phy_mode = 3;
     if (!context->on_wifi_ready) {
         sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
