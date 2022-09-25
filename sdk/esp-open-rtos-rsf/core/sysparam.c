@@ -112,7 +112,7 @@ struct sysparam_context {
 
 /*************************** Global variables/data ***************************/
 
-static struct {
+struct {
     uint32_t cur_base;
     uint32_t alt_base;
     uint32_t end_addr;
