@@ -82,6 +82,7 @@ static void IRAM get_otp_mac_address(uint8_t *buf) {
     otp_flags = DPORT.OTP_CHIPID;
     otp_id1 = DPORT.OTP_MAC1;
     otp_id0 = DPORT.OTP_MAC0;
+    /*
     if (!(otp_flags & 0x8000)) {
         //FIXME: do we really need this check?
         printf("Firmware ONLY supports ESP8266!!!\n");
@@ -91,6 +92,7 @@ static void IRAM get_otp_mac_address(uint8_t *buf) {
         printf("empty otp\n");
         abort();
     }
+     */
     if (otp_flags & 0x1000) {
         // If bit 12 is set, it indicates that the vendor portion of the MAC
         // address is stored in DPORT.OTP_MAC2.
@@ -147,9 +149,9 @@ void IRAM sdk_user_start(void) {
     uint32_t flash_sectors;
     uint32_t flash_size;
     int boot_slot;
-    uint32_t cksum_magic;
-    uint32_t cksum_len;
-    uint32_t cksum_value;
+    //uint32_t cksum_magic;
+    //uint32_t cksum_len;
+    //uint32_t cksum_value;
     uint32_t ic_flash_addr;
     //uint32_t sysparam_addr;
     //sysparam_status_t status;
@@ -204,16 +206,17 @@ void IRAM sdk_user_start(void) {
     sdk_flashchip.chip_size = flash_size;
     set_spi0_divisor(flash_speed_divisor);
     
-    // Flash Mode QIO or QOUT
-    //if (buf8[2] == 0 || buf8[2] == 1) {
-        //user_spi_flash_dio_to_qio_pre_init();
-    //}
+    /* Flash Mode QIO or QOUT
+    if (buf8[2] == 0 || buf8[2] == 1) {
+        user_spi_flash_dio_to_qio_pre_init();
+    }
+     */
     
     sdk_SPIRead(flash_size - 4096, buf32, BOOT_INFO_SIZE);
     boot_slot = buf8[0] ? 1 : 0;
-    cksum_magic = buf32[1];
-    cksum_len = buf32[3 + boot_slot];
-    cksum_value = buf32[5 + boot_slot];
+    //cksum_magic = buf32[1];
+    //cksum_len = buf32[3 + boot_slot];
+    //cksum_value = buf32[5 + boot_slot];
     ic_flash_addr = (flash_sectors - 3 + boot_slot) * sdk_flashchip.sector_size;
     sdk_SPIRead(ic_flash_addr, buf32, sizeof(struct sdk_g_ic_saved_st));
     Cache_Read_Enable(0, 0, 1);
@@ -227,7 +230,7 @@ void IRAM sdk_user_start(void) {
     nano_malloc_insert_chunk((void *)(sdk_wDevCtrl + 0x2190), 8000);
 
     init_newlib_locks();
-
+    /*
     if (cksum_magic == 0xffffffff) {
         // No checksum required
     } else if ((cksum_magic == 0x55aa55aa) &&
@@ -238,6 +241,7 @@ void IRAM sdk_user_start(void) {
         dump_flash_config_sectors(flash_sectors - 4);
         //FIXME: should we halt here? (original SDK code doesn't)
     }
+     */
     memcpy(&sdk_g_ic.s, buf32, sizeof(struct sdk_g_ic_saved_st));
 
     // By default, put the sysparam region just below the config sectors at the
@@ -261,7 +265,7 @@ void IRAM sdk_user_start(void) {
 
 // .text+0x3a8
 void IRAM vApplicationStackOverflowHook(TaskHandle_t task, char *task_name) {
-    printf("Task stack overflow (high water mark=%lu name=\"%s\")\n", uxTaskGetStackHighWaterMark(task), task_name);
+    printf("Task \"%s\" overflow (%lu)\n", task_name, uxTaskGetStackHighWaterMark(task));
 }
 
 // .text+0x3d8
@@ -289,7 +293,7 @@ static void init_networking(sdk_phy_info_t *phy_info, uint8_t *mac_addr) {
     // perhaps from 40MHz to 26MHz, at least it has such an effect on the uart
     // baud rate. The caller flushes the TX fifos.
     if (sdk_register_chipv6_phy(phy_info)) {
-        printf("FATAL: sdk_register_chipv6_phy failed");
+        printf("FATAL: sdk_register_chipv6_phy");
         abort();
     }
 
@@ -470,7 +474,7 @@ static __attribute__((noinline)) void user_start_phase2(void) {
     xTaskCreate(sdk_user_init_task, "uiT", 1024, 0, 14, &sdk_xUserTaskHandle);
     vTaskStartScheduler();
 }
-
+/*
 // .Lfunc010 -- .irom0.text+0x710
 static void dump_flash_sector(uint32_t start_sector, uint32_t length) {
     uint8_t *buf;
@@ -506,4 +510,4 @@ static __attribute__((noinline)) void dump_flash_config_sectors(uint32_t start_s
     printf("\nboot info:\n");
     dump_flash_sector(start_sector + 3, BOOT_INFO_SIZE);
 }
-
+*/
