@@ -70,8 +70,8 @@ static void zero_bss(void);
 static void init_networking(sdk_phy_info_t *phy_info, uint8_t *mac_addr);
 static void init_g_ic(void);
 static void user_start_phase2(void);
-static void dump_flash_sector(uint32_t start_sector, uint32_t length);
-static void dump_flash_config_sectors(uint32_t start_sector);
+//static void dump_flash_sector(uint32_t start_sector, uint32_t length);
+//static void dump_flash_config_sectors(uint32_t start_sector);
 
 // .Lfunc001 -- .text+0x14
 static void IRAM get_otp_mac_address(uint8_t *buf) {
