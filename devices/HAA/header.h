@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "11.3.1"
+#define HAA_FIRMWARE_VERSION                "11.3.2"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Peregrine"
 
@@ -335,7 +335,7 @@
 #define LIGHTBULB_FLUX_ARRAY_SET            "fa"
 #define LIGHTBULB_COORDINATE_ARRAY_SET      "ca"
 #define LIGHTBULB_WHITE_POINT_SET           "wp"
-#define RGBW_PERIOD                         (40)
+#define RGBW_PERIOD                         (20)
 #define RGBW_STEP_SET                       "st"
 #define RGBW_STEP_DEFAULT                   (102.4 * RGBW_PERIOD)
 #define PWM_SCALE                           (UINT16_MAX)

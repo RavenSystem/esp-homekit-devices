@@ -85,8 +85,6 @@ main_config_t main_config = {
     
     .ping_poll_period = PING_POLL_PERIOD_DEFAULT,
     
-    .setpwm_is_running = false,
-    
     .clock_ready = false,
     .timetable_ready = false,
     
@@ -956,7 +954,7 @@ void setup_mode_call(const uint16_t gpio, void* args, const uint8_t param) {
 void setup_mode_toggle_upcount() {
     if (main_config.setup_mode_toggle_counter_max > 0) {
         main_config.setup_mode_toggle_counter++;
-        INFO("Setup trigger %i/%i", main_config.setup_mode_toggle_counter, main_config.setup_mode_toggle_counter_max);
+        INFO("Call Setup %i/%i", main_config.setup_mode_toggle_counter, main_config.setup_mode_toggle_counter_max);
         
         if (main_config.setup_mode_toggle_counter == main_config.setup_mode_toggle_counter_max) {
             setup_mode_call(99, NULL, 0);
@@ -972,7 +970,7 @@ void setup_mode_toggle() {
 
 // -----
 void save_states() {
-    INFO("Saving states");
+    INFO("Saving");
     last_state_t* last_state = main_config.last_states;
     sysparam_status_t status;
     
@@ -1020,7 +1018,7 @@ void homekit_characteristic_notify_safe(homekit_characteristic_t *ch) {
 void hkc_custom_setup_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     if (strncmp(value.string_value, CUSTOM_TRIGGER_COMMAND, strlen(CUSTOM_TRIGGER_COMMAND)) == 0) {
         const unsigned int option = value.string_value[strlen(CUSTOM_TRIGGER_COMMAND)];
-        INFO("<0> Custom mode %c", value.string_value[strlen(CUSTOM_TRIGGER_COMMAND)]);
+        INFO("<0> -> MODE %c", value.string_value[strlen(CUSTOM_TRIGGER_COMMAND)]);
         
         homekit_characteristic_notify(ch);
         
@@ -1051,7 +1049,7 @@ void hkc_custom_setup_setter(homekit_characteristic_t* ch, const homekit_value_t
 
 void hkc_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
-    INFO("<%i> Gen setter", ch_group->serv_index);
+    INFO("<%i> -> GEN", ch_group->serv_index);
     ch->value = value;
     homekit_characteristic_notify_safe(ch);
     
@@ -1067,7 +1065,7 @@ void pm_custom_consumption_reset(ch_group_t* ch_group) {
     }
     
     led_blink(1);
-    INFO("<%i> Setter Consumption Reset", ch_group->serv_index);
+    INFO("<%i> -> Consumption Reset", ch_group->serv_index);
     
     time_t time = raven_ntp_get_time_t();
     
@@ -1098,7 +1096,7 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     if (ch_group->main_enabled) {
         if (ch->value.bool_value != value.bool_value) {
             led_blink(1);
-            INFO("<%i> Setter ON %i", ch_group->serv_index, value.bool_value);
+            INFO("<%i> -> ON %i", ch_group->serv_index, value.bool_value);
             
             ch->value.bool_value = value.bool_value;
             
@@ -1136,7 +1134,7 @@ void hkc_on_status_setter(homekit_characteristic_t* ch, const homekit_value_t va
     if (ch->value.bool_value != value.bool_value) {
         led_blink(1);
         ch_group_t* ch_group = ch_group_find(ch);
-        INFO("<%i> Setter St ON %i", ch_group->serv_index, value.bool_value);
+        INFO("<%i> -> St ON %i", ch_group->serv_index, value.bool_value);
         ch->value.bool_value = value.bool_value;
     }
     
@@ -1162,7 +1160,7 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
     if (ch_group->main_enabled) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            INFO("<%i> Setter LOCK %i", ch_group->serv_index, value.int_value);
+            INFO("<%i> -> LOCK %i", ch_group->serv_index, value.int_value);
             
             ch->value.int_value = value.int_value;
             
@@ -1192,7 +1190,7 @@ void hkc_lock_status_setter(homekit_characteristic_t* ch, const homekit_value_t 
     if (ch->value.int_value != value.int_value) {
         led_blink(1);
         
-        INFO("<%i> Setter St LOCK %i", ch_group->serv_index, value.int_value);
+        INFO("<%i> -> St LOCK %i", ch_group->serv_index, value.int_value);
         
         ch->value.int_value = value.int_value;
         
@@ -1209,7 +1207,7 @@ void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
     
     if (ch_group->child_enabled) {
         led_blink(1);
-        INFO("<%i> Setter EVENT %i", ch_group->serv_index, event_type);
+        INFO("<%i> -> EVENT %i", ch_group->serv_index, event_type);
         
         ch_group->ch[0]->value.int_value = event_type;
         homekit_characteristic_notify_safe(ch_group->ch[0]);
@@ -1390,7 +1388,7 @@ void power_monitor_task(void* args) {
     power = hwrand() % 70;
 #endif //POWER_MONITOR_DEBUG
     
-    INFO("<%i> PM: V = %g, C = %g, P = %g", ch_group->serv_index, voltage, current, power);
+    INFO("<%i> PM V = %g, C = %g, P = %g", ch_group->serv_index, voltage, current, power);
     
     if (pm_sensor_type < 2) {
         if (current < 0) {
@@ -1414,7 +1412,7 @@ void power_monitor_task(void* args) {
             }
         }
     } else {
-        ERROR("<%i> PM Voltage", ch_group->serv_index);
+        ERROR("<%i> PM V", ch_group->serv_index);
     }
     
     if (current < 150.f && current > -150.f) {
@@ -1429,7 +1427,7 @@ void power_monitor_task(void* args) {
             }
         }
     } else {
-        ERROR("<%i> PM Current", ch_group->serv_index);
+        ERROR("<%i> PM C", ch_group->serv_index);
     }
     
     PM_LAST_SAVED_CONSUPTION += PM_POLL_PERIOD;
@@ -1447,7 +1445,7 @@ void power_monitor_task(void* args) {
         }
         
         const float consumption = ch_group->ch[3]->value.float_value + ((power * PM_POLL_PERIOD) / 3600000.f);
-        INFO("<%i> PM: KWh = %1.7g", ch_group->serv_index, consumption);
+        INFO("<%i> PM KWh = %1.7g", ch_group->serv_index, consumption);
         
         do_wildcard_actions(ch_group, 3, consumption);
         
@@ -1465,7 +1463,7 @@ void power_monitor_task(void* args) {
             save_states_callback();
         }
     } else {
-        ERROR("<%i> PM Power", ch_group->serv_index);
+        ERROR("<%i> PM P", ch_group->serv_index);
     }
     
     vTaskDelete(NULL);
@@ -1490,7 +1488,7 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
     if (ch_group->main_enabled) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            INFO("<%i> Setter VALVE", ch_group->serv_index);
+            INFO("<%i> -> VALVE", ch_group->serv_index);
             
             ch->value.int_value = value.int_value;
             ch_group->ch[1]->value.int_value = value.int_value;
@@ -1535,7 +1533,7 @@ void hkc_valve_status_setter(homekit_characteristic_t* ch, const homekit_value_t
         
         ch_group->ch[1]->value.int_value = value.int_value;
         
-        INFO("<%i> Setter St VALVE", ch_group->serv_index);
+        INFO("<%i> -> St VALVE", ch_group->serv_index);
     }
     
     homekit_characteristic_notify_safe(ch);
@@ -1634,7 +1632,7 @@ void set_zones_task(void* args) {
         ch_group = ch_group->next;
     }
     
-    INFO("<%i> iAZ: all OFF: %i, all IDLE: %i, all soft ON: %i, force IDLE: %i",
+    INFO("<%i> iAZ all OFF %i, all IDLE %i, all soft ON %i, force IDLE %i",
          iairzoning_group->serv_index,
          thermostat_all_off,
          thermostat_all_idle,
@@ -2003,7 +2001,7 @@ void process_th_timer(TimerHandle_t xTimer) {
 void hkc_th_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
-        INFO("<%i> Setter TH", ch_group->serv_index);
+        INFO("<%i> -> TH", ch_group->serv_index);
         
         ch->value = value;
         
@@ -2349,7 +2347,7 @@ void process_humidif_timer(TimerHandle_t xTimer) {
 void hkc_humidif_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
-        INFO("<%i> Setter Hum", ch_group->serv_index);
+        INFO("<%i> -> HUM", ch_group->serv_index);
         
         ch->value = value;
         
@@ -3216,7 +3214,7 @@ void rgbw_set_timer_worker() {
     
     lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
     
-    while (main_config.setpwm_is_running && lightbulb_group) {
+    while (lightbulb_group) {
         if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL) {
             lightbulb_group->has_changed = false;
             for (int i = 0; i < LIGHTBULB_CHANNELS; i++) {
@@ -3289,7 +3287,6 @@ void rgbw_set_timer_worker() {
     }
     
     if (all_channels_ready) {
-        main_config.setpwm_is_running = false;
         esp_timer_stop(main_config.set_lightbulb_timer);
         
         INFO("RGBW done");
@@ -3400,8 +3397,7 @@ void lightbulb_no_task(ch_group_t* ch_group) {
             }
         }
         
-        if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL && !main_config.setpwm_is_running) {
-            main_config.setpwm_is_running = true;
+        if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL && xTimerIsTimerActive(main_config.set_lightbulb_timer) == pdFALSE) {
             esp_timer_start(main_config.set_lightbulb_timer);
             rgbw_set_timer_worker(main_config.set_lightbulb_timer);
         }
@@ -3692,7 +3688,7 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
         
         if (value.int_value != current_door_state && GD_CURRENT_DOOR_STATE_INT != GARAGE_DOOR_STOPPED) {
             led_blink(1);
-            INFO("<%i> Setter GD %i", ch_group->serv_index, value.int_value);
+            INFO("<%i> -> GD %i", ch_group->serv_index, value.int_value);
             
             ch1->value.int_value = value.int_value;
             
@@ -3884,7 +3880,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
     
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("<%i> Setter WC %i->%i", ch_group->serv_index, WINDOW_COVER_CH_CURRENT_POSITION->value.int_value, value.int_value);
+        INFO("<%i> -> WC %i->%i", ch_group->serv_index, WINDOW_COVER_CH_CURRENT_POSITION->value.int_value, value.int_value);
         
         ch1->value.int_value = value.int_value;
         
@@ -4065,7 +4061,7 @@ void process_fan_timer(TimerHandle_t xTimer) {
 void hkc_fan_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
-        INFO("<%i> Setter FAN", ch_group->serv_index);
+        INFO("<%i> -> FAN", ch_group->serv_index);
         
         const int old_on_value = ch_group->ch[0]->value.bool_value;
         
@@ -4099,7 +4095,7 @@ void hkc_fan_status_setter(homekit_characteristic_t* ch0, const homekit_value_t 
         led_blink(1);
         ch_group_t* ch_group = ch_group_find(ch0);
         
-        INFO("<%i> Setter St FAN %i", ch_group->serv_index, value.bool_value);
+        INFO("<%i> -> St FAN %i", ch_group->serv_index, value.bool_value);
         
         ch0->value.bool_value = value.bool_value;
         
@@ -4171,7 +4167,7 @@ void hkc_sec_system(homekit_characteristic_t* ch, const homekit_value_t value) {
     if (ch_group->main_enabled) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            INFO("<%i> Setter SEC SYSTEM %i", ch_group->serv_index, value.int_value);
+            INFO("<%i> -> SEC SYS %i", ch_group->serv_index, value.int_value);
             
             esp_timer_stop(SEC_SYSTEM_REC_ALARM_TIMER);
             
@@ -4196,7 +4192,7 @@ void hkc_sec_system_status(homekit_characteristic_t* ch, const homekit_value_t v
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch->value.int_value != value.int_value) {
         led_blink(1);
-        INFO("<%i> Setter St SEC SYSTEM %i", ch_group->serv_index, value.int_value);
+        INFO("<%i> -> St SEC SYS %i", ch_group->serv_index, value.int_value);
         
         esp_timer_stop(SEC_SYSTEM_REC_ALARM_TIMER);
         
@@ -4231,7 +4227,7 @@ void hkc_tv_active(homekit_characteristic_t* ch0, const homekit_value_t value) {
     if (ch_group->main_enabled) {
         if (ch0->value.int_value != value.int_value) {
             led_blink(1);
-            INFO("<%i> Setter TV ON %i", ch_group->serv_index, value.int_value);
+            INFO("<%i> -> TV ON %i", ch_group->serv_index, value.int_value);
             
             ch0->value.int_value = value.int_value;
             
@@ -4252,7 +4248,7 @@ void hkc_tv_status_active(homekit_characteristic_t* ch0, const homekit_value_t v
         led_blink(1);
         ch_group_t* ch_group = ch_group_find(ch0);
         
-        INFO("<%i> Setter St TV ON %i", ch_group->serv_index, value.int_value);
+        INFO("<%i> -> St TV ON %i", ch_group->serv_index, value.int_value);
         
         ch0->value.int_value = value.int_value;
         
@@ -4269,7 +4265,7 @@ void hkc_tv_active_identifier(homekit_characteristic_t* ch, const homekit_value_
     if (ch_group->main_enabled) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            INFO("<%i> Setter TV Input %i", ch_group->serv_index, value.int_value);
+            INFO("<%i> -> TV In %i", ch_group->serv_index, value.int_value);
             
             ch->value.int_value = value.int_value;
 
@@ -4286,7 +4282,7 @@ void hkc_tv_key(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("<%i> Setter TV Key %i", ch_group->serv_index, value.int_value + 2);
+        INFO("<%i> -> TV Key %i", ch_group->serv_index, value.int_value + 2);
         
         ch->value.int_value = value.int_value;
         
@@ -4302,7 +4298,7 @@ void hkc_tv_power_mode(homekit_characteristic_t* ch, const homekit_value_t value
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("<%i> Setter TV Settings %i", ch_group->serv_index, value.int_value + 30);
+        INFO("<%i> -> TV Settings %i", ch_group->serv_index, value.int_value + 30);
         
         ch->value.int_value = value.int_value;
         
@@ -4318,7 +4314,7 @@ void hkc_tv_mute(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("<%i> Setter TV Mute %i", ch_group->serv_index, value.int_value + 20);
+        INFO("<%i> -> TV Mute %i", ch_group->serv_index, value.int_value + 20);
         
         ch->value.int_value = value.int_value;
         
@@ -4334,7 +4330,7 @@ void hkc_tv_volume(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("<%i> Setter TV Volume %i", ch_group->serv_index, value.int_value + 22);
+        INFO("<%i> -> TV Vol %i", ch_group->serv_index, value.int_value + 22);
         
         ch->value.int_value = value.int_value;
         
@@ -4349,7 +4345,7 @@ void hkc_tv_volume(homekit_characteristic_t* ch, const homekit_value_t value) {
 void hkc_tv_configured_name(homekit_characteristic_t* ch1, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch1);
     
-    INFO("<%i> Setter TV Name %s", ch_group->serv_index, value.string_value);
+    INFO("<%i> -> TV Name %s", ch_group->serv_index, value.string_value);
     
     char* new_name = strdup(value.string_value);
     
@@ -6861,14 +6857,14 @@ void normal_mode_init() {
                     
                     adv_button_create(gpio, pullup_resistor, inverted, button_mode);
                     
-                    INFO("New Input GPIO %i: p %i, i %i, f %i, m %i", gpio, pullup_resistor, inverted, button_filter, button_mode);
+                    INFO("New DigI GPIO %i p %i, i %i, f %i, m %i", gpio, pullup_resistor, inverted, button_filter, button_mode);
                 }
                 
             } else {    // MCP23017
                 mcp23017_t* mcp = mcp_find_by_index(gpio / 100);
                 adv_button_create(gpio, mcp->bus, inverted, mcp->addr);
                 
-                INFO("New Input MCP GPIO %i: i %i, f %i, b %i, a %i", gpio, inverted, button_filter, mcp->bus, mcp->addr);
+                INFO("New DigI MCP Pin %i i %i, f %i, b %i, a %i", gpio, inverted, button_filter, mcp->bus, mcp->addr);
             }
             
             if (button_filter > 0) {
@@ -6886,7 +6882,7 @@ void normal_mode_init() {
                 active = true;
             }
             
-            INFO("New DigI GPIO %i: t %i, s %i", gpio, button_type, active);
+            INFO("New DigI GPIO %i t %i, s %i", gpio, button_type, active);
         }
         
         return active;
@@ -6937,7 +6933,7 @@ void normal_mode_init() {
                 ping_input->callback_0 = ping_input_callback_fn;
             }
             
-            INFO("New Ping Input: h %s, r %i", ping_input->host, response_type);
+            INFO("New PingI h %s, r %i", ping_input->host, response_type);
         }
     }
     
@@ -7015,13 +7011,13 @@ void normal_mode_init() {
                 }
                 
                 if (status != SYSPARAM_OK) {
-                    ERROR("Init: not saved, using default");
+                    ERROR("Init. Using default");
                 }
                 
                 if (ch_type == CH_TYPE_STRING && state > 0) {
-                    INFO("Init: %s", (char*) (uint32_t) state);
+                    INFO("Init %s", (char*) (uint32_t) state);
                 } else {
-                    INFO("Init: %g", state);
+                    INFO("Init %g", state);
                 }
                 
             }
@@ -7050,7 +7046,7 @@ void normal_mode_init() {
                     action_copy->next = last_action;
                     last_action = action_copy;
                     
-                    INFO("New Copy A%i: v %i", new_int_action, action_copy->new_action);
+                    INFO("New Copy A%i v %i", new_int_action, action_copy->new_action);
                 }
             }
         }
@@ -7100,7 +7096,7 @@ void normal_mode_init() {
                             gpio_enable(action_binary_output->gpio, GPIO_OUTPUT);
                             gpio_write(action_binary_output->gpio, initial_value);
                             
-                            INFO("New BinOut GPIO %i", action_binary_output->gpio);
+                            INFO("New DigO GPIO %i", action_binary_output->gpio);
                         }
                         
                         if (cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME) != NULL) {
@@ -7110,7 +7106,7 @@ void normal_mode_init() {
                         action_binary_output->next = last_action;
                         last_action = action_binary_output;
                         
-                        INFO("New BinOut A%i: g %i, v %i, i %i", new_int_action, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
+                        INFO("New DigO A%i g %i, v %i, i %i", new_int_action, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
                     }
                 }
             }
@@ -7163,7 +7159,7 @@ void normal_mode_init() {
                             }
                         }
                         
-                        INFO("New ServNot A%i: %i->%g", new_int_action, action_serv_manager->serv_index, action_serv_manager->value);
+                        INFO("New ServNot A%i %i->%g", new_int_action, action_serv_manager->serv_index, action_serv_manager->value);
                     }
                 }
             }
@@ -7223,7 +7219,7 @@ void normal_mode_init() {
                             }
                         }
                         
-                        INFO("New SetCh A%i: %i.%i->%i.%i", new_int_action, action_set_ch->source_serv, action_set_ch->source_ch, action_set_ch->target_serv, action_set_ch->target_ch);
+                        INFO("New SetCh A%i %i.%i->%i.%i", new_int_action, action_set_ch->source_serv, action_set_ch->source_ch, action_set_ch->target_serv, action_set_ch->target_ch);
                     }
                 }
             }
@@ -7263,7 +7259,7 @@ void normal_mode_init() {
                         action_system->next = last_action;
                         last_action = action_system;
                         
-                        INFO("New Sys A%i: v %i", new_int_action, action_system->value);
+                        INFO("New Sys A%i v %i", new_int_action, action_system->value);
                     }
                 }
             }
@@ -7346,7 +7342,7 @@ void normal_mode_init() {
                             }
                         }
                         
-                        INFO("New Net A%i: %s:%i", new_int_action, action_network->host, action_network->port_n);
+                        INFO("New Net A%i %s:%i", new_int_action, action_network->host, action_network->port_n);
                         
                         action_network->next = last_action;
                         last_action = action_network;
@@ -7418,7 +7414,7 @@ void normal_mode_init() {
                         action_irrf_tx->next = last_action;
                         last_action = action_irrf_tx;
                         
-                        INFO("New IRRF A%i: r %i, p %i", new_int_action, action_irrf_tx->repeats, action_irrf_tx->pause);
+                        INFO("New IRRF A%i r %i, p %i", new_int_action, action_irrf_tx->repeats, action_irrf_tx->pause);
                     }
                 }
             }
@@ -7477,7 +7473,7 @@ void normal_mode_init() {
                         action_uart->next = last_action;
                         last_action = action_uart;
                         
-                        INFO("New UART A%i: u %i, p %i, l %i", new_int_action, action_uart->uart, action_uart->pause, action_uart->len);
+                        INFO("New UART A%i u %i, p %i, l %i", new_int_action, action_uart->uart, action_uart->pause, action_uart->len);
                     }
                 }
             }

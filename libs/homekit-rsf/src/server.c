@@ -3252,7 +3252,7 @@ void homekit_server_close_client(client_context_t *context) {
 
     close(context->socket);
     
-    CLIENT_INFO(context, "Closed (%i/%i)", homekit_server->client_count, homekit_server->config->max_clients);
+    CLIENT_INFO(context, "Closed %i/%i", homekit_server->client_count, homekit_server->config->max_clients);
     
     if (homekit_server->pairing_context && homekit_server->pairing_context->client == context) {
         pairing_context_free(homekit_server->pairing_context);
@@ -3325,13 +3325,13 @@ void homekit_server_accept_client() {
             homekit_server->max_fd = s;
         }
         
-        HOMEKIT_INFO("[%d] New %s:%d (%i/%i) Free HEAP %d", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
+        HOMEKIT_INFO("[%d] New %s:%d %i/%i Free HEAP %d", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
 
         HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_CLIENT_CONNECTED);
         
     } else {
         close(s);
-        HOMEKIT_ERROR("[%d] No DRAM %s:%d (%i/%i) Free HEAP %d", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
+        HOMEKIT_ERROR("[%d] DRAM %s:%d %i/%i Free HEAP %d", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
     }
 }
 

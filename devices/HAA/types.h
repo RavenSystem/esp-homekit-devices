@@ -310,10 +310,10 @@ typedef struct _main_config {
     uint8_t wifi_status: 2;
     uint8_t wifi_channel: 4;
     bool ir_tx_inv: 1;
-    bool setpwm_is_running: 1;
+    bool rf_tx_inv: 1;
     uint8_t ir_tx_gpio: 6;
     bool timetable_ready: 1;
-    
+    bool clock_ready: 1;
     int8_t setup_mode_toggle_counter;
     int8_t setup_mode_toggle_counter_max;
     
@@ -329,11 +329,9 @@ typedef struct _main_config {
     
     uint64_t used_gpio: MAX_GPIOS;
     
-    uint8_t rf_tx_gpio: 6;
-    bool rf_tx_inv: 1;
-    bool clock_ready: 1;
     uint8_t wifi_ip;
     uint8_t uart_buffer_len;
+    uint8_t rf_tx_gpio: 6;
     uint8_t wifi_mode: 3;
     
     uint8_t uart_min_len;
