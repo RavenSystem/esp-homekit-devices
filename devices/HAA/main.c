@@ -8261,8 +8261,6 @@ void normal_mode_init() {
         accessories[accessory]->services[0]->characteristics[4] = &firmware;
         accessories[accessory]->services[0]->characteristics[5] = &identify_function;
         
-        free(serial_str);
-        
         services--;
         
         if (acc_count == haa_setup_accessory) {
