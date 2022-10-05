@@ -1402,9 +1402,9 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 send_tlv_error_response(context, 6, TLVError_Unknown);
                 break;
             }
-
-            HOMEKIT_INFO("Added pairing with %s", device_id);
-
+            
+            HOMEKIT_INFO("Added pairing %s", device_id);
+            
             HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_PAIRING_ADDED);
 
             free(device_id);

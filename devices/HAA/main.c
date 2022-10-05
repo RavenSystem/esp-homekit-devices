@@ -8219,18 +8219,18 @@ void normal_mode_init() {
             serial_prefix = common_serial_prefix;
         }
         
-        unsigned int serial_prefix_len = SERIAL_STRING_LEN;
+        unsigned int serial_str_len = SERIAL_STRING_LEN;
         int use_config_number = false;
         if (serial_prefix) {
-            serial_prefix_len += strlen(serial_prefix) + 1;
+            serial_str_len += strlen(serial_prefix) + 1;
             
             if (strcmp(serial_prefix, "cn") == 0) {
-                serial_prefix_len += 4;
+                serial_str_len += 6;
                 use_config_number = true;
             }
         }
         
-        char* serial_str = malloc(serial_prefix_len);
+        char* serial_str = malloc(serial_str_len);
         uint8_t macaddr[6];
         sdk_wifi_get_macaddr(STATION_IF, macaddr);
         
@@ -8239,9 +8239,11 @@ void normal_mode_init() {
             serial_index--;
         }
         if (use_config_number) {
-            snprintf(serial_str, serial_prefix_len, "%i-%02X%02X%02X-%i", last_config_number, macaddr[3], macaddr[4], macaddr[5], serial_index);
+            snprintf(serial_str, serial_str_len, "%i-%02X%02X%02X-%i",
+                     last_config_number, macaddr[3], macaddr[4], macaddr[5], serial_index);
         } else {
-            snprintf(serial_str, serial_prefix_len, "%s%s%02X%02X%02X-%i", serial_prefix ? serial_prefix : "", serial_prefix ? "-" : "", macaddr[3], macaddr[4], macaddr[5], serial_index);
+            snprintf(serial_str, serial_str_len, "%s%s%02X%02X%02X-%i",
+                     serial_prefix ? serial_prefix : "", serial_prefix ? "-" : "", macaddr[3], macaddr[4], macaddr[5], serial_index);
         }
         
         INFO("SN %s", serial_str);
@@ -8256,7 +8258,7 @@ void normal_mode_init() {
         accessories[accessory]->services[0]->characteristics = calloc(7, sizeof(homekit_characteristic_t*));
         accessories[accessory]->services[0]->characteristics[0] = &name;
         accessories[accessory]->services[0]->characteristics[1] = &manufacturer;
-        accessories[accessory]->services[0]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER, serial_str);
+        accessories[accessory]->services[0]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(SERIAL_NUMBER_STATIC, serial_str);
         accessories[accessory]->services[0]->characteristics[3] = &model;
         accessories[accessory]->services[0]->characteristics[4] = &firmware;
         accessories[accessory]->services[0]->characteristics[5] = &identify_function;
@@ -11669,7 +11671,7 @@ void init_task() {
             // Arming emergency Setup Mode
             esp_timer_start_forced(esp_timer_create(EXIT_EMERGENCY_SETUP_MODE_TIME, false, NULL, disable_emergency_setup));
             
-            name.value = HOMEKIT_STRING(main_config.name_value);
+            name.value = HOMEKIT_STRING(main_config.name_value, .is_static=true);
             
             xTaskCreate(normal_mode_init, "ini", INITIAL_SETUP_TASK_SIZE, NULL, INITIAL_SETUP_TASK_PRIORITY, NULL);
             

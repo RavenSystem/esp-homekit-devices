@@ -203,12 +203,13 @@ typedef struct _lightbulb_group {
     
     uint16_t range_start;
     uint16_t range_end;
-    
-    uint8_t gpio[5];
-    
-    uint16_t current[5];
-    uint16_t target[5];
 
+    TimerHandle_t timer;
+    
+    homekit_characteristic_t* ch0;
+    
+    struct _lightbulb_group* next;
+    
     float flux[5];
     
     float r[2];
@@ -221,12 +222,11 @@ typedef struct _lightbulb_group {
     float cmy[3][2];
     
     float wp[2];
-
-    homekit_characteristic_t* ch0;
     
-    TimerHandle_t timer;
+    uint8_t gpio[5];
     
-    struct _lightbulb_group* next;
+    uint16_t current[5];
+    uint16_t target[5];
 } lightbulb_group_t;
 
 typedef struct _addressled {
@@ -338,9 +338,6 @@ typedef struct _main_config {
     uint8_t uart_max_len;
     uint8_t wifi_arp_count_max;
     
-    char name_value[11];
-    char serial_value[13];
-    
     float ping_poll_period;
     
     TimerHandle_t setup_mode_toggle_timer;
@@ -361,6 +358,8 @@ typedef struct _main_config {
     uint8_t* uart_buffer;
     
     addressled_t* addressleds;
+    
+    char name_value[11];
 } main_config_t;
 
 #endif // __HAA_TYPES_H__

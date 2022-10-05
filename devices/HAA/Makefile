@@ -38,7 +38,7 @@ EXTRA_CFLAGS += -O2 \
 	-fvect-cost-model \
 	-ftree-partial-pre \
 	-ftree-loop-distribution \
-#	-fipa-cp-clone \
+	-fipa-cp-clone \
 #	-funswitch-loops \
 #	-fpeel-loops \
 
