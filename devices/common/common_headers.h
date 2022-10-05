@@ -20,7 +20,6 @@
 #define WIFI_LAST_WORKING_PHY_SYSPARAM      "wifi_phy"
 #define HOMEKIT_RE_PAIR_SYSPARAM            "re_pair"
 #define HOMEKIT_PAIRING_COUNT_SYSPARAM      "pair_count"
-#define AUTO_OTA_SYSPARAM                   "aota"
 #define TOTAL_SERV_SYSPARAM                 "total_ac"
 #define HAA_SCRIPT_SYSPARAM                 "haa_conf"
 #define HAA_SETUP_MODE_SYSPARAM             "setup"
@@ -37,6 +36,8 @@
 #define AUTO_REBOOT_ON_HANG_OTA_TIMEOUT     (2000000)
 #define MAX_BODY_LEN                        (16000)
 #define BEST_RSSI_MARGIN                    (1)
+
+#define HIGH_HOMEKIT_CH_NUMBER              (6)
 
 #define DEBUG(message, ...)                 printf("%s: " message "\n", __func__, ##__VA_ARGS__)
 #define INFO(message, ...)                  printf(message "\n", ##__VA_ARGS__)

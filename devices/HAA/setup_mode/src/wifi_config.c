@@ -511,13 +511,6 @@ static void wifi_config_server_on_settings(client_t *client) {
     
     client_send_chunk(client, html_settings_reset_homekit_id);
     
-    bool auto_ota = false;
-    status = sysparam_get_bool(AUTO_OTA_SYSPARAM, &auto_ota);
-    if (status == SYSPARAM_OK && auto_ota) {
-        client_send_chunk(client, "checked");
-    }
-    client_send_chunk(client, html_settings_autoota);
-    
     int8_t int8_value = 0;
     sysparam_get_int8(WIFI_MODE_SYSPARAM, &int8_value);
     if (int8_value == 0) {
@@ -590,14 +583,13 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     context->end_setup = true;
     
     while (context->end_setup) {
-        vTaskDelay(MS_TO_TICKS(1000));
+        vTaskDelay(MS_TO_TICKS(500));
     }
     
     sdk_wifi_station_disconnect();
-    
-    INFO("Update settings");
-    
     wifi_config_context_free(context);
+    
+    INFO("New settings");
     
     form_param_t *form = form_params_parse((char*) client->body);
     client_free(client);
@@ -645,7 +637,6 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             form_param_t *nowifi_param = form_params_find(form, "now");
             form_param_t *ota_param = form_params_find(form, "ota");
             form_param_t *installer_setup_param = form_params_find(form, "ins");
-            form_param_t *autoota_param = form_params_find(form, "aot");
             form_param_t *wifimode_param = form_params_find(form, "wm");
             form_param_t *irrx_param = form_params_find(form, "irx");
             form_param_t *ssid_param = form_params_find(form, "sid");
@@ -653,25 +644,22 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             form_param_t *password_param = form_params_find(form, "psw");
             
             // Remove saved states
-            int32_t hk_total_ac = 0;
-            sysparam_get_int32(TOTAL_SERV_SYSPARAM, &hk_total_ac);
+            int32_t hk_total_serv = 0;
+            sysparam_get_int32(TOTAL_SERV_SYSPARAM, &hk_total_serv);
             char saved_state_id[5];
             memset(saved_state_id, 0, 5);
-            for (uint32_t int_saved_state_id = 100; int_saved_state_id < (hk_total_ac + 1) * 100; int_saved_state_id++) {
-                itoa(int_saved_state_id, saved_state_id, 10);
-                sysparam_set_data(saved_state_id, NULL, 0, false);
+            for (int serv = 1; serv <= hk_total_serv; serv++) {
+                for (int ch = 0; ch <= HIGH_HOMEKIT_CH_NUMBER; ch++) {
+                    uint32_t int_saved_state_id = (serv * 100) + ch;
+                    itoa(int_saved_state_id, saved_state_id, 10);
+                    sysparam_set_data(saved_state_id, NULL, 0, false);
+                }
             }
             
             if (conf_param && conf_param->value) {
                 sysparam_set_string(HAA_SCRIPT_SYSPARAM, conf_param->value);
             } else {
                 sysparam_set_data(HAA_SCRIPT_SYSPARAM, NULL, 0, false);
-            }
-            
-            if (autoota_param) {
-                sysparam_set_bool(AUTO_OTA_SYSPARAM, true);
-            } else {
-                sysparam_set_data(AUTO_OTA_SYSPARAM, NULL, 0, false);
             }
             
             if (re_pair_param) {
@@ -921,7 +909,7 @@ static void http_task(void *arg) {
         if (context->end_setup) {
             static const char payload[] = "HTTP/1.1 200\r\nContent-Type: text/html\r\nConnection: close\r\n\r\n<center>OK</center>";
             client_send(client, payload, sizeof(payload) - 1);
-            vTaskDelay(MS_TO_TICKS(300));
+            vTaskDelay(MS_TO_TICKS(1000));
             lwip_close(client->fd);
             break;
         }
@@ -1053,14 +1041,8 @@ static void wifi_config_sta_connect_timeout_task() {
 }
 
 static void auto_reboot_run() {
-    bool auto_ota = false;
-    sysparam_get_bool(AUTO_OTA_SYSPARAM, &auto_ota);
-    if (auto_ota) {
-        INFO("Auto OTA");
-        rboot_set_temp_rom(1);
-    }
-
-    INFO("\nAuto Reboot\n");
+    INFO("Auto Reboot");
+    
     if (context->sta_connect_timeout) {
         vTaskDelete(context->sta_connect_timeout);
     }

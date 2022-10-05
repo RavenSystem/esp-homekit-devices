@@ -642,13 +642,16 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             form_param_t *wifimode_param = form_params_find(form, "wm");
             
             // Remove saved states
-            int32_t hk_total_ac = 0;
-            sysparam_get_int32(TOTAL_SERV_SYSPARAM, &hk_total_ac);
+            int32_t hk_total_serv = 0;
+            sysparam_get_int32(TOTAL_SERV_SYSPARAM, &hk_total_serv);
             char saved_state_id[5];
             memset(saved_state_id, 0, 5);
-            for (uint32_t int_saved_state_id = 100; int_saved_state_id <= (hk_total_ac + 1) * 100; int_saved_state_id++) {
-                itoa(int_saved_state_id, saved_state_id, 10);
-                sysparam_set_data(saved_state_id, NULL, 0, false);
+            for (int serv = 1; serv <= hk_total_serv; serv++) {
+                for (int ch = 0; ch <= HIGH_HOMEKIT_CH_NUMBER; ch++) {
+                    uint32_t int_saved_state_id = (serv * 100) + ch;
+                    itoa(int_saved_state_id, saved_state_id, 10);
+                    sysparam_set_data(saved_state_id, NULL, 0, false);
+                }
             }
             
             if (conf_param && conf_param->value) {

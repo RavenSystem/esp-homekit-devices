@@ -392,7 +392,7 @@ void pairing_context_free(pairing_context_t *context) {
 static int homekit_low_dram() {
     const uint32_t free_heap = xPortGetFreeHeapSize();
     if (free_heap < HOMEKIT_MIN_FREEHEAP) {
-        HOMEKIT_ERROR("LOW DRAM Free HEAP: %i", free_heap);
+        HOMEKIT_ERROR("DRAM Free HEAP %i", free_heap);
         return true;
     }
     
@@ -1809,7 +1809,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
         }
         case 3: {
             CLIENT_INFO(context, "Verify 2/2");
-
+            
             if (!context->verify_context) {
                 CLIENT_ERROR(context, "No state 1 data");
                 send_tlv_error_response(context, 4, TLVError_Authentication);
@@ -1951,7 +1951,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             );
 
             if (r) {
-                CLIENT_ERROR(context, "Derive read encryption key (%d)", r);
+                CLIENT_ERROR(context, "Derive read enc key (%d)", r);
 
                 pair_verify_context_free(&context->verify_context);
 
@@ -1971,7 +1971,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             pair_verify_context_free(&context->verify_context);
 
             if (r) {
-                CLIENT_ERROR(context, "Derive write encryption key (%d)", r);
+                CLIENT_ERROR(context, "Derive write enc key (%d)", r);
 
                 send_tlv_error_response(context, 4, TLVError_Unknown);
                 break;
@@ -1993,7 +1993,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             break;
         }
         default: {
-            CLIENT_ERROR(context, "Unknown state: %d", tlv_get_integer_value(message, TLVType_State, -1));
+            CLIENT_ERROR(context, "Unknown state %d", tlv_get_integer_value(message, TLVType_State, -1));
             homekit_disconnect_client(context);
             break;
         }
@@ -2008,7 +2008,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
 
 
 void homekit_server_on_get_accessories(client_context_t *context) {
-    CLIENT_INFO(context, "Get Acc");
+    CLIENT_INFO(context, "Get ACC");
     DEBUG_HEAP();
     
     json_stream* json = &homekit_server->json;
@@ -2103,7 +2103,7 @@ void homekit_server_on_get_accessories(client_context_t *context) {
 }
 
 void homekit_server_on_get_characteristics(client_context_t *context) {
-    CLIENT_INFO(context, "Get Ch");
+    CLIENT_INFO(context, "Get CH");
     DEBUG_HEAP();
     
     query_param_t *qp = context->endpoint_params;
@@ -2203,7 +2203,7 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
         int aid = atoi(ch_id);
         int iid = atoi(dot+1);
         
-        CLIENT_INFO(context, "for %d.%d", aid, iid);
+        CLIENT_DEBUG(context, "for %d.%d", aid, iid);
         homekit_characteristic_t *ch = homekit_characteristic_by_aid_and_iid(homekit_server->config->accessories, aid, iid);
         if (!ch) {
             write_characteristic_error(json, aid, iid, HAPStatus_NoResource);
@@ -2245,7 +2245,7 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
 }
 
 void homekit_server_on_update_characteristics(client_context_t *context, const byte *data, size_t size) {
-    CLIENT_INFO(context, "Upd Ch");
+    CLIENT_INFO(context, "Upd CH");
     DEBUG_HEAP();
     
     cJSON *json = cJSON_Parse((char*) data);
@@ -2327,7 +2327,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         return HAPStatus_InvalidValue;
                     }
 
-                    CLIENT_INFO(context, "for %d.%d=%i", aid, iid, value);
+                    CLIENT_DEBUG(context, "for %d.%d=%i", aid, iid, value);
                     
                     h_value = HOMEKIT_BOOL(value);
                     if (ch->setter_ex) {
@@ -2454,7 +2454,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     }
 #endif //HOMEKIT_DISABLE_VALUE_RANGES
                     
-                    CLIENT_INFO(context, "for %d.%d=%d", aid, iid, value);
+                    CLIENT_DEBUG(context, "for %d.%d=%d", aid, iid, value);
 
                     // Old style
                     h_value = HOMEKIT_INT(value);
@@ -2505,7 +2505,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         return HAPStatus_InvalidValue;
                     }
 
-                    CLIENT_INFO(context, "for %d.%d=%g", aid, iid, value);
+                    CLIENT_DEBUG(context, "for %d.%d=%g", aid, iid, value);
 
                     h_value = HOMEKIT_FLOAT(value);
                     if (ch->setter_ex) {
@@ -2534,7 +2534,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     }
 #endif //HOMEKIT_DISABLE_MAXLEN_CHECK
 
-                    CLIENT_INFO(context, "for %d.%d=\"%s\"", aid, iid, value);
+                    CLIENT_DEBUG(context, "for %d.%d=\"%s\"", aid, iid, value);
 
                     h_value = HOMEKIT_STRING(value);
                     if (ch->setter_ex) {
@@ -2635,7 +2635,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         return HAPStatus_InvalidValue;
                     }
 
-                    CLIENT_INFO(context, "for %d.%d", aid, iid);
+                    CLIENT_DEBUG(context, "for %d.%d", aid, iid);
 
                     h_value = HOMEKIT_DATA(data, data_size);
                     break;

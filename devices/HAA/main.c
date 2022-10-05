@@ -782,7 +782,7 @@ void wifi_reconnection_task(void* args) {
             
         } else if (main_config.wifi_status <= WIFI_STATUS_DISCONNECTED) {
             INFO("Recon...");
-            int8_t phy_mode = 4;    // main_config.wifi_status == WIFI_DISCONNECTED_LONG_TIME
+            int8_t phy_mode = 4;    // main_config.wifi_status == WIFI_STATUS_LONG_DISCONNECTED
             if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
                 phy_mode = 3;
                 sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
@@ -795,7 +795,7 @@ void wifi_reconnection_task(void* args) {
         } else {
             main_config.wifi_error_count++;
             if (main_config.wifi_error_count > WIFI_DISCONNECTED_LONG_TIME) {
-                ERROR("Discon long time");
+                ERROR("Discon long");
                 main_config.wifi_error_count = 0;
                 main_config.wifi_status = WIFI_STATUS_LONG_DISCONNECTED;
                 
