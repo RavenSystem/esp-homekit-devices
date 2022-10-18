@@ -947,12 +947,12 @@ void setup_mode_call(const uint16_t gpio, void* args, const uint8_t param) {
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
         reboot_haa();
     } else {
-        ERROR("Not allowed after %i secs since boot", main_config.setup_mode_time);
+        ERROR("Not allowed after %is since boot", main_config.setup_mode_time);
     }
 }
 
-void setup_mode_toggle_upcount() {
-    if (main_config.setup_mode_toggle_counter_max > 0) {
+void setup_mode_toggle_upcount(const int enabled) {
+    if (enabled && main_config.setup_mode_toggle_counter_max > 0) {
         main_config.setup_mode_toggle_counter++;
         INFO("Call Setup %i/%i", main_config.setup_mode_toggle_counter, main_config.setup_mode_toggle_counter_max);
         
@@ -1106,7 +1106,8 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
                 esp_timer_stop(AUTOOFF_TIMER);
             }
             
-            setup_mode_toggle_upcount();
+            setup_mode_toggle_upcount(ch_group->homekit_enabled);
+            
             save_states_callback();
             
             if (ch_group->chs > 1 && ch_group->ch[1]->value.int_value > 0) {
@@ -1172,7 +1173,8 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
                 esp_timer_stop(AUTOOFF_TIMER);
             }
             
-            setup_mode_toggle_upcount();
+            setup_mode_toggle_upcount(ch_group->homekit_enabled);
+            
             save_states_callback();
             
             save_data_history(ch);
@@ -1228,8 +1230,6 @@ void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
             
             save_data_history(ch_group->ch[1]);
         }
-        
-        setup_mode_toggle_upcount();
     }
 }
 
@@ -1499,7 +1499,8 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
                 esp_timer_stop(AUTOOFF_TIMER);
             }
             
-            setup_mode_toggle_upcount();
+            setup_mode_toggle_upcount(ch_group->homekit_enabled);
+            
             save_states_callback();
             
             if (ch_group->chs > 2 && ch_group->ch[2]->value.int_value > 0) {
@@ -2006,7 +2007,7 @@ void hkc_th_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
         ch->value = value;
         
         if (ch == ch_group->ch[2]) {
-            setup_mode_toggle_upcount();
+            setup_mode_toggle_upcount(ch_group->homekit_enabled);
             homekit_characteristic_notify_safe(ch);
         }
         
@@ -2352,7 +2353,7 @@ void hkc_humidif_setter(homekit_characteristic_t* ch, const homekit_value_t valu
         ch->value = value;
         
         if (ch == ch_group->ch[2]) {
-            setup_mode_toggle_upcount();
+            setup_mode_toggle_upcount(ch_group->homekit_enabled);
             homekit_characteristic_notify_safe(ch);
         }
         
@@ -3317,7 +3318,8 @@ void lightbulb_no_task(ch_group_t* ch_group) {
             lightbulb_group->target[2] == 0 &&
             lightbulb_group->target[3] == 0 &&
             lightbulb_group->target[4] == 0) {
-            setup_mode_toggle_upcount();
+            
+            setup_mode_toggle_upcount(ch_group->homekit_enabled);
         }
 
         if (LIGHTBULB_CHANNELS >= 3) {
@@ -3359,7 +3361,7 @@ void lightbulb_no_task(ch_group_t* ch_group) {
             lightbulb_group->target[i] = 0;
         }
         
-        setup_mode_toggle_upcount();
+        setup_mode_toggle_upcount(ch_group->homekit_enabled);
     }
     
     homekit_characteristic_notify_safe(ch_group->ch[0]);
@@ -3705,7 +3707,7 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
                 homekit_characteristic_notify_safe(ch1);
             }
             
-            setup_mode_toggle_upcount();
+            setup_mode_toggle_upcount(ch_group->homekit_enabled);
             
         } else {
             homekit_characteristic_notify_safe(ch1);
@@ -3823,7 +3825,7 @@ void window_cover_stop(ch_group_t* ch_group) {
     homekit_characteristic_notify_safe(WINDOW_COVER_CH_STATE);
     homekit_characteristic_notify_safe(WINDOW_COVER_CH_CURRENT_POSITION);
     
-    setup_mode_toggle_upcount();
+    setup_mode_toggle_upcount(ch_group->homekit_enabled);
     
     save_data_history(ch_group->ch[0]);
     save_data_history(ch_group->ch[1]);
@@ -3903,7 +3905,8 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
                     
                     WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_CLOSING;
                 }
-                setup_mode_toggle_upcount();
+                
+                setup_mode_toggle_upcount(ch_group->homekit_enabled);
                 
             } else {
                 do_actions(ch_group, WINDOW_COVER_CLOSING);
@@ -3930,7 +3933,8 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
                     
                     WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_OPENING;
                 }
-                setup_mode_toggle_upcount();
+                
+                setup_mode_toggle_upcount(ch_group->homekit_enabled);
                 
             } else {
                 do_actions(ch_group, WINDOW_COVER_OPENING);
@@ -4074,7 +4078,7 @@ void hkc_fan_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
         }
         
         if (ch == ch_group->ch[0] && ch->value.bool_value != old_on_value) {
-            setup_mode_toggle_upcount();
+            setup_mode_toggle_upcount(ch_group->homekit_enabled);
             
             if (ch_group->ch[0]->value.bool_value) {
                 esp_timer_start(AUTOOFF_TIMER);
@@ -4176,7 +4180,8 @@ void hkc_sec_system(homekit_characteristic_t* ch, const homekit_value_t value) {
             
             do_actions(ch_group, value.int_value);
             
-            setup_mode_toggle_upcount();
+            setup_mode_toggle_upcount(ch_group->homekit_enabled);
+            
             save_states_callback();
             
             save_data_history(ch);
@@ -4233,7 +4238,8 @@ void hkc_tv_active(homekit_characteristic_t* ch0, const homekit_value_t value) {
             
             do_actions(ch_group, value.int_value);
             
-            setup_mode_toggle_upcount();
+            setup_mode_toggle_upcount(ch_group->homekit_enabled);
+            
             save_states_callback();
             
             save_data_history(ch0);
@@ -10401,7 +10407,7 @@ void normal_mode_init() {
         service++;
         
         ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_tv_active);
-        ch_group->ch[1] = NEW_HOMEKIT_CHARACTERISTIC(CONFIGURED_NAME, "HAA", .setter_ex=hkc_tv_configured_name);
+        ch_group->ch[1] = NEW_HOMEKIT_CHARACTERISTIC(CONFIGURED_NAME_STATIC, "HAA", .setter_ex=hkc_tv_configured_name);
         ch_group->ch[2] = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE_IDENTIFIER, 1, .setter_ex=hkc_tv_active_identifier);
         ch_group->ch[3] = NEW_HOMEKIT_CHARACTERISTIC(REMOTE_KEY, .setter_ex=hkc_tv_key);
         ch_group->ch[4] = NEW_HOMEKIT_CHARACTERISTIC(POWER_MODE_SELECTION, .setter_ex=hkc_tv_power_mode);
@@ -10431,7 +10437,7 @@ void normal_mode_init() {
             
             input_service[0]->characteristics = calloc(6, sizeof(homekit_characteristic_t*));
             input_service[0]->characteristics[0] = NEW_HOMEKIT_CHARACTERISTIC(IDENTIFIER, service_number);
-            input_service[0]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(CONFIGURED_NAME, name, .setter_ex=hkc_tv_input_configured_name);
+            input_service[0]->characteristics[1] = NEW_HOMEKIT_CHARACTERISTIC(CONFIGURED_NAME_STATIC, name, .setter_ex=hkc_tv_input_configured_name);
             input_service[0]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(INPUT_SOURCE_TYPE, HOMEKIT_INPUT_SOURCE_TYPE_HDMI);
             input_service[0]->characteristics[3] = NEW_HOMEKIT_CHARACTERISTIC(IS_CONFIGURED, true);
             input_service[0]->characteristics[4] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_VISIBILITY_STATE, HOMEKIT_CURRENT_VISIBILITY_STATE_SHOWN);

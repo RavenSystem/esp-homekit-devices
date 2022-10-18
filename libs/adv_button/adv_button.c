@@ -26,8 +26,7 @@
 #define VERYLONGPRESS_TIME          (1500)
 #define HOLDPRESS_TIME              (8000)
 
-#define BUTTON_EVAL_DELAY_MIN       (10)
-#define BUTTON_EVAL_DELAY_DEFAULT   (20)
+#define BUTTON_EVAL_DELAY_MIN       (1)
 
 #define DISABLE_PRESS_COUNT         (15)
 
@@ -380,10 +379,10 @@ static void adv_button_init() {
         adv_button_main_config = malloc(sizeof(adv_button_main_config_t));
         memset(adv_button_main_config, 0, sizeof(*adv_button_main_config));
         
-        adv_button_main_config->button_evaluate_delay = BUTTON_EVAL_DELAY_DEFAULT;
-        adv_button_main_config->button_evaluate_sleep_time = (HOLDPRESS_TIME + 1000) / BUTTON_EVAL_DELAY_DEFAULT;
+        adv_button_main_config->button_evaluate_delay = BUTTON_EVAL_DELAY_MIN;
+        adv_button_main_config->button_evaluate_sleep_time = (HOLDPRESS_TIME + 1000) / (BUTTON_EVAL_DELAY_MIN * portTICK_PERIOD_MS);
         
-        adv_button_main_config->button_evaluate_timer = esp_timer_create(adv_button_main_config->button_evaluate_delay, true, NULL, button_evaluate_fn);
+        adv_button_main_config->button_evaluate_timer = esp_timer_create(BUTTON_EVAL_DELAY_MIN * portTICK_PERIOD_MS, true, NULL, button_evaluate_fn);
     }
 }
 
@@ -402,7 +401,9 @@ void adv_button_set_gpio_probes(const unsigned int gpio, const unsigned int max_
     }
 }
 
-void adv_button_set_evaluate_delay(const unsigned int new_delay) {
+void adv_button_set_evaluate_delay(unsigned int new_delay_ms) {
+    const unsigned int new_delay = new_delay_ms / portTICK_PERIOD_MS;
+    
     adv_button_init();
     
     if (new_delay < BUTTON_EVAL_DELAY_MIN) {
@@ -411,8 +412,8 @@ void adv_button_set_evaluate_delay(const unsigned int new_delay) {
         adv_button_main_config->button_evaluate_delay = new_delay;
     }
     
-    adv_button_main_config->button_evaluate_sleep_time = (HOLDPRESS_TIME + 1000) / adv_button_main_config->button_evaluate_delay;
-    esp_timer_change_period(adv_button_main_config->button_evaluate_timer, adv_button_main_config->button_evaluate_delay);
+    adv_button_main_config->button_evaluate_sleep_time = ((HOLDPRESS_TIME + 1000) / portTICK_PERIOD_MS) / adv_button_main_config->button_evaluate_delay;
+    esp_timer_change_period(adv_button_main_config->button_evaluate_timer, adv_button_main_config->button_evaluate_delay * portTICK_PERIOD_MS);
 }
 
 void adv_button_set_disable_time() {
