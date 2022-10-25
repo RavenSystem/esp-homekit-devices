@@ -619,10 +619,6 @@ void reboot_task() {
     INFO("\nRebooting\n");
     esp_timer_stop_forced(WIFI_WATCHDOG_TIMER);
     
-    vTaskDelay(MS_TO_TICKS(2000));
-    
-    sdk_wifi_station_disconnect();
-    
     random_task_delay();
     
     sdk_system_restart();
@@ -954,7 +950,7 @@ void setup_mode_call(const uint16_t gpio, void* args, const uint8_t param) {
 void setup_mode_toggle_upcount(const int enabled) {
     if (enabled && main_config.setup_mode_toggle_counter_max > 0) {
         main_config.setup_mode_toggle_counter++;
-        INFO("Call Setup %i/%i", main_config.setup_mode_toggle_counter, main_config.setup_mode_toggle_counter_max);
+        INFO("Setup %i/%i", main_config.setup_mode_toggle_counter, main_config.setup_mode_toggle_counter_max);
         
         if (main_config.setup_mode_toggle_counter == main_config.setup_mode_toggle_counter_max) {
             setup_mode_call(99, NULL, 0);

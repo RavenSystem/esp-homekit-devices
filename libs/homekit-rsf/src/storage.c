@@ -42,34 +42,19 @@ int homekit_storage_reset() {
 int homekit_storage_init() {
     char magic[sizeof(magic1)];
     memset(magic, 0, sizeof(magic));
-
-    if (!spiflash_read(MAGIC_ADDR, (byte *)magic, sizeof(magic))) {
+    
+    if (!spiflash_read(MAGIC_ADDR, (byte*) magic, sizeof(magic))) {
         ERROR("Read magic");
     }
 
     if (strncmp(magic, magic1, 2)) {
-        byte blank[64];
-        memset(blank, 0, sizeof(blank));
-        for (int i = 0; i < SPI_FLASH_SECTOR_SIZE; i += sizeof(blank)) {
-            if (!spiflash_write(SPIFLASH_BASE_ADDR + i, blank, sizeof(blank))) {
-                ERROR("Format");
-                return -1;
-            }
-        }
-        
         if (!spiflash_erase_sector(SPIFLASH_BASE_ADDR)) {
             ERROR("Erase flash");
             return -1;
         }
-
-        if (magic[2] != magic1[1]) {
-            strncpy(magic, magic1, sizeof(magic1));
-        } else {
-            strncpy(magic, magic1, sizeof(magic1));
-            magic[2] = magic1[1];
-        }
         
-        if (!spiflash_write(MAGIC_ADDR, (byte *)magic, sizeof(magic))) {
+        strncpy(magic, magic1, sizeof(magic));
+        if (!spiflash_write(MAGIC_ADDR, (byte*) magic, sizeof(magic))) {
             ERROR("Init sec");
             return -1;
         }
@@ -167,15 +152,6 @@ bool homekit_storage_can_add_pairing() {
         }
     }
     return false;
-}
-
-bool homekit_storage_finish_setup() {
-    char magic[sizeof(magic1)];
-    if (!spiflash_read(SPIFLASH_BASE_ADDR, (byte *)magic, sizeof(magic))) {
-        ERROR("Read flash");
-        return true;
-    }
-    return magic[2] == magic1[1];
 }
 
 static int compact_data() {

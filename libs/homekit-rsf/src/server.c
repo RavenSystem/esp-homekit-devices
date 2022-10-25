@@ -65,7 +65,7 @@
 #endif
 
 #ifndef HOMEKIT_NETWORK_PAUSE_COUNT
-#define HOMEKIT_NETWORK_PAUSE_COUNT             (4)
+#define HOMEKIT_NETWORK_PAUSE_COUNT             (8)
 #endif
 
 #ifndef HOMEKIT_NETWORK_MIN_FREEHEAP_CRITIC
@@ -73,7 +73,7 @@
 #endif
 
 #ifndef HOMEKIT_NETWORK_PAUSE_COUNT_CRITIC
-#define HOMEKIT_NETWORK_PAUSE_COUNT_CRITIC      (6)
+#define HOMEKIT_NETWORK_PAUSE_COUNT_CRITIC      (16)
 #endif
 
 #ifdef HOMEKIT_DEBUG
@@ -164,7 +164,6 @@ typedef struct {
     uint8_t client_count: 6;
     bool paired: 1;
     bool is_pairing: 1;
-    bool setup_finish: 1;
     bool pending_close: 1;
     
     json_stream json;
@@ -658,6 +657,8 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
 }
 
 void network_delay(const uint32_t free_heap) {
+    vTaskDelay(1);
+    
     if (free_heap < HOMEKIT_NETWORK_MIN_FREEHEAP) {
         unsigned int max_count = HOMEKIT_NETWORK_PAUSE_COUNT;
         if (free_heap < HOMEKIT_NETWORK_MIN_FREEHEAP_CRITIC) {
@@ -668,14 +669,15 @@ void network_delay(const uint32_t free_heap) {
         while (free_heap > xPortGetFreeHeapSize() && count < max_count) {
             count++;
             //HOMEKIT_INFO("Net Delay %i", count);
-            vTaskDelay(count);
+            vTaskDelay(1);
         }
     }
 }
 
 int client_send_encrypted(client_context_t *context, byte *payload, size_t size) {
-    if (!context || !context->encrypted)
+    if (!context || !context->encrypted) {
         return -1;
+    }
 
     byte nonce[12];
     memset(nonce, 0, sizeof(nonce));
@@ -1406,7 +1408,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             HOMEKIT_INFO("Added pairing %s", device_id);
             
             HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_PAIRING_ADDED);
-
+            
             free(device_id);
 
             crypto_ed25519_free(device_key);
@@ -3290,12 +3292,7 @@ void homekit_server_accept_client() {
     
     const uint32_t free_heap = xPortGetFreeHeapSize();
     
-    if (!homekit_server->setup_finish && 0b11 < homekit_server->client_count) {
-        HOMEKIT_INFO("[%d] New %s:%d Free HEAP %d", s, address_buffer, addr.sin_port, free_heap);
-        return;
-    } else if (homekit_server->client_count >= homekit_server->config->max_clients ||
-               homekit_low_dram() ||
-               !new_context) {
+    if (homekit_server->client_count >= homekit_server->config->max_clients || !new_context) {
         homekit_remove_oldest_client();
     }
     
@@ -3305,10 +3302,10 @@ void homekit_server_accept_client() {
         setsockopt(s, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
         */
         
-        const struct timeval sndtimeout = { 3, 0 };
+        const struct timeval sndtimeout = { 2, 0 };
         setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
         
-        const struct timeval rcvtimeout = { 13, 0 };
+        const struct timeval rcvtimeout = { 10, 0 };
         setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
         
         const int keepalive = 0;
@@ -3637,7 +3634,8 @@ char *homekit_accessory_id_generate() {
     snprintf(accessory_id, 18, "%02X:%02X:%02X:%02X:%02X:%02X",
              buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
 
-    HOMEKIT_INFO("New HK ID: %s", accessory_id);
+    HOMEKIT_INFO("HK ID: %s", accessory_id);
+    
     return accessory_id;
 }
 
@@ -3657,7 +3655,7 @@ void homekit_server_task(void *args) {
     vTaskDelay(500 / portTICK_PERIOD_MS);
     
     homekit_mdns_init();
-    homekit_server->setup_finish = homekit_storage_finish_setup();
+    
     homekit_setup_mdns();
 
     HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_SERVER_INITIALIZED);

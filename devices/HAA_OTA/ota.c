@@ -45,7 +45,6 @@
 
 static ecc_key public_key;
 static uint8_t file_first_byte[] = { 0xff };
-static const uint8_t magic1[] = "HAP";
 static WOLFSSL_CTX* ctx = NULL;
 static char last_host[HOST_LEN];
 static char last_location[RECV_BUF_LEN];
@@ -416,36 +415,6 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
     
     return ret;
 }
-
-#ifndef HAABOOT
-static void sign_check_client(const int set) {
-    uint8_t* sector = malloc(SPI_FLASH_SECTOR_SIZE);
-    
-    if (!spiflash_read(SPIFLASH_BASE_ADDR, sector, SPI_FLASH_SECTOR_SIZE)) {
-        ERROR("Read sector");
-        return;
-    }
-    
-    void write_flash() {
-        if (!spiflash_erase_sector(SPIFLASH_BASE_ADDR) ||
-            !spiflash_write(SPIFLASH_BASE_ADDR, sector, SPI_FLASH_SECTOR_SIZE)) {
-            ERROR("Writing flash");
-        }
-    }
-    
-    if (set == 0 && sector[2] != magic1[2]) {
-        sector[2] = magic1[2];
-        write_flash();
-        INFO("End ..");
-    } else if (set == 1 && sector[2] != magic1[1]) {
-        sector[2] = magic1[1];
-        write_flash();
-        INFO("End...");
-    }
-    
-    free(sector);
-}
-#endif  // HAABOOT
 
 static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, int bufsz, uint16_t port, const bool is_ssl, int* resume) {
     INFO("*** DOWNLOADING");
@@ -820,10 +789,6 @@ int ota_verify_sign(int start_sector, int filesize, uint8_t* signature) {
     wc_ecc_verify_hash(signature, SIGNSIZE, hash, HASHSIZE, &verify, &public_key);
     
     INFO(">>> Result %s", verify == 1 ? "OK" : "ERROR");
-    
-#ifndef HAABOOT
-    sign_check_client(verify);
-#endif  // HAABOOT
 
     return verify - 1;
 }
