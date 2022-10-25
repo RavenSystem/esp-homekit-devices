@@ -389,6 +389,7 @@ static bool IRAM special_flash_write_status(uint8_t command, uint32_t status, in
     return ret;
 }
 
+/*
 static uint8_t IRAM en25q16x_read_sfdp()
 {
     spi_cmd_t cmd;
@@ -409,6 +410,8 @@ static uint8_t IRAM en25q16x_read_sfdp()
 
     return ((uint8_t) data);
 }
+*/
+
 /*
 static uint32_t IRAM spi_flash_get_id(void)
 {
@@ -453,8 +456,10 @@ static bool IRAM spi_flash_check_wr_protect()
 {
     uint32_t flash_id = sdk_spi_flash_get_id();
     uint32_t status = 0;
-    //check for EN25Q16A/B flash chips
     
+    /* COMMENTED BECAUSE IT IS SAME THAN ISSI
+    
+    //check for EN25Q16A/B flash chips
     if ((flash_id & 0xffffff) == 0x15701c) {
         uint8_t sfdp = en25q16x_read_sfdp();
         if (sfdp == 0xE5) {
@@ -476,7 +481,11 @@ static bool IRAM spi_flash_check_wr_protect()
     //MXIC :0XC2
     //ISSI :0X9D
     // ets_printf("spi_flash_check_wr_protect\r\n");
-    else if (((flash_id & 0xFF) == 0X9D)||((flash_id & 0xFF) == 0XC2)||((flash_id & 0xFF) == 0x1C)) {
+    else
+    
+    */
+    
+    if (((flash_id & 0xFF) == 0X9D)||((flash_id & 0xFF) == 0XC2)||((flash_id & 0xFF) == 0x1C)) {
         if (spi_flash_read_status(&status) == 0) { //Read status Ok
             if (status & (SPI_ISSI_FLASH_WRITE_PROTECT_STATUS)) { //Write_protect
                 special_flash_write_status(0x1, status & (~(SPI_ISSI_FLASH_WRITE_PROTECT_STATUS)), 1, true);
