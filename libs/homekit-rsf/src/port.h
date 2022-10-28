@@ -22,7 +22,7 @@ void homekit_random_fill(uint8_t *data, size_t size);
 void homekit_port_mdns_announce();
 void homekit_port_mdns_announce_pause();
 #define SERVER_TASK_STACK_PAIR              (1664)
-#define SERVER_TASK_STACK_NORMAL            (1100)
+#define SERVER_TASK_STACK_NORMAL            (1280)
 
 #endif
 

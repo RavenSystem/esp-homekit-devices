@@ -577,8 +577,6 @@ void data_history_timer_worker(TimerHandle_t xTimer) {
 }
 
 void wifi_resend_arp() {
-    taskENTER_CRITICAL();
-    
     struct netif *netif = sdk_system_get_netif(STATION_IF);
     if (netif && (netif->flags & NETIF_FLAG_LINK_UP) && (netif->flags & NETIF_FLAG_UP)) {
         LOCK_TCPIP_CORE();
@@ -587,8 +585,6 @@ void wifi_resend_arp() {
         
         UNLOCK_TCPIP_CORE();
     }
-    
-    taskEXIT_CRITICAL();
 }
 
 int ping_host(char* host) {
