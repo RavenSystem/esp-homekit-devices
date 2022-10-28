@@ -170,15 +170,6 @@ int wifi_config_get_ip() {
     return -1;
 }
 
-void wifi_config_resend_arp() {
-    struct netif *netif = sdk_system_get_netif(STATION_IF);
-    if (netif && (netif->flags & NETIF_FLAG_LINK_UP) && (netif->flags & NETIF_FLAG_UP)) {
-        LOCK_TCPIP_CORE();
-        etharp_gratuitous(netif);
-        UNLOCK_TCPIP_CORE();
-    }
-}
-
 static void wifi_config_toggle_phy_mode(const uint8_t phy) {
     switch (phy) {
         /* Not used
@@ -996,6 +987,8 @@ static void wifi_config_sta_connect_timeout_task() {
         INFO("Set hostname");
     }
 
+    const int is_stattion_mode = (sdk_wifi_get_opmode() == STATION_MODE);
+    
     for (;;) {
         vTaskDelay(MS_TO_TICKS(1000));
         
@@ -1018,18 +1011,14 @@ static void wifi_config_sta_connect_timeout_task() {
             
             break;
             
-        } else {
+        } else if (is_stattion_mode) {
             context->check_counter++;
             if (context->check_counter > 32) {
                 context->check_counter = 0;
+
+                wifi_config_connect(0, 4, true);
                 
-                if (sdk_wifi_get_opmode() == STATION_MODE) {
-                    wifi_config_connect(0, 4, true);
-                    vTaskDelay(MS_TO_TICKS(1000));
-                }
-                
-            } else if (context->check_counter % 5 == 0) {
-                wifi_config_resend_arp();
+                vTaskDelay(MS_TO_TICKS(1000));
             }
         }
     }

@@ -60,12 +60,16 @@
 #define HOMEKIT_MIN_FREEHEAP                    (14336)
 #endif
 
+#ifndef HOMEKIT_NETWORK_FIRST_MIN_FREEHEAP
+#define HOMEKIT_NETWORK_FIRST_MIN_FREEHEAP      (25600)
+#endif
+
 #ifndef HOMEKIT_NETWORK_MIN_FREEHEAP
 #define HOMEKIT_NETWORK_MIN_FREEHEAP            (20480)
 #endif
 
 #ifndef HOMEKIT_NETWORK_PAUSE_COUNT
-#define HOMEKIT_NETWORK_PAUSE_COUNT             (8)
+#define HOMEKIT_NETWORK_PAUSE_COUNT             (5)
 #endif
 
 #ifndef HOMEKIT_NETWORK_MIN_FREEHEAP_CRITIC
@@ -73,7 +77,7 @@
 #endif
 
 #ifndef HOMEKIT_NETWORK_PAUSE_COUNT_CRITIC
-#define HOMEKIT_NETWORK_PAUSE_COUNT_CRITIC      (16)
+#define HOMEKIT_NETWORK_PAUSE_COUNT_CRITIC      (10)
 #endif
 
 #ifdef HOMEKIT_DEBUG
@@ -388,7 +392,7 @@ void pairing_context_free(pairing_context_t *context) {
     free(context);
 }
 
-static int homekit_low_dram() {
+static int IRAM homekit_low_dram() {
     const uint32_t free_heap = xPortGetFreeHeapSize();
     if (free_heap < HOMEKIT_MIN_FREEHEAP) {
         HOMEKIT_ERROR("DRAM Free HEAP %i", free_heap);
@@ -398,12 +402,12 @@ static int homekit_low_dram() {
     return false;
 }
 
-void homekit_disconnect_client(client_context_t* context) {
+void IRAM homekit_disconnect_client(client_context_t* context) {
     context->disconnect = true;
     homekit_server->pending_close = true;
 }
 
-void homekit_remove_oldest_client() {
+void IRAM homekit_remove_oldest_client() {
     if (homekit_server && homekit_server->client_count > HOMEKIT_MIN_CLIENTS) {
         client_context_t* context = homekit_server->clients;
         while (context) {
@@ -656,9 +660,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
     }
 }
 
-void network_delay(const uint32_t free_heap) {
-    vTaskDelay(1);
-    
+static void network_delay(const uint32_t free_heap) {
     if (free_heap < HOMEKIT_NETWORK_MIN_FREEHEAP) {
         unsigned int max_count = HOMEKIT_NETWORK_PAUSE_COUNT;
         if (free_heap < HOMEKIT_NETWORK_MIN_FREEHEAP_CRITIC) {
@@ -671,6 +673,9 @@ void network_delay(const uint32_t free_heap) {
             //HOMEKIT_INFO("Net Delay %i", count);
             vTaskDelay(1);
         }
+        
+    } else if (free_heap < HOMEKIT_NETWORK_FIRST_MIN_FREEHEAP) {
+        vTaskDelay(1);
     }
 }
 
@@ -3187,8 +3192,7 @@ static http_parser_settings homekit_http_parser_settings = {
     .on_message_complete = homekit_server_on_message_complete,
 };
 
-
-inline static void homekit_client_process(client_context_t *context) {
+static inline void IRAM homekit_client_process(client_context_t *context) {
     int data_len = read(context->socket,
                         homekit_server->data + homekit_server->data_available,
                         RECEIVED_DATA_SIZE - homekit_server->data_available
@@ -3246,12 +3250,12 @@ inline static void homekit_client_process(client_context_t *context) {
 }
 
 
-void homekit_server_close_client(client_context_t *context) {
+void IRAM homekit_server_close_client(client_context_t *context) {
     FD_CLR(context->socket, &homekit_server->fds);
     if (homekit_server->client_count > 0) {
         homekit_server->client_count--;
     }
-
+    
     close(context->socket);
     
     CLIENT_INFO(context, "Closed %i/%i", homekit_server->client_count, homekit_server->config->max_clients);
@@ -3260,7 +3264,7 @@ void homekit_server_close_client(client_context_t *context) {
         pairing_context_free(homekit_server->pairing_context);
         homekit_server->pairing_context = NULL;
     }
-
+    
     homekit_accessories_clear_notify_subscriptions(homekit_server->config->accessories, context);
     
     HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_CLIENT_DISCONNECTED);
@@ -3269,7 +3273,7 @@ void homekit_server_close_client(client_context_t *context) {
 }
 
 
-void homekit_server_accept_client() {
+static inline void IRAM homekit_server_accept_client() {
     int s = accept(homekit_server->listen_fd, (struct sockaddr*) NULL, (socklen_t*) NULL);
     if (s < 0) {
         HOMEKIT_ERROR("Socket");
@@ -3302,7 +3306,7 @@ void homekit_server_accept_client() {
         setsockopt(s, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
         */
         
-        const struct timeval sndtimeout = { 2, 0 };
+        const struct timeval sndtimeout = { 3, 0 };
         setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
         
         const struct timeval rcvtimeout = { 10, 0 };
@@ -3362,7 +3366,7 @@ void homekit_characteristic_notify(homekit_characteristic_t *ch) {
     }
 }
 
-static void homekit_server_process_notifications() {
+static inline void IRAM homekit_server_process_notifications() {
     notification_t *notifications = homekit_server->notifications;
     homekit_server->notifications = NULL;
     
@@ -3431,7 +3435,7 @@ static void homekit_server_process_notifications() {
     }
 }
 
-static inline void homekit_server_close_clients() {
+static inline void IRAM homekit_server_close_clients() {
     if (homekit_server->pending_close) {
         homekit_server->pending_close = false;
         
@@ -3460,7 +3464,7 @@ static inline void homekit_server_close_clients() {
     }
 }
 
-static void homekit_run_server() {
+static void IRAM homekit_run_server() {
     HOMEKIT_DEBUG_LOG("Starting HTTP server");
     
     struct sockaddr_in serv_addr;
@@ -3486,7 +3490,7 @@ static void homekit_run_server() {
     FD_SET(homekit_server->listen_fd, &homekit_server->fds);
     homekit_server->max_fd = homekit_server->listen_fd;
     
-    struct timeval timeout = { 0, 100000 }; /* 0.1 seconds timeout (orig: 1s) */
+    struct timeval timeout = { 0, 80000 }; /* 0.08 seconds timeout (orig: 1s) */
     int triggered_nfds;
     fd_set read_fds;
     

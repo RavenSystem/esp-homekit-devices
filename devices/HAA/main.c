@@ -30,6 +30,7 @@
 #include <lwip/sys.h>
 #include <lwip/netdb.h>
 #include <lwip/dns.h>
+#include <lwip/etharp.h>
 #ifdef HAA_DEBUG
 #include <lwip/stats.h>
 #endif // HAA_DEBUG
@@ -575,6 +576,21 @@ void data_history_timer_worker(TimerHandle_t xTimer) {
     save_data_history(ch);
 }
 
+void wifi_resend_arp() {
+    taskENTER_CRITICAL();
+    
+    struct netif *netif = sdk_system_get_netif(STATION_IF);
+    if (netif && (netif->flags & NETIF_FLAG_LINK_UP) && (netif->flags & NETIF_FLAG_UP)) {
+        LOCK_TCPIP_CORE();
+        
+        etharp_gratuitous(netif);
+        
+        UNLOCK_TCPIP_CORE();
+    }
+    
+    taskEXIT_CRITICAL();
+}
+
 int ping_host(char* host) {
     if (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
         return false;
@@ -760,8 +776,6 @@ void wifi_reconnection_task(void* args) {
             main_config.wifi_channel = sdk_wifi_get_channel();
             main_config.wifi_ip = new_ip;
             
-            wifi_config_resend_arp();
-            
             save_last_working_phy();
             
             random_task_delay();
@@ -843,7 +857,8 @@ void wifi_watchdog() {
         main_config.wifi_arp_count++;
         if (main_config.wifi_arp_count >= main_config.wifi_arp_count_max) {
             main_config.wifi_arp_count = 0;
-            wifi_config_resend_arp();
+            
+            wifi_resend_arp();
         }
         
         if (main_config.wifi_ping_max_errors != 255 && !homekit_is_pairing() && !main_config.network_is_busy) {
@@ -6743,8 +6758,6 @@ void run_homekit_server() {
     
     show_freeheap();
     
-    wifi_config_resend_arp();
-    
     if (main_config.enable_homekit_server) {
         random_task_delay();
         homekit_server_init(&config);
@@ -6768,10 +6781,6 @@ void run_homekit_server() {
     do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 2);
     
     led_blink(4);
-    
-    vTaskDelay(MS_TO_TICKS(500));
-    
-    wifi_config_resend_arp();
     
     WIFI_WATCHDOG_TIMER = esp_timer_create(WIFI_WATCHDOG_POLL_PERIOD_MS, true, NULL, wifi_watchdog);
     esp_timer_start_forced(WIFI_WATCHDOG_TIMER);
