@@ -126,7 +126,7 @@ struct {
 static sysparam_status_t _write_and_verify(uint32_t addr, const void *data, size_t data_size) {
     uint8_t bounce[BOUNCE_BUFFER_SIZE];
 
-    for (int i = 0; i < data_size; i += BOUNCE_BUFFER_SIZE) {
+    for (size_t i = 0; i < data_size; i += BOUNCE_BUFFER_SIZE) {
         size_t count = min(data_size - i, BOUNCE_BUFFER_SIZE);
         memcpy(bounce, data + i, count);
         CHECK_FLASH_OP(spiflash_write(addr + i, bounce, count));
@@ -296,7 +296,7 @@ static inline sysparam_status_t _compare_payload(struct sysparam_context *ctx, u
     if (ctx->entry.len != size) return SYSPARAM_NOTFOUND;
     uint32_t bounce[BOUNCE_BUFFER_WORDS];
     uint32_t addr = ctx->addr + ENTRY_HEADER_SIZE;
-    int i;
+    size_t i;
     for (i = 0; i < size; i += BOUNCE_BUFFER_SIZE) {
         int len = min(size - i, BOUNCE_BUFFER_SIZE);
         CHECK_FLASH_OP(spiflash_read(addr + i, (void*)bounce, len));

@@ -291,7 +291,7 @@ bool rboot_verify_image(uint32_t initial_offset, uint32_t *image_length, const c
         if(!is_new_header) {
             /* Add individual data of the section to the checksum. */
             char chunk[16] __attribute__((aligned(4)));
-            for(int i = 0; i < header.length; i++) {
+            for(size_t i = 0; i < header.length; i++) {
                 if(i % sizeof(chunk) == 0)
                     sdk_spi_flash_read(offset+i, (uint32_t *)chunk, sizeof(chunk));
                 checksum ^= chunk[i % sizeof(chunk)];
@@ -358,7 +358,7 @@ bool rboot_verify_image(uint32_t initial_offset, uint32_t *image_length, const c
 bool rboot_digest_image(uint32_t offset, uint32_t image_length, rboot_digest_update_fn update_fn, void *update_ctx)
 {
     uint8_t buf[32] __attribute__((aligned(4)));
-    for(int i = 0; i < image_length; i += sizeof(buf)) {
+    for(size_t i = 0; i < image_length; i += sizeof(buf)) {
         if(sdk_spi_flash_read(offset+i, (uint32_t *)buf, sizeof(buf)))
             return false;
         uint32_t digest_len = sizeof(buf);

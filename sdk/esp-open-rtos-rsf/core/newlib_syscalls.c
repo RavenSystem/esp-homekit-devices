@@ -72,7 +72,7 @@ void nano_malloc_insert_chunk(void *start, size_t size) {
 /* syscall implementation for stdio write to UART */
 __attribute__((weak)) ssize_t _write_stdout_r(struct _reent *r, int fd, const void *ptr, size_t len )
 {
-    for(int i = 0; i < len; i++) {
+    for(size_t i = 0; i < len; i++) {
         /* Auto convert CR to CRLF, ignore other LFs (compatible with Espressif SDK behaviour) */
         if(((char *)ptr)[i] == '\r')
             continue;
@@ -124,7 +124,8 @@ __attribute__((weak)) ssize_t _write_r(struct _reent *r, int fd, const void *ptr
 /* syscall implementation for stdio read from UART */
 __attribute__((weak)) ssize_t _read_stdin_r(struct _reent *r, int fd, void *ptr, size_t len)
 {
-    int ch, i;
+    int ch;
+    size_t i;
     uart_rxfifo_wait(0, 1);
     for(i = 0; i < len; i++) {
         ch = uart_getc_nowait(0);

@@ -76,7 +76,7 @@ sdk_SpiFlashOpResult IRAM sdk_SPIWrite(uint32_t des_addr, uint32_t *src_addr, ui
     bytes_remaining = size - first_page_portion;
     full_pages = bytes_remaining / sdk_flashchip.page_size;
     if (full_pages) {
-        for (int i = 0; i != full_pages; i++) {
+        for (unsigned int i = 0; i != full_pages; i++) {
             if (SPI_page_program(&sdk_flashchip, des_addr + pos, src_addr + (pos / 4), sdk_flashchip.page_size)) {
                 return SPI_FLASH_RESULT_ERR;
             }

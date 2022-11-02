@@ -15,10 +15,10 @@
 #define _FREQ_DIV16 (5*1000*1000)
 #define _FREQ_DIV256 312500
 
-const static uint32_t IROM _TIMER_FREQS[] = { _FREQ_DIV1, _FREQ_DIV16, _FREQ_DIV256 };
+static const uint32_t IROM _TIMER_FREQS[] = { _FREQ_DIV1, _FREQ_DIV16, _FREQ_DIV256 };
 
 /* Timer divisor index to divisor value */
-const static uint32_t IROM _TIMER_DIV_VAL[] = { 1, 16, 256 };
+static const uint32_t IROM _TIMER_DIV_VAL[] = { 1, 16, 256 };
 
 void timer_set_interrupts(const timer_frc_t frc, bool enable)
 {

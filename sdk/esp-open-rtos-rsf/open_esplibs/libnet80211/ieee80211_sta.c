@@ -17,7 +17,7 @@ void sdk_sta_status_set(int status) {
     struct sdk_g_ic_netif_info *netif_info = sdk_g_ic.v.station_netif_info;
     uint32_t statusb8 = netif_info->statusb8;
 
-    if (statusb8 == 1 || statusb8 == status) {
+    if (statusb8 == 1 || statusb8 == ((uint32_t) status)) {
         uint32_t statusb9 = netif_info->statusb9 + 1;
         netif_info->statusb9 = statusb9;
         if (statusb9 == 3)

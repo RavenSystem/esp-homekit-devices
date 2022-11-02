@@ -250,7 +250,7 @@ http_wait_headers(struct pbuf *p, u32_t *content_length, u16_t *total_header_len
         memset(content_len_num, 0, sizeof(content_len_num));
         if (pbuf_copy_partial(p, content_len_num, content_len_num_len, content_len_hdr + 16) == content_len_num_len) {
           int len = atoi(content_len_num);
-          if ((len >= 0) && (len < HTTPC_CONTENT_LEN_INVALID)) {
+          if ((len >= 0) && (((size_t)len) < HTTPC_CONTENT_LEN_INVALID)) {
             *content_length = (u32_t)len;
           }
         }
