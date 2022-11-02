@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "11.4.2"
+#define HAA_FIRMWARE_VERSION                "11.5.0"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Peregrine"
 
@@ -747,7 +747,7 @@
 #define WIFI_PING_ERRORS                    "w"
 
 #define WIFI_RECONNECTION_POLL_PERIOD_MS    (5000)
-#define WIFI_DISCONNECTED_LONG_TIME         (120)   // * WIFI_RECONNECTION_POLL_PERIOD_MS
+#define WIFI_DISCONNECTED_LONG_TIME         (60)    // * WIFI_RECONNECTION_POLL_PERIOD_MS
 
 #define WIFI_WATCHDOG_POLL_PERIOD_MS        (1500)
 #define WIFI_WATCHDOG_ARP_PERIOD_SET        "e"

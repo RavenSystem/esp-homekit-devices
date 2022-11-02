@@ -550,7 +550,7 @@ void save_data_history(homekit_characteristic_t* ch_target) {
             uint32_t current_ch = last_register / HIST_BLOCK_SIZE;
             uint32_t current_pos = last_register % HIST_BLOCK_SIZE;
             
-            if (current_ch >= ch_group->chs - 1) {
+            if (current_ch + 1 >= ch_group->chs) {
                 current_ch = 0;
                 current_pos = 0;
             }
@@ -798,7 +798,7 @@ void wifi_reconnection_task(void* args) {
             
             wifi_config_connect(1, phy_mode, true);
             
-        } else {
+        } else {    // main_config.wifi_status == WIFI_STATUS_CONNECTING
             main_config.wifi_error_count++;
             if (main_config.wifi_error_count > WIFI_DISCONNECTED_LONG_TIME) {
                 ERROR("Discon long");
@@ -2547,7 +2547,7 @@ void temperature_task(void* args) {
                         ds18b20_addr_t ds18b20_addrs[sensor_index];
                         
                         taskENTER_CRITICAL();
-                        const int scaned_devices = ds18b20_scan_devices(sensor_gpio, ds18b20_addrs, sensor_index);
+                        const unsigned int scaned_devices = ds18b20_scan_devices(sensor_gpio, ds18b20_addrs, sensor_index);
                         taskEXIT_CRITICAL();
                         
                         if (scaned_devices >= sensor_index) {
@@ -5765,7 +5765,7 @@ void irrf_tx_task(void* pvParameters) {
                 
                 switch (ir_action_protocol_len) {
                     case IRRF_ACTION_PROTOCOL_LEN_4BITS:
-                        for (int i = 0; i < json_ir_code_len; i++) {
+                        for (unsigned int i = 0; i < json_ir_code_len; i++) {
                             char* found = strchr(baseUC_dic, action_irrf_tx->prot_code[i]);
                             if (found) {
                                 if (found - baseUC_dic < 13) {
@@ -5785,7 +5785,7 @@ void irrf_tx_task(void* pvParameters) {
                         break;
                         
                     case IRRF_ACTION_PROTOCOL_LEN_6BITS:
-                        for (int i = 0; i < json_ir_code_len; i++) {
+                        for (unsigned int i = 0; i < json_ir_code_len; i++) {
                             char* found = strchr(baseUC_dic, action_irrf_tx->prot_code[i]);
                             if (found) {
                                 if (found - baseUC_dic < 9) {
@@ -5809,7 +5809,7 @@ void irrf_tx_task(void* pvParameters) {
                         break;
                         
                     default:    // case IRRF_ACTION_PROTOCOL_LEN_2BITS:
-                        for (int i = 0; i < json_ir_code_len; i++) {
+                        for (unsigned int i = 0; i < json_ir_code_len; i++) {
                             char* found = strchr(baseUC_dic, action_irrf_tx->prot_code[i]);
                             if (found) {
                                 ir_code_len += (1 + found - baseUC_dic) << 1;
@@ -5841,7 +5841,7 @@ void irrf_tx_task(void* pvParameters) {
                 unsigned int bit4_mark = 0, bit4_space = 0, bit5_mark = 0, bit5_space = 0;
                 unsigned int packet, index;
                 
-                for (int i = 0; i < (ir_action_protocol_len >> 1); i++) {
+                for (unsigned int i = 0; i < (ir_action_protocol_len >> 1); i++) {
                     index = i << 1;     // i * 2
                     char* found = strchr(baseRaw_dic, prot[index]);
                     packet = (found - baseRaw_dic) * IRRF_CODE_LEN * IRRF_CODE_SCALE;
@@ -5930,7 +5930,7 @@ void irrf_tx_task(void* pvParameters) {
                 unsigned int ir_code_index = 2;
                 
                 void fill_code(const unsigned int count, const unsigned int bit_mark, const unsigned int bit_space) {
-                    for (int j = 0; j < count; j++) {
+                    for (unsigned int j = 0; j < count; j++) {
                         ir_code[ir_code_index] = bit_mark;
                         ir_code_index++;
                         ir_code[ir_code_index] = bit_space;
@@ -5938,7 +5938,7 @@ void irrf_tx_task(void* pvParameters) {
                     }
                 }
                 
-                for (int i = 0; i < json_ir_code_len; i++) {
+                for (unsigned int i = 0; i < json_ir_code_len; i++) {
                     char* found = strchr(baseUC_dic, action_irrf_tx->prot_code[i]);
                     if (found) {
                         switch (ir_action_protocol_len) {
@@ -5994,7 +5994,7 @@ void irrf_tx_task(void* pvParameters) {
                 }
                 
                 INFO("\n<%i> IR code %s", action_task->ch_group->serv_index, action_irrf_tx->prot_code);
-                for (int i = 0; i < ir_code_len; i++) {
+                for (unsigned int i = 0; i < ir_code_len; i++) {
                     printf("%s%5d ", i & 1 ? "-" : "+", ir_code[i]);
                     if (i % 16 == 15) {
                         printf("\n");
@@ -6012,7 +6012,7 @@ void irrf_tx_task(void* pvParameters) {
                 INFO("<%i> IR packet (%i)", action_task->ch_group->serv_index, ir_code_len);
 
                 unsigned int index, packet;
-                for (int i = 0; i < ir_code_len; i++) {
+                for (unsigned int i = 0; i < ir_code_len; i++) {
                     index = i << 1;
                     char* found = strchr(baseRaw_dic, action_irrf_tx->raw_code[index]);
                     packet = (found - baseRaw_dic) * IRRF_CODE_LEN * IRRF_CODE_SCALE;
@@ -6048,7 +6048,7 @@ void irrf_tx_task(void* pvParameters) {
                 
                 taskENTER_CRITICAL();
                 
-                for (int i = 0; i < ir_code_len; i++) {
+                for (unsigned int i = 0; i < ir_code_len; i++) {
                     if (ir_code[i] > 0) {
                         if (i & 1) {    // Space
                             gpio_write(ir_gpio, ir_false);
@@ -8105,7 +8105,7 @@ void normal_mode_init() {
     }
     
     // Accessory to include HAA Settings
-    int haa_setup_accessory = 1;
+    unsigned int haa_setup_accessory = 1;
     if (cJSON_GetObjectItemCaseSensitive(json_config, HAA_SETUP_ACCESSORY_SET) != NULL) {
         haa_setup_accessory = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, HAA_SETUP_ACCESSORY_SET)->valuedouble;
     }
@@ -8181,7 +8181,7 @@ void normal_mode_init() {
     unsigned int hk_total_ac = 1;
     int bridge_needed = false;
     
-    for (int i = 0; i < total_accessories; i++) {
+    for (unsigned int i = 0; i < total_accessories; i++) {
         cJSON* json_accessory = cJSON_GetArrayItem(json_accessories, i);
         if (acc_homekit_enabled(json_accessory) && get_serv_type(json_accessory) != SERV_TYPE_IAIRZONING) {
             hk_total_ac += 1;
@@ -8786,7 +8786,7 @@ void normal_mode_init() {
         
         ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(AIR_QUALITY, 0);
         
-        for (int i = 1; i <= extra_data_size; i++) {
+        for (unsigned int i = 1; i <= extra_data_size; i++) {
             const unsigned int extra_data_type = (uint8_t) cJSON_GetArrayItem(json_extra_data, i - 1)->valuedouble;
             switch (extra_data_type) {
                 case AQ_OZONE_DENSITY:
@@ -8834,7 +8834,7 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics = calloc(2 + extra_data_size, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[service]->characteristics[0] = ch_group->ch[0];
             
-            for (int i = 1; i <= extra_data_size; i++) {
+            for (unsigned int i = 1; i <= extra_data_size; i++) {
                 accessories[accessory]->services[service]->characteristics[i] = ch_group->ch[i];
             }
             
@@ -9743,7 +9743,7 @@ void normal_mode_init() {
             cJSON* color_map = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COLOR_MAP_SET);
             if (color_map) {
                 const unsigned int size = cJSON_GetArraySize(color_map);
-                for (int i = 0; i < size; i++) {
+                for (unsigned int i = 0; i < size; i++) {
                     addressled->map[i] = cJSON_GetArrayItem(color_map, i)->valuedouble;
                 }
             }
@@ -11097,7 +11097,7 @@ void normal_mode_init() {
             unsigned int i2c_addr = (uint8_t) cJSON_GetArrayItem(i2c_array, 1)->valuedouble;
             size_t i2c_read_len = cJSON_GetArraySize(i2c_array) - 2;
             
-            for (int i = 0; i < i2c_read_len; i++) {
+            for (unsigned int i = 0; i < i2c_read_len; i++) {
                 FM_I2C_REG[FM_I2C_REG_FIRST + i] = (uint8_t) cJSON_GetArrayItem(i2c_array, i + 2)->valuedouble;
             }
             
@@ -11120,7 +11120,7 @@ void normal_mode_init() {
                     
                     const unsigned int reg_size = (uint8_t) cJSON_GetArrayItem(i2c_init, 0)->valuedouble;
                     if (reg_size > 0) {
-                        for (int j = 0; j < reg_size; j++) {
+                        for (unsigned int j = 0; j < reg_size; j++) {
                             reg[j] = cJSON_GetArrayItem(i2c_init, j + 1)->valuedouble;
                         }
                     }
@@ -11129,7 +11129,7 @@ void normal_mode_init() {
                     const unsigned int val_size = cJSON_GetArraySize(i2c_init) - val_offset;
                     uint8_t val[val_size];
                     
-                    for (int j = 0; j < val_size; j++) {
+                    for (unsigned int j = 0; j < val_size; j++) {
                         val[j] = cJSON_GetArrayItem(i2c_init, j + val_offset)->valuedouble;
                     }
                     
@@ -11145,12 +11145,12 @@ void normal_mode_init() {
                 FM_NEW_VALUE = cJSON_GetArrayItem(i2c_trigger_array, 0)->valuedouble * MS_TO_TICKS(1000);
                 
                 size_t trigger_reg_len = (uint8_t) cJSON_GetArrayItem(i2c_trigger_array, 1)->valuedouble;
-                for (int i = 0; i < trigger_reg_len; i++) {
+                for (unsigned int i = 0; i < trigger_reg_len; i++) {
                     FM_I2C_TRIGGER_REG[FM_I2C_TRIGGER_REG_FIRST + i] = (uint8_t) cJSON_GetArrayItem(i2c_trigger_array, i + 2)->valuedouble;
                 }
                 
                 size_t trigger_val_len = i2c_trigger_array_len - trigger_reg_len - 2;
-                for (int i = 0; i < trigger_val_len; i++) {
+                for (unsigned int i = 0; i < trigger_val_len; i++) {
                     FM_I2C_TRIGGER_VAL[FM_I2C_TRIGGER_VAL_FIRST + i] = (uint8_t) cJSON_GetArrayItem(i2c_trigger_array, i + trigger_reg_len + 2)->valuedouble;
                 }
             }
@@ -11223,7 +11223,7 @@ void normal_mode_init() {
         
         //service_iid += (hist_size + 1);
         
-        for (int i = 0; i < hist_size; i++) {
+        for (unsigned int i = 0; i < hist_size; i++) {
             // Each block uses 132 + HIST_BLOCK_SIZE bytes
             ch_group->ch[i] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_DATA_HISTORY, NULL, 0);
             char index[4];
@@ -11360,7 +11360,7 @@ void normal_mode_init() {
         show_freeheap();
     }
     
-    for (int i = 0; i < total_accessories; i++) {
+    for (unsigned int i = 0; i < total_accessories; i++) {
         INFO("\n** ACC %i", i + 1);
         
         cJSON* json_accessory = cJSON_GetArrayItem(json_accessories, i);

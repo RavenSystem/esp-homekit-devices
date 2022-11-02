@@ -205,11 +205,11 @@ static int compact_data() {
 static int find_empty_block() {
     byte data[sizeof(pairing_data_t)];
 
-    for (int i = 0; i < MAX_PAIRINGS; i++) {
+    for (unsigned int i = 0; i < MAX_PAIRINGS; i++) {
         spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, data, sizeof(data));
 
         bool block_empty = true;
-        for (int j = 0; j < sizeof(data); j++)
+        for (unsigned int j = 0; j < sizeof(data); j++)
             if (data[j] != 0xff) {
                 block_empty = false;
                 break;

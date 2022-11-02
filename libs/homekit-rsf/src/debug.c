@@ -4,16 +4,16 @@
 
 
 char *binary_to_string(const byte *data, size_t size) {
-    int i;
+    unsigned int i;
 
     size_t buffer_size = 1; // 1 char for eos
-    for (i=0; i<size; i++)
+    for (i = 0; i < size; i++)
         buffer_size += (data[i] == '\\') ? 2 : ((data[i] >= 32 && data[i] < 128) ? 1 : 4);
 
     char *buffer = malloc(buffer_size);
 
-    int pos = 0;
-    for (i=0; i<size; i++) {
+    unsigned int pos = 0;
+    for (i = 0; i < size; i++) {
         if (data[i] == '\\') {
             buffer[pos++] = '\\';
             buffer[pos++] = '\\';

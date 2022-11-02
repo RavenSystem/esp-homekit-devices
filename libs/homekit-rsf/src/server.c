@@ -687,8 +687,8 @@ int client_send_encrypted(client_context_t *context, byte *payload, size_t size)
     byte nonce[12];
     memset(nonce, 0, sizeof(nonce));
     
-    int payload_offset = 0;
-
+    size_t payload_offset = 0;
+    
     while (payload_offset < size) {
         size_t chunk_size = size - payload_offset;
         if (chunk_size > ENCRYPTED_DATA_SIZE)
@@ -753,8 +753,8 @@ int client_decrypt(client_context_t *context, byte *payload, size_t payload_size
     byte nonce[12];
     memset(nonce, 0, sizeof(nonce));
 
-    int payload_offset = 0;
-    int decrypted_offset = 0;
+    size_t payload_offset = 0;
+    size_t decrypted_offset = 0;
 
     while (payload_offset < payload_size) {
         size_t chunk_size = payload[payload_offset] + payload[payload_offset + 1] * 256;
@@ -908,9 +908,9 @@ void send_tlv_response(client_context_t *context, tlv_values_t *values) {
         "Content-Type: application/pairing+tlv8\r\n"
         "Content-Length: %d\r\n\r\n";
     
-    int response_size = strlen(http_headers) + payload_size + 32;
+    size_t response_size = strlen(http_headers) + payload_size + 32;
     char *response = malloc(response_size);
-    int response_len = snprintf(response, response_size, http_headers, payload_size);
+    size_t response_len = snprintf(response, response_size, http_headers, payload_size);
 
     if (response_size - response_len < payload_size + 1) {
         CLIENT_ERROR(context, "Buffer size %d: headers took %d, payload size %d", response_size, response_len, payload_size);
@@ -958,13 +958,13 @@ void send_json_response(client_context_t *context, int status_code, byte *payloa
         "Content-Type: application/hap+json\r\n"
         "Content-Length: %d\r\n\r\n";
     
-    int response_size = strlen(http_headers) + payload_size + strlen(status_text) + 32;
+    size_t response_size = strlen(http_headers) + payload_size + strlen(status_text) + 32;
     char *response = malloc(response_size);
     if (!response) {
         CLIENT_ERROR(context, "Allocate buffer of size %d", response_size);
         return;
     }
-    int response_len = snprintf(response, response_size, http_headers, status_code, status_text, payload_size);
+    size_t response_len = snprintf(response, response_size, http_headers, status_code, status_text, payload_size);
 
     if (response_size - response_len < payload_size + 1) {
         CLIENT_ERROR(context, "Buffer size %d: headers took %d, payload size %d", response_size, response_len, payload_size);
@@ -2355,63 +2355,76 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         return HAPStatus_InvalidValue;
                     }
 
-                    unsigned long long min_value = 0;
-                    unsigned long long max_value = 0;
+                    int min_value = 0;
+                    //unsigned long long max_value = 0;
+                    long long max_value = 0;
 
                     switch (ch->format) {
-                        case HOMEKIT_FORMAT_UINT8: {
+                        case HOMEKIT_FORMAT_UINT8:
                             min_value = 0;
                             max_value = 255;
                             break;
-                        }
-                        case HOMEKIT_FORMAT_UINT16: {
+                        
+                        case HOMEKIT_FORMAT_UINT16:
                             min_value = 0;
                             max_value = 65535;
                             break;
-                        }
-                        case HOMEKIT_FORMAT_UINT32: {
+                        
+                        /*
+                        case HOMEKIT_FORMAT_UINT32:
                             min_value = 0;
                             max_value = 4294967295;
                             break;
-                        }
-                        case HOMEKIT_FORMAT_UINT64: {
+                        
+                        case HOMEKIT_FORMAT_UINT64:
                             min_value = 0;
                             max_value = 18446744073709551615ULL;
                             break;
-                        }
-                        case HOMEKIT_FORMAT_INT: {
+                        */
+                        
+                        case HOMEKIT_FORMAT_UINT32:
+                        case HOMEKIT_FORMAT_UINT64:
+                            min_value = 0;
+                            max_value = 2147483647;
+                            break;
+                        
+                        case HOMEKIT_FORMAT_INT:
                             min_value = -2147483648;
                             max_value = 2147483647;
                             break;
-                        }
-                        default: {
+                    
+                        default:
                             // Impossible, keeping to make compiler happy
                             break;
-                        }
                     }
 
                     // Old style
-                    if (ch->min_value)
+                    if (ch->min_value) {
                         min_value = (int) *ch->min_value;
-                    if (ch->max_value)
+                    }
+                    if (ch->max_value) {
                         max_value = (int) *ch->max_value;
+                    }
 
                     int value = j_value->valueint;
 
                     // New style
                     /*
-                    if (ch->min_value)
+                    if (ch->min_value) {
                         min_value = *ch->min_value;
-                    if (ch->max_value)
+                    }
+                    if (ch->max_value) {
                         max_value = *ch->max_value;
+                    }
                     
                     double value = j_value->valuedouble;
+                    */
+                    
                     if (j_value->type == cJSON_True) {
                         value = 1;
                     } else if (j_value->type == cJSON_False) {
                         value = 0;
                     }
-                    */
                     
                     
                     /*
@@ -2420,7 +2433,6 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         return HAPStatus_InvalidValue;
                     }
                     */
-                    
                     if (value < min_value) {
                         value = min_value;
                     } else if (value > max_value) {

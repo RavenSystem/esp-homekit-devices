@@ -89,15 +89,15 @@ void homekit_mdns_add_txt(const char *key, const char *format, ...) {
     va_start(arg_ptr, format);
 
     char value[128];
-    int value_len = vsnprintf(value, sizeof(value), format, arg_ptr);
-
+    size_t value_len = vsnprintf(value, sizeof(value), format, arg_ptr);
+    
     va_end(arg_ptr);
 
-    if (value_len && value_len < sizeof(value)-1) {
+    if (value_len && ((value_len + 1) < sizeof(value))) {
         char buffer[128];
-        int buffer_len = snprintf(buffer, sizeof(buffer), "%s=%s", key, value);
+        size_t buffer_len = snprintf(buffer, sizeof(buffer), "%s=%s", key, value);
 
-        if (buffer_len < sizeof(buffer)-1)
+        if ((buffer_len + 1) < sizeof(buffer))
             mdns_TXT_append(mdns_txt_rec, sizeof(mdns_txt_rec), buffer, buffer_len);
     }
 }

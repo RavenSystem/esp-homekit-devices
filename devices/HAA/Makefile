@@ -30,17 +30,21 @@ FLASH_SPEED = 40
 HOMEKIT_SPI_FLASH_BASE_ADDR = 0xF2000
 HOMEKIT_SMALL = 0
 
-EXTRA_CFLAGS += -O2 \
-	-fpredictive-commoning \
-	-ftree-slp-vectorize \
-	-fgcse-after-reload \
-	-floop-interchange \
-	-fvect-cost-model \
-	-ftree-partial-pre \
-	-ftree-loop-distribution \
+#EXTRA_CFLAGS += -O2 \
+#	-fpredictive-commoning \
+#	-ftree-slp-vectorize \
+#	-fgcse-after-reload \
+#	-floop-interchange \
+#	-fvect-cost-model \
+#	-ftree-partial-pre \
+#	-ftree-loop-distribution \
 #	-fipa-cp-clone \
 #	-funswitch-loops \
 #	-fpeel-loops \
+
+EXTRA_CFLAGS += -Wall -std=gnu99
+EXTRA_CFLAGS += -Wextra -Wno-unused-parameter
+#EXTRA_CFLAGS += -Wpedantic
 
 EXTRA_CFLAGS += -I../.. -DHOMEKIT_SHORT_APPLE_UUIDS
 

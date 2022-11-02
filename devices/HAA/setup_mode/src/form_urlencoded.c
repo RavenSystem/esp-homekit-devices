@@ -19,8 +19,8 @@ char *url_unescape(const char *buffer, size_t size) {
         else
             return c - 'A' + 10;
     }
-
-    int i = 0, j;
+    
+    size_t i = 0, j;
     while (i < size) {
         len++;
         if (buffer[i] == '%') {
@@ -40,8 +40,8 @@ char *url_unescape(const char *buffer, size_t size) {
             } else if (buffer[i] != '%') {
                 result[j++] = buffer[i++];
             } else {
-                if (i+2 < size && ishex(buffer[i+1]) && ishex(buffer[i+2])) {
-                    result[j++] = hexvalue(buffer[i+1])*16 + hexvalue(buffer[i+2]);
+                if (i + 2 < size && ishex(buffer[i + 1]) && ishex(buffer[i + 2])) {
+                    result[j++] = hexvalue(buffer[i + 1]) * 16 + hexvalue(buffer[i + 2]);
                     i += 3;
                 } else {
                     result[j++] = buffer[i++];

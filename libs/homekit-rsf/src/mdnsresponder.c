@@ -817,7 +817,7 @@ static void mdns_send_mcast(struct netif* netif, const ip_addr_t *addr, u8_t* ms
 // Message has passed tests, may want to send an answer
 static void mdns_reply(const ip_addr_t *addr, struct mdns_hdr* hdrP)
 {
-    int i, nquestions, respLen;
+    unsigned int i, nquestions, respLen;
     struct mdns_hdr* rHdr;
     mdns_rsrc* extra;
     u8_t* qBase = (u8_t*)hdrP;
@@ -960,7 +960,7 @@ static void mdns_announce_netif(struct netif *netif, const ip_addr_t *addr)
     memset(rHdr, 0, sizeof(*rHdr));
     rHdr->flags1 = DNS_FLAG1_RESP + DNS_FLAG1_AUTH;
 
-    int respLen = SIZEOF_DNS_HDR;
+    size_t respLen = SIZEOF_DNS_HDR;
 
     if (xSemaphoreTake(gDictMutex, portMAX_DELAY)) {
         mdns_rsrc *rsrcP = gDictP;

@@ -185,7 +185,7 @@ static void push_down(const unsigned int used_gpio) {
     }
 }
 
-static void inline push_up(const unsigned int used_gpio) {
+static inline void push_up(const unsigned int used_gpio) {
     const uint32_t now = xTaskGetTickCount();
     
     if (now - adv_button_main_config->disable_time > DISABLE_TIME / portTICK_PERIOD_MS) {
@@ -232,14 +232,14 @@ static void inline push_up(const unsigned int used_gpio) {
     }
 }
 
-static void inline adv_button_single_callback(TimerHandle_t xTimer) {
+static inline void adv_button_single_callback(TimerHandle_t xTimer) {
     adv_button_t *button = (adv_button_t*) pvTimerGetTimerID(xTimer);
     // Single button pressed
     button->press_count = 0;
     adv_button_run_callback_fn(button->singlepress_callback_fn, button->gpio);
 }
 
-static void inline adv_button_hold_callback(TimerHandle_t xTimer) {
+static inline void adv_button_hold_callback(TimerHandle_t xTimer) {
     adv_button_t* button = (adv_button_t*) pvTimerGetTimerID(xTimer);
     // Hold button pressed
     button->press_count = DISABLE_PRESS_COUNT;

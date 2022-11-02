@@ -987,7 +987,7 @@ static void wifi_config_sta_connect_timeout_task() {
         INFO("Set hostname");
     }
 
-    const int is_stattion_mode = (sdk_wifi_get_opmode() == STATION_MODE);
+    const int is_station_mode = (sdk_wifi_get_opmode() == STATION_MODE);
     
     for (;;) {
         vTaskDelay(MS_TO_TICKS(1000));
@@ -1006,12 +1006,12 @@ static void wifi_config_sta_connect_timeout_task() {
                 sdk_wifi_set_opmode(STATION_MODE);
                 UNLOCK_TCPIP_CORE();
                 
-                xTaskCreate(setup_announcer_task, "setup_announcer", 512, NULL, (tskIDLE_PRIORITY + 0), &context->setup_announcer);
+                xTaskCreate(setup_announcer_task, "StA", 512, NULL, (tskIDLE_PRIORITY + 0), &context->setup_announcer);
             }
             
             break;
             
-        } else if (is_stattion_mode) {
+        } else if (is_station_mode) {
             context->check_counter++;
             if (context->check_counter > 32) {
                 context->check_counter = 0;
