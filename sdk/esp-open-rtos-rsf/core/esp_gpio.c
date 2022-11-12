@@ -77,7 +77,7 @@ void __attribute__((weak)) IRAM gpio_interrupt_handler(void *arg)
     }
 }
 
-void gpio_set_interrupt(const uint8_t gpio_num, const gpio_inttype_t int_type, gpio_interrupt_handler_t handler)
+void IRAM gpio_set_interrupt(const uint8_t gpio_num, const gpio_inttype_t int_type, gpio_interrupt_handler_t handler)
 {
     gpio_interrupt_handlers[gpio_num] = handler;
 

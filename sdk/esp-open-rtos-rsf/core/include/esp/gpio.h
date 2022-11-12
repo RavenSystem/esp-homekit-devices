@@ -164,7 +164,7 @@ typedef void (* gpio_interrupt_handler_t)(uint8_t gpio_num);
  * If int_type is not GPIO_INTTYPE_NONE, the gpio_interrupt_handler will be
  * attached and unmasked.
  */
-void gpio_set_interrupt(const uint8_t gpio_num, const gpio_inttype_t int_type, gpio_interrupt_handler_t handler);
+void IRAM gpio_set_interrupt(const uint8_t gpio_num, const gpio_inttype_t int_type, gpio_interrupt_handler_t handler);
 
 /* Return the interrupt type set for a pin */
 static inline gpio_inttype_t gpio_get_interrupt(const uint8_t gpio_num)
