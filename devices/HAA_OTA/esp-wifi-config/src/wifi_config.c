@@ -608,7 +608,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             sysparam_get_int32(LAST_CONFIG_NUMBER_SYSPARAM, &last_config_number);
             
             char* ota_version_string = NULL;
-            sysparam_get_string(OTA_VERSION_SYSPARAM, &ota_version_string);
+            sysparam_get_string(INSTALLER_VERSION_SYSPARAM, &ota_version_string);
             
             int8_t saved_pairing_count = -1;
             sysparam_get_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, &saved_pairing_count);
@@ -620,7 +620,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             }
             
             if (ota_version_string) {
-                sysparam_set_string(OTA_VERSION_SYSPARAM, ota_version_string);
+                sysparam_set_string(INSTALLER_VERSION_SYSPARAM, ota_version_string);
             }
             
             if (saved_pairing_count > -1) {
@@ -1002,7 +1002,7 @@ static void wifi_config_sta_connect_timeout_task() {
 }
 
 static uint8_t wifi_config_connect(const uint8_t phy) {
-    sysparam_set_string(OTA_VERSION_SYSPARAM, INSTALLER_VERSION);
+    sysparam_set_string(INSTALLER_VERSION_SYSPARAM, INSTALLER_VERSION);
     
     char *wifi_ssid = NULL;
     sysparam_get_string(WIFI_SSID_SYSPARAM, &wifi_ssid);

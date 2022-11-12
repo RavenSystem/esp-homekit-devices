@@ -106,7 +106,7 @@ typedef struct _adv_button_main_config {
 
 static adv_button_main_config_t* adv_button_main_config = NULL;
 
-static adv_button_t* button_find_by_gpio(const unsigned int gpio) {
+static adv_button_t* IRAM button_find_by_gpio(const unsigned int gpio) {
     if (adv_button_main_config) {
         adv_button_t* button = adv_button_main_config->buttons;
         

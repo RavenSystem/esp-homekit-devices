@@ -31,15 +31,15 @@
 #include "ota.h"
 
 char* user_repo = NULL;
-char* user_version = NULL;
+char* haamain_installed_version = NULL;
 
-char* new_version = NULL;
-char* ota_version = NULL;
+char* haamain_new_version = NULL;
+char* installer_new_version = NULL;
 uint8_t signature[SIGNSIZE];
 int file_size;
 int result;
 
-uint_fast16_t port = 443;
+int port = 443;
 bool is_ssl = true;
 int tries_count = 0;
 int tries_partial_count;
@@ -50,12 +50,6 @@ void ota_task(void *arg) {
     vTaskSuspend(NULL);
     
     vTaskDelay(MS_TO_TICKS(1000));
-    
-    INFO("\n\nHAA Installer v"INSTALLER_VERSION"\n\n");
-    
-#ifdef HAABOOT
-    sysparam_set_string(USER_VERSION_SYSPARAM, "0");
-#endif  // HAABOOT
     
     sysparam_status_t status;
     
@@ -76,190 +70,199 @@ void ota_task(void *arg) {
         }
     }
     
-    INFO("REPO http%s://%s %i", is_ssl ? "s" : "", user_repo, port);
-
-    status = sysparam_get_string(USER_VERSION_SYSPARAM, &user_version);
-    if (status == SYSPARAM_OK) {
-        INFO("Current HAA v%s\n", user_version);
-
-        ota_init(user_repo, is_ssl);
-        
-        vTaskDelay(MS_TO_TICKS(2000));
-        
-        sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
-        
-        for (;;) {
-            INFO("\n*** STARTING\n");
-            tries_count++;
-            tries_partial_count = 0;
-            file_size = 0;
-            result = 0;
-            
+    printf("HAA Installer "INSTALLER_VERSION"\nREPO http%s://%s %i\n**** ", is_ssl ? "s" : "", user_repo, port);
+    
 #ifdef HAABOOT
-            INFO("\nHAABOOT\n");
+    INFO("HAABOOT");
+    
+    sysparam_set_data(HAAMAIN_VERSION_SYSPARAM, NULL, 0, false);
+    sysparam_compact();
+    
+#else   // HAABOOT
+    printf("OTAMAIN\nHAAMAIN ");
+    
+    status = sysparam_get_string(HAAMAIN_VERSION_SYSPARAM, &haamain_installed_version);
+    if (status != SYSPARAM_OK) {
+        printf("no");
+        haamain_installed_version = strdup("");
+        
+    } else {
+        printf("%s", haamain_installed_version);
+    }
+    
+    INFO(" installed");
+#endif  // HAABOOT
+    
+    ota_init(user_repo, is_ssl);
+    
+    vTaskDelay(MS_TO_TICKS(2000));
+    
+    sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
+    
+    for (;;) {
+        tries_count++;
+        tries_partial_count = 0;
+        file_size = 0;
+        result = 0;
+        
+#ifdef HAABOOT
 /*
-            printf("HK data migration\n");
-            const char magic1[] = "HAP";
-            char magic[sizeof(magic1)];
-            memset(magic, 0, sizeof(magic));
+        printf("HK data migration");
+        const char magic1[] = "HAP";
+        char magic[sizeof(magic1)];
+        memset(magic, 0, sizeof(magic));
 
-            if (!spiflash_read(OLD_SPIFLASH_BASE_ADDR, (byte*) magic, sizeof(magic))) {
-                printf("! Read old sector\n");
+        if (!spiflash_read(OLD_SPIFLASH_BASE_ADDR, (byte*) magic, sizeof(magic))) {
+            printf("! Read old sector");
+            
+        } else if (strncmp(magic, magic1, sizeof(magic1)) == 0) {
+            printf("Formatting new sector 0x%x", SPIFLASH_BASE_ADDR);
+            if (!spiflash_erase_sector(SPIFLASH_BASE_ADDR)) {
+                printf("! Erase new sector");
+            } else {
+                printf("Reading data from 0x%x", OLD_SPIFLASH_BASE_ADDR);
                 
-            } else if (strncmp(magic, magic1, sizeof(magic1)) == 0) {
-                printf("Formatting new sector 0x%x\n", SPIFLASH_BASE_ADDR);
-                if (!spiflash_erase_sector(SPIFLASH_BASE_ADDR)) {
-                    printf("! Erase new sector\n");
+                byte data[4096];
+                if (!spiflash_read(OLD_SPIFLASH_BASE_ADDR, data, sizeof(data))) {
+                    printf("! Read HK data");
                 } else {
-                    printf("Reading data from 0x%x\n", OLD_SPIFLASH_BASE_ADDR);
+                    printf("Writting data to 0x%x", SPIFLASH_BASE_ADDR);
                     
-                    byte data[4096];
-                    if (!spiflash_read(OLD_SPIFLASH_BASE_ADDR, data, sizeof(data))) {
-                        printf("! Read HK data\n");
+                    if (!spiflash_write(SPIFLASH_BASE_ADDR, data, sizeof(data))) {
+                        printf("! Write HK data to new sector");
                     } else {
-                        printf("Writting data to 0x%x\n", SPIFLASH_BASE_ADDR);
-                        
-                        if (!spiflash_write(SPIFLASH_BASE_ADDR, data, sizeof(data))) {
-                            printf("! Write HK data to new sector\n");
+                        printf("Erasing old sector 0x%x", OLD_SPIFLASH_BASE_ADDR);
+                        if (!spiflash_erase_sector(OLD_SPIFLASH_BASE_ADDR)) {
+                            printf("! Erase old sector");
                         } else {
-                            printf("Erasing old sector 0x%x\n", OLD_SPIFLASH_BASE_ADDR);
-                            if (!spiflash_erase_sector(OLD_SPIFLASH_BASE_ADDR)) {
-                                printf("! Erase old sector\n");
-                            } else {
-                                printf("HK data is migrated\n");
-                            }
+                            printf("HK data is migrated");
                         }
                     }
                 }
-            } else {
-                printf("Data is already migrated\n\n");
             }
+        } else {
+            printf("Data is already migrated");
+        }
 */
-            static char otamainfile[] = OTAMAINFILE;
-            do {
-                tries_partial_count++;
-                
-                void enable_setup_mode() {
-                    sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
-                    ota_reboot();
-                }
-                
-                result = ota_get_sign(user_repo, otamainfile, signature, port, is_ssl);
+        static char otamainfile[] = OTAMAINFILE;
+        do {
+            tries_partial_count++;
+            
+            void enable_setup_mode() {
+                sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
+                ota_reboot();
+            }
+            
+            result = ota_get_sign(user_repo, otamainfile, signature, port, is_ssl);
+            if (result == 0) {
+                result = ota_get_file_part(user_repo, otamainfile, BOOT1SECTOR, port, is_ssl, &file_size);
                 if (result == 0) {
-                    result = ota_get_file_part(user_repo, otamainfile, BOOT1SECTOR, port, is_ssl, &file_size);
-                    if (result == 0) {
-                        if (ota_verify_sign(BOOT1SECTOR, file_size, signature) == 0) {
-                            ota_finalize_file(BOOT1SECTOR);
-                            INFO("\n* OTAMAIN installed");
-                            sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
-                            rboot_set_temp_rom(1);
-                            ota_reboot();
-                        } else {
-                            enable_setup_mode();
-                        }
-                    } else if (result < 0) {
-                        ERROR("Installing OTAMAIN %i", result);
+                    if (ota_verify_sign(BOOT1SECTOR, file_size, signature) == 0) {
+                        ota_finalize_file(BOOT1SECTOR);
+                        INFO("* OTAMAIN installed");
+                        sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
+                        rboot_set_temp_rom(1);
+                        ota_reboot();
+                    } else {
                         enable_setup_mode();
                     }
-                } else {
-                    ERROR("OTAMAIN sign %i", result);
+                } else if (result < 0) {
+                    ERROR("Installing OTAMAIN %i", result);
                     enable_setup_mode();
                 }
-            } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
+            } else {
+                ERROR("OTAMAIN sign %i", result);
+                enable_setup_mode();
+            }
+        } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
+        
 #else   // HAABOOT
-            INFO("\nOTAMAIN\n");
-            
-            if (ota_version) {
-                free(ota_version);
-                ota_version = NULL;
-            }
-            static char otaversionfile[] = OTAVERSIONFILE;
-            ota_version = ota_get_version(user_repo, otaversionfile, port, is_ssl);
-            
-            if (ota_version && strcmp(ota_version, INSTALLER_VERSION) != 0) {
-                static char otabootfile[] = OTABOOTFILE;
-                do {
-                    tries_partial_count++;
-                    result = ota_get_sign(user_repo, otabootfile, signature, port, is_ssl);
+        if (installer_new_version) {
+            free(installer_new_version);
+            installer_new_version = NULL;
+        }
+        static char otaversionfile[] = OTAVERSIONFILE;
+        installer_new_version = ota_get_version(user_repo, otaversionfile, port, is_ssl);
+        
+        if (installer_new_version && strcmp(installer_new_version, INSTALLER_VERSION) != 0) {
+            static char otabootfile[] = OTABOOTFILE;
+            do {
+                tries_partial_count++;
+                result = ota_get_sign(user_repo, otabootfile, signature, port, is_ssl);
+                if (result == 0) {
+                    result = ota_get_file_part(user_repo, otabootfile, BOOT0SECTOR, port, is_ssl, &file_size);
                     if (result == 0) {
-                        result = ota_get_file_part(user_repo, otabootfile, BOOT0SECTOR, port, is_ssl, &file_size);
-                        if (result == 0) {
-                            if (ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
-                                ota_finalize_file(BOOT0SECTOR);
-                                INFO("\n* HAABOOT installed");
-                            }
-                            
-                            ota_reboot();
-                        } else if (result < 0) {
-                            ERROR("Installing HAABOOT %i", result);
-                            break;
+                        if (ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
+                            ota_finalize_file(BOOT0SECTOR);
+                            INFO("* HAABOOT %s installed", installer_new_version);
                         }
-                    } else {
-                        ERROR("HAABOOT sign %i", result);
+                        
+                        ota_reboot();
+                    } else if (result < 0) {
+                        ERROR("Installing HAABOOT %i", result);
                         break;
                     }
-                } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
-                
-                break;
-            }
-            
-            if (new_version) {
-                free(new_version);
-                new_version = NULL;
-            }
-            static char haaversionfile[] = HAAVERSIONFILE;
-            new_version = ota_get_version(user_repo, haaversionfile, port, is_ssl);
-            
-            if (new_version && strcmp(new_version, user_version) != 0) {
-                static char haamainfile[] = HAAMAINFILE;
-                do {
-                    tries_partial_count++;
-                    result = ota_get_sign(user_repo, haamainfile, signature, port, is_ssl);
-                    if (result == 0) {
-                        result = ota_get_file_part(user_repo, haamainfile, BOOT0SECTOR, port, is_ssl, &file_size);
-                        if (result == 0) {
-                            if (ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
-                                ota_finalize_file(BOOT0SECTOR);
-                                sysparam_set_string(USER_VERSION_SYSPARAM, new_version);
-                                
-                                int last_config_number = 0;
-                                sysparam_get_int32(LAST_CONFIG_NUMBER_SYSPARAM, &last_config_number);
-                                last_config_number++;
-                                
-                                if (last_config_number > 65535) {
-                                    last_config_number = 1;
-                                }
-                                
-                                sysparam_set_int32(LAST_CONFIG_NUMBER_SYSPARAM, last_config_number);
-                                
-                                INFO("\n* HAAMAIN v%s installed", new_version);
-                            }
-                            
-                            ota_reboot();
-                        } else if (result < 0) {
-                            ERROR("Installing HAAMAIN %i", result);
-                            break;
-                        }
-                    } else {
-                        ERROR("HAAMAIN sign %i", result);
-                        break;
-                    }
-                } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
-            }
+                } else {
+                    ERROR("HAABOOT sign %i", result);
+                    break;
+                }
+            } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
             
             break;
-#endif  // HAABOOT
-            
-            if (tries_count == MAX_GLOBAL_TRIES) {
-                break;
-            }
-            
-            vTaskDelay(MS_TO_TICKS(5000));
         }
-    } else {
-        ERROR("HAAMAIN, fixing\n");
-        sysparam_set_string(USER_VERSION_SYSPARAM, "0");
-        sysparam_compact();
+        
+        if (haamain_new_version) {
+            free(haamain_new_version);
+            haamain_new_version = NULL;
+        }
+        static char haaversionfile[] = HAAVERSIONFILE;
+        haamain_new_version = ota_get_version(user_repo, haaversionfile, port, is_ssl);
+        
+        if (haamain_new_version && strcmp(haamain_new_version, haamain_installed_version) != 0) {
+            static char haamainfile[] = HAAMAINFILE;
+            do {
+                tries_partial_count++;
+                result = ota_get_sign(user_repo, haamainfile, signature, port, is_ssl);
+                if (result == 0) {
+                    result = ota_get_file_part(user_repo, haamainfile, BOOT0SECTOR, port, is_ssl, &file_size);
+                    if (result == 0) {
+                        if (ota_verify_sign(BOOT0SECTOR, file_size, signature) == 0) {
+                            ota_finalize_file(BOOT0SECTOR);
+                            sysparam_set_string(HAAMAIN_VERSION_SYSPARAM, haamain_new_version);
+                            
+                            int last_config_number = 0;
+                            sysparam_get_int32(LAST_CONFIG_NUMBER_SYSPARAM, &last_config_number);
+                            last_config_number++;
+                            
+                            if (last_config_number > 65535) {
+                                last_config_number = 1;
+                            }
+                            
+                            sysparam_set_int32(LAST_CONFIG_NUMBER_SYSPARAM, last_config_number);
+                            
+                            INFO("* HAAMAIN %s installed", haamain_new_version);
+                        }
+                        
+                        ota_reboot();
+                    } else if (result < 0) {
+                        ERROR("Installing HAAMAIN %i", result);
+                        break;
+                    }
+                } else {
+                    ERROR("HAAMAIN sign %i", result);
+                    break;
+                }
+            } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
+        }
+        
+        break;
+#endif  // HAABOOT
+        
+        if (tries_count == MAX_GLOBAL_TRIES) {
+            break;
+        }
+        
+        vTaskDelay(MS_TO_TICKS(5000));
     }
     
     ota_reboot();
@@ -296,6 +299,6 @@ void user_init(void) {
     sdk_wifi_station_disconnect();
     sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
     
-    xTaskCreate(ota_task, "ota", 1920, NULL, (tskIDLE_PRIORITY + 1), &xHandle);
+    xTaskCreate(ota_task, "ota", 2024, NULL, (tskIDLE_PRIORITY + 1), &xHandle);
     xTaskCreate(init_task, "ini", 512, NULL, (tskIDLE_PRIORITY + 2), NULL);
 }

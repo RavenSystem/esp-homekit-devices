@@ -8,6 +8,7 @@
 #include <string.h>
 #include <espressif/esp_common.h>
 #include <esp8266.h>
+#include <esplibs/libmain.h>
 #include <FreeRTOS.h>
 #include <task.h>
 #include <math.h>
@@ -51,7 +52,7 @@ static adv_hlw_unit_t* IRAM adv_hlw_find_by_gpio(const int gpio) {
 }
 
 static void normalize_cf1(adv_hlw_unit_t* adv_hlw_unit) {
-    if ((sdk_system_get_time() - adv_hlw_unit->last_cf1) > PERIOD_TIMEOUT) {
+    if ((sdk_system_get_time_raw() - adv_hlw_unit->last_cf1) > PERIOD_TIMEOUT) {
         
         if (adv_hlw_unit->mode == adv_hlw_unit->current_mode) {
             adv_hlw_unit->period_cf1_c = 0;
@@ -107,7 +108,7 @@ double adv_hlw_get_power_freq(const int gpio) {
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
     
     if (adv_hlw_unit && adv_hlw_unit->period_cf > 0) {
-        if ((sdk_system_get_time() - adv_hlw_unit->last_cf) > PERIOD_TIMEOUT) {
+        if ((sdk_system_get_time_raw() - adv_hlw_unit->last_cf) > PERIOD_TIMEOUT) {
             adv_hlw_unit->period_cf = 0;
             return 0;
         }
@@ -119,9 +120,9 @@ double adv_hlw_get_power_freq(const int gpio) {
 }
 
 static void IRAM adv_hlw_cf1_callback(const uint8_t gpio) {
-    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
+    const uint32_t now = sdk_system_get_time_raw();
     
-    const uint32_t now = sdk_system_get_time();
+    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
     
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
 
@@ -154,9 +155,9 @@ static void IRAM adv_hlw_cf1_callback(const uint8_t gpio) {
 }
 
 static void IRAM adv_hlw_cf_callback(const uint8_t gpio) {
-    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
+    const uint32_t now = sdk_system_get_time_raw();
     
-    const uint32_t now = sdk_system_get_time();
+    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
     
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
     

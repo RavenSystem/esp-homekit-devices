@@ -140,7 +140,7 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
                 
                 adv_logger_data->udplogstring[adv_logger_data->udplogstring_len] = 0;
                 char buffer[10];
-                snprintf(buffer, 10, "%08.3f ", (float) sdk_system_get_time() * 1e-6);
+                snprintf(buffer, 10, "%08.3f ", (float) sdk_system_get_time_raw() * 1e-6);
                 strcat(strcat(strcat(adv_logger_data->udplogstring, buffer), adv_logger_data->header), ": ");
                 adv_logger_data->udplogstring_len = strlen(adv_logger_data->udplogstring);
             }

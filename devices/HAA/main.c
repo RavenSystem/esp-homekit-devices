@@ -950,7 +950,7 @@ void ping_task_timer_worker() {
 void setup_mode_call(const uint16_t gpio, void* args, const uint8_t param) {
     INFO("Setup call");
     
-    if (main_config.setup_mode_time == 0 || xTaskGetTickCountFromISR() < main_config.setup_mode_time * (1000 / portTICK_PERIOD_MS)) {
+    if (main_config.setup_mode_time == 0 || xTaskGetTickCount() < main_config.setup_mode_time * (1000 / portTICK_PERIOD_MS)) {
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
         reboot_haa();
     } else {
@@ -2878,7 +2878,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
     
     // *** HSI TO RGBW FUNCTION ***
 #ifdef LIGHT_DEBUG
-    uint32_t run_time = sdk_system_get_time();
+    uint32_t run_time = sdk_system_get_time_raw();
 #endif
     
     lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_group->ch[0]);
@@ -3201,7 +3201,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
     }
 
 #ifdef LIGHT_DEBUG
-    INFO("hsi2rgbw runtime: %0.3f ms", ((float) (sdk_system_get_time() - run_time)) * 1e-3);
+    INFO("hsi2rgbw runtime: %0.3f ms", ((float) (sdk_system_get_time_raw() - run_time)) * 1e-3);
 #endif
 }
 /*
@@ -4537,7 +4537,7 @@ void reset_uart_buffer() {
 }
 
 void IRAM fm_pulse_interrupt(const uint8_t gpio) {
-    uint32_t time = sdk_system_get_time();
+    const uint32_t time = sdk_system_get_time_raw();
     
     gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
     
@@ -4636,9 +4636,12 @@ void free_monitor_task(void* args) {
                     if (((uint8_t) FM_SENSOR_GPIO_TRIGGER) < 255) {
                         const int inverted = ((uint8_t) FM_SENSOR_GPIO_TRIGGER) / 100;
                         const unsigned int gpio_final = ((uint8_t) FM_SENSOR_GPIO_TRIGGER) % 100;
+                        
+                        taskENTER_CRITICAL();
                         gpio_write(gpio_final, inverted);
                         sdk_os_delay_us(20);
                         gpio_write(gpio_final, !inverted);
+                        taskEXIT_CRITICAL();
                     }
                     
                     vTaskDelay(MS_TO_TICKS(90));
@@ -6054,9 +6057,9 @@ void irrf_tx_task(void* pvParameters) {
                             gpio_write(ir_gpio, ir_false);
                             sdk_os_delay_us(ir_code[i]);
                         } else {        // Mark
-                            start = sdk_system_get_time();
+                            start = sdk_system_get_time_raw();
                             if (freq > 1) {
-                                while ((sdk_system_get_time() - start) < ir_code[i]) {
+                                while ((sdk_system_get_time_raw() - start) < ir_code[i]) {
                                     gpio_write(ir_gpio, ir_true);
                                     sdk_os_delay_us(freq);
                                     gpio_write(ir_gpio, ir_false);
@@ -6945,13 +6948,15 @@ void normal_mode_init() {
     }
     
     // Initial state function
-    double set_initial_state(const uint8_t accessory, const uint8_t ch_number, cJSON* json_context, homekit_characteristic_t* ch, const uint8_t ch_type, const double default_value) {
-        double state = default_value;
-        INFO("Set init state");
+    float set_initial_state(const uint8_t accessory, const uint8_t ch_number, cJSON* json_context, homekit_characteristic_t* ch, const uint8_t ch_type, const float default_value) {
+        float state = default_value;
+        printf("Set init ");
         if (cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
             const unsigned int initial_state = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE)->valuedouble;
             if (initial_state < INIT_STATE_LAST) {
-                    state = initial_state;
+                state = initial_state;
+                INFO("%g", state);
+                
             } else {
                 char* saved_state_id = malloc(3);
                 unsigned int int_saved_state_id = ((accessory + 10) * 10) + ch_number;
@@ -7018,16 +7023,17 @@ void normal_mode_init() {
                 }
                 
                 if (status != SYSPARAM_OK) {
-                    ERROR("Init. Using default");
+                    printf("error ");
                 }
                 
                 if (ch_type == CH_TYPE_STRING && state > 0) {
-                    INFO("Init %s", (char*) (uint32_t) state);
+                    INFO("%s", (char*) (uint32_t) state);
                 } else {
-                    INFO("Init %g", state);
+                    INFO("%g", state);
                 }
-                
             }
+        } else {
+            INFO("default");
         }
         
         return state;
@@ -8330,7 +8336,7 @@ void normal_mode_init() {
             initial_state = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE)->valuedouble;
         }
         
-        INFO("Init %i", initial_state);
+        INFO("Get init %i", initial_state);
         
         return initial_state;
     }
@@ -10590,7 +10596,7 @@ void normal_mode_init() {
         ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .setter_ex=hkc_fan_setter);
         ch_group->ch[1] = NEW_HOMEKIT_CHARACTERISTIC(ROTATION_SPEED, max_speed, .max_value=(float[]) {max_speed}, .setter_ex=hkc_fan_setter);
         
-        FAN_CURRENT_ACTION = ch_group->ch[0]->value.bool_value;
+        FAN_CURRENT_ACTION = -1;
         
         ch_group->serv_type = SERV_TYPE_FAN;
         register_actions(ch_group, json_context, 0);
@@ -10599,7 +10605,7 @@ void normal_mode_init() {
         AUTOOFF_TIMER = autoswitch_time(json_context, ch_group);
         
         if (ch_group->homekit_enabled) {
-            FAN_SET_DELAY_TIMER = esp_timer_create(FAN_SET_DELAY_MS, false, (void*) ch_group, process_fan_timer);
+            FAN_SET_DELAY_TIMER = esp_timer_create(FAN_SET_DELAY_MS, false, (void*) ch_group, process_fan_timer);   // Only used with HomeKit
             
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
@@ -10643,9 +10649,9 @@ void normal_mode_init() {
             
             ch_group->ch[0]->value.bool_value = !((uint8_t) set_initial_state(ch_group->serv_index, 0, json_context, ch_group->ch[0], CH_TYPE_BOOL, false));
             if (exec_actions_on_boot) {
-                 hkc_fan_setter(ch_group->ch[0], HOMEKIT_UINT8(!ch_group->ch[0]->value.bool_value));
+                 hkc_fan_setter(ch_group->ch[0], HOMEKIT_BOOL(!ch_group->ch[0]->value.bool_value));
             } else {
-                hkc_fan_status_setter(ch_group->ch[0], HOMEKIT_UINT8(!ch_group->ch[0]->value.bool_value));
+                hkc_fan_status_setter(ch_group->ch[0], HOMEKIT_BOOL(!ch_group->ch[0]->value.bool_value));
             }
            
         } else {
@@ -11557,19 +11563,19 @@ void irrf_capture_task(void* args) {
     int read, last = true;
     unsigned int i, c = 0;
     uint16_t* buffer = malloc(2048 * sizeof(uint16_t));
-    uint32_t now, new_time, current_time = sdk_system_get_time();
+    uint32_t now, new_time, current_time = sdk_system_get_time_raw();
     
     for (;;) {
         read = gpio_read(irrf_capture_gpio);
         if (read != last) {
-            new_time = sdk_system_get_time();
+            new_time = sdk_system_get_time_raw();
             buffer[c] = new_time - current_time;
             current_time = new_time;
             last = read;
             c++;
         }
         
-        now = sdk_system_get_time();
+        now = sdk_system_get_time_raw();
         if (now - current_time > UINT16_MAX) {
             current_time = now;
             if (c > 0) {

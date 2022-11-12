@@ -461,11 +461,13 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send_chunk(client, html_settings_haa_firmware_version);
     
     char *text = NULL;
-    sysparam_get_string(OTA_VERSION_SYSPARAM, &text);
+    sysparam_get_string(INSTALLER_VERSION_SYSPARAM, &text);
     if (text) {
         client_send_chunk(client, text);
         free(text);
         text = NULL;
+    } else {
+        client_send_chunk(client, "none");
     }
     client_send_chunk(client, html_settings_installer_version);
     
@@ -602,7 +604,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             }
             
             char* ota_version_string = NULL;
-            sysparam_get_string(OTA_VERSION_SYSPARAM, &ota_version_string);
+            sysparam_get_string(INSTALLER_VERSION_SYSPARAM, &ota_version_string);
             
             int8_t saved_pairing_count = -1;
             sysparam_get_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, &saved_pairing_count);
@@ -614,7 +616,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             }
             
             if (ota_version_string) {
-                sysparam_set_string(OTA_VERSION_SYSPARAM, ota_version_string);
+                sysparam_set_string(INSTALLER_VERSION_SYSPARAM, ota_version_string);
             }
             
             if (saved_pairing_count > -1) {

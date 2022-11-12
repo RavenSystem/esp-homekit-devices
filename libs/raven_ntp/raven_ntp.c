@@ -8,6 +8,7 @@
 #include <string.h>
 #include <espressif/esp_common.h>
 #include <esp8266.h>
+#include <esplibs/libmain.h>
 #include <FreeRTOS.h>
 #include <lwip/err.h>
 #include <lwip/sockets.h>
@@ -37,7 +38,7 @@ static void raven_ntp_init() {
 time_t raven_ntp_get_time_t() {
     raven_ntp_init();
     
-    const uint32_t now = sdk_system_get_time();
+    const uint32_t now = sdk_system_get_time_raw();
     const uint32_t diff = (now - raven_ntp_config->last_system_time) / 1000000;
     
     if (diff > 3550) {
@@ -155,7 +156,7 @@ int raven_ntp_update(char* ntp_server) {
                         uint32_t recv_time = 0;
                         memcpy(&recv_time, &ntp_payload[32], sizeof(recv_time));
                         
-                        raven_ntp_config->last_system_time = sdk_system_get_time();
+                        raven_ntp_config->last_system_time = sdk_system_get_time_raw();
                         raven_ntp_config->time = (ntohl(recv_time) - NTP_TIME_DIFF_1900_1970);
                         
                         ntp_result = 0;

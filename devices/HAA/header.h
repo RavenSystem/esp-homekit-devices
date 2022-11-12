@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "11.5.0"
+#define HAA_FIRMWARE_VERSION                "11.5.1"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Peregrine"
 
@@ -768,7 +768,7 @@
 
 #define WOL_PACKET_LEN                      (102)
 
-#define SYSTEM_UPTIME_MS                    ((float) sdk_system_get_time() * 1e-3)
+#define SYSTEM_UPTIME_MS                    ((float) sdk_system_get_time_raw() * 1e-3)
 
 #define MIN(x, y)                           (((x) < (y)) ? (x) : (y))
 #define MAX(x, y)                           (((x) > (y)) ? (x) : (y))
