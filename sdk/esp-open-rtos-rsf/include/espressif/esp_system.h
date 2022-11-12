@@ -47,7 +47,7 @@ void sdk_system_restart(void);
 bool sdk_system_deep_sleep_set_option(uint8_t option);
 void sdk_system_deep_sleep(uint32_t time_in_us);
 
-uint32_t sdk_system_get_time(void);
+uint32_t __attribute__((section(".iram1.text"))) sdk_system_get_time(void);
 
 void sdk_system_print_meminfo(void);
 uint32_t sdk_system_get_free_heap_size(void);

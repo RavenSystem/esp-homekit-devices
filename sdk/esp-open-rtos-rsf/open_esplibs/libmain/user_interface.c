@@ -460,11 +460,15 @@ bool sdk_system_restoreclock(void) {
     return false;
 }
 
-uint32_t sdk_system_get_time(void) {
+uint32_t __attribute__((section(".iram1.text"))) sdk_system_get_time(void) {
     return WDEV.SYS_TIME + sdk_WdevTimOffSet;
 }
 
-uint32_t sdk_system_relative_time(uint32_t reltime) {
+uint32_t __attribute__((section(".iram1.text"))) sdk_system_get_time_raw(void) {
+    return WDEV.SYS_TIME;
+}
+
+uint32_t __attribute__((section(".iram1.text"))) sdk_system_relative_time(uint32_t reltime) {
     return WDEV.SYS_TIME - reltime;
 }
 
