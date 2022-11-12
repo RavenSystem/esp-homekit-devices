@@ -27,7 +27,7 @@ void sdk_os_update_cpu_frequency(int freq) {
 
 void sdk_ets_update_cpu_frequency(int freq) __attribute__ (( alias ("sdk_os_update_cpu_frequency") ));
 
-void sdk_os_delay_us(uint16_t us) {
+void __attribute__((section(".iram1.text"))) sdk_os_delay_us(uint16_t us) {
     uint32_t start_ccount, ccount;
     uint32_t delay_ccount = cpu_freq * us;
 
