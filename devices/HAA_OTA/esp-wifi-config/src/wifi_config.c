@@ -86,10 +86,6 @@ static void wifi_config_station_connect();
 static void wifi_config_softap_start();
 
 void setup_mode_reset_sysparam() {
-    for (int i = 0; i < SYSPARAMSIZE; i++) {
-        sdk_spi_flash_erase_sector((SYSPARAMSECTOR / SPI_FLASH_SECTOR_SIZE) + i);
-    }
-    
     sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
     sysparam_init(SYSPARAMSECTOR, 0);
 }
@@ -484,8 +480,7 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send_chunk(client, html_settings_flash_mode_start);
     
     uint32_t flash_id = sdk_spi_flash_get_id();
-    char flash_id_text[34];
-    flash_id_text[0] = 0;
+    char flash_id_text[36];
     itoa(flash_id, flash_id_text, 16);
     strcat(flash_id_text, " ");
     client_send_chunk(client, flash_id_text);
@@ -551,7 +546,7 @@ static void wifi_config_server_on_settings(client_t *client) {
     
     status = sysparam_get_int32(PORT_NUMBER_SYSPARAM, &int32_value);
     if (status == SYSPARAM_OK) {
-        char str_port[6];
+        char str_port[8];
         itoa(int32_value, str_port, 10);
         client_send_chunk(client, str_port);
     } else {
@@ -607,8 +602,11 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             int last_config_number = 0;
             sysparam_get_int32(LAST_CONFIG_NUMBER_SYSPARAM, &last_config_number);
             
-            char* ota_version_string = NULL;
-            sysparam_get_string(INSTALLER_VERSION_SYSPARAM, &ota_version_string);
+            char* installer_version_string = NULL;
+            sysparam_get_string(INSTALLER_VERSION_SYSPARAM, &installer_version_string);
+            
+            char* haamain_version_string = NULL;
+            sysparam_get_string(HAAMAIN_VERSION_SYSPARAM, &haamain_version_string);
             
             int8_t saved_pairing_count = -1;
             sysparam_get_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, &saved_pairing_count);
@@ -619,8 +617,12 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                 sysparam_set_int32(LAST_CONFIG_NUMBER_SYSPARAM, last_config_number);
             }
             
-            if (ota_version_string) {
-                sysparam_set_string(INSTALLER_VERSION_SYSPARAM, ota_version_string);
+            if (installer_version_string) {
+                sysparam_set_string(INSTALLER_VERSION_SYSPARAM, installer_version_string);
+            }
+            
+            if (haamain_version_string) {
+                sysparam_set_string(HAAMAIN_VERSION_SYSPARAM, haamain_version_string);
             }
             
             if (saved_pairing_count > -1) {
@@ -644,8 +646,8 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             // Remove saved states
             int32_t hk_total_serv = 0;
             sysparam_get_int32(TOTAL_SERV_SYSPARAM, &hk_total_serv);
-            char saved_state_id[5];
-            memset(saved_state_id, 0, 5);
+            
+            char saved_state_id[8];
             for (int serv = 1; serv <= hk_total_serv; serv++) {
                 for (int ch = 0; ch <= HIGH_HOMEKIT_CH_NUMBER; ch++) {
                     uint32_t int_saved_state_id = (serv * 100) + ch;
@@ -696,7 +698,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                 if (bssid_param && bssid_param->value && strlen(bssid_param->value) == 12) {
                     uint8_t bssid[6];
                     char hex[3];
-                    memset(hex, 0, 3);
+                    hex[2] = 0;
                     
                     for (int i = 0; i < 6; i++) {
                         hex[0] = bssid_param->value[(i * 2)];

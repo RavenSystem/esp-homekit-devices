@@ -491,7 +491,7 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send_chunk(client, html_settings_pairings);
     
     const int homekit_pairings = homekit_pairing_count();
-    char homekit_pairings_text[3];
+    char homekit_pairings_text[4];
     itoa(homekit_pairings, homekit_pairings_text, 10);
     
     client_send_chunk(client, homekit_pairings_text);
@@ -603,8 +603,11 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                 sysparam_get_int32(LAST_CONFIG_NUMBER_SYSPARAM, &last_config_number);
             }
             
-            char* ota_version_string = NULL;
-            sysparam_get_string(INSTALLER_VERSION_SYSPARAM, &ota_version_string);
+            char* installer_version_string = NULL;
+            sysparam_get_string(INSTALLER_VERSION_SYSPARAM, &installer_version_string);
+            
+            char* haamain_version_string = NULL;
+            sysparam_get_string(HAAMAIN_VERSION_SYSPARAM, &haamain_version_string);
             
             int8_t saved_pairing_count = -1;
             sysparam_get_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, &saved_pairing_count);
@@ -615,8 +618,12 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                 sysparam_set_int32(LAST_CONFIG_NUMBER_SYSPARAM, last_config_number);
             }
             
-            if (ota_version_string) {
-                sysparam_set_string(INSTALLER_VERSION_SYSPARAM, ota_version_string);
+            if (installer_version_string) {
+                sysparam_set_string(INSTALLER_VERSION_SYSPARAM, installer_version_string);
+            }
+            
+            if (haamain_version_string) {
+                sysparam_set_string(HAAMAIN_VERSION_SYSPARAM, haamain_version_string);
             }
             
             if (saved_pairing_count > -1) {
@@ -639,8 +646,8 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             // Remove saved states
             int32_t hk_total_serv = 0;
             sysparam_get_int32(TOTAL_SERV_SYSPARAM, &hk_total_serv);
-            char saved_state_id[5];
-            memset(saved_state_id, 0, 5);
+            
+            char saved_state_id[8];
             for (int serv = 1; serv <= hk_total_serv; serv++) {
                 for (int ch = 0; ch <= HIGH_HOMEKIT_CH_NUMBER; ch++) {
                     uint32_t int_saved_state_id = (serv * 100) + ch;
@@ -715,7 +722,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                 if (bssid_param && bssid_param->value && strlen(bssid_param->value) == 12) {
                     uint8_t bssid[6];
                     char hex[3];
-                    memset(hex, 0, 3);
+                    hex[2] = 0;
                     
                     for (int i = 0; i < 6; i++) {
                         hex[0] = bssid_param->value[(i * 2)];

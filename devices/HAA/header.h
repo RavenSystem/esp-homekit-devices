@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "11.5.1"
+#define HAA_FIRMWARE_VERSION                "11.5.2"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Peregrine"
 
@@ -181,6 +181,8 @@
 #define THERMOSTAT_TYPE_COOLER              (2)
 #define THERMOSTAT_TYPE_HEATERCOOLER        (3)
 #define THERMOSTAT_TYPE_HEATERCOOLER_NOAUTO (4)
+#define THERMOSTAT_INIT_TARGET_MODE         "e"
+#define THERMOSTAT_INIT_TARGET_MODE_DEFAULT (3)
 #define THERMOSTAT_MIN_TEMP                 "m"
 #define TH_HEATER_MIN_TEMP                  *ch_group->ch[5]->min_value
 #define TH_COOLER_MIN_TEMP                  *ch_group->ch[6]->min_value
@@ -272,6 +274,8 @@
 #define HUMIDIF_TYPE_DEHUM                  (2)
 #define HUMIDIF_TYPE_HUMDEHUM               (3)
 #define HUMIDIF_TYPE_HUMDEHUM_NOAUTO        (4)
+#define HUMIDIF_INIT_TARGET_MODE            "e"
+#define HUMIDIF_INIT_TARGET_MODE_DEFAULT    (3)
 #define HUMIDIF_DEADBAND                    "d"
 #define HM_DEADBAND                         ch_group->num_f[2]
 #define HUMIDIF_DEADBAND_FORCE_IDLE         "df"

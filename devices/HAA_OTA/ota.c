@@ -166,7 +166,6 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
     }
     
     char port_s[6];
-    memset(port_s, 0, 6);
     itoa(port, port_s, 10);
     ret = getaddrinfo(host, port_s, &hints, &res);
     if (ret) {

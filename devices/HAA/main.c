@@ -268,9 +268,8 @@ int new_net_con(char* host, uint16_t port_n, bool is_udp, uint8_t* payload, size
     struct addrinfo* res;
     struct addrinfo hints;
     int result;
-    char port[6];
+    char port[8];
     *s = -2;
-    memset(port, 0, 6);
     itoa(port_n, port, 10);
     
     hints.ai_family = AF_UNSPEC;
@@ -365,7 +364,7 @@ uint16_t get_absolut_index(const uint16_t base, const int16_t rel_index) {
 int process_hexstr(const char* string, uint8_t** output_hex_string) {
     const int len = strlen(string) >> 1;
     uint8_t* hex_string = malloc(len);
-    memset(hex_string, 0, len);
+    //memset(hex_string, 0, len);
     
     char buffer[3];
     buffer[2] = 0;
@@ -3257,8 +3256,8 @@ void rgbw_set_timer_worker() {
     addressled_t* addressled = main_config.addressleds;
     while (addressled) {
         uint8_t* colors = malloc(addressled->max_range);
-        memset(colors, 0, addressled->max_range);
         if (colors) {
+            memset(colors, 0, addressled->max_range);
             bool has_changed = false;
             
             lightbulb_group = main_config.lightbulb_groups;
@@ -6948,7 +6947,7 @@ void normal_mode_init() {
     }
     
     // Initial state function
-    float set_initial_state(const uint8_t accessory, const uint8_t ch_number, cJSON* json_context, homekit_characteristic_t* ch, const uint8_t ch_type, const float default_value) {
+    float set_initial_state(const uint8_t service, const uint8_t ch_number, cJSON* json_context, homekit_characteristic_t* ch, const uint8_t ch_type, const float default_value) {
         float state = default_value;
         printf("Set init ");
         if (cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
@@ -6958,10 +6957,12 @@ void normal_mode_init() {
                 INFO("%g", state);
                 
             } else {
-                char* saved_state_id = malloc(3);
-                unsigned int int_saved_state_id = ((accessory + 10) * 10) + ch_number;
-                
+                char saved_state_id[8];
+                unsigned int int_saved_state_id = (service * 100) + ch_number;
                 itoa(int_saved_state_id, saved_state_id, 10);
+                
+                printf("%s: ", saved_state_id);
+                
                 last_state_t* last_state = malloc(sizeof(last_state_t));
                 memset(last_state, 0, sizeof(*last_state));
                 last_state->id = saved_state_id;
@@ -7023,7 +7024,7 @@ void normal_mode_init() {
                 }
                 
                 if (status != SYSPARAM_OK) {
-                    printf("error ");
+                    printf("none ");
                 }
                 
                 if (ch_type == CH_TYPE_STRING && state > 0) {
@@ -7045,7 +7046,7 @@ void normal_mode_init() {
         action_copy_t* last_action = ch_group->action_copy;
         
         void register_action(cJSON* json_accessory, uint8_t new_int_action) {
-            char action[3];
+            char action[4];
             itoa(new_int_action, action, 10);
             if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
                 cJSON* json_action = cJSON_GetObjectItemCaseSensitive(json_accessory, action);
@@ -7080,7 +7081,7 @@ void normal_mode_init() {
         action_binary_output_t* last_action = ch_group->action_binary_output;
         
         void register_action(cJSON* json_accessory, uint8_t new_int_action) {
-            char action[3];
+            char action[4];
             itoa(new_int_action, action, 10);
             if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
                 if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), BINARY_OUTPUTS_ARRAY) != NULL) {
@@ -7141,7 +7142,7 @@ void normal_mode_init() {
         action_serv_manager_t* last_action = ch_group->action_serv_manager;
         
         void register_action(cJSON* json_accessory, uint8_t new_int_action) {
-            char action[3];
+            char action[4];
             itoa(new_int_action, action, 10);
             if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
                 if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SERVICE_MANAGER_ACTIONS_ARRAY) != NULL) {
@@ -7194,7 +7195,7 @@ void normal_mode_init() {
         action_set_ch_t* last_action = ch_group->action_set_ch;
         
         void register_action(cJSON* json_accessory, uint8_t new_int_action) {
-            char action[3];
+            char action[4];
             itoa(new_int_action, action, 10);
             if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
                 if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SET_CH_ACTIONS_ARRAY) != NULL) {
@@ -7254,7 +7255,7 @@ void normal_mode_init() {
         action_system_t* last_action = ch_group->action_system;
         
         void register_action(cJSON* json_accessory, uint8_t new_int_action) {
-            char action[3];
+            char action[4];
             itoa(new_int_action, action, 10);
             if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
                 if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SYSTEM_ACTIONS_ARRAY) != NULL) {
@@ -7294,7 +7295,7 @@ void normal_mode_init() {
         action_network_t* last_action = ch_group->action_network;
         
         void register_action(cJSON* json_accessory, uint8_t new_int_action) {
-            char action[3];
+            char action[4];
             itoa(new_int_action, action, 10);
             if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
                 if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), NETWORK_ACTIONS_ARRAY) != NULL) {
@@ -7380,7 +7381,7 @@ void normal_mode_init() {
         action_irrf_tx_t* last_action = ch_group->action_irrf_tx;
         
         void register_action(cJSON* json_accessory, uint8_t new_int_action) {
-            char action[3];
+            char action[4];
             itoa(new_int_action, action, 10);
             if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
                 if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), IRRF_ACTIONS_ARRAY) != NULL) {
@@ -7449,7 +7450,7 @@ void normal_mode_init() {
         action_uart_t* last_action = ch_group->action_uart;
         
         void register_action(cJSON* json_accessory, uint8_t new_int_action) {
-            char action[3];
+            char action[4];
             itoa(new_int_action, action, 10);
             if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
                 if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), UART_ACTIONS_ARRAY) != NULL) {
@@ -7519,10 +7520,10 @@ void normal_mode_init() {
         wildcard_action_t* last_action = ch_group->wildcard_action;
         
         for (int int_index = 0; int_index < MAX_WILDCARD_ACTIONS; int_index++) {
-            char number[2];
+            char number[4];
             itoa(int_index, number, 10);
             
-            char index[3];
+            char index[4];
             snprintf(index, 3, "%s%s", WILDCARD_ACTIONS_ARRAY_HEADER, number);
             
             cJSON* json_wilcard_actions = cJSON_GetObjectItemCaseSensitive(json_accessory, index);
@@ -7540,7 +7541,7 @@ void normal_mode_init() {
                 }
                 
                 if (cJSON_GetObjectItemCaseSensitive(json_wilcard_action, "0") != NULL) {
-                    char action[3];
+                    char action[4];
                     itoa(global_index, action, 10);
                     cJSON* json_new_input_action = cJSON_CreateObject();
                     cJSON_AddItemReferenceToObject(json_new_input_action, action, cJSON_GetObjectItemCaseSensitive(json_wilcard_action, "0"));
@@ -9185,7 +9186,16 @@ void normal_mode_init() {
                 ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_7), th_input, ch_group, 7);
             }
             
-            ch_group->ch[4]->value.int_value = set_initial_state(ch_group->serv_index, 4, init_last_state_json, ch_group->ch[4], CH_TYPE_INT8, ch_group->ch[4]->value.int_value);
+            int initial_target_mode = THERMOSTAT_INIT_TARGET_MODE_DEFAULT;
+            if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_INIT_TARGET_MODE) != NULL) {
+                initial_target_mode = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_INIT_TARGET_MODE)->valuedouble;
+            }
+            
+            if (initial_target_mode == THERMOSTAT_INIT_TARGET_MODE_DEFAULT) {
+                ch_group->ch[4]->value.int_value = set_initial_state(ch_group->serv_index, 4, init_last_state_json, ch_group->ch[4], CH_TYPE_INT8, ch_group->ch[4]->value.int_value);
+            } else {
+                ch_group->ch[4]->value.int_value = initial_target_mode;
+            }
         }
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
@@ -9574,7 +9584,16 @@ void normal_mode_init() {
                 ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_7), humidif_input, ch_group, 7);
             }
             
-            ch_group->ch[4]->value.int_value = set_initial_state(ch_group->serv_index, 4, init_last_state_json, ch_group->ch[4], CH_TYPE_INT8, ch_group->ch[4]->value.int_value);
+            int initial_target_mode = HUMIDIF_INIT_TARGET_MODE_DEFAULT;
+            if (cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_INIT_TARGET_MODE) != NULL) {
+                initial_target_mode = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_INIT_TARGET_MODE)->valuedouble;
+            }
+            
+            if (initial_target_mode == HUMIDIF_INIT_TARGET_MODE_DEFAULT) {
+                ch_group->ch[4]->value.int_value = set_initial_state(ch_group->serv_index, 4, init_last_state_json, ch_group->ch[4], CH_TYPE_INT8, ch_group->ch[4]->value.int_value);
+            } else {
+                ch_group->ch[4]->value.int_value = initial_target_mode;
+            }
         }
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
@@ -10414,7 +10433,7 @@ void normal_mode_init() {
         service++;
         
         ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_tv_active);
-        ch_group->ch[1] = NEW_HOMEKIT_CHARACTERISTIC(CONFIGURED_NAME_STATIC, "HAA", .setter_ex=hkc_tv_configured_name);
+        ch_group->ch[1] = NEW_HOMEKIT_CHARACTERISTIC(CONFIGURED_NAME, "HAA", .setter_ex=hkc_tv_configured_name);
         ch_group->ch[2] = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE_IDENTIFIER, 1, .setter_ex=hkc_tv_active_identifier);
         ch_group->ch[3] = NEW_HOMEKIT_CHARACTERISTIC(REMOTE_KEY, .setter_ex=hkc_tv_key);
         ch_group->ch[4] = NEW_HOMEKIT_CHARACTERISTIC(POWER_MODE_SELECTION, .setter_ex=hkc_tv_power_mode);
@@ -10489,7 +10508,7 @@ void normal_mode_init() {
                     name = strdup(cJSON_GetObjectItemCaseSensitive(json_input, TV_INPUT_NAME)->valuestring);
                     if (cJSON_GetObjectItemCaseSensitive(json_input, "0") != NULL) {
                         int int_action = MAX_ACTIONS + i;
-                        char action[3];
+                        char action[4];
                         itoa(int_action, action, 10);
                         cJSON* json_new_input_action = cJSON_CreateObject();
                         cJSON_AddItemReferenceToObject(json_new_input_action, action, cJSON_GetObjectItemCaseSensitive(json_input, "0"));
