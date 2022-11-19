@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "11.5.3"
+#define HAA_FIRMWARE_VERSION                "11.5.4"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Peregrine"
 
@@ -761,7 +761,7 @@
 #define STATUS_LED_DURATION_ON              (30)
 #define STATUS_LED_DURATION_OFF             (120)
 
-#define SAVE_STATES_DELAY_MS                (5000)
+#define SAVE_STATES_DELAY_MS                (3000)
 #define RANDOM_DELAY_MS                     (4000)
 
 #define HOMEKIT_RE_PAIR_TIME_MS             (300000)
