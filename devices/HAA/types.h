@@ -17,9 +17,11 @@
 #endif
 
 typedef struct _last_state {
-    char *id;
-    homekit_characteristic_t* ch;
     uint8_t ch_type;
+    uint16_t ch_state_id;
+    
+    homekit_characteristic_t* ch;
+    
     struct _last_state* next;
 } last_state_t;
 

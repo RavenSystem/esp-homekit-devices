@@ -3321,7 +3321,7 @@ static inline void IRAM homekit_server_accept_client() {
         const struct timeval sndtimeout = { 3, 0 };
         setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &sndtimeout, sizeof(sndtimeout));
         
-        const struct timeval rcvtimeout = { 10, 0 };
+        const struct timeval rcvtimeout = { 13, 0 };
         setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
         
         const int keepalive = 0;

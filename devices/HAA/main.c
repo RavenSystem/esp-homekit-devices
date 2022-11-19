@@ -981,30 +981,33 @@ void save_states() {
     sysparam_status_t status;
     
     while (last_state) {
+        char saved_state_id[8];
+        itoa(last_state->ch_state_id, saved_state_id, 10);
+        
         switch (last_state->ch_type) {
             case CH_TYPE_INT8:
-                status = sysparam_set_int8(last_state->id, last_state->ch->value.int_value);
+                status = sysparam_set_int8(saved_state_id, last_state->ch->value.int_value);
                 break;
                 
             case CH_TYPE_INT:
-                status = sysparam_set_int32(last_state->id, last_state->ch->value.int_value);
+                status = sysparam_set_int32(saved_state_id, last_state->ch->value.int_value);
                 break;
                 
             case CH_TYPE_FLOAT:
-                status = sysparam_set_int32(last_state->id, (int32_t) (last_state->ch->value.float_value * FLOAT_FACTOR_SAVE_AS_INT));
+                status = sysparam_set_int32(saved_state_id, (int32_t) (last_state->ch->value.float_value * FLOAT_FACTOR_SAVE_AS_INT));
                 break;
                 
             case CH_TYPE_STRING:
-                status = sysparam_set_string(last_state->id, last_state->ch->value.string_value);
+                status = sysparam_set_string(saved_state_id, last_state->ch->value.string_value);
                 break;
                 
             default:    // case CH_TYPE_BOOL
-                status = sysparam_set_bool(last_state->id, last_state->ch->value.bool_value);
+                status = sysparam_set_bool(saved_state_id, last_state->ch->value.bool_value);
                 break;
         }
         
         if (status != SYSPARAM_OK) {
-            ERROR("Saving Ch%s", last_state->id);
+            ERROR("Saving Ch%s", saved_state_id);
         }
         
         last_state = last_state->next;
@@ -4357,16 +4360,18 @@ void hkc_tv_volume(homekit_characteristic_t* ch, const homekit_value_t value) {
 void hkc_tv_configured_name(homekit_characteristic_t* ch1, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch1);
     
-    INFO("<%i> -> TV Name %s", ch_group->serv_index, value.string_value);
-    
-    char* new_name = strdup(value.string_value);
-    
-    homekit_value_destruct(&ch1->value);
-    ch1->value = HOMEKIT_STRING(new_name);
-
-    homekit_characteristic_notify_safe(ch1);
-
-    save_states_callback();
+    if (strcmp(value.string_value, ch1->value.string_value)) {
+        INFO("<%i> -> TV Name %s", ch_group->serv_index, value.string_value);
+        
+        char* new_name = strdup(value.string_value);
+        
+        homekit_value_destruct(&ch1->value);
+        ch1->value = HOMEKIT_STRING(new_name);
+        
+        homekit_characteristic_notify_safe(ch1);
+        
+        save_states_callback();
+    }
 }
 
 void hkc_tv_input_configured_name(homekit_characteristic_t* ch, const homekit_value_t value) {
@@ -6947,27 +6952,25 @@ void normal_mode_init() {
     }
     
     // Initial state function
-    float set_initial_state(const uint8_t service, const uint8_t ch_number, cJSON* json_context, homekit_characteristic_t* ch, const uint8_t ch_type, const float default_value) {
-        float state = default_value;
-        printf("Set init ");
+    double set_initial_state(const uint8_t service, const uint8_t ch_number, cJSON* json_context, homekit_characteristic_t* ch, const uint8_t ch_type, const float default_value) {
+        double state = default_value;
+        printf("<%i> Init Ch%i ", service, ch_number);
         if (cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
             const unsigned int initial_state = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE)->valuedouble;
             if (initial_state < INIT_STATE_LAST) {
                 state = initial_state;
-                INFO("%g", state);
                 
             } else {
+                printf("saved ");
                 char saved_state_id[8];
                 unsigned int int_saved_state_id = (service * 100) + ch_number;
                 itoa(int_saved_state_id, saved_state_id, 10);
                 
-                printf("%s: ", saved_state_id);
-                
                 last_state_t* last_state = malloc(sizeof(last_state_t));
                 memset(last_state, 0, sizeof(*last_state));
-                last_state->id = saved_state_id;
-                last_state->ch = ch;
                 last_state->ch_type = ch_type;
+                last_state->ch_state_id = int_saved_state_id;
+                last_state->ch = ch;
                 last_state->next = main_config.last_states;
                 main_config.last_states = last_state;
                 
@@ -7026,15 +7029,13 @@ void normal_mode_init() {
                 if (status != SYSPARAM_OK) {
                     printf("none ");
                 }
-                
-                if (ch_type == CH_TYPE_STRING && state > 0) {
-                    INFO("%s", (char*) (uint32_t) state);
-                } else {
-                    INFO("%g", state);
-                }
             }
+        }
+        
+        if (ch_type == CH_TYPE_STRING && state > 0) {
+            INFO("\"%s\"", (char*) ((uint32_t) state));
         } else {
-            INFO("default");
+            INFO("%g", state);
         }
         
         return state;
@@ -8311,7 +8312,7 @@ void normal_mode_init() {
         ch_group->main_enabled = killswitch & 0b01;
         ch_group->child_enabled = killswitch & 0b10;
         
-        INFO("KS %i%i", ch_group->main_enabled, ch_group->child_enabled);
+        INFO("<%i> KS %i%i", ch_group->serv_index, ch_group->main_enabled, ch_group->child_enabled);
     }
     
     void set_accessory_ir_protocol(ch_group_t* ch_group, cJSON* json_context) {
@@ -8337,7 +8338,7 @@ void normal_mode_init() {
             initial_state = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE)->valuedouble;
         }
         
-        INFO("Get init %i", initial_state);
+        //INFO("Get Init %i", initial_state);
         
         return initial_state;
     }
