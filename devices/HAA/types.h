@@ -192,9 +192,11 @@ typedef struct _lightbulb_group {
     bool autodimmer_reverse: 1;
     bool lightbulb_task_running: 1;
     uint8_t autodimmer_task_step;
-    uint8_t type: 6;
+    uint8_t type: 4;
     bool has_changed: 1;
     bool old_on_value: 1;
+    bool last_on_action: 1;
+    bool _align: 1;
     
     uint16_t pwm_dither;
     

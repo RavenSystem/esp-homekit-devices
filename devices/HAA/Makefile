@@ -18,6 +18,7 @@ EXTRA_COMPONENTS = \
 	$(abspath ../../libs/new_ds18b20) \
 	$(abspath ../../libs/raven_ntp) \
 	$(abspath ../../libs/ping) \
+	$(abspath ../../libs/unistring) \
 	$(abspath ../../libs/adv_logger_ntp) \
 	$(abspath ../../libs/timers_helper)
 

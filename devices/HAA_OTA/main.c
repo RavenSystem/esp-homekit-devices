@@ -83,7 +83,7 @@ void ota_task(void *arg) {
     
     status = sysparam_get_string(HAAMAIN_VERSION_SYSPARAM, &haamain_installed_version);
     if (status != SYSPARAM_OK) {
-        printf("no");
+        printf("not");
         haamain_installed_version = strdup("");
         
     } else {

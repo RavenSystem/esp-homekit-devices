@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "11.5.4"
+#define HAA_FIRMWARE_VERSION                "11.6.0"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Peregrine"
 
@@ -173,8 +173,6 @@
 #define VALVE_MAX_DURATION                  "d"
 #define VALVE_MAX_DURATION_DEFAULT          (3600)
 
-#define DOORBELL_LAST_STATE                 ch_group->num_i[0]
-
 #define THERMOSTAT_TYPE                     "w"
 #define TH_TYPE                             ch_group->num_i[4]
 #define THERMOSTAT_TYPE_HEATER              (1)
@@ -267,6 +265,7 @@
 #define SENSOR_HUMIDITY_FLOAT               ch_group->ch[1]->value.float_value
 #define TH_SENSOR_ERROR_COUNT               ch_group->num_i[3]
 #define TH_SENSOR_MAX_ALLOWED_ERRORS        (3)
+#define TH_SENSOR_TEMP_VALUE_WHEN_ERROR     (-99.f)
 
 #define HUMIDIF_TYPE                        "w"
 #define HM_TYPE                             ch_group->num_i[4]
@@ -410,7 +409,7 @@
 #define WINDOW_COVER_TIME_DEFAULT           (15)
 #define WINDOW_COVER_CORRECTION_SET         "f"
 #define WINDOW_COVER_CORRECTION_DEFAULT     (0)
-#define WINDOW_COVER_POLL_PERIOD_MS         (250)
+#define WINDOW_COVER_TIMER_WORKER_PERIOD_MS (250)
 #define WINDOW_COVER_MARGIN_SYNC_SET        "m"
 #define WINDOW_COVER_MARGIN_SYNC_DEFAULT    (15)
 #define WINDOW_COVER_TIME_OPEN              ch_group->num_f[0]

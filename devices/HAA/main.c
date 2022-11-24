@@ -45,6 +45,7 @@
 #include <ping.h>
 #include <adv_logger_ntp.h>
 #include <adv_i2c.h>
+#include <unistring.h>
 #include <timers_helper.h>
 
 #include <dht.h>
@@ -361,7 +362,7 @@ uint16_t get_absolut_index(const uint16_t base, const int16_t rel_index) {
     return rel_index;
 }
 
-int process_hexstr(const char* string, uint8_t** output_hex_string) {
+int process_hexstr(const char* string, uint8_t** output_hex_string, unistring_t** unistrings) {
     const int len = strlen(string) >> 1;
     uint8_t* hex_string = malloc(len);
     //memset(hex_string, 0, len);
@@ -376,7 +377,9 @@ int process_hexstr(const char* string, uint8_t** output_hex_string) {
         hex_string[i] = (uint8_t) strtol(buffer, NULL, 16);
     }
     
-    *output_hex_string = hex_string;
+    *output_hex_string = uni_memdup(hex_string, len, unistrings);
+    
+    free(hex_string);
     
     return len;
 }
@@ -1133,7 +1136,7 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
             
             save_data_history(ch);
             
-            do_actions(ch_group, (uint8_t) ch->value.bool_value);
+            do_actions(ch_group, ch->value.bool_value);
         }
     }
     
@@ -1188,7 +1191,7 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
             
             save_data_history(ch);
             
-            do_actions(ch_group, (uint8_t) ch->value.int_value);
+            do_actions(ch_group, ch->value.int_value);
         }
     }
     
@@ -1213,12 +1216,12 @@ void hkc_lock_status_setter(homekit_characteristic_t* ch, const homekit_value_t 
 }
 
 // --- BUTTON EVENT / DOORBELL
-void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
+void button_event(const uint16_t gpio, void* args, const uint8_t event_type) {
     ch_group_t* ch_group = args;
     
-    if (ch_group->child_enabled) {
+    if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("<%i> -> EVENT %i", ch_group->serv_index, event_type);
+        INFO("<%i> -> BE %i", ch_group->serv_index, event_type);
         
         ch_group->ch[0]->value.int_value = event_type;
         homekit_characteristic_notify_safe(ch_group->ch[0]);
@@ -1228,17 +1231,23 @@ void button_event(const uint8_t gpio, void* args, const uint8_t event_type) {
         do_actions(ch_group, event_type);
         
         if (ch_group->serv_type == SERV_TYPE_DOORBELL && event_type == 0) {
-            INFO("<%i> Doorbell", ch_group->serv_index);
+            INFO("<%i> Ring", ch_group->serv_index);
             
-            bool doorbell_last_state = DOORBELL_LAST_STATE;
-            doorbell_last_state = !doorbell_last_state;
-            DOORBELL_LAST_STATE = doorbell_last_state;
-            
-            ch_group->ch[1]->value.int_value = doorbell_last_state;
+            ch_group->ch[1]->value.int_value = !((bool) ch_group->ch[1]->value.int_value);
             homekit_characteristic_notify_safe(ch_group->ch[1]);
             
             save_data_history(ch_group->ch[1]);
         }
+    }
+}
+
+void button_event_diginput(const uint16_t gpio, void* args, const uint8_t event_type) {
+    ch_group_t* ch_group = args;
+    
+    INFO("<%i> BE DigI GPIO %i", ch_group->serv_index, gpio);
+    
+    if (ch_group->child_enabled) {
+        button_event(gpio, args, event_type);
     }
 }
 
@@ -1526,7 +1535,7 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
             
             save_data_history(ch);
             
-            do_actions(ch_group, (uint8_t) ch->value.int_value);
+            do_actions(ch_group, ch->value.int_value);
         }
     }
     
@@ -2668,7 +2677,7 @@ void temperature_task(void* args) {
                             TH_SENSOR_ERROR_COUNT = 0;
                             
                             if (ch_group->chs > 0 && ch_group->ch[0]) {
-                                ch_group->ch[0]->value.float_value = 0;
+                                ch_group->ch[0]->value.float_value = TH_SENSOR_TEMP_VALUE_WHEN_ERROR;
                                 homekit_characteristic_notify_safe(ch_group->ch[0]);
                             }
                             
@@ -3423,8 +3432,9 @@ void lightbulb_no_task(ch_group_t* ch_group) {
         }
     }
     
-    if (lightbulb_group->old_on_value != ch_group->ch[0]->value.bool_value) {
-        do_actions(ch_group, (uint8_t) ch_group->ch[0]->value.bool_value);
+    if (lightbulb_group->last_on_action != ch_group->ch[0]->value.bool_value) {
+        lightbulb_group->last_on_action = ch_group->ch[0]->value.bool_value;
+        do_actions(ch_group, ch_group->ch[0]->value.bool_value);
     }
     
     if (ch_group->ch[0]->value.bool_value) {
@@ -3993,15 +4003,15 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
         }
     }
     
-    float window_cover_homekit_position(const float motor_position, const float correction) {
-        return motor_position / (1 + ((100 - motor_position) * correction * 0.00020000f));
+    float window_cover_homekit_position() {
+        return WINDOW_COVER_MOTOR_POSITION / (1.00000000f + ((100.00000000f - WINDOW_COVER_MOTOR_POSITION) * ((float) WINDOW_COVER_CORRECTION) * 0.00020000f));
     }
     
     switch (WINDOW_COVER_CH_STATE->value.int_value) {
         case WINDOW_COVER_CLOSING:
             WINDOW_COVER_MOTOR_POSITION -= window_cover_step(ch_group, WINDOW_COVER_TIME_CLOSE);
             if (WINDOW_COVER_MOTOR_POSITION > 0) {
-                WINDOW_COVER_HOMEKIT_POSITION = window_cover_homekit_position(WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_CORRECTION);
+                WINDOW_COVER_HOMEKIT_POSITION = window_cover_homekit_position();
             } else {
                 WINDOW_COVER_HOMEKIT_POSITION = WINDOW_COVER_MOTOR_POSITION;
             }
@@ -4016,7 +4026,7 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
         case WINDOW_COVER_OPENING:
             WINDOW_COVER_MOTOR_POSITION += window_cover_step(ch_group, WINDOW_COVER_TIME_OPEN);
             if (WINDOW_COVER_MOTOR_POSITION < 100) {
-                WINDOW_COVER_HOMEKIT_POSITION = window_cover_homekit_position(WINDOW_COVER_MOTOR_POSITION, WINDOW_COVER_CORRECTION);
+                WINDOW_COVER_HOMEKIT_POSITION = window_cover_homekit_position();
             } else {
                 WINDOW_COVER_HOMEKIT_POSITION = WINDOW_COVER_MOTOR_POSITION;
             }
@@ -6105,8 +6115,9 @@ void uart_action_task(void* pvParameters) {
 
     while (action_uart) {
         if (action_uart->action == action_task->action) {
-            printf("<%i> UART%i SEND ", action_task->ch_group->serv_index, action_uart->uart);
+            printf("<%i> UART%i -> ", action_task->ch_group->serv_index, action_uart->uart);
             for (int i = 0; i < action_uart->len; i++) {
+                printf("%02x", action_uart->command[i]);
                 printf("%02x", action_uart->command[i]);
             }
             INFO("");
@@ -6391,7 +6402,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             
                         case SERV_TYPE_WINDOW_COVER:
                             if (value_int < 0) {
-                                window_cover_obstruction(0, ch_group, value_int + 2);
+                                window_cover_obstruction(99, ch_group, value_int + 2);
                                 
                             } else if (value_int == 101) {
                                 hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
@@ -6400,7 +6411,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 WINDOW_COVER_HOMEKIT_POSITION = value_int - 200;
                                 
                                 WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_HOMEKIT_POSITION;
-                                WINDOW_COVER_MOTOR_POSITION = ((float) ((100 * WINDOW_COVER_CORRECTION * WINDOW_COVER_HOMEKIT_POSITION) + (5000 * WINDOW_COVER_HOMEKIT_POSITION))) / ((float) ((WINDOW_COVER_CORRECTION * WINDOW_COVER_HOMEKIT_POSITION) + 5000));
+                                WINDOW_COVER_MOTOR_POSITION = ((double) ((100.00000000f * WINDOW_COVER_CORRECTION * WINDOW_COVER_HOMEKIT_POSITION) + (5000.00000000f * WINDOW_COVER_HOMEKIT_POSITION))) / ((double) ((WINDOW_COVER_CORRECTION * WINDOW_COVER_HOMEKIT_POSITION) + 5000.00000000f));
                                 
                                 if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
                                     WINDOW_COVER_CH_TARGET_POSITION->value.int_value = WINDOW_COVER_CH_CURRENT_POSITION->value.int_value;
@@ -6818,6 +6829,8 @@ void homekit_re_pair_timer(TimerHandle_t xTimer) {
 }
 
 void normal_mode_init() {
+    unistring_t* unistrings = NULL;
+    
     char* txt_config = NULL;
     sysparam_get_string(HAA_SCRIPT_SYSPARAM, &txt_config);
 
@@ -6911,7 +6924,7 @@ void normal_mode_init() {
                 ping_input = malloc(sizeof(ping_input_t));
                 memset(ping_input, 0, sizeof(*ping_input));
                 
-                ping_input->host = strdup(cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_HOST)->valuestring);
+                ping_input->host = uni_strdup(cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_HOST)->valuestring, &unistrings);
                 
                 ping_input->next = main_config.ping_inputs;
                 main_config.ping_inputs = ping_input;
@@ -7061,7 +7074,7 @@ void normal_mode_init() {
                     action_copy->next = last_action;
                     last_action = action_copy;
                     
-                    INFO("New Copy A%i v %i", new_int_action, action_copy->new_action);
+                    INFO("New A%i Copy v %i", new_int_action, action_copy->new_action);
                 }
             }
         }
@@ -7121,7 +7134,7 @@ void normal_mode_init() {
                         action_binary_output->next = last_action;
                         last_action = action_binary_output;
                         
-                        INFO("New DigO A%i g %i, v %i, i %i", new_int_action, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
+                        INFO("New A%i DigO g %i, v %i, i %i", new_int_action, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
                     }
                 }
             }
@@ -7174,7 +7187,7 @@ void normal_mode_init() {
                             }
                         }
                         
-                        INFO("New ServNot A%i %i->%g", new_int_action, action_serv_manager->serv_index, action_serv_manager->value);
+                        INFO("New A%i ServNot %i->%g", new_int_action, action_serv_manager->serv_index, action_serv_manager->value);
                     }
                 }
             }
@@ -7234,7 +7247,7 @@ void normal_mode_init() {
                             }
                         }
                         
-                        INFO("New SetCh A%i %i.%i->%i.%i", new_int_action, action_set_ch->source_serv, action_set_ch->source_ch, action_set_ch->target_serv, action_set_ch->target_ch);
+                        INFO("New A%i SetCh %i.%i->%i.%i", new_int_action, action_set_ch->source_serv, action_set_ch->source_ch, action_set_ch->target_serv, action_set_ch->target_ch);
                     }
                 }
             }
@@ -7274,7 +7287,7 @@ void normal_mode_init() {
                         action_system->next = last_action;
                         last_action = action_system;
                         
-                        INFO("New Sys A%i v %i", new_int_action, action_system->value);
+                        INFO("New A%i Sys v %i", new_int_action, action_system->value);
                     }
                 }
             }
@@ -7309,7 +7322,7 @@ void normal_mode_init() {
                         
                         action_network->action = new_int_action;
                         
-                        action_network->host = strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_HOST)->valuestring);
+                        action_network->host = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_HOST)->valuestring, &unistrings);
                         
                         action_network->port_n = 80;
                         if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_PORT) != NULL) {
@@ -7326,15 +7339,15 @@ void normal_mode_init() {
                         
                         if (action_network->method_n < 3) {
                             if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_URL) != NULL) {
-                                action_network->url = strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_URL)->valuestring);
+                                action_network->url = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_URL)->valuestring, &unistrings);
                             } else {
-                                action_network->url = strdup("");
+                                action_network->url = uni_strdup("", &unistrings);
                             }
                             
                             if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_HEADER) != NULL) {
-                                action_network->header = strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_HEADER)->valuestring);
+                                action_network->header = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_HEADER)->valuestring, &unistrings);
                             } else {
-                                action_network->header = strdup("Content-type: text/html\r\n");
+                                action_network->header = uni_strdup("Content-type: text/html\r\n", &unistrings);
                             }
                         }
                         
@@ -7342,7 +7355,7 @@ void normal_mode_init() {
                             if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT) != NULL) {
                                 action_network->content = strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT)->valuestring);
                             } else {
-                                action_network->content = strdup("");
+                                action_network->content = uni_strdup("", &unistrings);
                             }
                             
                             if (action_network->method_n ==  3 ||
@@ -7353,11 +7366,11 @@ void normal_mode_init() {
                                        action_network->method_n == 14) {
                                 
                                 free(action_network->content);
-                                action_network->len = process_hexstr(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT)->valuestring, &action_network->raw);
+                                action_network->len = process_hexstr(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT)->valuestring, &action_network->raw, &unistrings);
                             }
                         }
                         
-                        INFO("New Net A%i %s:%i", new_int_action, action_network->host, action_network->port_n);
+                        INFO("New A%i Net %s:%i", new_int_action, action_network->host, action_network->port_n);
                         
                         action_network->next = last_action;
                         last_action = action_network;
@@ -7396,15 +7409,15 @@ void normal_mode_init() {
                         action_irrf_tx->action = new_int_action;
                         
                         if (cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_PROTOCOL) != NULL) {
-                            action_irrf_tx->prot = strdup(cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_PROTOCOL)->valuestring);
+                            action_irrf_tx->prot = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_PROTOCOL)->valuestring, &unistrings);
                         }
                         
                         if (cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_PROTOCOL_CODE) != NULL) {
-                            action_irrf_tx->prot_code = strdup(cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_PROTOCOL_CODE)->valuestring);
+                            action_irrf_tx->prot_code = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_PROTOCOL_CODE)->valuestring, &unistrings);
                         }
                         
                         if (cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_RAW_CODE) != NULL) {
-                            action_irrf_tx->raw_code = strdup(cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_RAW_CODE)->valuestring);
+                            action_irrf_tx->raw_code = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_RAW_CODE)->valuestring, &unistrings);
                         }
                         
                         if (cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_FREQ) != NULL) {
@@ -7429,7 +7442,7 @@ void normal_mode_init() {
                         action_irrf_tx->next = last_action;
                         last_action = action_irrf_tx;
                         
-                        INFO("New IRRF A%i r %i, p %i", new_int_action, action_irrf_tx->repeats, action_irrf_tx->pause);
+                        INFO("New A%i IRRF r %i, p %i", new_int_action, action_irrf_tx->repeats, action_irrf_tx->pause);
                     }
                 }
             }
@@ -7478,17 +7491,17 @@ void normal_mode_init() {
                         
                         if (cJSON_GetObjectItemCaseSensitive(json_action_uart, VALUE) != NULL) {
                             if (is_text) {
-                                action_uart->command = (uint8_t*) strdup(cJSON_GetObjectItemCaseSensitive(json_action_uart, VALUE)->valuestring);
+                                action_uart->command = (uint8_t*) uni_strdup(cJSON_GetObjectItemCaseSensitive(json_action_uart, VALUE)->valuestring, &unistrings);
                                 action_uart->len = strlen((char*) action_uart->command);
                             } else {
-                                action_uart->len = process_hexstr(cJSON_GetObjectItemCaseSensitive(json_action_uart, VALUE)->valuestring, &action_uart->command);
+                                action_uart->len = process_hexstr(cJSON_GetObjectItemCaseSensitive(json_action_uart, VALUE)->valuestring, &action_uart->command, &unistrings);
                             }
                         }
                         
                         action_uart->next = last_action;
                         last_action = action_uart;
                         
-                        INFO("New UART A%i u %i, p %i, l %i", new_int_action, action_uart->uart, action_uart->pause, action_uart->len);
+                        INFO("New A%i UART%i p %i, l %i", new_int_action, action_uart->uart, action_uart->pause, action_uart->len);
                     }
                 }
             }
@@ -7776,7 +7789,7 @@ void normal_mode_init() {
     
     char* log_output_target = NULL;
     if (cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT_TARGET) != NULL) {
-        log_output_target = strdup(cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT_TARGET)->valuestring);
+        log_output_target = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT_TARGET)->valuestring, &unistrings);
     }
     
     adv_logger_init(log_output_type, log_output_target);
@@ -7792,12 +7805,12 @@ void normal_mode_init() {
     // Custom Hostname
     char* custom_hostname = name.value.string_value;
     if (cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME) != NULL) {
-        custom_hostname = strdup(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring);
+        custom_hostname = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring, &unistrings);
     }
     
     // Custom NTP Host
     if (cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_NTP_HOST) != NULL) {
-        main_config.ntp_host = strdup(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_NTP_HOST)->valuestring);
+        main_config.ntp_host = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_NTP_HOST)->valuestring, &unistrings);
     }
     
     // Timezone
@@ -8312,12 +8325,12 @@ void normal_mode_init() {
         ch_group->main_enabled = killswitch & 0b01;
         ch_group->child_enabled = killswitch & 0b10;
         
-        INFO("<%i> KS %i%i", ch_group->serv_index, ch_group->main_enabled, ch_group->child_enabled);
+        INFO("<%i> KS 0b%i%i", ch_group->serv_index, ch_group->main_enabled, ch_group->child_enabled);
     }
     
     void set_accessory_ir_protocol(ch_group_t* ch_group, cJSON* json_context) {
         if (cJSON_GetObjectItemCaseSensitive(json_context, IRRF_ACTION_PROTOCOL) != NULL) {
-            ch_group->ir_protocol = strdup(cJSON_GetObjectItemCaseSensitive(json_context, IRRF_ACTION_PROTOCOL)->valuestring);
+            ch_group->ir_protocol = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_context, IRRF_ACTION_PROTOCOL)->valuestring, &unistrings);
         }
     }
     
@@ -8327,7 +8340,7 @@ void normal_mode_init() {
             exec_actions_on_boot = (bool) cJSON_GetObjectItemCaseSensitive(json_context, EXEC_ACTIONS_ON_BOOT)->valuedouble;
         }
         
-        INFO("Run Ac Boot %i", exec_actions_on_boot);
+        //INFO("Run Ac Boot %i", exec_actions_on_boot);
         
         return exec_actions_on_boot;
     }
@@ -8344,6 +8357,43 @@ void normal_mode_init() {
     }
     
     cJSON* init_last_state_json = cJSON_Parse(INIT_STATE_LAST_STR);
+    
+    // Helpers to use common code
+    void register_bool_inputs(cJSON* json_context, ch_group_t* ch_group, const bool exec_actions_on_boot) {
+        int initial_state = 2;
+        
+        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
+            initial_state = 1;
+        }
+        
+        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
+            ch_group->ch[0]->value.bool_value = true;
+            initial_state = 0;
+        }
+        
+        if (initial_state < 2) {
+            if (exec_actions_on_boot) {
+                diginput(99, ch_group, initial_state);
+            } else {
+                digstate(99, ch_group, initial_state);
+            }
+        }
+        
+        initial_state = 2;
+        
+        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
+            initial_state = 1;
+        }
+        
+        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
+            ch_group->ch[0]->value.bool_value = true;
+            initial_state = 0;
+        }
+        
+        if (initial_state < 2) {
+            digstate(99, ch_group, initial_state);
+        }
+    }
     
     // *** NEW SWITCH / OUTLET
     void new_switch(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context, const uint8_t serv_type) {
@@ -8436,31 +8486,7 @@ void normal_mode_init() {
                 hkc_on_status_setter(ch_group->ch[0], HOMEKIT_BOOL(!ch_group->ch[0]->value.bool_value));
             }
         } else {
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
-                if (exec_actions_on_boot) {
-                    diginput(99, ch_group, 1);
-                } else {
-                    digstate(99, ch_group, 1);
-                }
-            }
-            
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
-                ch_group->ch[0]->value.bool_value = true;
-                if (exec_actions_on_boot) {
-                    diginput(99, ch_group, 0);
-                } else {
-                    digstate(99, ch_group, 0);
-                }
-            }
-            
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
-                digstate(99, ch_group, 1);
-            }
-            
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
-                ch_group->ch[0]->value.bool_value = true;
-                digstate(99, ch_group, 0);
-            }
+            register_bool_inputs(json_context, ch_group, exec_actions_on_boot);
         }
         
         if (ch_group->homekit_enabled) {
@@ -8474,7 +8500,7 @@ void normal_mode_init() {
     
     // *** NEW BUTTON EVENT / DOORBELL
     void new_button_event(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context, const uint8_t serv_type) {
-        ch_group_t* ch_group = new_ch_group(1 + (serv_type == SERV_TYPE_DOORBELL), serv_type == SERV_TYPE_DOORBELL, 0, 0);
+        ch_group_t* ch_group = new_ch_group(1 + (serv_type == SERV_TYPE_DOORBELL), 0, 0, 0);
         ch_group->serv_index = service_numerator;
         set_killswitch(ch_group, json_context);
         int homekit_enabled = acc_homekit_enabled(json_context);
@@ -8509,11 +8535,9 @@ void normal_mode_init() {
             //service_iid += 2;
             
             if (serv_type == SERV_TYPE_DOORBELL) {
-                DOORBELL_LAST_STATE = 1;
-                
                 service++;
                 
-                ch_group->ch[1] = NEW_HOMEKIT_CHARACTERISTIC(PROGRAMMABLE_SWITCH_EVENT, 0);
+                ch_group->ch[1] = NEW_HOMEKIT_CHARACTERISTIC(PROGRAMMABLE_SWITCH_EVENT, 1);
                 
                 accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
                 accessories[accessory]->services[service]->id = (service - 1) * 50;
@@ -8527,12 +8551,12 @@ void normal_mode_init() {
             }
         }
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), button_event, ch_group, SINGLEPRESS_EVENT);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), button_event, ch_group, DOUBLEPRESS_EVENT);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), button_event, ch_group, LONGPRESS_EVENT);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), button_event, ch_group, SINGLEPRESS_EVENT);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), button_event, ch_group, DOUBLEPRESS_EVENT);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_2), button_event, ch_group, LONGPRESS_EVENT);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), button_event_diginput, ch_group, SINGLEPRESS_EVENT);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), button_event_diginput, ch_group, DOUBLEPRESS_EVENT);
+        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), button_event_diginput, ch_group, LONGPRESS_EVENT);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), button_event_diginput, ch_group, SINGLEPRESS_EVENT);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), button_event_diginput, ch_group, DOUBLEPRESS_EVENT);
+        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_2), button_event_diginput, ch_group, LONGPRESS_EVENT);
     }
     
     // *** NEW LOCK
@@ -8599,30 +8623,38 @@ void normal_mode_init() {
                 hkc_lock_status_setter(ch_group->ch[1], HOMEKIT_UINT8(!ch_group->ch[1]->value.int_value));
             }
         } else {
+            int initial_state = 2;
+            
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
+                initial_state = 0;
+            }
+            
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
+                ch_group->ch[1]->value.int_value = 0;
+                initial_state = 1;
+            }
+            
+            if (initial_state < 2) {
                 if (exec_actions_on_boot) {
-                    diginput(99, ch_group, 1);
+                    diginput(99, ch_group, initial_state);
                 } else {
-                    digstate(99, ch_group, 1);
+                    digstate(99, ch_group, initial_state);
                 }
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
-                ch_group->ch[1]->value.int_value = 0;
-                if (exec_actions_on_boot) {
-                    diginput(99, ch_group, 0);
-                } else {
-                    digstate(99, ch_group, 0);
-                }
+            initial_state = 2;
+            
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
+                initial_state = 0;
             }
             
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
-                digstate(99, ch_group, 1);
+                ch_group->ch[1]->value.int_value = 0;
+                initial_state = 1;
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
-                ch_group->ch[1]->value.int_value = 0;
-                digstate(99, ch_group, 0);
+            if (initial_state < 2) {
+                digstate(99, ch_group, initial_state);
             }
         }
     }
@@ -8733,6 +8765,8 @@ void normal_mode_init() {
         
         const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
+        int initial_state = 4;
+        
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), binary_sensor, ch_group, 0)) {
             if (serv_type == SERV_TYPE_MOTION_SENSOR) {
                 ch_group->ch[0]->value.int_value = 1;
@@ -8740,20 +8774,22 @@ void normal_mode_init() {
                 ch_group->ch[0]->value.bool_value = true;
             }
             
-            if (exec_actions_on_boot) {
-                binary_sensor(99, ch_group, 0);
-            } else {
-                binary_sensor(99, ch_group, 2);
-            }
+            initial_state = 0;
         }
         
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), binary_sensor, ch_group, 1)) {
-            if (exec_actions_on_boot) {
-                binary_sensor(99, ch_group, 1);
-            } else {
-                binary_sensor(99, ch_group, 3);
-            }
+            initial_state = 1;
         }
+        
+        if (initial_state < 4) {
+            if (!exec_actions_on_boot) {
+                initial_state += 2;
+            }
+            
+            binary_sensor(99, ch_group, initial_state);
+        }
+        
+        initial_state = 4;
         
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), binary_sensor, ch_group, 2)) {
             if (serv_type == SERV_TYPE_MOTION_SENSOR) {
@@ -8762,11 +8798,15 @@ void normal_mode_init() {
                 ch_group->ch[0]->value.bool_value = true;
             }
             
-            binary_sensor(99, ch_group, 2);
+            initial_state = 2;
         }
         
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), binary_sensor, ch_group, 3)) {
-            binary_sensor(99, ch_group, 3);
+            initial_state = 3;
+        }
+        
+        if (initial_state < 4) {
+            binary_sensor(99, ch_group, initial_state);
         }
     }
     
@@ -8954,30 +8994,38 @@ void normal_mode_init() {
             }
             
         } else {
+            int initial_state = 2;
+            
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
-                if (exec_actions_on_boot) {
-                    diginput(99, ch_group, 1);
-                } else {
-                    digstate(99, ch_group, 1);
-                }
+                initial_state = 1;
             }
             
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
                 ch_group->ch[0]->value.int_value = 1;
+                initial_state = 0;
+            }
+            
+            if (initial_state < 2) {
                 if (exec_actions_on_boot) {
-                    diginput(99, ch_group, 0);
+                    diginput(99, ch_group, initial_state);
                 } else {
-                    digstate(99, ch_group, 0);
+                    digstate(99, ch_group, initial_state);
                 }
             }
             
+            initial_state = 2;
+            
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
-                digstate(99, ch_group, 1);
+                initial_state = 1;
             }
             
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
                 ch_group->ch[0]->value.int_value = 1;
-                digstate(99, ch_group, 0);
+                initial_state = 0;
+            }
+            
+            if (initial_state < 2) {
+                digstate(99, ch_group, initial_state);
             }
         }
     }
@@ -9037,7 +9085,7 @@ void normal_mode_init() {
         TH_TYPE = th_type;
         
         // HomeKit Characteristics
-        ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0);
+        ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, TH_SENSOR_TEMP_VALUE_WHEN_ERROR);
         ch_group->ch[2] = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_th_setter);
         ch_group->ch[3] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_HEATER_COOLER_STATE, 0);
         
@@ -9154,7 +9202,6 @@ void normal_mode_init() {
         register_wildcard_actions(ch_group, json_context);
         const float poll_period = th_sensor(ch_group, json_context);
         
-        TH_IAIRZONING_CONTROLLER = 0;
         if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER) != NULL) {
             TH_IAIRZONING_CONTROLLER = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER)->valuedouble;
         }
@@ -9206,12 +9253,18 @@ void normal_mode_init() {
             ch_group->ch[2]->value.int_value = !((uint8_t) set_initial_state(ch_group->serv_index, 2, json_context, ch_group->ch[2], CH_TYPE_INT8, 0));
             hkc_th_setter(ch_group->ch[2], HOMEKIT_UINT8(!ch_group->ch[2]->value.int_value));
         } else {
+            int initial_state = 2;
+            
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), th_input, ch_group, 1)) {
-                th_input(99, ch_group, 1);
+                initial_state = 1;
             }
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), th_input, ch_group, 0)) {
                 ch_group->ch[2]->value.int_value = 1;
-                th_input(99, ch_group, 0);
+                initial_state = 0;
+            }
+            
+            if (initial_state < 2) {
+                th_input(99, ch_group, initial_state);
             }
         }
     }
@@ -9256,7 +9309,7 @@ void normal_mode_init() {
         
         service++;
         
-        ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0);
+        ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, TH_SENSOR_TEMP_VALUE_WHEN_ERROR);
   
         const float poll_period = th_sensor(ch_group, json_context);
         register_actions(ch_group, json_context, 0);
@@ -9350,7 +9403,7 @@ void normal_mode_init() {
         
         service++;
         
-        ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0);
+        ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, TH_SENSOR_TEMP_VALUE_WHEN_ERROR);
         ch_group->ch[1] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_RELATIVE_HUMIDITY, 0);
         
         const float poll_period = th_sensor(ch_group, json_context);
@@ -9529,7 +9582,7 @@ void normal_mode_init() {
         if (serv_type == SERV_TYPE_HUMIDIFIER_WITH_TEMP) {
             service++;
             
-            ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, 0);
+            ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_TEMPERATURE, TH_SENSOR_TEMP_VALUE_WHEN_ERROR);
             
             if (ch_group->homekit_enabled) {
                 accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
@@ -9604,12 +9657,18 @@ void normal_mode_init() {
             ch_group->ch[2]->value.int_value = !((uint8_t) set_initial_state(ch_group->serv_index, 2, json_context, ch_group->ch[2], CH_TYPE_INT8, 0));
             hkc_humidif_setter(ch_group->ch[2], HOMEKIT_UINT8(!ch_group->ch[2]->value.int_value));
         } else {
+            int initial_state = 2;
+            
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), humidif_input, ch_group, 1)) {
-                humidif_input(99, ch_group, 1);
+                initial_state = 1;
             }
             if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), humidif_input, ch_group, 0)) {
                 ch_group->ch[2]->value.int_value = 1;
-                humidif_input(99, ch_group, 0);
+                initial_state = 0;
+            }
+            
+            if (initial_state < 2) {
+                humidif_input(99, ch_group, initial_state);
             }
         }
     }
@@ -9985,6 +10044,7 @@ void normal_mode_init() {
         }
         
         lightbulb_group->old_on_value = lightbulb_group->ch0->value.bool_value;
+        lightbulb_group->last_on_action = !lightbulb_group->ch0->value.bool_value;
         lightbulb_group->ch0->value.bool_value = !lightbulb_group->ch0->value.bool_value;
         
         lightbulb_group->lightbulb_task_running = true;
@@ -10083,47 +10143,55 @@ void normal_mode_init() {
             GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN;
         }
         
-        GARAGE_DOOR_HAS_F5 = 0;
+        int initial_sensor = 2;
+        
         if (cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5) != NULL) {
             GARAGE_DOOR_HAS_F5 = 1;
+            
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSING)) {
+                initial_sensor = GARAGE_DOOR_OPENED;
+            }
         }
         
-        GARAGE_DOOR_HAS_F4 = 0;
         if (cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4) != NULL) {
             GARAGE_DOOR_HAS_F4 = 1;
+            
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), garage_door_sensor, ch_group, GARAGE_DOOR_OPENING)) {
+                initial_sensor = GARAGE_DOOR_OPENED;
+            }
         }
         
-        GARAGE_DOOR_HAS_F3 = 0;
         if (cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3) != NULL) {
             GARAGE_DOOR_HAS_F3 = 1;
+            
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSED)) {
+                initial_sensor = GARAGE_DOOR_CLOSED;
+            }
         }
         
-        GARAGE_DOOR_HAS_F2 = 0;
         if (cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2) != NULL) {
             GARAGE_DOOR_HAS_F2 = 1;
+            
+            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), garage_door_sensor, ch_group, GARAGE_DOOR_OPENED)) {
+                initial_sensor = GARAGE_DOOR_OPENED;
+            }
         }
         
-        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSING)) {
-            garage_door_sensor(99, ch_group, GARAGE_DOOR_OPENED);
+        if (initial_sensor < 2) {
+            garage_door_sensor(99, ch_group, initial_sensor);
         }
         
-        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), garage_door_sensor, ch_group, GARAGE_DOOR_OPENING)) {
-            garage_door_sensor(99, ch_group, GARAGE_DOOR_OPENED);
-        }
+        initial_sensor = 2;
         
-        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSED)) {
-            garage_door_sensor(99, ch_group, GARAGE_DOOR_CLOSED);
-        }
-        
-        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), garage_door_sensor, ch_group, GARAGE_DOOR_OPENED)) {
-            garage_door_sensor(99, ch_group, GARAGE_DOOR_OPENED);
-        }
-
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), garage_door_obstruction, ch_group, 0)) {
-            garage_door_obstruction(99, ch_group, 0);
+            initial_sensor = 0;
         }
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_7), garage_door_obstruction, ch_group, 1)) {
-            garage_door_obstruction(99, ch_group, 1);
+            initial_sensor = 1;
+        }
+        
+        if (initial_sensor < 2) {
+            garage_door_obstruction(99, ch_group, initial_sensor);
         }
     }
     
@@ -10195,7 +10263,7 @@ void normal_mode_init() {
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
         
-        ch_group->timer = esp_timer_create(WINDOW_COVER_POLL_PERIOD_MS, true, (void*) ch_group, window_cover_timer_worker);
+        ch_group->timer = esp_timer_create(WINDOW_COVER_TIMER_WORKER_PERIOD_MS, true, (void*) ch_group, window_cover_timer_worker);
         
         ch_group->timer2 = esp_timer_create(WINDOW_COVER_STOP_ENABLE_DELAY_MS, false, (void*) ch_group, window_cover_timer_rearm_stop);
         
@@ -10239,11 +10307,17 @@ void normal_mode_init() {
             window_cover_stop(ch_group);
         }
         
+        int initial_sensor = 2;
+        
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), window_cover_obstruction, ch_group, 0)) {
-            window_cover_obstruction(0, ch_group, 0);
+            initial_sensor = 0;
         }
         if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), window_cover_obstruction, ch_group, 1)) {
-            window_cover_obstruction(0, ch_group, 1);
+            initial_sensor = 1;
+        }
+        
+        if (initial_sensor < 2) {
+            window_cover_obstruction(99, ch_group, initial_sensor);
         }
     }
     
@@ -10506,7 +10580,7 @@ void normal_mode_init() {
                 char* name = strdup("TV");
                 if (cJSON_GetObjectItemCaseSensitive(json_input, TV_INPUT_NAME) != NULL) {
                     free(name);
-                    name = strdup(cJSON_GetObjectItemCaseSensitive(json_input, TV_INPUT_NAME)->valuestring);
+                    name = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_input, TV_INPUT_NAME)->valuestring, &unistrings);
                     if (cJSON_GetObjectItemCaseSensitive(json_input, "0") != NULL) {
                         int int_action = MAX_ACTIONS + i;
                         char action[4];
@@ -10673,33 +10747,8 @@ void normal_mode_init() {
             } else {
                 hkc_fan_status_setter(ch_group->ch[0], HOMEKIT_BOOL(!ch_group->ch[0]->value.bool_value));
             }
-           
         } else {
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
-                if (exec_actions_on_boot) {
-                    diginput(99, ch_group, 1);
-                } else {
-                    digstate(99, ch_group, 1);
-                }
-            }
-            
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
-                ch_group->ch[0]->value.int_value = 1;
-                if (exec_actions_on_boot) {
-                    diginput(99, ch_group, 0);
-                } else {
-                    digstate(99, ch_group, 0);
-                }
-            }
-            
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
-                digstate(99, ch_group, 1);
-            }
-            
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
-                ch_group->ch[0]->value.int_value = 1;
-                digstate(99, ch_group, 0);
-            }
+            register_bool_inputs(json_context, ch_group, exec_actions_on_boot);
         }
     }
     
@@ -10929,10 +10978,10 @@ void normal_mode_init() {
                 if (strlen(cJSON_GetArrayItem(pattern_data, 0)->valuestring) > 0) {
                     if (fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_TEXT ||
                         fm_sensor_type == FM_SENSOR_TYPE_UART_PATTERN_TEXT) {
-                        new_pattern->pattern = (uint8_t*) strdup(cJSON_GetArrayItem(pattern_data, 0)->valuestring);
+                        new_pattern->pattern = (uint8_t*) uni_strdup(cJSON_GetArrayItem(pattern_data, 0)->valuestring, &unistrings);
                         new_pattern->len = strlen((char*) new_pattern->pattern);
                     } else {
-                        new_pattern->len = process_hexstr(cJSON_GetArrayItem(pattern_data, 0)->valuestring, &new_pattern->pattern);
+                        new_pattern->len = process_hexstr(cJSON_GetArrayItem(pattern_data, 0)->valuestring, &new_pattern->pattern, &unistrings);
                     }
                 }
                 
@@ -11529,6 +11578,8 @@ void normal_mode_init() {
     
     cJSON_Delete(json_haa);
     cJSON_Delete(init_last_state_json);
+    
+    unistring_destroy(unistrings);
     
     xTaskCreate(delayed_sensor_task, "DS", DELAYED_SENSOR_START_TASK_SIZE, NULL, DELAYED_SENSOR_START_TASK_PRIORITY, NULL);
     
