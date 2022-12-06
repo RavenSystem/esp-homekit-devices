@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "11.6.0"
+#define HAA_FIRMWARE_VERSION                "11.7.0"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Peregrine"
 
@@ -159,7 +159,6 @@
 #define INITIAL_STATE                       "s"
 #define EXEC_ACTIONS_ON_BOOT                "xa"
 #define KILLSWITCH                          "ks"
-#define KILLSWITCH_DEFAULT                  (3)
 
 #define TIMETABLE_ACTION_ARRAY              "tt"
 #define ALL_MONS                            13

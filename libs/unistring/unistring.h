@@ -27,4 +27,4 @@ void unistring_destroy(unistring_t* unistrings);
 }
 #endif
 
-#endif  // __ADV_HLW_H__
+#endif  // __UNISTRING_H__

@@ -209,6 +209,9 @@ void ota_task(void *arg) {
             } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
             
             break;
+        } else {
+            printf("HAA Installer");
+            INFO(" is in last version");
         }
         
         if (haamain_new_version) {
@@ -253,6 +256,9 @@ void ota_task(void *arg) {
                     break;
                 }
             } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
+        } else {
+            printf("HAAMAIN");
+            INFO(" is in last version");
         }
         
         break;
