@@ -92,6 +92,12 @@
 #define LWIP_HOOK_DHCP_PARSE_OPTION(netif, dhcp, state, msg, msg_type, option, len, pbuf, offset) do { LWIP_UNUSED_ARG(msg); } while(0)
 #endif
 
+#ifdef LWIP_DHCP_AGGRESSIVE
+#define LWIP_DHCP_RETRY_TIMEOUT     (500)
+#else
+#define LWIP_DHCP_RETRY_TIMEOUT     (1000)
+#endif /* LWIP_DHCP_AGGRESSIVE */
+
 /** DHCP_CREATE_RAND_XID: if this is set to 1, the xid is created using
  * LWIP_RAND() (this overrides DHCP_GLOBAL_XID)
  */
@@ -1026,7 +1032,7 @@ dhcp_discover(struct netif *netif)
     autoip_start(netif);
   }
 #endif /* LWIP_DHCP_AUTOIP_COOP */
-  msecs = (u16_t)((dhcp->tries < 6 ? 1 << dhcp->tries : 60) * 1000);
+  msecs = (u16_t)((dhcp->tries < 6 ? 1 << dhcp->tries : 60) * LWIP_DHCP_RETRY_TIMEOUT);
   dhcp->request_timeout = (u16_t)((msecs + DHCP_FINE_TIMER_MSECS - 1) / DHCP_FINE_TIMER_MSECS);
   LWIP_DEBUGF(DHCP_DEBUG | LWIP_DBG_TRACE | LWIP_DBG_STATE, ("dhcp_discover(): set request timeout %"U16_F" msecs\n", msecs));
   return result;
