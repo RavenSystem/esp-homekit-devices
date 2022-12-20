@@ -4505,6 +4505,13 @@ bool set_hkch_value(homekit_characteristic_t* ch_target, const float value) {
         } else if (ch_target_group->serv_type == SERV_TYPE_HUMIDIFIER) {
             hkc_humidif_setter(ch_target, ch_target->value);
             
+        } else if (ch_target_group->serv_type == SERV_TYPE_LIGHTBULB) {
+            if (ch_target_group->ch[0] == ch_target) {
+                lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_target);
+                lightbulb_group->old_on_value = ch_target->value.bool_value;
+                lightbulb_group->last_on_action = ch_target->value.bool_value;
+            }
+            
         } else if (ch_target_group->serv_type == SERV_TYPE_BATTERY) {
             battery_manager(ch_target, ch_target->value.int_value, true);
         }
@@ -7812,7 +7819,7 @@ void normal_mode_init() {
         log_output_target = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT_TARGET)->valuestring, &unistrings);
     }
     
-    adv_logger_init(log_output_type, log_output_target);
+    adv_logger_init(log_output_type, log_output_target, true);
     free(log_output_target);
     
     if (log_output_type > 0) {
@@ -11752,7 +11759,7 @@ void irrf_capture_task(void* args) {
 }
 
 void wifi_done() {
-    adv_logger_init(ADV_LOGGER_UART0_UDP, NULL);
+    adv_logger_init(ADV_LOGGER_UART0_UDP, NULL, false);
 }
 
 void init_task() {

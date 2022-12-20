@@ -5,8 +5,6 @@
  *
  */
 
-#include "adv_logger_ntp.h"
-
 #include <stdio.h>
 #include <espressif/esp_wifi.h>
 #include <espressif/esp_sta.h>
@@ -28,6 +26,8 @@
 
 #include <raven_ntp.h>
 
+#include "adv_logger_ntp.h"
+
 #define HEADER_LEN                          (23)
 #define UDP_LOG_LEN                         (1472)
 
@@ -44,11 +44,10 @@
 typedef struct _adv_logger_data {
     int socket;
     
-    char* udplogstring;
-    char* header;
-
-    int8_t log_type: 4;
     uint16_t udplogstring_len: 11;
+    int8_t log_type: 4;
+    bool with_header: 1;
+    
     uint16_t udplogstring_size: 11;
     bool is_new_line: 1;
     bool ready_to_send: 1;
@@ -56,6 +55,9 @@ typedef struct _adv_logger_data {
     
     TaskHandle_t xHandle;
     SemaphoreHandle_t log_sender_semaphore;
+    
+    char* udplogstring;
+    char* header;
     
     struct addrinfo* res;
 } adv_logger_data_t;
@@ -96,7 +98,11 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
         }
     }
     
-    char buffer[17];
+    char* buffer = NULL;
+    
+    if (adv_logger_data->with_header) {
+        buffer = malloc(17);
+    }
     
     for (size_t i = 0; i < len; i++) {
         // Auto convert CR to CRLF, ignore other LFs (compatible with Espressif SDK behaviour)
@@ -119,14 +125,14 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
             }
         }
         
-        if (adv_logger_data->is_new_line) {
+        if (adv_logger_data->with_header && adv_logger_data->is_new_line) {
             raven_ntp_get_log_time(buffer, 16);
             buffer[15] = ' ';
             buffer[16] = 0;
         }
         
         if (adv_logger_data->log_type >= 0) {
-            if (adv_logger_data->is_new_line) {
+            if (adv_logger_data->with_header && adv_logger_data->is_new_line) {
                 for (int j = 0; j < 16; j++) {
                     uart_putc(adv_logger_data->log_type, buffer[j]);
                 }
@@ -138,7 +144,9 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
         if (adv_logger_data->ready_to_send && is_adv_logger_data) {
             if (adv_logger_data->is_new_line) {
                 if (!adv_logger_data->is_buffered) {
-                    adv_logger_data->udplogstring_size += 40;
+                    if (adv_logger_data->with_header) {
+                        adv_logger_data->udplogstring_size += 40;
+                    }
                     if (adv_logger_data->udplogstring_size > UDP_LOG_LEN) {
                         is_adv_logger_data = false;
                         continue;
@@ -154,10 +162,12 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
                 }
                 
                 adv_logger_data->udplogstring[adv_logger_data->udplogstring_len] = 0;
-                strcat(strcat(strcat(adv_logger_data->udplogstring, buffer), adv_logger_data->header), " ");
+                if (adv_logger_data->with_header) {
+                    strcat(strcat(strcat(adv_logger_data->udplogstring, buffer), adv_logger_data->header), " ");
+                }
                 adv_logger_data->udplogstring_len = strlen(adv_logger_data->udplogstring);
             }
-
+            
             adv_logger_data->udplogstring[adv_logger_data->udplogstring_len] = ((char*) ptr)[i];
             adv_logger_data->udplogstring_len++;
         }
@@ -167,6 +177,10 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
         if (((char*) ptr)[i] == '\n') {
             adv_logger_data->is_new_line = true;
         }
+    }
+    
+    if (buffer) {
+        free(buffer);
     }
     
     if (!adv_logger_data->is_buffered && adv_logger_data->ready_to_send && adv_logger_data->udplogstring_len > 0 && xSemaphoreTake(adv_logger_data->log_sender_semaphore, 0) == pdTRUE) {
@@ -195,7 +209,7 @@ static void adv_logger_buffered_task() {
             
             i = 0;
         }
-
+        
         if (i == 8) {
             i = 0;
         }
@@ -213,12 +227,14 @@ static void adv_logger_init_task(void* args) {
         vTaskDelay(pdMS_TO_TICKS(200));
     }
     
-    sdk_wifi_get_ip_info(STATION_IF, &info);
-    
-    uint8_t macaddr[6];
-    sdk_wifi_get_macaddr(STATION_IF, macaddr);
-    snprintf(adv_logger_data->header, HEADER_LEN, IPSTR"-%02X%02X%02X", IP2STR(&info.ip), macaddr[3], macaddr[4], macaddr[5]);
-    
+    if (adv_logger_data->with_header) {
+        sdk_wifi_get_ip_info(STATION_IF, &info);
+        
+        uint8_t macaddr[6];
+        sdk_wifi_get_macaddr(STATION_IF, macaddr);
+        snprintf(adv_logger_data->header, HEADER_LEN, IPSTR"-%02X%02X%02X", IP2STR(&info.ip), macaddr[3], macaddr[4], macaddr[5]);
+    }
+        
     const struct addrinfo hints = {
         .ai_family = AF_UNSPEC,
         .ai_socktype = SOCK_DGRAM,
@@ -284,7 +300,7 @@ int adv_logger_remove() {
 }
 #endif
 
-void adv_logger_init(const int log_type, char* dest_addr) {
+void adv_logger_init(const uint8_t log_type, char* dest_addr, const bool with_header) {
 #ifdef ADV_LOGGER_REMOVE
     adv_logger_remove();
     
@@ -299,6 +315,7 @@ void adv_logger_init(const int log_type, char* dest_addr) {
         memset(adv_logger_data, 0, sizeof(*adv_logger_data));
         
         adv_logger_data->log_type = log_type - ADV_LOGGER_UART0;
+        adv_logger_data->with_header = with_header;
 
         if (adv_logger_data->log_type > ADV_LOGGER_UART0_UDP) {
             adv_logger_data->log_type -= 3;
@@ -311,7 +328,9 @@ void adv_logger_init(const int log_type, char* dest_addr) {
 
         if (log_type > ADV_LOGGER_UART1) {
             adv_logger_data->socket = -1;
-            adv_logger_data->header = malloc(HEADER_LEN);
+            if (with_header) {
+                adv_logger_data->header = malloc(HEADER_LEN);
+            }
             if (!adv_logger_data->is_buffered) {
                 adv_logger_data->log_sender_semaphore = xSemaphoreCreateMutex();
             }
@@ -325,7 +344,7 @@ void adv_logger_init(const int log_type, char* dest_addr) {
                 snprintf(destination, strlen(ADV_LOGGER_DEFAULT_DESTINATION) + 1, ADV_LOGGER_DEFAULT_DESTINATION);
             }
             
-            xTaskCreate(adv_logger_init_task, "Log", ADV_LOGGER_INIT_TASK_SIZE, (void*) destination, ADV_LOGGER_INIT_TASK_PRIORITY, NULL);
+            xTaskCreate(adv_logger_init_task, "LOG", ADV_LOGGER_INIT_TASK_SIZE, (void*) destination, ADV_LOGGER_INIT_TASK_PRIORITY, NULL);
         }
         
         set_write_stdout(adv_logger_write);
