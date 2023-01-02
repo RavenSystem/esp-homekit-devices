@@ -189,7 +189,7 @@ static void standard_fatal_exception_handler_inner(uint32_t *sp, bool registers_
 */
 static void second_fatal_exception_handler_inner(uint32_t *sp, bool registers_saved_on_stack) {
     dump_excinfo();
-    printf("Second fatal exception occured inside fatal exception handler. Can't continue.\n");
+    printf("Second fatal exception handler inner\n");
     post_crash_reset();
 }
 
@@ -232,7 +232,7 @@ void dump_heapinfo(void)
    IRAM.
 */
 static void abort_handler_inner(uint32_t *caller, uint32_t *sp) {
-    printf("abort() invoked at %p.\n", caller);
+    printf("abort() at %p\n", caller);
     dump_stack(sp);
     dump_heapinfo();
     post_crash_reset();

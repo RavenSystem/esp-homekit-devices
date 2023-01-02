@@ -79,8 +79,8 @@ void sdk_eagle_auth_done() {
 
     uint32_t channel = cnx_node->channel->num;
     char *ssid = (char *)sdk_g_ic.s.sta_ssid.ssid;
-    printf("\nconnected with %s, channel %d\n", ssid, channel);
-
+    printf("Connected to %s Ch%d\n", ssid, channel);
+    
     RTCMEM_SYSTEM[61] = 0x00010000 | channel;
 
     ETSTimer *timer = &netif_info->timer;
@@ -96,7 +96,7 @@ void sdk_eagle_auth_done() {
         return;
 
     if (sdk_dhcpc_flag != DHCP_STOPPED) {
-        printf("dhcp client start...\n");
+        printf("DHCP client start\n");
         LOCK_TCPIP_CORE();
         netif_set_up(netif);
         dhcp_start(netif);
@@ -105,7 +105,7 @@ void sdk_eagle_auth_done() {
     }
 
     if (ip4_addr_isany_val(sdk_info.sta_ipaddr)) {
-        printf("expected a static ip address?\n");
+        printf("Expected a static IP address?\n");
         return;
     }
 

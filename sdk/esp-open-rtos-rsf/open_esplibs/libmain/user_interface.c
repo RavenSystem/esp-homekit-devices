@@ -182,7 +182,7 @@ uint8_t sdk_system_get_boot_version(void) {
 static bool _check_boot_version(void) {
     uint8_t ver = sdk_system_get_boot_version();
     if (ver < 3 || ver == 31) {
-        printf("failed: need boot >= 1.3\n");
+        printf("! Need boot >= 1.3\n");
         return false;
     }
     return true;
@@ -261,11 +261,11 @@ bool sdk_system_restart_enhance(uint8_t bin_type, uint32_t bin_addr) {
         return true;
     } else {
         if (bin_type != 1) {
-            printf("don't supported type.\n");
+            printf("don't supported type\n");
             return false;
         }
         if (!sdk_system_get_test_result()) {
-            printf("test already passed.\n");
+            printf("test already passed\n");
             return false;
         }
        
@@ -479,7 +479,7 @@ void sdk_system_station_got_ip_set(struct ip4_addr *ip, struct ip4_addr *mask, s
     uint32_t gpio_mask;
 
     sdk_g_ic.v.station_netif_info->connect_status = STATION_GOT_IP;
-    printf("ip:%d.%d.%d.%d,mask:%d.%d.%d.%d,gw:%d.%d.%d.%d", ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3], mask_bytes[0], mask_bytes[1], mask_bytes[2], mask_bytes[3], gw_bytes[0], gw_bytes[1], gw_bytes[2], gw_bytes[3]);
+    printf("IP:%d.%d.%d.%d/%d.%d.%d.%d GW:%d.%d.%d.%d", ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3], mask_bytes[0], mask_bytes[1], mask_bytes[2], mask_bytes[3], gw_bytes[0], gw_bytes[1], gw_bytes[2], gw_bytes[3]);
     printf("\n");
     if ((sdk_g_ic.s.wifi_led_enable == 1) && (sdk_g_ic.s.wifi_mode == 1)) {
         sdk_os_timer_disarm(&sdk_sta_con_timer);

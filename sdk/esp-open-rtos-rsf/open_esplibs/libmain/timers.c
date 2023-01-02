@@ -31,7 +31,7 @@ void sdk_os_timer_setfn(ETSTimer *ptimer, ETSTimerFunc *pfunction, void *parg) {
                 }
                 if (ptimer->timer_handle) {
                     if (!xTimerDelete(ptimer->timer_handle, 50)) {
-                        printf("Timer Delete Failed\n");
+                        printf("! Timer Delete\n");
                     }
                     armed_timer_count--;
                 }
@@ -91,14 +91,14 @@ void sdk_os_timer_arm(ETSTimer *ptimer, uint32_t milliseconds, bool repeat_flag)
         xTimerChangePeriod(ptimer->timer_handle, milliseconds/10, 10);
     }
     if (!xTimerStart(ptimer->timer_handle, 50)) {
-        printf("Timer Start Failed\n");
+        printf("! Timer Start\n");
     }
 }
 
 void sdk_os_timer_disarm(ETSTimer *ptimer) {
     if (ptimer->timer_handle) {
         if (!xTimerStop(ptimer->timer_handle, 50)) {
-            printf("Timer Stop Failed\n");
+            printf("! Timer Stop\n");
         }
     }
 }
