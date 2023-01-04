@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect OTA Installer
  *
- * Copyright 2020-2022 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2020-2023 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -10,6 +10,6 @@
 
 #include "../common/common_headers.h"
 
-#define INSTALLER_VERSION           "6.5.4"
+#define INSTALLER_VERSION           "6.6.0"
 
 #endif  // __HAA_OTA_HEADER_H__

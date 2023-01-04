@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect OTA Update
  *
- * Copyright 2020-2022 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2020-2023 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -83,7 +83,6 @@ typedef struct _client {
 
 
 static void wifi_config_station_connect();
-static void wifi_config_softap_start();
 
 void setup_mode_reset_sysparam() {
     sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
@@ -290,7 +289,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
             return;
         }
         
-        if (xTaskCreate(wifi_smart_connect_task, "wsm", 512, (void*) best_bssid, (tskIDLE_PRIORITY + 1), NULL) == pdPASS) {
+        if (xTaskCreate(wifi_smart_connect_task, "WSM", 512, (void*) best_bssid, (tskIDLE_PRIORITY + 1), NULL) == pdPASS) {
             if (wifi_bssid) {
                 free(wifi_bssid);
             }
@@ -316,7 +315,7 @@ static void wifi_config_smart_connect() {
     int8_t wifi_mode = 0;
     sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
     
-    if (wifi_mode < 2 || xTaskCreate(wifi_scan_sc_task, "sma", 384, NULL, (tskIDLE_PRIORITY + 2), NULL) != pdPASS) {
+    if (wifi_mode < 2 || xTaskCreate(wifi_scan_sc_task, "SMA", 384, NULL, (tskIDLE_PRIORITY + 2), NULL) != pdPASS) {
         if (!wifi_config_got_ip()) {
             sdk_wifi_station_connect();
         }
@@ -403,7 +402,7 @@ static void wifi_scan_task(void *arg) {
 static void wifi_config_server_on_settings(client_t *client) {
     esp_timer_change_period_forced(context->auto_reboot_timer, AUTO_REBOOT_LONG_TIMEOUT);
     
-    xTaskCreate(wifi_scan_task, "sca", 384, NULL, (tskIDLE_PRIORITY + 0), NULL);
+    xTaskCreate(wifi_scan_task, "SCA", 384, NULL, (tskIDLE_PRIORITY + 0), NULL);
     
     static const char http_prologue[] =
         "HTTP/1.1 200 \r\n"
@@ -753,7 +752,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
         }
     }
     
-    INFO("\nReboot");
+    INFO("Reboot");
     vTaskDelay(MS_TO_TICKS(1000));
     
 #ifndef HAABOOT
@@ -817,7 +816,7 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
                 vTaskDelete(context->sta_connect_timeout);
             }
             
-            xTaskCreate(wifi_config_server_on_settings_update_task, "upd", 512, client, (tskIDLE_PRIORITY + 1), NULL);
+            xTaskCreate(wifi_config_server_on_settings_update_task, "UDP", 512, client, (tskIDLE_PRIORITY + 1), NULL);
             return 0;
         
         /*
@@ -844,7 +843,7 @@ static http_parser_settings wifi_config_http_parser_settings = {
 };
 
 static void http_task(void *arg) {
-    INFO("Start HTTP");
+    INFO("Start WEB");
 
     context->end_setup = false;
     
@@ -907,22 +906,22 @@ static void http_task(void *arg) {
             lwip_close(client->fd);
             break;
         }
-
-        INFO("Disconnected");
-
+        
+        //INFO("Conn closed");
+        
         lwip_close(client->fd);
         client_free(client);
     }
     
     context->end_setup = false;
     
-    INFO("Stop HTTP");
+    INFO("Stop WEB");
     vTaskDelete(NULL);
 }
 
 static void wifi_config_softap_start() {
     sdk_wifi_set_opmode(STATIONAP_MODE);
-
+    
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(SOFTAP_IF, macaddr);
 
@@ -956,11 +955,11 @@ static void wifi_config_softap_start() {
     INFO("Start DHCP");
     dhcpserver_start(&first_client_ip, 4);
     
-    xTaskCreate(http_task, "htp", 640, NULL, (tskIDLE_PRIORITY + 1), NULL);
+    xTaskCreate(http_task, "WEB", 640, NULL, (tskIDLE_PRIORITY + 1), NULL);
 }
 
 static void auto_reboot_run() {
-    INFO("\nAuto Reboot\n");
+    INFO("Auto Reboot");
 
     vTaskDelay(MS_TO_TICKS(500));
     
@@ -1074,7 +1073,7 @@ static uint8_t wifi_config_connect(const uint8_t phy) {
             wifi_config_toggle_phy_mode(phy);
             
             if (wifi_mode == 4) {
-                xTaskCreate(wifi_scan_sc_task, "sma", 384, NULL, (tskIDLE_PRIORITY + 2), NULL);
+                xTaskCreate(wifi_scan_sc_task, "SMA", 384, NULL, (tskIDLE_PRIORITY + 2), NULL);
             } else {
                 wifi_config_smart_connect();
             }
@@ -1112,7 +1111,7 @@ static void wifi_config_station_connect() {
         INFO("* NORMAL");
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
         
-        xTaskCreate(wifi_config_sta_connect_timeout_task, "sta", 640, NULL, (tskIDLE_PRIORITY + 1), &context->sta_connect_timeout);
+        xTaskCreate(wifi_config_sta_connect_timeout_task, "STI", 640, NULL, (tskIDLE_PRIORITY + 1), &context->sta_connect_timeout);
         
     } else {
         INFO("* SETUP");
@@ -1131,6 +1130,10 @@ static void wifi_config_station_connect() {
 }
 
 void wifi_config_init(const char *ssid_prefix, TaskHandle_t xHandle) {
+    INFO("Wifi init");
+    
+    sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
+    
     context = malloc(sizeof(wifi_config_context_t));
     memset(context, 0, sizeof(*context));
 
@@ -1138,5 +1141,5 @@ void wifi_config_init(const char *ssid_prefix, TaskHandle_t xHandle) {
     
     context->ota_task = xHandle;
     
-    xTaskCreate(wifi_config_station_connect, "wco", 512, NULL, (tskIDLE_PRIORITY + 1), NULL);
+    xTaskCreate(wifi_config_station_connect, "WCO", 512, NULL, (tskIDLE_PRIORITY + 1), NULL);
 }

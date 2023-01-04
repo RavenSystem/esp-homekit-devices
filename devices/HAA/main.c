@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * Copyright 2019-2022 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2023 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -642,8 +642,8 @@ void reboot_task() {
 }
 
 void reboot_haa() {
-    if (xTaskCreate(reboot_task, "Reb", REBOOT_TASK_SIZE, NULL, REBOOT_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("New Reb");
+    if (xTaskCreate(reboot_task, "REB", REBOOT_TASK_SIZE, NULL, REBOOT_TASK_PRIORITY, NULL) != pdPASS) {
+        ERROR("New REB");
         homekit_remove_oldest_client();
     }
 }
@@ -1031,9 +1031,9 @@ void homekit_characteristic_notify_safe(homekit_characteristic_t *ch) {
 }
 
 void hkc_custom_setup_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
-    if (strncmp(value.string_value, CUSTOM_TRIGGER_COMMAND, strlen(CUSTOM_TRIGGER_COMMAND)) == 0) {
-        const unsigned int option = value.string_value[strlen(CUSTOM_TRIGGER_COMMAND)];
-        INFO("<0> -> MODE %c", value.string_value[strlen(CUSTOM_TRIGGER_COMMAND)]);
+    if (strncmp(value.string_value, CUSTOM_HAA_COMMAND, strlen(CUSTOM_HAA_COMMAND)) == 0) {
+        const unsigned int option = value.string_value[strlen(CUSTOM_HAA_COMMAND)];
+        INFO("<0> -> MODE %c", value.string_value[strlen(CUSTOM_HAA_COMMAND)]);
         
         homekit_characteristic_notify(ch);
         
@@ -1080,7 +1080,7 @@ void pm_custom_consumption_reset(ch_group_t* ch_group) {
     }
     
     led_blink(1);
-    INFO("<%i> -> Consumption Reset", ch_group->serv_index);
+    INFO("<%i> -> KWh Reset", ch_group->serv_index);
     
     time_t time = raven_ntp_get_time_t();
     
@@ -1099,7 +1099,7 @@ void pm_custom_consumption_reset(ch_group_t* ch_group) {
 }
 
 void hkc_custom_consumption_reset_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
-    if (strcmp(value.string_value, CUSTOM_TRIGGER_COMMAND) == 0) {
+    if (strcmp(value.string_value, CUSTOM_HAA_COMMAND) == 0) {
         ch_group_t* ch_group = ch_group_find(ch);
         pm_custom_consumption_reset(ch_group);
     }
@@ -1409,7 +1409,7 @@ void power_monitor_task(void* args) {
     power = hwrand() % 70;
 #endif //POWER_MONITOR_DEBUG
     
-    INFO("<%i> -> PM V = %g, C = %g, P = %g", ch_group->serv_index, voltage, current, power);
+    INFO("<%i> -> PM V=%g, C=%g, P=%g", ch_group->serv_index, voltage, current, power);
     
     if (pm_sensor_type < 2) {
         if (current < 0) {
@@ -1466,7 +1466,7 @@ void power_monitor_task(void* args) {
         }
         
         const float consumption = ch_group->ch[3]->value.float_value + ((power * PM_POLL_PERIOD) / 3600000.f);
-        INFO("<%i> PM KWh = %1.7g", ch_group->serv_index, consumption);
+        INFO("<%i> PM KWh=%1.7g", ch_group->serv_index, consumption);
         
         do_wildcard_actions(ch_group, 3, consumption);
         
@@ -3620,8 +3620,8 @@ void autodimmer_call(homekit_characteristic_t* ch0, const homekit_value_t value)
             lightbulb_group->armed_autodimmer = false;
             esp_timer_stop(LIGHTBULB_AUTODIMMER_TIMER);
             
-            if (xTaskCreate(autodimmer_task, "Dim", AUTODIMMER_TASK_SIZE, (void*) ch0, AUTODIMMER_TASK_PRIORITY, NULL) != pdPASS) {
-                ERROR("<%i> New Dim", ch_group->serv_index);
+            if (xTaskCreate(autodimmer_task, "DIM", AUTODIMMER_TASK_SIZE, (void*) ch0, AUTODIMMER_TASK_PRIORITY, NULL) != pdPASS) {
+                ERROR("<%i> New DIM", ch_group->serv_index);
                 homekit_remove_oldest_client();
             }
         } else {
@@ -4087,8 +4087,8 @@ void process_fan_task(void* args) {
 }
 
 void process_fan_timer(TimerHandle_t xTimer) {
-    if (xTaskCreate(process_fan_task, "Fan", PROCESS_FAN_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_FAN_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("New Fan");
+    if (xTaskCreate(process_fan_task, "FAN", PROCESS_FAN_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_FAN_TASK_PRIORITY, NULL) != pdPASS) {
+        ERROR("New FAN");
         homekit_remove_oldest_client();
         esp_timer_start(xTimer);
     }
@@ -5227,7 +5227,7 @@ void recv_uart_timer_worker(TimerHandle_t xTimer) {
     if (uart_rxfifo_wait(0, 0) > 0 &&
         main_config.uart_buffer_len == 0 &&
         !homekit_is_pairing()) {
-        xTaskCreate(recv_uart_task, "ru", RECV_UART_TASK_SIZE, NULL, RECV_UART_TASK_PRIORITY, NULL);
+        xTaskCreate(recv_uart_task, "RUA", RECV_UART_TASK_SIZE, NULL, RECV_UART_TASK_PRIORITY, NULL);
     }
 }
 
@@ -6832,7 +6832,7 @@ void run_homekit_server() {
 }
 
 void printf_header() {
-    INFO("\n\nHome Accessory Architect "HAA_FIRMWARE_VERSION""HAA_FIRMWARE_BETA_REVISION"\n(c) 2018-2022 José A. Jiménez Campos\n");
+    INFO("\n\nHome Accessory Architect "HAA_FIRMWARE_VERSION""HAA_FIRMWARE_BETA_REVISION"\n(c) 2018-2023 José A. Jiménez Campos\n");
     
 #ifdef HAA_DEBUG
     INFO("HAA DEBUG ENABLED\n");
@@ -11693,7 +11693,7 @@ void normal_mode_init() {
     
     //main_config.wifi_status = WIFI_STATUS_CONNECTING;     // Not needed
     
-    wifi_config_init("HAA", NULL, run_homekit_server, custom_hostname, 0);
+    wifi_config_init("HAA", run_homekit_server, custom_hostname, 0);
     
     led_blink(2);
     
@@ -11766,7 +11766,9 @@ void init_task() {
     // Sysparam starter
     sysparam_status_t status = sysparam_init(SYSPARAMSECTOR, 0);
     if (status != SYSPARAM_OK) {
-        setup_mode_reset_sysparam();
+        rboot_set_temp_rom(1);
+        vTaskDelay(MS_TO_TICKS(200));
+        sdk_system_restart();
     }
     
     uint8_t macaddr[6];
@@ -11788,7 +11790,7 @@ void init_task() {
         
         printf_header();
         INFO("SETUP");
-        wifi_config_init("HAA", NULL, NULL, main_config.name_value, param);
+        wifi_config_init("HAA", NULL, main_config.name_value, param);
     }
     
     sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &haa_setup);
@@ -11798,13 +11800,13 @@ void init_task() {
         reset_uart();
         
         if (wifi_ssid) {
-            wifi_config_init("HAA", NULL, wifi_done, main_config.name_value, 0);
+            wifi_config_init("HAA", wifi_done, main_config.name_value, 0);
         }
         
         printf_header();
         
         const int irrf_capture_gpio = haa_setup;
-        xTaskCreate(irrf_capture_task, "cap", IRRF_CAPTURE_TASK_SIZE, (void*) irrf_capture_gpio, IRRF_CAPTURE_TASK_PRIORITY, NULL);
+        xTaskCreate(irrf_capture_task, "CAP", IRRF_CAPTURE_TASK_SIZE, (void*) irrf_capture_gpio, IRRF_CAPTURE_TASK_PRIORITY, NULL);
         
     } else if (haa_setup > 0 || !wifi_ssid) {
         enter_setup(0);
@@ -11835,7 +11837,7 @@ void init_task() {
             
             name.value = HOMEKIT_STRING(main_config.name_value, .is_static=true);
             
-            xTaskCreate(normal_mode_init, "ini", INITIAL_SETUP_TASK_SIZE, NULL, INITIAL_SETUP_TASK_PRIORITY, NULL);
+            xTaskCreate(normal_mode_init, "NOM", INITIAL_SETUP_TASK_SIZE, NULL, INITIAL_SETUP_TASK_PRIORITY, NULL);
             
         } else {
             enter_setup(1);
@@ -11849,7 +11851,7 @@ void init_task() {
     vTaskDelete(NULL);
 }
 
-void user_init(void) {
+void user_init() {
     // GPIO Init
     for (int i = 0; i < 17; i++) {
         if (i == 6) {
@@ -11858,11 +11860,6 @@ void user_init(void) {
         
         gpio_enable(i, GPIO_INPUT);
     }
-    
-    sdk_wifi_station_set_auto_connect(false);
-    sdk_wifi_set_opmode(STATION_MODE);
-    sdk_wifi_station_disconnect();
-    sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
     
     xTaskCreate(init_task, "INI", 512, NULL, (tskIDLE_PRIORITY + 2), NULL);
 }

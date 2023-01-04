@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect OTA Installer
  *
- * Copyright 2020-2022 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2020-2023 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -46,7 +46,23 @@ int tries_partial_count;
 
 TaskHandle_t xHandle = NULL;
 
+void init_task() {
+    uart_set_baud(0, 115200);
+    adv_logger_init(ADV_LOGGER_UART0_UDP_BUFFERED, NULL);
+    
+    sysparam_status_t status = sysparam_init(SYSPARAMSECTOR, 0);
+    if (status != SYSPARAM_OK) {
+        setup_mode_reset_sysparam();
+    }
+    
+    wifi_config_init("HAA", xHandle);
+    
+    vTaskDelete(NULL);
+}
+
 void ota_task(void *arg) {
+    xTaskCreate(init_task, "INI", 512, NULL, (tskIDLE_PRIORITY + 2), NULL);
+    
     vTaskSuspend(NULL);
     
     vTaskDelay(MS_TO_TICKS(1000));
@@ -274,21 +290,7 @@ void ota_task(void *arg) {
     ota_reboot();
 }
 
-void init_task() {
-    uart_set_baud(0, 115200);
-    adv_logger_init(ADV_LOGGER_UART0_UDP_BUFFERED, NULL);
-    
-    sysparam_status_t status = sysparam_init(SYSPARAMSECTOR, 0);
-    if (status != SYSPARAM_OK) {
-        setup_mode_reset_sysparam();
-    }
-    
-    wifi_config_init("HAA", xHandle);
-    
-    vTaskDelete(NULL);
-}
-
-void user_init(void) {
+void user_init() {
     // GPIO Init
     for (int i = 0; i < 17; i++) {
         if (i == 6) {
@@ -300,11 +302,5 @@ void user_init(void) {
         gpio_enable(i, GPIO_INPUT);
     }
     
-    sdk_wifi_station_set_auto_connect(false);
-    sdk_wifi_set_opmode(STATION_MODE);
-    sdk_wifi_station_disconnect();
-    sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
-    
-    xTaskCreate(ota_task, "ota", 2024, NULL, (tskIDLE_PRIORITY + 1), &xHandle);
-    xTaskCreate(init_task, "ini", 512, NULL, (tskIDLE_PRIORITY + 2), NULL);
+    xTaskCreate(ota_task, "OTA", 2048, NULL, (tskIDLE_PRIORITY + 1), &xHandle);
 }

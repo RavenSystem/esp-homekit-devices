@@ -1,7 +1,7 @@
 /*
 * Home Accessory Architect OTA Installer
 *
-* Copyright 2020-2022 José Antonio Jiménez Campos (@RavenSystem)
+* Copyright 2020-2023 José Antonio Jiménez Campos (@RavenSystem)
 *
 */
 
@@ -477,8 +477,6 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
         
-        INFO("");
-        
         if (result >= 0) {
             const struct timeval rcvtimeout = { 60, 0 };
             setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
@@ -683,8 +681,6 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
         free(recv_buf);
     }
     
-    INFO("");
-    
     switch (ota_conn_result) {
         case 0:
         case -1:
@@ -787,7 +783,7 @@ int ota_verify_sign(int start_sector, int filesize, uint8_t* signature) {
     int verify = 0;
     wc_ecc_verify_hash(signature, SIGNSIZE, hash, HASHSIZE, &verify, &public_key);
     
-    INFO(">>> Result %s", verify == 1 ? "OK" : "ERROR");
+    INFO(">>> Result %s", verify == 1 ? "OK" : "ERR");
 
     return verify - 1;
 }
