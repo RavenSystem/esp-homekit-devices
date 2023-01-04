@@ -146,13 +146,13 @@ void IRAM sdk_user_start(void) {
     uint32_t buf32[sizeof(struct sdk_g_ic_saved_st) / 4];
     uint8_t *buf8 = (uint8_t *)buf32;
     uint32_t flash_speed_divisor;
-    uint32_t flash_sectors;
+    //uint32_t flash_sectors;
     uint32_t flash_size;
-    int boot_slot;
+    //int boot_slot;
     //uint32_t cksum_magic;
     //uint32_t cksum_len;
     //uint32_t cksum_value;
-    uint32_t ic_flash_addr;
+    //uint32_t ic_flash_addr;
     //uint32_t sysparam_addr;
     //sysparam_status_t status;
 
@@ -202,7 +202,7 @@ void IRAM sdk_user_start(void) {
         default:   // Invalid -- Assume 4 Mbit (512 KByte)
             flash_size = 524288;
     }
-    flash_sectors = flash_size / sdk_flashchip.sector_size;
+    //flash_sectors = flash_size / sdk_flashchip.sector_size;
     sdk_flashchip.chip_size = flash_size;
     set_spi0_divisor(flash_speed_divisor);
     
@@ -212,13 +212,13 @@ void IRAM sdk_user_start(void) {
     }
      */
     
-    sdk_SPIRead(flash_size - 4096, buf32, BOOT_INFO_SIZE);
-    boot_slot = buf8[0] ? 1 : 0;
+    //sdk_SPIRead(flash_size - 4096, buf32, BOOT_INFO_SIZE);
+    //boot_slot = buf8[0] ? 1 : 0;
     //cksum_magic = buf32[1];
     //cksum_len = buf32[3 + boot_slot];
     //cksum_value = buf32[5 + boot_slot];
-    ic_flash_addr = (flash_sectors - 3 + boot_slot) * sdk_flashchip.sector_size;
-    sdk_SPIRead(ic_flash_addr, buf32, sizeof(struct sdk_g_ic_saved_st));
+    //ic_flash_addr = (flash_sectors - 3 + boot_slot) * sdk_flashchip.sector_size;
+    //sdk_SPIRead(ic_flash_addr, buf32, sizeof(struct sdk_g_ic_saved_st));
     Cache_Read_Enable(0, 0, 1);
     zero_bss();
     sdk_os_install_putc1(default_putc);
@@ -242,7 +242,9 @@ void IRAM sdk_user_start(void) {
         //FIXME: should we halt here? (original SDK code doesn't)
     }
      */
-    memcpy(&sdk_g_ic.s, buf32, sizeof(struct sdk_g_ic_saved_st));
+    
+    //memcpy(&sdk_g_ic.s, buf32, sizeof(struct sdk_g_ic_saved_st));
+    memset(&sdk_g_ic.s, 0, sizeof(struct sdk_g_ic_saved_st));
 
     // By default, put the sysparam region just below the config sectors at the
     // top of the flash space, and allowing one extra sector spare.
@@ -324,6 +326,7 @@ static void init_networking(sdk_phy_info_t *phy_info, uint8_t *mac_addr) {
 
 // .Lfunc007 -- .irom0.text+0x148
 static void init_g_ic(void) {
+    /*
     if (sdk_g_ic.s.wifi_mode == 0xff) {
         sdk_g_ic.s.wifi_mode = 2;
     }
@@ -358,6 +361,14 @@ static void init_g_ic(void) {
     if (sdk_g_ic.s.phy_mode < 1 || sdk_g_ic.s.phy_mode > 3) {
        sdk_g_ic.s.phy_mode = PHY_MODE_11N;
     }
+    */
+    
+    sdk_wifi_softap_set_default_ssid();
+    sdk_g_ic.s._unknown30d = 1;
+    sdk_g_ic.s._unknown544 = 100;
+    sdk_g_ic.s._unknown310 = 4;
+    sdk_g_ic.s.ap_number = 1;
+    sdk_g_ic.s.phy_mode = PHY_MODE_11N;
 }
 
 // .irom0.text+0x398
@@ -376,21 +387,28 @@ extern void *xPortSupervisorStackPointer;
 
 // .irom0.text+0x474
 void sdk_user_init_task(void *params) {
-    int phy_ver, pp_ver;
-
+    //int phy_ver, pp_ver;
+    
     /* The start up stack is not used after scheduling has started, so all of
      * the top area of RAM which was stack can be used for the dynamic heap. */
     xPortSupervisorStackPointer = (void *)0x40000000;
-
+    
     sdk_ets_timer_init();
+    
+    /*
     printf("\nESP-Open-SDK ver: %s compiled @ %s %s\n", OS_VERSION_STR, __DATE__, __TIME__);
     phy_ver = RTCMEM_BACKUP[RTCMEM_BACKUP_PHY_VER] >> 16;
     printf("phy ver: %d, ", phy_ver);
     pp_ver = RTCMEM_SYSTEM[RTCMEM_SYSTEM_PP_VER];
     printf("pp ver: %d.%d\n\n", (pp_ver >> 8) & 0xff, pp_ver & 0xff);
+    */
+    
+    sdk_wifi_mode_set(sdk_g_ic.s.wifi_mode);
+    
     user_init();
     sdk_user_init_flag = 1;
-    sdk_wifi_mode_set(sdk_g_ic.s.wifi_mode);
+    
+    /* Commented because now initial mode is 0 (NULL_MODE), so wifi is disabled at boot.
     if (sdk_g_ic.s.wifi_mode == STATION_MODE) {
         sdk_wifi_station_start();
         LOCK_TCPIP_CORE();
@@ -413,6 +431,8 @@ void sdk_user_init_task(void *params) {
     if (sdk_wifi_station_get_auto_connect()) {
         sdk_wifi_station_connect();
     }
+    */
+    
     vTaskDelete(NULL);
 }
 
@@ -468,10 +488,10 @@ static __attribute__((noinline)) void user_start_phase2(void) {
     for ( ctor = &__init_array_start; ctor != &__init_array_end; ++ctor) {
         (*ctor)();
     }
-
+    
     tcpip_init(NULL, NULL);
     sdk_wdt_init();
-    xTaskCreate(sdk_user_init_task, "uiT", 1024, 0, 14, &sdk_xUserTaskHandle);
+    xTaskCreate(sdk_user_init_task, NULL, configMINIMAL_STACK_SIZE, NULL, 14, &sdk_xUserTaskHandle);
     vTaskStartScheduler();
 }
 /*
