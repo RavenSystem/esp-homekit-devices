@@ -1,7 +1,7 @@
 /*
  * Advanced HLW8012 Driver
  *
- * Copyright 2020-2022 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2020-2023 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -169,7 +169,7 @@ static void IRAM adv_hlw_cf_callback(const uint8_t gpio) {
     gpio_set_interrupt(gpio, adv_hlw_unit->interrupt_type, adv_hlw_cf_callback);
 }
 
-int adv_hlw_unit_create(const int gpio_cf, const int gpio_cf1, const int gpio_sel, const unsigned int current_mode, const unsigned int interrupt_type, const bool pullup) {
+int adv_hlw_unit_create(int gpio_cf, int gpio_cf1, int gpio_sel, const unsigned int current_mode, const unsigned int interrupt_type) {
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio_cf);
     
     if (!adv_hlw_unit) {
@@ -177,9 +177,8 @@ int adv_hlw_unit_create(const int gpio_cf, const int gpio_cf1, const int gpio_se
         
         if (!adv_hlw_unit) {
             adv_hlw_unit = adv_hlw_find_by_gpio(gpio_sel);
-        
+            
             if (!adv_hlw_unit) {
-
                 adv_hlw_unit = malloc(sizeof(adv_hlw_unit_t));
                 memset(adv_hlw_unit, 0, sizeof(*adv_hlw_unit));
                 
@@ -194,18 +193,40 @@ int adv_hlw_unit_create(const int gpio_cf, const int gpio_cf1, const int gpio_se
                 adv_hlw_units = adv_hlw_unit;
                 
                 if (gpio_cf > -1) {
+                    int pullup = false;
+                    if (gpio_cf >= 100) {
+                        pullup = true;
+                        gpio_cf -= 100;
+                    }
+                    
                     gpio_enable(gpio_cf, GPIO_INPUT);
                     gpio_set_pullup(gpio_cf, pullup, pullup);
                     gpio_set_interrupt(gpio_cf, interrupt_type, adv_hlw_cf_callback);
                 }
                 
                 if (gpio_cf1 > -1) {
+                    int pullup = false;
+                    if (gpio_cf1 >= 100) {
+                        pullup = true;
+                        gpio_cf1 -= 100;
+                    }
+                    
                     gpio_enable(gpio_cf1, GPIO_INPUT);
                     gpio_set_pullup(gpio_cf1, pullup, pullup);
                     gpio_set_interrupt(gpio_cf1, interrupt_type, adv_hlw_cf1_callback);
                     
                     if (gpio_sel > -1) {
-                        gpio_enable(gpio_sel, GPIO_OUTPUT);
+                        int gpio_open_drain = false;
+                        if (gpio_sel >= 100) {
+                            gpio_open_drain = true;
+                            gpio_sel -= 100;
+                        }
+                        
+                        if (gpio_open_drain) {
+                            gpio_enable(gpio_sel, GPIO_OUT_OPEN_DRAIN);
+                        } else {
+                            gpio_enable(gpio_sel, GPIO_OUTPUT);
+                        }
                         gpio_write(gpio_sel, adv_hlw_unit->current_mode);
                     }
                 }

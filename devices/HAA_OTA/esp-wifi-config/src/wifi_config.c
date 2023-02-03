@@ -920,7 +920,10 @@ static void http_task(void *arg) {
 }
 
 static void wifi_config_softap_start() {
+    LOCK_TCPIP_CORE();
     sdk_wifi_set_opmode(STATIONAP_MODE);
+    UNLOCK_TCPIP_CORE();
+    //sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
     
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(SOFTAP_IF, macaddr);
@@ -1055,7 +1058,10 @@ static uint8_t wifi_config_connect(const uint8_t phy) {
                 sta_config.bssid_set = 0;
             }
 
+            LOCK_TCPIP_CORE();
             sdk_wifi_set_opmode(STATION_MODE);
+            UNLOCK_TCPIP_CORE();
+            //sdk_wifi_set_sleep_type(WIFI_SLEEP_MODEM);
             sdk_wifi_station_set_config(&sta_config);
             sdk_wifi_station_set_auto_connect(true);
             
@@ -1066,7 +1072,10 @@ static uint8_t wifi_config_connect(const uint8_t phy) {
         } else {
             INFO("Roaming");
             sysparam_set_data(WIFI_BSSID_SYSPARAM, NULL, 0, false);
+            LOCK_TCPIP_CORE();
             sdk_wifi_set_opmode(STATION_MODE);
+            UNLOCK_TCPIP_CORE();
+            //sdk_wifi_set_sleep_type(WIFI_SLEEP_MODEM);
             sdk_wifi_station_set_config(&sta_config);
             sdk_wifi_station_set_auto_connect(true);
             
@@ -1131,8 +1140,6 @@ static void wifi_config_station_connect() {
 
 void wifi_config_init(const char *ssid_prefix, TaskHandle_t xHandle) {
     INFO("Wifi init");
-    
-    sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
     
     context = malloc(sizeof(wifi_config_context_t));
     memset(context, 0, sizeof(*context));

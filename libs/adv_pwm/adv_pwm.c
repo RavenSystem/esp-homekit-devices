@@ -1,7 +1,7 @@
 /*
  * Advanced PWM Driver
  *
- * Copyright 2021-2022 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2021-2023 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -220,7 +220,7 @@ void adv_pwm_set_duty(const uint8_t gpio, uint16_t duty, uint16_t dithering) {
     }
 }
 
-void adv_pwm_new_channel(const uint8_t gpio, const bool inverted, const bool leading) {
+void adv_pwm_new_channel(const uint8_t gpio, uint8_t inverted, const bool leading) {
     adv_pwm_init(0);
     
     if (!adv_pwm_channel_find_by_gpio(gpio)) {
@@ -232,7 +232,17 @@ void adv_pwm_new_channel(const uint8_t gpio, const bool inverted, const bool lea
         adv_pwm_channel_t* adv_pwm_channel = malloc(sizeof(adv_pwm_channel_t));
         memset(adv_pwm_channel, 0, sizeof(*adv_pwm_channel));
         
-        gpio_enable(gpio, GPIO_OUTPUT);
+        int gpio_open_drain = false;
+        if (inverted > 1) {
+            inverted -= 2;
+            gpio_open_drain = true;
+        }
+        
+        if (gpio_open_drain) {
+            gpio_enable(gpio, GPIO_OUT_OPEN_DRAIN);
+        } else {
+            gpio_enable(gpio, GPIO_OUTPUT);
+        }
         
         adv_pwm_channel->gpio = gpio;
         adv_pwm_channel->leading = leading;

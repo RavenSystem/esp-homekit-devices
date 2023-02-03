@@ -243,19 +243,30 @@ void led_blink(const uint8_t times) {
     }
 }
 
-void led_create(const uint8_t gpio, const bool inverted) {
+void led_create(const uint8_t gpio, uint8_t inverted) {
     main_config.status_led = malloc(sizeof(led_t));
     memset(main_config.status_led, 0, sizeof(*main_config.status_led));
     
     main_config.status_led->timer = esp_timer_create(10, false, NULL, led_code_run);
     
     main_config.status_led->gpio = gpio;
+    
+    int gpio_open_drain = false;
+    if (inverted > 1) {
+        inverted -= 2;
+        gpio_open_drain = true;
+    }
+    
     main_config.status_led->inverted = inverted;
     main_config.status_led->status = inverted;
     
     if (gpio < 17) {
         gpio_write(gpio, inverted);
-        gpio_enable(gpio, GPIO_OUTPUT);
+        if (gpio_open_drain) {
+            gpio_enable(gpio, GPIO_OUT_OPEN_DRAIN);
+        } else {
+            gpio_enable(gpio, GPIO_OUTPUT);
+        }
     }
     
     extended_gpio_write(gpio, inverted);
@@ -479,7 +490,13 @@ addressled_t* addressled_find(const uint8_t gpio) {
     return addressled;
 }
 
-addressled_t* new_addressled(const uint8_t gpio, const uint16_t max_range) {
+addressled_t* new_addressled(uint8_t gpio, const uint16_t max_range) {
+    int gpio_open_drain = false;
+    if (gpio >= 100) {
+        gpio_open_drain = true;
+        gpio -= 100;
+    }
+    
     addressled_t* addressled = addressled_find(gpio);
     
     if (addressled) {
@@ -487,7 +504,12 @@ addressled_t* new_addressled(const uint8_t gpio, const uint16_t max_range) {
             addressled->max_range = max_range;
         }
     } else {
-        gpio_enable(gpio, GPIO_OUTPUT);
+        if (gpio_open_drain) {
+            gpio_enable(gpio, GPIO_OUT_OPEN_DRAIN);
+        } else {
+            gpio_enable(gpio, GPIO_OUTPUT);
+        }
+        
         gpio_write(gpio, false);
         
         addressled = malloc(sizeof(addressled_t));
@@ -823,7 +845,7 @@ void wifi_reconnection_task(void* args) {
 }
 
 void wifi_watchdog() {
-    //INFO("Wifi status = %i", main_config.wifi_status);
+    //INFO("Wifi status %i, sleep mode %i", main_config.wifi_status, sdk_wifi_get_sleep_type());
     const int current_ip = wifi_config_get_ip();
     if (current_ip >= 0 && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
         unsigned int current_channel = sdk_wifi_get_channel();
@@ -1347,7 +1369,12 @@ void power_monitor_task(void* args) {
     int get_data = true;
     
     const uint8_t pm_sensor_type = PM_SENSOR_TYPE;
-    if (pm_sensor_type >= 2) {
+    if (pm_sensor_type <= 1) {
+        voltage = adv_hlw_get_voltage_freq((uint8_t) PM_SENSOR_HLW_GPIO);
+        current = adv_hlw_get_current_freq((uint8_t) PM_SENSOR_HLW_GPIO);
+        power = adv_hlw_get_power_freq((uint8_t) PM_SENSOR_HLW_GPIO);
+        
+    } else if (pm_sensor_type <= 3) {
         const uint8_t bus = PM_SENSOR_ADE_BUS;
         const uint8_t addr = (uint8_t) PM_SENSOR_ADE_ADDR;
         
@@ -1379,76 +1406,76 @@ void power_monitor_task(void* args) {
             current = 0;
         }
         
-    } else {
-        voltage = adv_hlw_get_voltage_freq((uint8_t) PM_SENSOR_HLW_GPIO);
-        current = adv_hlw_get_current_freq((uint8_t) PM_SENSOR_HLW_GPIO);
-        power = adv_hlw_get_power_freq((uint8_t) PM_SENSOR_HLW_GPIO);
     }
     
-    voltage = (PM_VOLTAGE_FACTOR * voltage) + PM_VOLTAGE_OFFSET;
-    
-    if (voltage < 0) {
-        voltage = 0;
-    }
-    
-    if (get_data) {
-        current = (PM_CURRENT_FACTOR * current) + PM_CURRENT_OFFSET;
-    }
-    
-    if (pm_sensor_type < 2 && PM_SENSOR_HLW_GPIO_CF == PM_SENSOR_DATA_DEFAULT) {
-        power = voltage * current;
-    }
-    
-    if (get_data) {
-        power = (PM_POWER_FACTOR * power) + PM_POWER_OFFSET;
-    }
-    
+    if (pm_sensor_type <= 3) {
+        voltage = (PM_VOLTAGE_FACTOR * voltage) + PM_VOLTAGE_OFFSET;
+        
+        if (voltage < 0) {
+            voltage = 0;
+        }
+        
+        if (get_data) {
+            current = (PM_CURRENT_FACTOR * current) + PM_CURRENT_OFFSET;
+        }
+        
+        if (pm_sensor_type <= 1 && PM_SENSOR_HLW_GPIO_CF == PM_SENSOR_DATA_DEFAULT) {
+            power = voltage * current;
+        }
+        
+        if (get_data) {
+            power = (PM_POWER_FACTOR * power) + PM_POWER_OFFSET;
+        }
+        
 #ifdef POWER_MONITOR_DEBUG
-    voltage = (hwrand() % 40) + 200;
-    current = (hwrand() % 100) / 10.0f;
-    power = hwrand() % 70;
+        voltage = (hwrand() % 40) + 200;
+        current = (hwrand() % 100) / 10.0f;
+        power = hwrand() % 70;
 #endif //POWER_MONITOR_DEBUG
-    
-    INFO("<%i> -> PM V=%g, C=%g, P=%g", ch_group->serv_index, voltage, current, power);
-    
-    if (pm_sensor_type < 2) {
-        if (current < 0) {
-            current = 0;
-        }
         
-        if (power < 0) {
-            power = 0;
-        }
-    }
-    
-    if (voltage < 500.f && voltage > -500.f) {
-        do_wildcard_actions(ch_group, 0, voltage);
+        INFO("<%i> -> PM V=%g, C=%g, P=%g", ch_group->serv_index, voltage, current, power);
         
-        if (voltage != ch_group->ch[0]->value.float_value) {
-            const int old_voltage = ch_group->ch[0]->value.float_value * 10;
-            ch_group->ch[0]->value.float_value = voltage;
+        if (pm_sensor_type <= 1) {
+            if (current < 0) {
+                current = 0;
+            }
             
-            if (old_voltage != (int) (voltage * 10)) {
-                homekit_characteristic_notify_safe(ch_group->ch[0]);
+            if (power < 0) {
+                power = 0;
             }
         }
-    } else {
-        ERROR("<%i> PM V", ch_group->serv_index);
-    }
-    
-    if (current < 150.f && current > -150.f) {
-        do_wildcard_actions(ch_group, 1, current);
         
-        if (current != ch_group->ch[1]->value.float_value) {
-            const int old_current = ch_group->ch[1]->value.float_value * 1000;
-            ch_group->ch[1]->value.float_value = current;
+        if (voltage < 500.f && voltage > -500.f) {
+            do_wildcard_actions(ch_group, 0, voltage);
             
-            if (old_current != (int) (current * 1000)) {
-                homekit_characteristic_notify_safe(ch_group->ch[1]);
+            if (voltage != ch_group->ch[0]->value.float_value) {
+                const int old_voltage = ch_group->ch[0]->value.float_value * 10;
+                ch_group->ch[0]->value.float_value = voltage;
+                
+                if (old_voltage != (int) (voltage * 10)) {
+                    homekit_characteristic_notify_safe(ch_group->ch[0]);
+                }
             }
+        } else {
+            ERROR("<%i> PM V", ch_group->serv_index);
+        }
+        
+        if (current < 150.f && current > -150.f) {
+            do_wildcard_actions(ch_group, 1, current);
+            
+            if (current != ch_group->ch[1]->value.float_value) {
+                const int old_current = ch_group->ch[1]->value.float_value * 1000;
+                ch_group->ch[1]->value.float_value = current;
+                
+                if (old_current != (int) (current * 1000)) {
+                    homekit_characteristic_notify_safe(ch_group->ch[1]);
+                }
+            }
+        } else {
+            ERROR("<%i> PM C", ch_group->serv_index);
         }
     } else {
-        ERROR("<%i> PM C", ch_group->serv_index);
+        power = ch_group->ch[2]->value.float_value;
     }
     
     PM_LAST_SAVED_CONSUPTION += PM_POLL_PERIOD;
@@ -1483,6 +1510,7 @@ void power_monitor_task(void* args) {
             PM_LAST_SAVED_CONSUPTION = 0;
             save_states_callback();
         }
+        
     } else {
         ERROR("<%i> PM P", ch_group->serv_index);
     }
@@ -3674,25 +3702,27 @@ void garage_door_sensor(const uint16_t gpio, void* args, const uint8_t type) {
     led_blink(1);
     INFO("<%i> GD sensor %i", ch_group->serv_index, type);
     
+    if (type == GARAGE_DOOR_OPENED || type == GARAGE_DOOR_CLOSING) {
+        GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN;
+    } else {
+        GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_TIME_MARGIN;
+    }
+    
     GD_CURRENT_DOOR_STATE_INT = type;
     
     if (type > 1) {
         GD_TARGET_DOOR_STATE_INT = type - 2;
         esp_timer_stop(AUTOOFF_TIMER);
         esp_timer_start(GARAGE_DOOR_WORKER_TIMER);
+        
     } else {
         esp_timer_stop(GARAGE_DOOR_WORKER_TIMER);
         GD_TARGET_DOOR_STATE_INT = type;
-        
-        if (type == 0) {
-            GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN;
-        } else {    // type == 1
-            GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_TIME_MARGIN;
-        }
-        
-        if (GD_OBSTRUCTION_DETECTED_BOOL) {     // Remove obstruction
-            garage_door_obstruction(99, ch_group, 0);
-        }
+    }
+    
+    // Remove obstruction
+    if (GD_OBSTRUCTION_DETECTED_BOOL) {
+        garage_door_obstruction(99, ch_group, 0);
     }
     
     homekit_characteristic_notify_safe(GD_TARGET_DOOR_STATE);
@@ -3705,6 +3735,13 @@ void garage_door_sensor(const uint16_t gpio, void* args, const uint8_t type) {
 
 void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch1);
+    
+    void run_margin_at_start() {
+        esp_timer_stop(AUTOOFF_TIMER);
+        esp_timer_start(GARAGE_DOOR_WORKER_TIMER);
+        homekit_characteristic_notify_safe(ch1);
+    }
+    
     if (ch_group->main_enabled) {
         int current_door_state = GD_CURRENT_DOOR_STATE_INT;
         int stopped_offset = 0;
@@ -3720,7 +3757,7 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
             }
         }
         
-        if (value.int_value != current_door_state && GD_CURRENT_DOOR_STATE_INT != GARAGE_DOOR_STOPPED) {
+        if ((value.int_value != current_door_state && GD_CURRENT_DOOR_STATE_INT != GARAGE_DOOR_STOPPED) || GD_OBSTRUCTION_DETECTED_BOOL) {
             led_blink(1);
             INFO("<%i> -> GD %i", ch_group->serv_index, value.int_value);
             
@@ -3735,6 +3772,17 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
             } else if ((value.int_value == GARAGE_DOOR_CLOSED && GARAGE_DOOR_HAS_F5 == 0) ||
                        GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_OPENING) {
                 garage_door_sensor(99, ch_group, GARAGE_DOOR_CLOSING);
+                
+            } else if (GARAGE_DOOR_TIME_MARGIN > 0 && value.int_value == GARAGE_DOOR_OPENED && GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_CLOSED && GARAGE_DOOR_HAS_F4 == 1) {
+                GARAGE_DOOR_CURRENT_TIME = 0;
+                GD_TARGET_DOOR_STATE_INT = GARAGE_DOOR_OPENED;
+                run_margin_at_start();
+                
+            } else if (GARAGE_DOOR_TIME_MARGIN > 0 && value.int_value == GARAGE_DOOR_CLOSED && GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_OPENED && GARAGE_DOOR_HAS_F5 == 1) {
+                GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_WORKING_TIME;
+                GD_TARGET_DOOR_STATE_INT = GARAGE_DOOR_CLOSED;
+                run_margin_at_start();
+                
             } else {
                 homekit_characteristic_notify_safe(ch1);
             }
@@ -3755,23 +3803,23 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
 void garage_door_timer_worker(TimerHandle_t xTimer) {
     ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
     
-    void halt_timer() {
+    void halt_timer(const bool forced) {
         esp_timer_stop(xTimer);
         
-        if (GARAGE_DOOR_TIME_MARGIN > 0 && GD_CURRENT_DOOR_STATE_INT > 1) {
+        if (forced || (GARAGE_DOOR_TIME_MARGIN > 0 && GD_CURRENT_DOOR_STATE_INT > 1)) {
             garage_door_obstruction(99, ch_group, 3);
         }
     }
     
     if (GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_OPENING) {
         GARAGE_DOOR_CURRENT_TIME++;
-
+        
         if (GARAGE_DOOR_CURRENT_TIME >= (GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN) && GARAGE_DOOR_HAS_F2 == 0) {
             esp_timer_start(AUTOOFF_TIMER);
             garage_door_sensor(99, ch_group, GARAGE_DOOR_OPENED);
             
         } else if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME && GARAGE_DOOR_HAS_F2 == 1) {
-            halt_timer();
+            halt_timer(false);
         }
         
     } else if (GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_CLOSING) {
@@ -3781,7 +3829,27 @@ void garage_door_timer_worker(TimerHandle_t xTimer) {
             garage_door_sensor(99, ch_group, GARAGE_DOOR_CLOSED);
             
         } else if (GARAGE_DOOR_CURRENT_TIME <= 0 && GARAGE_DOOR_HAS_F3 == 1) {
-            halt_timer();
+            halt_timer(false);
+        }
+        
+    } else if (GARAGE_DOOR_TIME_MARGIN > 0 &&
+               GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_CLOSED &&
+               GD_TARGET_DOOR_STATE_INT == GARAGE_DOOR_OPENED &&
+               GARAGE_DOOR_HAS_F4 == 1) {
+        GARAGE_DOOR_CURRENT_TIME++;
+        
+        if (GARAGE_DOOR_CURRENT_TIME > GARAGE_DOOR_TIME_MARGIN) {
+            halt_timer(true);
+        }
+        
+    } else if (GARAGE_DOOR_TIME_MARGIN > 0 &&
+               GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_OPENED &&
+               GD_TARGET_DOOR_STATE_INT == GARAGE_DOOR_CLOSED &&
+               GARAGE_DOOR_HAS_F5 == 1) {
+        GARAGE_DOOR_CURRENT_TIME -= GARAGE_DOOR_CLOSE_TIME_FACTOR;
+        
+        if (GARAGE_DOOR_CURRENT_TIME < (GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN)) {
+            halt_timer(true);
         }
         
     } else {
@@ -6832,7 +6900,7 @@ void run_homekit_server() {
 }
 
 void printf_header() {
-    INFO("\n\nHome Accessory Architect "HAA_FIRMWARE_VERSION""HAA_FIRMWARE_BETA_REVISION"\n(c) 2018-2023 José A. Jiménez Campos\n");
+    INFO("\nHome Accessory Architect "HAA_FIRMWARE_VERSION""HAA_FIRMWARE_BETA_REVISION"\n(c) 2018-2023 José A. Jiménez Campos\n");
     
 #ifdef HAA_DEBUG
     INFO("HAA DEBUG ENABLED\n");
@@ -6881,12 +6949,11 @@ void normal_mode_init() {
         int active = false;
         
         for (int j = 0; j < cJSON_GetArraySize(json_buttons); j++) {
-            const unsigned int gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PIN_GPIO)->valuedouble;
+            const int gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PIN_GPIO)->valuedouble;
             
             int inverted = false;
-            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), INVERTED) != NULL &&
-                cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), INVERTED)->valuedouble == 1) {
-                inverted = true;
+            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), INVERTED)) {
+                inverted = (bool) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), INVERTED)->valuedouble;
             }
             
             int button_filter = 0;
@@ -6898,10 +6965,9 @@ void normal_mode_init() {
                 if (!get_used_gpio(gpio)) {
                     set_used_gpio(gpio);
                     
-                    int pullup_resistor = true;
-                    if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR) != NULL &&
-                        cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR)->valuedouble == 0) {
-                        pullup_resistor = false;
+                    int pullup_resistor = false;
+                    if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR)) {
+                        pullup_resistor = (bool) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR)->valuedouble;
                     }
                     
                     int button_mode = 0;
@@ -7141,14 +7207,26 @@ void normal_mode_init() {
                         
                         action_binary_output->gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuedouble;
                         if (!get_used_gpio(action_binary_output->gpio) && action_binary_output->gpio < MAX_GPIOS) {
-                            int initial_value = false;
+                            int initial_value = 0;
                             if (cJSON_GetObjectItemCaseSensitive(json_relay, INITIAL_VALUE) != NULL) {
-                                initial_value = (bool) cJSON_GetObjectItemCaseSensitive(json_relay, INITIAL_VALUE)->valuedouble;
+                                initial_value = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_relay, INITIAL_VALUE)->valuedouble;
+                            }
+                            
+                            int gpio_open_drain = false;
+                            if (initial_value > 1) {
+                                initial_value -= 2;
+                                gpio_open_drain = true;
                             }
                             
                             set_used_gpio(action_binary_output->gpio);
                             gpio_write(action_binary_output->gpio, initial_value);
-                            gpio_enable(action_binary_output->gpio, GPIO_OUTPUT);
+                            
+                            if (gpio_open_drain) {
+                                gpio_enable(action_binary_output->gpio, GPIO_OUT_OPEN_DRAIN);
+                            } else {
+                                gpio_enable(action_binary_output->gpio, GPIO_OUTPUT);
+                            }
+                            
                             gpio_write(action_binary_output->gpio, initial_value);
                             
                             INFO("New DigO GPIO %i", action_binary_output->gpio);
@@ -8026,43 +8104,73 @@ void normal_mode_init() {
     if (cJSON_GetObjectItemCaseSensitive(json_config, STATUS_LED_GPIO) != NULL) {
         const unsigned int led_gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, STATUS_LED_GPIO)->valuedouble;
         
-        int led_inverted = true;
+        int led_inverted = 3;   // Open-drain and Inverted
         if (cJSON_GetObjectItemCaseSensitive(json_config, INVERTED) != NULL) {
-            led_inverted = (bool) cJSON_GetObjectItemCaseSensitive(json_config, INVERTED)->valuedouble;
+            led_inverted = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, INVERTED)->valuedouble;
         }
         
         set_used_gpio(led_gpio);
         led_create(led_gpio, led_inverted);
     }
     
-    // IR TX LED Frequency
-    if (cJSON_GetObjectItemCaseSensitive(json_config, IRRF_ACTION_FREQ) != NULL) {
-        main_config.ir_tx_freq = 1000 / cJSON_GetObjectItemCaseSensitive(json_config, IRRF_ACTION_FREQ)->valuedouble / 2;
-    }
-    
-    // IR TX LED Inverted
-    if (cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO_INVERTED) != NULL) {
-        main_config.ir_tx_inv = (bool) cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO_INVERTED)->valuedouble;
-    }
-    
     // IR TX LED GPIO
     if (cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO) != NULL) {
+        // IR TX LED Frequency
+        if (cJSON_GetObjectItemCaseSensitive(json_config, IRRF_ACTION_FREQ) != NULL) {
+            main_config.ir_tx_freq = 1000 / cJSON_GetObjectItemCaseSensitive(json_config, IRRF_ACTION_FREQ)->valuedouble / 2;
+        }
+        
+        // IR TX LED Inverted
+        int inverted_value = 0;
+        if (cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO_INVERTED) != NULL) {
+            inverted_value = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO_INVERTED)->valuedouble;
+        }
+        
+        int gpio_open_drain = false;
+        if (inverted_value > 1) {
+            inverted_value -= 2;
+            gpio_open_drain = true;
+        }
+        
+        main_config.ir_tx_inv = inverted_value;
+        
         main_config.ir_tx_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO)->valuedouble;
         set_used_gpio(main_config.ir_tx_gpio);
-        gpio_enable(main_config.ir_tx_gpio, GPIO_OUTPUT);
+        
+        if (gpio_open_drain) {
+            gpio_enable(main_config.ir_tx_gpio, GPIO_OUT_OPEN_DRAIN);
+        } else {
+            gpio_enable(main_config.ir_tx_gpio, GPIO_OUTPUT);
+        }
+        
         gpio_write(main_config.ir_tx_gpio, false ^ main_config.ir_tx_inv);
-    }
-    
-    // RF TX Inverted
-    if (cJSON_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO_INVERTED) != NULL) {
-        main_config.rf_tx_inv = (bool) cJSON_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO_INVERTED)->valuedouble;
     }
     
     // RF TX GPIO
     if (cJSON_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO) != NULL) {
+        // RF TX Inverted
+        int inverted_value = 0;
+        if (cJSON_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO_INVERTED) != NULL) {
+            inverted_value = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO_INVERTED)->valuedouble;
+        }
+        
+        int gpio_open_drain = false;
+        if (inverted_value > 1) {
+            inverted_value -= 2;
+            gpio_open_drain = true;
+        }
+        
+        main_config.rf_tx_inv = inverted_value;
+        
         main_config.rf_tx_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO)->valuedouble;
         set_used_gpio(main_config.rf_tx_gpio);
-        gpio_enable(main_config.rf_tx_gpio, GPIO_OUTPUT);
+        
+        if (gpio_open_drain) {
+            gpio_enable(main_config.rf_tx_gpio, GPIO_OUT_OPEN_DRAIN);
+        } else {
+            gpio_enable(main_config.rf_tx_gpio, GPIO_OUTPUT);
+        }
+        
         gpio_write(main_config.rf_tx_gpio, false ^ main_config.rf_tx_inv);
     }
     
@@ -9854,13 +9962,15 @@ void normal_mode_init() {
             
             adv_pwm_start();
             
+        /*
         } else if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_SM16716) {
-            //lightbulb_group->gpio[0] = cJSON_GetArrayItem(gpio_array, 0)->valuedouble;
-            //lightbulb_group->gpio[1] = cJSON_GetArrayItem(gpio_array, 1)->valuedouble;
+            lightbulb_group->gpio[0] = cJSON_GetArrayItem(gpio_array, 0)->valuedouble;
+            lightbulb_group->gpio[1] = cJSON_GetArrayItem(gpio_array, 1)->valuedouble;
             
             //
             // TO-DO
             //
+        */
             
         } else if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_NRZ) {
             lightbulb_group->gpio[0] = cJSON_GetArrayItem(gpio_array, 0)->valuedouble;
@@ -10979,7 +11089,18 @@ void normal_mode_init() {
             }
         }
         
-        if (pm_sensor_type >= 2) {  // ADE7953 chip
+        if (pm_sensor_type <= 1) {          // HLW chip
+            PM_SENSOR_HLW_GPIO_CF = data[0];
+            
+            if (data[0] != PM_SENSOR_DATA_DEFAULT) {
+                PM_SENSOR_HLW_GPIO = data[0];
+            } else {
+                PM_SENSOR_HLW_GPIO = data[1];
+            }
+            
+            adv_hlw_unit_create(data[0], data[1], data[2], pm_sensor_type, data[3]);
+            
+        } else if (pm_sensor_type <= 3) {   // ADE7953 chip
             PM_SENSOR_ADE_BUS = data[0];
             PM_SENSOR_ADE_ADDR = data[1];
             
@@ -11001,21 +11122,12 @@ void normal_mode_init() {
             reg[1] = 0x20;
             bytes[1] = 0x30;
             i2c_slave_write(data[0], data[1], reg, 2, bytes, 2);
-            
-        } else {                    // HLW chip
-            PM_SENSOR_HLW_GPIO_CF = data[0];
-            
-            if (data[0] != PM_SENSOR_DATA_DEFAULT) {
-                PM_SENSOR_HLW_GPIO = data[0];
-            } else {
-                PM_SENSOR_HLW_GPIO = data[1];
-            }
-            
-            adv_hlw_unit_create(data[0], data[1], data[2], pm_sensor_type, data[3], true);
         }
         
-        PM_POLL_PERIOD = sensor_poll_period(json_context, PM_POLL_PERIOD_DEFAULT);
-        esp_timer_start_forced(esp_timer_create(PM_POLL_PERIOD * 1000, true, (void*) ch_group, power_monitor_timer_worker));
+        if (pm_sensor_type <= 4) {
+            PM_POLL_PERIOD = sensor_poll_period(json_context, PM_POLL_PERIOD_DEFAULT);
+            esp_timer_start_forced(esp_timer_create(PM_POLL_PERIOD * 1000, true, (void*) ch_group, power_monitor_timer_worker));
+        }
         
         set_killswitch(ch_group, json_context);
     }
@@ -11208,14 +11320,17 @@ void normal_mode_init() {
         if (fm_sensor_type == FM_SENSOR_TYPE_PULSE_FREQ ||
             fm_sensor_type == FM_SENSOR_TYPE_PULSE_US_TIME) {
             cJSON* gpio_array = cJSON_GetObjectItemCaseSensitive(json_context, FM_SENSOR_GPIO_ARRAY_SET);
-            const unsigned int gpio = (uint8_t) cJSON_GetArrayItem(gpio_array, 0)->valuedouble;
+            unsigned int gpio = (uint8_t) cJSON_GetArrayItem(gpio_array, 0)->valuedouble;
             const unsigned int interrupt_type = (uint8_t) cJSON_GetArrayItem(gpio_array, 1)->valuedouble;
-            const int pullup = (bool) cJSON_GetArrayItem(gpio_array, 2)->valuedouble;
+            const unsigned int pullup = (bool) cJSON_GetArrayItem(gpio_array, 2)->valuedouble;
             FM_SENSOR_GPIO = gpio;
             set_used_gpio(gpio);
             
             if (fm_sensor_type == FM_SENSOR_TYPE_PULSE_FREQ) {
-                adv_hlw_unit_create(gpio, -1, -1, 0, interrupt_type, pullup);
+                if (pullup) {
+                    gpio += 100;
+                }
+                adv_hlw_unit_create(gpio, -1, -1, 0, interrupt_type);
                 
             } else {    // FM_SENSOR_TYPE_PULSE_US_TIME
                 FM_SENSOR_GPIO_INT_TYPE = interrupt_type;

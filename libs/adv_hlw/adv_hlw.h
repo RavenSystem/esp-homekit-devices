@@ -1,7 +1,7 @@
 /*
 * Advanced HLW8012 Driver
 *
-* Copyright 2020-2022 José Antonio Jiménez Campos (@RavenSystem)
+* Copyright 2020-2023 José Antonio Jiménez Campos (@RavenSystem)
 *
 */
 
@@ -12,7 +12,7 @@
 extern "C" {
 #endif
 
-int adv_hlw_unit_create(const int gpio_cf, const int gpio_cf1, const int gpio_sel, const unsigned int current_mode, const unsigned int interrupt_type, const bool pullup);
+int adv_hlw_unit_create(int gpio_cf, int gpio_cf1, int gpio_sel, const unsigned int current_mode, const unsigned int interrupt_type);
 
 double adv_hlw_get_voltage_freq(const int gpio);
 double adv_hlw_get_current_freq(const int gpio);

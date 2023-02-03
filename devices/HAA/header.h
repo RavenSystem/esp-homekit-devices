@@ -11,7 +11,7 @@
 #include "../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "11.8.0"
+#define HAA_FIRMWARE_VERSION                "11.9.0"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Peregrine"
 
@@ -732,7 +732,7 @@
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
-#define CUSTOM_HAA_COMMAND                  "cmy"
+#define CUSTOM_HAA_COMMAND                  "rgb"
 #define HAA_SETUP_ACCESSORY_SET             "s"
 
 #define ACTION_TASK_TYPE_UART               (0)
