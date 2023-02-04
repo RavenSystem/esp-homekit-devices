@@ -6944,7 +6944,7 @@ void normal_mode_init() {
         sdk_system_restart();
     }
     
-    // Buttons GPIO Setup function
+    // Binary Inputs GPIO Setup function
     bool diginput_register(cJSON* json_buttons, void* callback, ch_group_t* ch_group, const uint8_t param) {
         int active = false;
         
@@ -6965,7 +6965,7 @@ void normal_mode_init() {
                 if (!get_used_gpio(gpio)) {
                     set_used_gpio(gpio);
                     
-                    int pullup_resistor = false;
+                    int pullup_resistor = true;
                     if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR)) {
                         pullup_resistor = (bool) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR)->valuedouble;
                     }
@@ -11322,7 +11322,7 @@ void normal_mode_init() {
             cJSON* gpio_array = cJSON_GetObjectItemCaseSensitive(json_context, FM_SENSOR_GPIO_ARRAY_SET);
             unsigned int gpio = (uint8_t) cJSON_GetArrayItem(gpio_array, 0)->valuedouble;
             const unsigned int interrupt_type = (uint8_t) cJSON_GetArrayItem(gpio_array, 1)->valuedouble;
-            const unsigned int pullup = (bool) cJSON_GetArrayItem(gpio_array, 2)->valuedouble;
+            const int pullup = (bool) cJSON_GetArrayItem(gpio_array, 2)->valuedouble;
             FM_SENSOR_GPIO = gpio;
             set_used_gpio(gpio);
             
