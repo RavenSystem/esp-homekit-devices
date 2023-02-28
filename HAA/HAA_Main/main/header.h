@@ -8,12 +8,12 @@
 #ifndef __HAA_HEADER_H__
 #define __HAA_HEADER_H__
 
-#include "../common/common_headers.h"
+#include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "11.9.1"
-#define HAA_FIRMWARE_BETA_REVISION          ""
-#define HAA_FIRMWARE_CODENAME               "Peregrine"
+#define HAA_FIRMWARE_VERSION                "12.0.0"
+#define HAA_FIRMWARE_BETA_REVISION          "b1"
+#define HAA_FIRMWARE_CODENAME               "Merlin"
 
 // Characteristic types (ch_type)
 #define CH_TYPE_BOOL                        (0)
@@ -25,15 +25,15 @@
 #define FLOAT_FACTOR_SAVE_AS_INT            (100000.00000f)
 
 // Task Stack Sizes
-#define GLOBAL_TASK_SIZE                    (640)
+#define GLOBAL_TASK_SIZE                    (TASK_SIZE_FACTOR * (640))
 
-#define INITIAL_SETUP_TASK_SIZE             (1600)
-#define NTP_TASK_SIZE                       (512)
+#define INITIAL_SETUP_TASK_SIZE             (TASK_SIZE_FACTOR * (1600))
+#define NTP_TASK_SIZE                       (TASK_SIZE_FACTOR * (512))
 #define PING_TASK_SIZE                      GLOBAL_TASK_SIZE
 #define AUTODIMMER_TASK_SIZE                GLOBAL_TASK_SIZE
-#define IRRF_TX_TASK_SIZE                   (456)
-#define UART_ACTION_TASK_SIZE               (384)
-#define NETWORK_ACTION_TASK_SIZE            (544)
+#define IRRF_TX_TASK_SIZE                   (TASK_SIZE_FACTOR * (456))
+#define UART_ACTION_TASK_SIZE               (TASK_SIZE_FACTOR * (384))
+#define NETWORK_ACTION_TASK_SIZE            (TASK_SIZE_FACTOR * (544))
 #define DELAYED_SENSOR_START_TASK_SIZE      GLOBAL_TASK_SIZE
 #define TEMPERATURE_TASK_SIZE               GLOBAL_TASK_SIZE
 #define PROCESS_TH_TASK_SIZE                GLOBAL_TASK_SIZE
@@ -44,11 +44,11 @@
 #define POWER_MONITOR_TASK_SIZE             GLOBAL_TASK_SIZE
 #define FREE_MONITOR_TASK_SIZE              GLOBAL_TASK_SIZE
 #define LIGHT_SENSOR_TASK_SIZE              GLOBAL_TASK_SIZE
-#define WIFI_PING_GW_TASK_SIZE              (384)
+#define WIFI_PING_GW_TASK_SIZE              (TASK_SIZE_FACTOR * (384))
 #define WIFI_RECONNECTION_TASK_SIZE         GLOBAL_TASK_SIZE
-#define RECV_UART_TASK_SIZE                 (384)
-#define REBOOT_TASK_SIZE                    (384)
-#define IRRF_CAPTURE_TASK_SIZE              (512)
+#define RECV_UART_TASK_SIZE                 (TASK_SIZE_FACTOR * (384))
+#define REBOOT_TASK_SIZE                    (TASK_SIZE_FACTOR * (384))
+#define IRRF_CAPTURE_TASK_SIZE              (TASK_SIZE_FACTOR * (512))
 
 // Task Priorities
 #define INITIAL_SETUP_TASK_PRIORITY         (tskIDLE_PRIORITY + 1)
@@ -159,6 +159,14 @@
 #define INITIAL_STATE                       "s"
 #define EXEC_ACTIONS_ON_BOOT                "xa"
 #define KILLSWITCH                          "ks"
+#define IO_CONFIG_ARRAY                     "io"
+#define IO_GPIO                             io_value[0]
+#define IO_GPIO_MODE                        io_value[1]
+#define IO_GPIO_INPUT_MODE                  io_value[2]
+#define IO_GPIO_INPUT_FILTER                io_value[3]
+#define IO_GPIO_OUTPUT_INIT_VALUE           io_value[2]
+#define IO_GPIO_PWM_MODE                    io_value[3]
+#define IO_GPIO_PWM_DITHERING               io_value[4]
 
 #define TIMETABLE_ACTION_ARRAY              "tt"
 #define ALL_MONS                            13
@@ -317,7 +325,6 @@
 #define LIGHTBULB_TYPE_SM16716              (7)
 #define LIGHTBULB_TYPE_NRZ                  (8)
 #define LIGHTBULB_NRZ_TIMES_ARRAY_SET       "nrz"
-#define LIGHTBULB_PWM_LEADING_ARRAY_SET     "ld"
 #define LIGHTBULB_CHANNELS_SET              "n"
 #define LIGHTBULB_CHANNELS                  lightbulb_group->channels
 #define LIGHTBULB_INITITAL_STATE_ARRAY_SET  "it"
@@ -328,11 +335,9 @@
 #define LIGHTBULB_MAX_POWER                 ch_group->num_f[0]
 #define LIGHTBULB_CURVE_FACTOR_SET          "cf"
 #define LIGHTBULB_CURVE_FACTOR              ch_group->num_f[1]
-#define PWM_DITHER_SET                      "di"
 #define LIGHTBULB_COLOR_MAP_SET             "cm"
 #define LIGHTBULB_RANGE_START               lightbulb_group->range_start
 #define LIGHTBULB_RANGE_END                 lightbulb_group->range_end
-#define LIGHTBULB_PWM_DITHER                lightbulb_group->pwm_dither
 #define LIGHTBULB_STEP_VALUE                lightbulb_group->step_value
 #define LIGHTBULB_FLUX_ARRAY_SET            "fa"
 #define LIGHTBULB_COORDINATE_ARRAY_SET      "ca"
@@ -674,6 +679,7 @@
 #define UART_ACTIONS_ARRAY                  "u"
 #define UART_ACTION_UART                    "n"
 #define UART_ACTION_PAUSE                   "d"
+#define PWM_ACTIONS_ARRAY                   "q"
 
 #define I2C_CONFIG_ARRAY                    "ic"
 
@@ -732,7 +738,7 @@
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
-#define CUSTOM_HAA_COMMAND                  "rgb"
+#define CUSTOM_HAA_COMMAND                  "io"
 #define HAA_SETUP_ACCESSORY_SET             "s"
 
 #define ACTION_TASK_TYPE_UART               (0)

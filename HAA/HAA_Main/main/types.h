@@ -114,6 +114,18 @@ typedef struct _action_uart {
     struct _action_uart* next;
 } action_uart_t;
 
+typedef struct _action_pwm {
+    uint8_t action;
+    
+    int8_t gpio;
+    uint16_t duty;
+    
+    uint16_t dithering;
+    uint16_t freq;
+    
+    struct _action_pwm* next;
+} action_pwm_t;
+
 typedef struct _action_set_ch {
     uint8_t action;
     
@@ -170,6 +182,7 @@ typedef struct _ch_group {
     action_network_t* action_network;
     action_irrf_tx_t* action_irrf_tx;
     action_uart_t* action_uart;
+    action_pwm_t* action_pwm;
     action_set_ch_t* action_set_ch;
     
     wildcard_action_t* wildcard_action;
@@ -197,8 +210,6 @@ typedef struct _lightbulb_group {
     bool old_on_value: 1;
     bool last_on_action: 1;
     bool _align: 1;
-    
-    uint16_t pwm_dither;
     
     uint16_t step;
     uint16_t autodimmer_task_delay;
@@ -331,7 +342,7 @@ typedef struct _main_config {
     uint16_t setup_mode_time;
     uint16_t wifi_roaming_count;
     
-    uint64_t used_gpio: MAX_GPIOS;
+    //uint64_t used_gpio: MAX_GPIOS;
     
     uint8_t wifi_ip;
     uint8_t uart_buffer_len;

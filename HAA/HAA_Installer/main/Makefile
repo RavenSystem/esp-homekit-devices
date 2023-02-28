@@ -1,15 +1,17 @@
 #Set this in local.mk
 #PROGRAM = main
 
+SETUP_WEB := $(shell python3 ../../common/embed.py setup.html > setup.html.h)
+
 EXTRA_COMPONENTS = \
 	extras/sntp \
 	extras/dhcpserver \
     extras/rboot-ota \
-	$(abspath esp-wifi-config) \
 	$(abspath esp-wolfssl) \
-	$(abspath ../../external_libs/http-parser) \
-	$(abspath ../../libs/adv_logger) \
-	$(abspath ../../libs/timers_helper)
+	$(abspath ../../../external_libs/http-parser) \
+	$(abspath ../../../libs/form_urlencoded) \
+	$(abspath ../../../libs/adv_logger) \
+	$(abspath ../../../libs/timers_helper)
 
 FLASH_SIZE ?= 1
 FLASH_MODE = dout
@@ -105,7 +107,7 @@ EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=600
 
 #EXTRA_CFLAGS += -DLWIP_DEBUG
 
-include $(abspath ../../sdk/esp-open-rtos-rsf/common.mk)
+include $(abspath ../../../sdk/esp-open-rtos-rsf/common.mk)
 
 monitor:
 	$(FILTEROUTPUT) --port $(ESPPORT) --baud 115200 --elf $(PROGRAM_OUT)

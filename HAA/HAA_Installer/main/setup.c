@@ -289,7 +289,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
             return;
         }
         
-        if (xTaskCreate(wifi_smart_connect_task, "WSM", 512, (void*) best_bssid, (tskIDLE_PRIORITY + 1), NULL) == pdPASS) {
+        if (xTaskCreate(wifi_smart_connect_task, "WSM", (TASK_SIZE_FACTOR * 512), (void*) best_bssid, (tskIDLE_PRIORITY + 1), NULL) == pdPASS) {
             if (wifi_bssid) {
                 free(wifi_bssid);
             }
@@ -315,7 +315,7 @@ static void wifi_config_smart_connect() {
     int8_t wifi_mode = 0;
     sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
     
-    if (wifi_mode < 2 || xTaskCreate(wifi_scan_sc_task, "SMA", 384, NULL, (tskIDLE_PRIORITY + 2), NULL) != pdPASS) {
+    if (wifi_mode < 2 || xTaskCreate(wifi_scan_sc_task, "SMA", (TASK_SIZE_FACTOR * 384), NULL, (tskIDLE_PRIORITY + 2), NULL) != pdPASS) {
         if (!wifi_config_got_ip()) {
             sdk_wifi_station_connect();
         }
@@ -397,12 +397,18 @@ static void wifi_scan_task(void *arg) {
     vTaskDelete(NULL);
 }
 
-#include "index.html.h"
+#ifdef HAABOOT
+    #define WEB_BACKGROUND_COLOR    "ffb84d"
+#else
+    #define WEB_BACKGROUND_COLOR    "4ddaff"
+#endif
+
+#include "setup.html.h"
 
 static void wifi_config_server_on_settings(client_t *client) {
     esp_timer_change_period_forced(context->auto_reboot_timer, AUTO_REBOOT_LONG_TIMEOUT);
     
-    xTaskCreate(wifi_scan_task, "SCA", 384, NULL, (tskIDLE_PRIORITY + 0), NULL);
+    xTaskCreate(wifi_scan_task, "SCA", (TASK_SIZE_FACTOR * 384), NULL, (tskIDLE_PRIORITY + 0), NULL);
     
     static const char http_prologue[] =
         "HTTP/1.1 200 \r\n"
@@ -414,16 +420,6 @@ static void wifi_config_server_on_settings(client_t *client) {
     
     client_send(client, http_prologue, sizeof(http_prologue) - 1);
     client_send_chunk(client, html_settings_header);
-    
-#ifdef HAABOOT
-    client_send_chunk(client, "ffb84d");
-#else
-    client_send_chunk(client, "4ddaff");
-#endif
-    
-    client_send_chunk(client, html_settings_color);
-    client_send_chunk(client, INSTALLER_VERSION);
-    client_send_chunk(client, html_settings_installer_version);
     
     sysparam_status_t status;
     char *text = NULL;
@@ -816,7 +812,7 @@ static int wifi_config_server_on_message_complete(http_parser *parser) {
                 vTaskDelete(context->sta_connect_timeout);
             }
             
-            xTaskCreate(wifi_config_server_on_settings_update_task, "UDP", 512, client, (tskIDLE_PRIORITY + 1), NULL);
+            xTaskCreate(wifi_config_server_on_settings_update_task, "UDP", (TASK_SIZE_FACTOR * 512), client, (tskIDLE_PRIORITY + 1), NULL);
             return 0;
         
         /*
@@ -958,7 +954,7 @@ static void wifi_config_softap_start() {
     INFO("Start DHCP");
     dhcpserver_start(&first_client_ip, 4);
     
-    xTaskCreate(http_task, "WEB", 640, NULL, (tskIDLE_PRIORITY + 1), NULL);
+    xTaskCreate(http_task, "WEB", (TASK_SIZE_FACTOR * 640), NULL, (tskIDLE_PRIORITY + 1), NULL);
 }
 
 static void auto_reboot_run() {
@@ -1082,7 +1078,7 @@ static uint8_t wifi_config_connect(const uint8_t phy) {
             wifi_config_toggle_phy_mode(phy);
             
             if (wifi_mode == 4) {
-                xTaskCreate(wifi_scan_sc_task, "SMA", 384, NULL, (tskIDLE_PRIORITY + 2), NULL);
+                xTaskCreate(wifi_scan_sc_task, "SMA", (TASK_SIZE_FACTOR * 384), NULL, (tskIDLE_PRIORITY + 2), NULL);
             } else {
                 wifi_config_smart_connect();
             }
@@ -1120,7 +1116,7 @@ static void wifi_config_station_connect() {
         INFO("* NORMAL");
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
         
-        xTaskCreate(wifi_config_sta_connect_timeout_task, "STI", 640, NULL, (tskIDLE_PRIORITY + 1), &context->sta_connect_timeout);
+        xTaskCreate(wifi_config_sta_connect_timeout_task, "STI", (TASK_SIZE_FACTOR * 640), NULL, (tskIDLE_PRIORITY + 1), &context->sta_connect_timeout);
         
     } else {
         INFO("* SETUP");
@@ -1148,5 +1144,5 @@ void wifi_config_init(const char *ssid_prefix, TaskHandle_t xHandle) {
     
     context->ota_task = xHandle;
     
-    xTaskCreate(wifi_config_station_connect, "WCO", 512, NULL, (tskIDLE_PRIORITY + 1), NULL);
+    xTaskCreate(wifi_config_station_connect, "WCO", (TASK_SIZE_FACTOR * 512), NULL, (tskIDLE_PRIORITY + 1), NULL);
 }

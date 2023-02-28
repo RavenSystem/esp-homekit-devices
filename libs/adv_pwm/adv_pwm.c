@@ -17,6 +17,8 @@
 
 typedef struct _adv_pwm_channel {
     uint16_t duty[8];
+    
+    uint16_t dithering;
     uint8_t gpio: 5;
     bool inverted: 1;
     bool leading: 1;
@@ -51,20 +53,22 @@ static adv_pwm_channel_t* adv_pwm_channel_find_by_gpio(const uint8_t gpio) {
     return NULL;
 }
 
-int adv_pwm_get_duty(const uint8_t gpio) {
-    if (adv_pwm_config) {
-        adv_pwm_channel_t* adv_pwm_channel = adv_pwm_config->adv_pwm_channels;
-        
-        while (adv_pwm_channel && adv_pwm_channel->gpio != gpio) {
-            adv_pwm_channel = adv_pwm_channel->next;
-        }
-
-        if (adv_pwm_channel) {
-            return ((UINT16_MAX - adv_pwm_channel->duty[0]) + (UINT16_MAX - adv_pwm_channel->duty[1]) + (UINT16_MAX - adv_pwm_channel->duty[2]) + (UINT16_MAX - adv_pwm_channel->duty[3])) >> 2;
-        }
+int adv_pwm_get_dithering(const uint8_t gpio) {
+    adv_pwm_channel_t* adv_pwm_channel = adv_pwm_channel_find_by_gpio(gpio);
+    if (adv_pwm_channel) {
+        return adv_pwm_channel->dithering;
     }
     
-    return 0;
+    return -1;
+}
+
+int adv_pwm_get_duty(const uint8_t gpio) {
+    adv_pwm_channel_t* adv_pwm_channel = adv_pwm_channel_find_by_gpio(gpio);
+    if (adv_pwm_channel) {
+        return ((UINT16_MAX - adv_pwm_channel->duty[0]) + (UINT16_MAX - adv_pwm_channel->duty[1]) + (UINT16_MAX - adv_pwm_channel->duty[2]) + (UINT16_MAX - adv_pwm_channel->duty[3])) >> 2;
+    }
+    
+    return -1;
 }
 
 static void IRAM zero_crossing_interrupt(const uint8_t gpio) {
@@ -174,44 +178,51 @@ static void adv_pwm_init(const unsigned int mode) {
 void adv_pwm_set_freq(const uint16_t freq) {
     adv_pwm_init(1);
     
-    if (adv_pwm_config->is_running) {
-        adv_pwm_stop();
-    }
+    const int pwm_was_running = adv_pwm_config->is_running;
+    adv_pwm_stop();
     
     timer_set_frequency(FRC1, freq);
     adv_pwm_config->max_load = timer_get_load(FRC1);
-    adv_pwm_stop();
     
-    if (adv_pwm_config->is_running) {
+    if (pwm_was_running) {
         adv_pwm_start();
     }
 }
 
-void adv_pwm_set_duty(const uint8_t gpio, uint16_t duty, uint16_t dithering) {
+void adv_pwm_set_dithering(const uint8_t gpio, const uint16_t dithering) {
+    adv_pwm_channel_t* adv_pwm_channel = adv_pwm_channel_find_by_gpio(gpio);
+    if (adv_pwm_channel) {
+        adv_pwm_channel->dithering = dithering;
+    }
+}
+
+void adv_pwm_set_duty(const uint8_t gpio, uint16_t duty) {
     adv_pwm_channel_t* adv_pwm_channel = adv_pwm_channel_find_by_gpio(gpio);
     if (adv_pwm_channel) {
         if (adv_pwm_channel->leading) {
             duty = UINT16_MAX - duty;
         }
         
-        if (dithering == 0 || duty == 0 || duty == UINT16_MAX) {
+        uint16_t _dithering = adv_pwm_channel->dithering;
+        
+        if (_dithering == 0 || duty == 0 || duty == UINT16_MAX) {
             for (int i = 0; i < 8; i++) {
                 adv_pwm_channel->duty[i] = duty;
             }
         } else {
-            if (duty >= (UINT16_MAX - dithering)) {
-                dithering = UINT16_MAX - duty;
-            } else if (duty <= dithering) {
-                dithering = 0;
+            if (duty >= (UINT16_MAX - _dithering)) {
+                _dithering = UINT16_MAX - duty;
+            } else if (duty <= _dithering) {
+                _dithering = 0;
             } else {
-                dithering = dithering * duty / UINT16_MAX;
+                _dithering = _dithering * duty / UINT16_MAX;
             }
 
-            adv_pwm_channel->duty[0] = duty + dithering;
-            adv_pwm_channel->duty[1] = duty + (dithering >> 1);
+            adv_pwm_channel->duty[0] = duty + _dithering;
+            adv_pwm_channel->duty[1] = duty + (_dithering >> 1);
             adv_pwm_channel->duty[2] = duty;
-            adv_pwm_channel->duty[3] = duty - (dithering >> 1);
-            adv_pwm_channel->duty[4] = duty - dithering;
+            adv_pwm_channel->duty[3] = duty - (_dithering >> 1);
+            adv_pwm_channel->duty[4] = duty - _dithering;
             
             for (int i = 5; i < 8; i++) {
                 adv_pwm_channel->duty[i] = adv_pwm_channel->duty[8 - i];
@@ -220,7 +231,7 @@ void adv_pwm_set_duty(const uint8_t gpio, uint16_t duty, uint16_t dithering) {
     }
 }
 
-void adv_pwm_new_channel(const uint8_t gpio, uint8_t inverted, const bool leading) {
+void adv_pwm_new_channel(const uint8_t gpio, const bool inverted, const bool leading, const uint16_t dithering) {
     adv_pwm_init(0);
     
     if (!adv_pwm_channel_find_by_gpio(gpio)) {
@@ -232,21 +243,10 @@ void adv_pwm_new_channel(const uint8_t gpio, uint8_t inverted, const bool leadin
         adv_pwm_channel_t* adv_pwm_channel = malloc(sizeof(adv_pwm_channel_t));
         memset(adv_pwm_channel, 0, sizeof(*adv_pwm_channel));
         
-        int gpio_open_drain = false;
-        if (inverted > 1) {
-            inverted -= 2;
-            gpio_open_drain = true;
-        }
-        
-        if (gpio_open_drain) {
-            gpio_enable(gpio, GPIO_OUT_OPEN_DRAIN);
-        } else {
-            gpio_enable(gpio, GPIO_OUTPUT);
-        }
-        
         adv_pwm_channel->gpio = gpio;
         adv_pwm_channel->leading = leading;
         adv_pwm_channel->inverted = inverted ^ leading;
+        adv_pwm_channel->dithering = dithering;
         
         adv_pwm_channel->next = adv_pwm_config->adv_pwm_channels;
         adv_pwm_config->adv_pwm_channels = adv_pwm_channel;
@@ -257,12 +257,10 @@ void adv_pwm_new_channel(const uint8_t gpio, uint8_t inverted, const bool leadin
     }
 }
 
-void adv_pwm_set_zc_gpio(const uint8_t gpio, const unsigned int int_type, const bool pullup_resistor) {
+void adv_pwm_set_zc_gpio(const uint8_t gpio, const unsigned int int_type) {
     adv_pwm_init(0);
     
     adv_pwm_config->zc_status = 1;
     
-    gpio_enable(gpio, GPIO_INPUT);
-    gpio_set_pullup(gpio, pullup_resistor, pullup_resistor);
     gpio_set_interrupt(gpio, int_type, zero_crossing_interrupt);
 }

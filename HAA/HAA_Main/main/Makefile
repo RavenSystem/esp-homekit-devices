@@ -1,26 +1,28 @@
 PROGRAM = haamain
 
+SETUP_WEB := $(shell python3 ../../common/embed.py setup.html > setup.html.h)
+
 EXTRA_COMPONENTS = \
-	$(abspath setup_mode) \
 	extras/dhcpserver \
 	extras/rboot-ota \
-	$(abspath ../../external_libs/http-parser) \
-    $(abspath ../../external_libs/wolfssl) \
-    $(abspath ../../external_libs/cJSON) \
-    $(abspath ../../libs/homekit-rsf) \
-	$(abspath ../../libs/adv_i2c) \
-    $(abspath ../../libs/adv_button) \
-    $(abspath ../../libs/adv_hlw) \
-	$(abspath ../../libs/adv_pwm) \
-	$(abspath ../../libs/adv_nrzled) \
-	$(abspath ../../libs/new_dht) \
-	$(abspath ../../libs/new_onewire) \
-	$(abspath ../../libs/new_ds18b20) \
-	$(abspath ../../libs/raven_ntp) \
-	$(abspath ../../libs/ping) \
-	$(abspath ../../libs/unistring) \
-	$(abspath ../../libs/adv_logger_ntp) \
-	$(abspath ../../libs/timers_helper)
+	$(abspath ../../../external_libs/http-parser) \
+    $(abspath ../../../external_libs/wolfssl) \
+    $(abspath ../../../external_libs/cJSON) \
+    $(abspath ../../../libs/homekit-rsf) \
+	$(abspath ../../../libs/adv_i2c) \
+    $(abspath ../../../libs/adv_button) \
+    $(abspath ../../../libs/adv_hlw) \
+	$(abspath ../../../libs/adv_pwm) \
+	$(abspath ../../../libs/adv_nrzled) \
+	$(abspath ../../../libs/new_dht) \
+	$(abspath ../../../libs/new_onewire) \
+	$(abspath ../../../libs/new_ds18b20) \
+	$(abspath ../../../libs/raven_ntp) \
+	$(abspath ../../../libs/ping) \
+	$(abspath ../../../libs/unistring) \
+	$(abspath ../../../libs/form_urlencoded) \
+	$(abspath ../../../libs/adv_logger_ntp) \
+	$(abspath ../../../libs/timers_helper)
 
 FLASH_SIZE = 1
 FLASH_MODE = dout
@@ -47,7 +49,7 @@ EXTRA_CFLAGS += -Wall -std=gnu99
 EXTRA_CFLAGS += -Wextra -Wno-unused-parameter
 #EXTRA_CFLAGS += -Wpedantic
 
-EXTRA_CFLAGS += -I../.. -DHOMEKIT_SHORT_APPLE_UUIDS
+EXTRA_CFLAGS += -I../../.. -DHOMEKIT_SHORT_APPLE_UUIDS
 
 EXTRA_CFLAGS += -DHOMEKIT_OVERCLOCK_PAIR_VERIFY
 EXTRA_CFLAGS += -DHOMEKIT_OVERCLOCK_PAIR_SETUP
@@ -110,7 +112,7 @@ EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=736
 ## mDNS Responder DEBUG
 #EXTRA_CFLAGS += -DqDebugLog -DqLogIncoming -DqLogAllTraffic
 
-include $(abspath ../../sdk/esp-open-rtos-rsf/common.mk)
+include $(abspath ../../../sdk/esp-open-rtos-rsf/common.mk)
 
 LIBS += m
 

@@ -12,7 +12,7 @@
 extern "C" {
 #endif
 
-int adv_hlw_unit_create(int gpio_cf, int gpio_cf1, int gpio_sel, const unsigned int current_mode, const unsigned int interrupt_type);
+int adv_hlw_unit_create(const int8_t gpio_cf, const int8_t gpio_cf1, const int8_t gpio_sel, const unsigned int current_mode, const unsigned int interrupt_type);
 
 double adv_hlw_get_voltage_freq(const int gpio);
 double adv_hlw_get_current_freq(const int gpio);

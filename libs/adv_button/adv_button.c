@@ -422,7 +422,7 @@ void adv_button_set_disable_time() {
     }
 }
 
-int adv_button_create(const uint16_t gpio, const uint8_t pullup_resistor, const bool inverted, const uint8_t mode) {
+int adv_button_create(const uint16_t gpio, const bool inverted, const uint8_t mode, const uint8_t mcp_bus) {
     adv_button_init();
     
     adv_button_t* button = button_find_by_gpio(gpio);
@@ -438,6 +438,7 @@ int adv_button_create(const uint16_t gpio, const uint8_t pullup_resistor, const 
         button->inverted = inverted;
         button->mode = mode;
         
+        /*
         if (gpio <= 16) {
             if (gpio != 0) {
                 gpio_enable(gpio, GPIO_INPUT);
@@ -445,13 +446,13 @@ int adv_button_create(const uint16_t gpio, const uint8_t pullup_resistor, const 
             
             gpio_set_pullup(gpio, pullup_resistor, pullup_resistor);
         }
-        
+        */
         if (mode == ADV_BUTTON_NORMAL_MODE) {
             vTaskDelay(pdMS_TO_TICKS(20));
             
             if (gpio <= 16) {
                 button->state = gpio_read(gpio);
-            } else {
+            } else {    // gpio == 17
                 button->state = (sdk_system_adc_read() > ADC_MID_VALUE);
             }
             
@@ -486,7 +487,7 @@ int adv_button_create(const uint16_t gpio, const uint8_t pullup_resistor, const 
                 
                 mcp->index = index;
                 mcp->addr = mode;
-                mcp->bus = pullup_resistor;
+                mcp->bus = mcp_bus;
                 
                 if (mcp_gpio < 8) {
                     mcp->channels = MCP_CHANNEL_A;

@@ -31,6 +31,7 @@
 #include <lwip/netdb.h>
 #include <lwip/dns.h>
 #include <lwip/etharp.h>
+
 #ifdef HAA_DEBUG
 #include <lwip/stats.h>
 #endif // HAA_DEBUG
@@ -53,8 +54,8 @@
 
 #include <cJSON.h>
 
-#include "setup_mode/include/wifi_config.h"
-#include "../common/ir_code.h"
+#include "setup.h"
+#include "ir_code.h"
 
 #include "extra_characteristics.h"
 #include "header.h"
@@ -90,7 +91,7 @@ main_config_t main_config = {
     .clock_ready = false,
     .timetable_ready = false,
     
-    .used_gpio = 0,
+    //.used_gpio = 0,
     
     .setup_mode_toggle_timer = NULL,
     
@@ -133,6 +134,7 @@ double fast_precise_pow(double a, double b) {
     return r * u.d;
 }
 
+/*
 int get_used_gpio(const uint16_t gpio) {
     if (gpio < MAX_GPIOS) {
         const uint64_t bit = 1 << gpio;
@@ -154,7 +156,7 @@ void set_used_gpio(const int16_t gpio) {
         main_config.used_gpio |= bit;
     }
 }
-/*
+
 void set_unused_gpios() {
     for (int i = 0; i < 17; i++) {
         if (i == 6) {
@@ -243,7 +245,7 @@ void led_blink(const uint8_t times) {
     }
 }
 
-void led_create(const uint8_t gpio, uint8_t inverted) {
+void led_create(const uint16_t gpio, uint8_t inverted) {
     main_config.status_led = malloc(sizeof(led_t));
     memset(main_config.status_led, 0, sizeof(*main_config.status_led));
     
@@ -251,23 +253,8 @@ void led_create(const uint8_t gpio, uint8_t inverted) {
     
     main_config.status_led->gpio = gpio;
     
-    int gpio_open_drain = false;
-    if (inverted > 1) {
-        inverted -= 2;
-        gpio_open_drain = true;
-    }
-    
     main_config.status_led->inverted = inverted;
     main_config.status_led->status = inverted;
-    
-    if (gpio < 17) {
-        gpio_write(gpio, inverted);
-        if (gpio_open_drain) {
-            gpio_enable(gpio, GPIO_OUT_OPEN_DRAIN);
-        } else {
-            gpio_enable(gpio, GPIO_OUTPUT);
-        }
-    }
     
     extended_gpio_write(gpio, inverted);
 }
@@ -491,12 +478,6 @@ addressled_t* addressled_find(const uint8_t gpio) {
 }
 
 addressled_t* new_addressled(uint8_t gpio, const uint16_t max_range) {
-    int gpio_open_drain = false;
-    if (gpio >= 100) {
-        gpio_open_drain = true;
-        gpio -= 100;
-    }
-    
     addressled_t* addressled = addressled_find(gpio);
     
     if (addressled) {
@@ -504,14 +485,6 @@ addressled_t* new_addressled(uint8_t gpio, const uint16_t max_range) {
             addressled->max_range = max_range;
         }
     } else {
-        if (gpio_open_drain) {
-            gpio_enable(gpio, GPIO_OUT_OPEN_DRAIN);
-        } else {
-            gpio_enable(gpio, GPIO_OUTPUT);
-        }
-        
-        gpio_write(gpio, false);
-        
         addressled = malloc(sizeof(addressled_t));
         memset(addressled, 0, sizeof(*addressled));
         
@@ -3280,14 +3253,14 @@ void rgbw_set_timer_worker() {
                     lightbulb_group->has_changed = true;
                     
                     if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM) {
-                        adv_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i], LIGHTBULB_PWM_DITHER);
+                        adv_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i]);
                     }
                 } else if (lightbulb_group->current[i] != lightbulb_group->target[i]) {
                     lightbulb_group->current[i] = lightbulb_group->target[i];
                     lightbulb_group->has_changed = true;
                     
                     if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM) {
-                        adv_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i], LIGHTBULB_PWM_DITHER);
+                        adv_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i]);
                     }
                 }
             }
@@ -6273,7 +6246,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     
     // Copy actions
     action_copy_t* action_copy = ch_group->action_copy;
-    while(action_copy) {
+    while (action_copy) {
         if (action_copy->action == action) {
             action = action_copy->new_action;
             action_copy = NULL;
@@ -6284,7 +6257,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     
     // Binary outputs
     action_binary_output_t* action_binary_output = ch_group->action_binary_output;
-    while(action_binary_output) {
+    while (action_binary_output) {
         if (action_binary_output->action == action) {
             extended_gpio_write(action_binary_output->gpio, action_binary_output->value);
             INFO("<%i> DigO %i->%i (%i)", ch_group->serv_index, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
@@ -6299,7 +6272,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     
     // Service Notification Manager
     action_serv_manager_t* action_serv_manager = ch_group->action_serv_manager;
-    while(action_serv_manager) {
+    while (action_serv_manager) {
         if (action_serv_manager->action == action) {
             ch_group_t* ch_group = ch_group_find_by_serv(action_serv_manager->serv_index);
             if (ch_group) {
@@ -6657,7 +6630,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     
     // System actions
     action_system_t* action_system = ch_group->action_system;
-    while(action_system) {
+    while (action_system) {
         if (action_system->action == action) {
             INFO("<%i> Sys %i", ch_group->serv_index, action_system->value);
             switch (action_system->value) {
@@ -6687,9 +6660,28 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         action_system = action_system->next;
     }
     
+    // PWM actions
+    action_pwm_t* action_pwm = ch_group->action_pwm;
+    while (action_pwm) {
+        if (action_pwm->action == action) {
+            INFO("<%i> PWM %i->%i, d %i, f %i", ch_group->serv_index, action_pwm->gpio, action_pwm->duty, action_pwm->dithering, action_pwm->freq);
+            
+            if (action_pwm->gpio >= 0) {
+                adv_pwm_set_dithering(action_pwm->gpio, action_pwm->dithering);
+                adv_pwm_set_duty(action_pwm->gpio, action_pwm->duty);
+            }
+            
+            if (action_pwm->freq > 0) {
+                adv_pwm_set_freq(action_pwm->freq);
+            }
+        }
+        
+        action_pwm = action_pwm->next;
+    }
+    
     // Set Characteristic actions
     action_set_ch_t* action_set_ch = ch_group->action_set_ch;
-    while(action_set_ch) {
+    while (action_set_ch) {
         if (action_set_ch->action == action) {
             INFO("<%i> SetCh %i.%i->%i.%i", ch_group->serv_index, action_set_ch->source_serv, action_set_ch->source_ch, action_set_ch->target_serv, action_set_ch->target_ch);
             const float value = get_hkch_value(ch_group_find_by_serv(action_set_ch->source_serv)->ch[action_set_ch->source_ch]);
@@ -6908,7 +6900,7 @@ void printf_header() {
 }
 
 void reset_uart() {
-    set_used_gpio(1);
+    //set_used_gpio(1);
     gpio_disable(1);
     iomux_set_pullup_flags(5, 0);
     iomux_set_function(5, IOMUX_GPIO1_FUNC_UART0_TXD);
@@ -6950,46 +6942,6 @@ void normal_mode_init() {
         
         for (int j = 0; j < cJSON_GetArraySize(json_buttons); j++) {
             const int gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PIN_GPIO)->valuedouble;
-            
-            int inverted = false;
-            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), INVERTED)) {
-                inverted = (bool) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), INVERTED)->valuedouble;
-            }
-            
-            int button_filter = 0;
-            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_FILTER) != NULL) {
-                button_filter = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_FILTER)->valuedouble;
-            }
-            
-            if (gpio < MAX_GPIOS) {
-                if (!get_used_gpio(gpio)) {
-                    set_used_gpio(gpio);
-                    
-                    int pullup_resistor = true;
-                    if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR)) {
-                        pullup_resistor = (bool) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PULLUP_RESISTOR)->valuedouble;
-                    }
-                    
-                    int button_mode = 0;
-                    if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_MODE) != NULL) {
-                        button_mode = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_MODE)->valuedouble;
-                    }
-                    
-                    adv_button_create(gpio, pullup_resistor, inverted, button_mode);
-                    
-                    INFO("New DigI GPIO %i p %i, i %i, f %i, m %i", gpio, pullup_resistor, inverted, button_filter, button_mode);
-                }
-                
-            } else {    // MCP23017
-                mcp23017_t* mcp = mcp_find_by_index(gpio / 100);
-                adv_button_create(gpio, mcp->bus, inverted, mcp->addr);
-                
-                INFO("New DigI MCP Pin %i i %i, f %i, b %i, a %i", gpio, inverted, button_filter, mcp->bus, mcp->addr);
-            }
-            
-            if (button_filter > 0) {
-                adv_button_set_gpio_probes(gpio, button_filter);
-            }
             
             int button_type = 1;
             if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE) != NULL) {
@@ -7200,36 +7152,10 @@ void normal_mode_init() {
                         cJSON* json_relay = cJSON_GetArrayItem(json_relays, i);
                         
                         action_binary_output->action = new_int_action;
+                        action_binary_output->gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuedouble;
                         
                         if (cJSON_GetObjectItemCaseSensitive(json_relay, VALUE) != NULL) {
                             action_binary_output->value = (bool) cJSON_GetObjectItemCaseSensitive(json_relay, VALUE)->valuedouble;
-                        }
-                        
-                        action_binary_output->gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuedouble;
-                        if (!get_used_gpio(action_binary_output->gpio) && action_binary_output->gpio < MAX_GPIOS) {
-                            int initial_value = 0;
-                            if (cJSON_GetObjectItemCaseSensitive(json_relay, INITIAL_VALUE) != NULL) {
-                                initial_value = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_relay, INITIAL_VALUE)->valuedouble;
-                            }
-                            
-                            int gpio_open_drain = false;
-                            if (initial_value > 1) {
-                                initial_value -= 2;
-                                gpio_open_drain = true;
-                            }
-                            
-                            set_used_gpio(action_binary_output->gpio);
-                            gpio_write(action_binary_output->gpio, initial_value);
-                            
-                            if (gpio_open_drain) {
-                                gpio_enable(action_binary_output->gpio, GPIO_OUT_OPEN_DRAIN);
-                            } else {
-                                gpio_enable(action_binary_output->gpio, GPIO_OUTPUT);
-                            }
-                            
-                            gpio_write(action_binary_output->gpio, initial_value);
-                            
-                            INFO("New DigO GPIO %i", action_binary_output->gpio);
                         }
                         
                         if (cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME) != NULL) {
@@ -7623,6 +7549,64 @@ void normal_mode_init() {
         ch_group->action_uart = last_action;
     }
     
+    inline void new_action_pwm(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+        action_pwm_t* last_action = ch_group->action_pwm;
+        
+        void register_action(cJSON* json_accessory, uint8_t new_int_action) {
+            char action[4];
+            itoa(new_int_action, action, 10);
+            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), PWM_ACTIONS_ARRAY) != NULL) {
+                    cJSON* json_action_pwms = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), PWM_ACTIONS_ARRAY);
+                    for (int i = cJSON_GetArraySize(json_action_pwms) - 1; i >= 0; i--) {
+                        action_pwm_t* action_pwm = malloc(sizeof(action_pwm_t));
+                        memset(action_pwm, 0, sizeof(*action_pwm));
+                        
+                        action_pwm->action = new_int_action;
+                        
+                        action_pwm->next = last_action;
+                        last_action = action_pwm;
+                        
+                        cJSON* json_action_pwm = cJSON_GetArrayItem(json_action_pwms, i);
+                        for (int j = 0; j < cJSON_GetArraySize(json_action_pwm); j++) {
+                            const int value = cJSON_GetArrayItem(json_action_pwm, j)->valuedouble;
+                            
+                            switch (j) {
+                                case 0:
+                                    action_pwm->gpio = value;
+                                    break;
+                                    
+                                case 1:
+                                    action_pwm->duty = value;
+                                    break;
+                                    
+                                case 2:
+                                    action_pwm->dithering = value;
+                                    break;
+                                    
+                                case 3:
+                                    action_pwm->freq = value;
+                                    break;
+                            }
+                        }
+                        
+                        INFO("New A%i PWM g %i->%i, d %i, f %i", new_int_action, action_pwm->gpio, action_pwm->duty, action_pwm->dithering, action_pwm->freq);
+                    }
+                }
+            }
+        }
+        
+        if (fixed_action < MAX_ACTIONS) {
+            for (int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+                register_action(json_context, int_action);
+            }
+        } else {
+            register_action(json_context, fixed_action);
+        }
+        
+        ch_group->action_pwm = last_action;
+    }
+    
     void register_actions(ch_group_t* ch_group, cJSON* json_accessory, uint8_t fixed_action) {
         new_action_copy(ch_group, json_accessory, fixed_action);
         new_action_binary_output(ch_group, json_accessory, fixed_action);
@@ -7631,6 +7615,7 @@ void normal_mode_init() {
         new_action_network(ch_group, json_accessory, fixed_action);
         new_action_irrf_tx(ch_group, json_accessory, fixed_action);
         new_action_uart(ch_group, json_accessory, fixed_action);
+        new_action_pwm(ch_group, json_accessory, fixed_action);
         new_action_set_ch(ch_group, json_accessory, fixed_action);
     }
     
@@ -7699,9 +7684,13 @@ void normal_mode_init() {
     
     int8_t th_sensor_gpio(cJSON* json_accessory) {
         if (cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO) != NULL) {
+            /*
             const uint8_t sensor_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO)->valuedouble;
             set_used_gpio(sensor_gpio);
             return sensor_gpio;
+            */
+            
+            return (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO)->valuedouble;
         }
         return -1;
     }
@@ -7798,13 +7787,13 @@ void normal_mode_init() {
                 
                 switch (uart_config) {
                     case 1:
-                        set_used_gpio(2);
+                        //set_used_gpio(2);
                         gpio_disable(2);
                         gpio_set_iomux_function(2, IOMUX_GPIO2_FUNC_UART1_TXD);
                         break;
                         
                     case 2:
-                        set_used_gpio(15);
+                        //set_used_gpio(15);
                         gpio_disable(15);
                         sdk_system_uart_swap();
                         is_uart_swap = true;
@@ -7885,7 +7874,7 @@ void normal_mode_init() {
         if ((log_output_type == 1 || log_output_type == 4 || log_output_type == 7) && !used_uart[0]) {
             reset_uart();
         } else if ((log_output_type == 2 || log_output_type == 5 || log_output_type == 8) && !used_uart[1]) {
-            set_used_gpio(2);
+            //set_used_gpio(2);
             gpio_disable(2);
             gpio_set_iomux_function(2, IOMUX_GPIO2_FUNC_UART1_TXD);
             uart_set_baud(1, 115200);
@@ -7907,23 +7896,6 @@ void normal_mode_init() {
     
     free(txt_config);
     
-    // Custom Hostname
-    char* custom_hostname = name.value.string_value;
-    if (cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME) != NULL) {
-        custom_hostname = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring, &unistrings);
-    }
-    
-    // Custom NTP Host
-    if (cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_NTP_HOST) != NULL) {
-        main_config.ntp_host = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_NTP_HOST)->valuestring, &unistrings);
-    }
-    
-    // Timezone
-    if (cJSON_GetObjectItemCaseSensitive(json_config, TIMEZONE) != NULL) {
-        setenv("TZ", cJSON_GetObjectItemCaseSensitive(json_config, TIMEZONE)->valuestring, 1);
-        tzset();
-    }
-    
     // I2C Bus
     if (cJSON_GetObjectItemCaseSensitive(json_config, I2C_CONFIG_ARRAY) != NULL) {
         cJSON* json_i2cs = cJSON_GetObjectItemCaseSensitive(json_config, I2C_CONFIG_ARRAY);
@@ -7931,10 +7903,10 @@ void normal_mode_init() {
             cJSON* json_i2c = cJSON_GetArrayItem(json_i2cs, i);
 
             unsigned int i2c_scl_gpio = (uint8_t) cJSON_GetArrayItem(json_i2c, 0)->valuedouble;
-            set_used_gpio(i2c_scl_gpio);
+            //set_used_gpio(i2c_scl_gpio);
 
             unsigned int i2c_sda_gpio = (uint8_t) cJSON_GetArrayItem(json_i2c, 1)->valuedouble;
-            set_used_gpio(i2c_sda_gpio);
+            //set_used_gpio(i2c_sda_gpio);
 
             uint32_t i2c_freq_hz = (uint32_t) (cJSON_GetArrayItem(json_i2c, 2)->valuedouble * 1000.f);
 
@@ -8048,6 +8020,107 @@ void normal_mode_init() {
         }
     }
     
+    // PWM frequency
+    if (cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ) != NULL) {
+        adv_pwm_set_freq((uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ)->valuedouble);
+    }
+    
+    // GPIO Hardware Setup
+    if (cJSON_GetObjectItemCaseSensitive(json_config, IO_CONFIG_ARRAY) != NULL) {
+        cJSON* json_io_configs = cJSON_GetObjectItemCaseSensitive(json_config, IO_CONFIG_ARRAY);
+        
+        int use_software_pwm = false;
+        
+        for (int i = 0; i < cJSON_GetArraySize(json_io_configs); i++) {
+            int io_value[5] = { 0, 0, 0, 0, 0 };
+            
+            cJSON* json_io_config = cJSON_GetArrayItem(json_io_configs, i);
+            for (int j = 0; j < cJSON_GetArraySize(json_io_config); j++) {
+                io_value[j] = cJSON_GetArrayItem(json_io_config, j)->valuedouble;
+            }
+            
+            if (IO_GPIO_MODE <= 3) {
+                const int pullup_resistor = (bool) (IO_GPIO_MODE & 0b0001);
+                
+                gpio_set_pullup(IO_GPIO, pullup_resistor, pullup_resistor);
+                
+                if (IO_GPIO_MODE >= 2) {
+                    const int inverted = (bool) (IO_GPIO_INPUT_MODE & 0b0001);
+                    const int pulse_mode = (bool) (IO_GPIO_INPUT_MODE & 0b0010);
+                    
+                    if (IO_GPIO < 100) {
+                        adv_button_create(IO_GPIO, inverted, pulse_mode, 0);
+                        
+                        INFO("DigI GPIO %i p %i, i %i, f %i, m %i", IO_GPIO, pullup_resistor, inverted, IO_GPIO_INPUT_FILTER, pulse_mode);
+                        
+                    } else {    // MCP23017
+                        mcp23017_t* mcp = mcp_find_by_index(IO_GPIO / 100);
+                        adv_button_create(IO_GPIO, inverted, mcp->addr, mcp->bus);
+                        
+                        INFO("DigI MCP Pin %i i %i, f %i, b %i, a %i", IO_GPIO, inverted, IO_GPIO_INPUT_FILTER, mcp->bus, mcp->addr);
+                    }
+                    
+                    if (IO_GPIO_INPUT_FILTER > 0) {
+                        adv_button_set_gpio_probes(IO_GPIO, IO_GPIO_INPUT_FILTER);
+                    }
+                }
+                
+            } else if (IO_GPIO_MODE <= 7) {
+                const int pullup_resistor = (bool) (IO_GPIO_MODE & 0b0001);
+                if (pullup_resistor) {
+                    gpio_enable(IO_GPIO, GPIO_OUTPUT);
+                } else {
+                    gpio_enable(IO_GPIO, GPIO_OUT_OPEN_DRAIN);
+                }
+                
+                if (IO_GPIO_MODE <= 5) {
+                    gpio_write(IO_GPIO, IO_GPIO_OUTPUT_INIT_VALUE);
+                    
+                    INFO("DigO GPIO %i p %i, v %i", IO_GPIO, pullup_resistor, IO_GPIO_OUTPUT_INIT_VALUE);
+                    
+                } else {    // PWM Software
+                    use_software_pwm = true;
+                    
+                    const int inverted = (bool) (IO_GPIO_PWM_MODE & 0b0001);
+                    const int leading = (bool) (IO_GPIO_PWM_MODE & 0b0010);
+                    
+                    adv_pwm_new_channel(IO_GPIO, inverted, leading, IO_GPIO_PWM_DITHERING);
+                    adv_pwm_set_duty(IO_GPIO, IO_GPIO_OUTPUT_INIT_VALUE);
+                    
+                    INFO("PWM GPIO %i, p %i, v %i, i %i, l %i, d %i", IO_GPIO, pullup_resistor, IO_GPIO_OUTPUT_INIT_VALUE, inverted, leading, IO_GPIO_PWM_DITHERING);
+                }
+            }
+        }
+        
+        if (use_software_pwm) {
+            adv_pwm_start();
+        }
+    }
+    
+    // PWM Zero-Crossing GPIO
+    if (cJSON_GetObjectItemCaseSensitive(json_config, PWM_ZEROCROSSING_ARRAY_SET) != NULL) {
+        cJSON* zc_array = cJSON_GetObjectItemCaseSensitive(json_config, PWM_ZEROCROSSING_ARRAY_SET);
+        
+        adv_pwm_set_zc_gpio((uint8_t) cJSON_GetArrayItem(zc_array, 0)->valuedouble, (uint8_t) cJSON_GetArrayItem(zc_array, 1)->valuedouble);
+    }
+    
+    // Custom Hostname
+    char* custom_hostname = name.value.string_value;
+    if (cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME) != NULL) {
+        custom_hostname = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring, &unistrings);
+    }
+    
+    // Custom NTP Host
+    if (cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_NTP_HOST) != NULL) {
+        main_config.ntp_host = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_NTP_HOST)->valuestring, &unistrings);
+    }
+    
+    // Timezone
+    if (cJSON_GetObjectItemCaseSensitive(json_config, TIMEZONE) != NULL) {
+        setenv("TZ", cJSON_GetObjectItemCaseSensitive(json_config, TIMEZONE)->valuestring, 1);
+        tzset();
+    }
+    
     // Timetable Actions
     if (cJSON_GetObjectItemCaseSensitive(json_config, TIMETABLE_ACTION_ARRAY) != NULL) {
         cJSON* json_timetable_actions = cJSON_GetObjectItemCaseSensitive(json_config, TIMETABLE_ACTION_ARRAY);
@@ -8109,7 +8182,7 @@ void normal_mode_init() {
             led_inverted = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, INVERTED)->valuedouble;
         }
         
-        set_used_gpio(led_gpio);
+        //set_used_gpio(led_gpio);
         led_create(led_gpio, led_inverted);
     }
     
@@ -8126,22 +8199,10 @@ void normal_mode_init() {
             inverted_value = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO_INVERTED)->valuedouble;
         }
         
-        int gpio_open_drain = false;
-        if (inverted_value > 1) {
-            inverted_value -= 2;
-            gpio_open_drain = true;
-        }
-        
         main_config.ir_tx_inv = inverted_value;
         
         main_config.ir_tx_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO)->valuedouble;
-        set_used_gpio(main_config.ir_tx_gpio);
-        
-        if (gpio_open_drain) {
-            gpio_enable(main_config.ir_tx_gpio, GPIO_OUT_OPEN_DRAIN);
-        } else {
-            gpio_enable(main_config.ir_tx_gpio, GPIO_OUTPUT);
-        }
+        //set_used_gpio(main_config.ir_tx_gpio);
         
         gpio_write(main_config.ir_tx_gpio, false ^ main_config.ir_tx_inv);
     }
@@ -8154,22 +8215,10 @@ void normal_mode_init() {
             inverted_value = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO_INVERTED)->valuedouble;
         }
         
-        int gpio_open_drain = false;
-        if (inverted_value > 1) {
-            inverted_value -= 2;
-            gpio_open_drain = true;
-        }
-        
         main_config.rf_tx_inv = inverted_value;
         
         main_config.rf_tx_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO)->valuedouble;
-        set_used_gpio(main_config.rf_tx_gpio);
-        
-        if (gpio_open_drain) {
-            gpio_enable(main_config.rf_tx_gpio, GPIO_OUT_OPEN_DRAIN);
-        } else {
-            gpio_enable(main_config.rf_tx_gpio, GPIO_OUTPUT);
-        }
+        //set_used_gpio(main_config.rf_tx_gpio);
         
         gpio_write(main_config.rf_tx_gpio, false ^ main_config.rf_tx_inv);
     }
@@ -8187,20 +8236,6 @@ void normal_mode_init() {
     if (cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER) != NULL) {
         unsigned int button_filter_value = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER)->valuedouble;
         adv_button_set_evaluate_delay(button_filter_value);
-    }
-    
-    // PWM frequency
-    if (cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ) != NULL) {
-        adv_pwm_set_freq((uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ)->valuedouble);
-    }
-    
-    // PWM Zero-Crossing GPIO
-    if (cJSON_GetObjectItemCaseSensitive(json_config, PWM_ZEROCROSSING_ARRAY_SET) != NULL) {
-        cJSON* zc_array = cJSON_GetObjectItemCaseSensitive(json_config, PWM_ZEROCROSSING_ARRAY_SET);
-        const unsigned int zc_gpio = (uint8_t) cJSON_GetArrayItem(zc_array, 0)->valuedouble;
-        set_used_gpio(zc_gpio);
-        
-        adv_pwm_set_zc_gpio(zc_gpio, (uint8_t) cJSON_GetArrayItem(zc_array, 1)->valuedouble, (bool) cJSON_GetArrayItem(zc_array, 2)->valuedouble);
     }
     
     // Ping poll period
@@ -9935,32 +9970,10 @@ void normal_mode_init() {
         }
         
         if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM || LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM_CWWW) {
-            if (cJSON_GetObjectItemCaseSensitive(json_context, PWM_DITHER_SET) != NULL) {
-                LIGHTBULB_PWM_DITHER = cJSON_GetObjectItemCaseSensitive(json_context, PWM_DITHER_SET)->valuedouble;
-            }
-            
-            cJSON* leading_array = NULL;
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_LEADING_ARRAY_SET) != NULL) {
-                leading_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_PWM_LEADING_ARRAY_SET);
-            }
-            
             LIGHTBULB_CHANNELS = cJSON_GetArraySize(gpio_array);
             for (int i = 0; i < LIGHTBULB_CHANNELS; i++) {
-                const int gpio = cJSON_GetArrayItem(gpio_array, i)->valuedouble;
-                const int real_gpio = gpio % 100;
-                set_used_gpio(real_gpio);
-                
-                lightbulb_group->gpio[i] = real_gpio;
-                
-                int is_leading = false;
-                if (leading_array) {
-                    is_leading = (bool) cJSON_GetArrayItem(leading_array, i)->valuedouble;
-                }
-                
-                adv_pwm_new_channel(real_gpio, gpio / 100, is_leading);
+                lightbulb_group->gpio[i] = (uint8_t) cJSON_GetArrayItem(gpio_array, i)->valuedouble;
             }
-            
-            adv_pwm_start();
             
         /*
         } else if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_SM16716) {
@@ -9974,7 +9987,7 @@ void normal_mode_init() {
             
         } else if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_NRZ) {
             lightbulb_group->gpio[0] = cJSON_GetArrayItem(gpio_array, 0)->valuedouble;
-            set_used_gpio(lightbulb_group->gpio[0]);
+            //set_used_gpio(lightbulb_group->gpio[0]);
             
             LIGHTBULB_RANGE_START = cJSON_GetArrayItem(gpio_array, 1)->valuedouble;
             LIGHTBULB_RANGE_START -= 1;
@@ -11083,9 +11096,11 @@ void normal_mode_init() {
             for (int i = 0; i < cJSON_GetArraySize(gpio_array); i++) {
                 data[i] = (int16_t) cJSON_GetArrayItem(gpio_array, i)->valuedouble;
                 
+                /*
                 if (i < 3 && pm_sensor_type < 2 && data[i] > -1) {
                     set_used_gpio(data[i]);
                 }
+                */
             }
         }
         
@@ -11322,20 +11337,14 @@ void normal_mode_init() {
             cJSON* gpio_array = cJSON_GetObjectItemCaseSensitive(json_context, FM_SENSOR_GPIO_ARRAY_SET);
             unsigned int gpio = (uint8_t) cJSON_GetArrayItem(gpio_array, 0)->valuedouble;
             const unsigned int interrupt_type = (uint8_t) cJSON_GetArrayItem(gpio_array, 1)->valuedouble;
-            const int pullup = (bool) cJSON_GetArrayItem(gpio_array, 2)->valuedouble;
             FM_SENSOR_GPIO = gpio;
-            set_used_gpio(gpio);
+            //set_used_gpio(gpio);
             
             if (fm_sensor_type == FM_SENSOR_TYPE_PULSE_FREQ) {
-                if (pullup) {
-                    gpio += 100;
-                }
                 adv_hlw_unit_create(gpio, -1, -1, 0, interrupt_type);
                 
             } else {    // FM_SENSOR_TYPE_PULSE_US_TIME
                 FM_SENSOR_GPIO_INT_TYPE = interrupt_type;
-                gpio_enable(gpio, GPIO_INPUT);
-                gpio_set_pullup(gpio, pullup, pullup);
                 
                 FM_SENSOR_GPIO_TRIGGER = 255;
                 if (cJSON_GetArraySize(gpio_array) > 3) {
@@ -11345,9 +11354,8 @@ void normal_mode_init() {
                     const int inverted = gpio_trigger / 100;
                     const unsigned int gpio_final = gpio_trigger % 100;
                     
-                    gpio_enable(gpio_final, GPIO_OUTPUT);
                     gpio_write(gpio_final, !inverted);
-                    set_used_gpio(gpio_final);
+                    //set_used_gpio(gpio_final);
                 }
             }
             
@@ -11419,13 +11427,15 @@ void normal_mode_init() {
         } else if (is_type_uart) {
             if (main_config.uart_buffer_len == 0) {
                 main_config.uart_buffer_len = 1;
-                if (is_uart_swap) {
-                    set_used_gpio(13);
-                } else {
+                if (!is_uart_swap) {
                     gpio_disable(3);
-                    set_used_gpio(3);
+                    //set_used_gpio(3);
                     iomux_set_pullup_flags(4, IOMUX_PIN_PULLUP);
                     iomux_set_function(4, IOMUX_GPIO3_FUNC_UART0_RXD);
+                /*
+                } else {
+                    set_used_gpio(13);
+                */
                 }
             }
         }
@@ -11976,5 +11986,5 @@ void user_init() {
         gpio_enable(i, GPIO_INPUT);
     }
     
-    xTaskCreate(init_task, "INI", 512, NULL, (tskIDLE_PRIORITY + 2), NULL);
+    xTaskCreate(init_task, "INI", (TASK_SIZE_FACTOR * 512), NULL, (tskIDLE_PRIORITY + 2), NULL);
 }
