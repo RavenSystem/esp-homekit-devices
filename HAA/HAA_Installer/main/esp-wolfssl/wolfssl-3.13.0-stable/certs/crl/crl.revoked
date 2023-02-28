@@ -1,0 +1,44 @@
+Certificate Revocation List (CRL):
+        Version 2 (0x1)
+    Signature Algorithm: sha256WithRSAEncryption
+        Issuer: /C=US/ST=Montana/L=Bozeman/O=Sawtooth/OU=Consulting/CN=www.wolfssl.com/emailAddress=info@wolfssl.com
+        Last Update: Aug 11 20:07:38 2016 GMT
+        Next Update: May  8 20:07:38 2019 GMT
+        CRL extensions:
+            X509v3 CRL Number: 
+                2
+Revoked Certificates:
+    Serial Number: 01
+        Revocation Date: Aug 11 20:07:38 2016 GMT
+    Serial Number: 02
+        Revocation Date: Aug 11 20:07:38 2016 GMT
+    Signature Algorithm: sha256WithRSAEncryption
+         91:67:3d:34:8f:85:87:cd:11:0f:e2:af:cd:77:3f:d8:f2:15:
+         cb:c3:0d:49:02:87:13:f5:82:9e:a9:6f:ed:6a:aa:28:b7:6c:
+         61:7b:ac:90:d0:e5:a1:3d:80:2c:31:6f:4e:0b:e9:9a:44:db:
+         6b:24:71:34:9f:d1:51:53:8a:bd:bd:1c:20:e0:96:73:7b:29:
+         1c:e3:56:97:46:a2:5e:db:ae:fe:1f:4a:c1:5c:5b:30:74:a4:
+         70:dc:7e:70:7f:42:9f:48:d3:99:16:ff:34:f9:a7:db:ad:3d:
+         bc:a6:9d:ee:6a:ed:e7:e0:2f:ef:24:ab:4c:9b:44:d8:fc:1c:
+         48:9f:f4:3c:14:f3:6c:a2:0f:a7:93:00:32:29:96:7e:98:5d:
+         c9:85:fa:94:4c:e2:03:7e:fb:bf:f0:0e:93:52:3b:8a:e1:43:
+         fe:3f:f2:57:02:21:e8:ff:43:da:3e:f0:3d:1a:eb:96:7a:0a:
+         d8:27:56:e2:30:2a:3c:a3:93:ff:1e:3f:98:6b:4e:ea:78:90:
+         8b:d7:24:0a:98:b8:c1:e8:f5:02:d2:18:07:17:c3:6c:b5:db:
+         a7:61:c5:5d:8e:36:80:f5:aa:c1:a7:5b:66:4a:dd:17:62:da:
+         80:70:83:4d:69:fa:c4:f4:2d:27:90:8d:7f:28:34:19:e0:a3:
+         8a:6b:73:55
+-----BEGIN X509 CRL-----
+MIICGTCCAQECAQEwDQYJKoZIhvcNAQELBQAwgZQxCzAJBgNVBAYTAlVTMRAwDgYD
+VQQIDAdNb250YW5hMRAwDgYDVQQHDAdCb3plbWFuMREwDwYDVQQKDAhTYXd0b290
+aDETMBEGA1UECwwKQ29uc3VsdGluZzEYMBYGA1UEAwwPd3d3LndvbGZzc2wuY29t
+MR8wHQYJKoZIhvcNAQkBFhBpbmZvQHdvbGZzc2wuY29tFw0xNjA4MTEyMDA3Mzha
+Fw0xOTA1MDgyMDA3MzhaMCgwEgIBARcNMTYwODExMjAwNzM4WjASAgECFw0xNjA4
+MTEyMDA3MzhaoA4wDDAKBgNVHRQEAwIBAjANBgkqhkiG9w0BAQsFAAOCAQEAkWc9
+NI+Fh80RD+KvzXc/2PIVy8MNSQKHE/WCnqlv7WqqKLdsYXuskNDloT2ALDFvTgvp
+mkTbayRxNJ/RUVOKvb0cIOCWc3spHONWl0aiXtuu/h9KwVxbMHSkcNx+cH9Cn0jT
+mRb/NPmn2609vKad7mrt5+Av7ySrTJtE2PwcSJ/0PBTzbKIPp5MAMimWfphdyYX6
+lEziA377v/AOk1I7iuFD/j/yVwIh6P9D2j7wPRrrlnoK2CdW4jAqPKOT/x4/mGtO
+6niQi9ckCpi4wej1AtIYBxfDbLXbp2HFXY42gPWqwadbZkrdF2LagHCDTWn6xPQt
+J5CNfyg0GeCjimtzVQ==
+-----END X509 CRL-----
