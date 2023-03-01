@@ -109,5 +109,8 @@ EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=600
 
 include $(abspath ../../../sdk/esp-open-rtos-rsf/common.mk)
 
+all:
+	../../common/ota_sign.sh
+
 monitor:
 	$(FILTEROUTPUT) --port $(ESPPORT) --baud 115200 --elf $(PROGRAM_OUT)

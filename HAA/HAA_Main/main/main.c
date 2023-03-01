@@ -86,6 +86,9 @@ main_config_t main_config = {
     .ir_tx_gpio = MAX_GPIOS,
     .ir_tx_inv = false,
     
+    .rf_tx_gpio = MAX_GPIOS,
+    .rf_tx_inv = false,
+    
     .ping_poll_period = PING_POLL_PERIOD_DEFAULT,
     
     .clock_ready = false,
@@ -8074,7 +8077,9 @@ void normal_mode_init() {
                 }
                 
                 if (IO_GPIO_MODE <= 5) {
-                    gpio_write(IO_GPIO, IO_GPIO_OUTPUT_INIT_VALUE);
+                    if (IO_GPIO_OUTPUT_INIT_VALUE < 2) {
+                        gpio_write(IO_GPIO, IO_GPIO_OUTPUT_INIT_VALUE);
+                    }
                     
                     INFO("DigO GPIO %i p %i, v %i", IO_GPIO, pullup_resistor, IO_GPIO_OUTPUT_INIT_VALUE);
                     

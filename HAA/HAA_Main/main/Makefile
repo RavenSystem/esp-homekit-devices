@@ -116,5 +116,8 @@ include $(abspath ../../../sdk/esp-open-rtos-rsf/common.mk)
 
 LIBS += m
 
+all:
+	../../common/ota_sign.sh
+	
 monitor:
 	$(FILTEROUTPUT) --port $(ESPPORT) --baud 115200 --elf $(PROGRAM_OUT)
