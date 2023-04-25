@@ -30,10 +30,15 @@
 #define __ADV_I2C_H__
 
 #include <stdint.h>
+
+#ifndef ESP_PLATFORM
+
 #include <stdbool.h>
 #include <errno.h>
 #include <FreeRTOS.h>
 #include <task.h>
+
+#endif
 
 #ifdef	__cplusplus
 extern "C" {
@@ -45,6 +50,45 @@ extern "C" {
 #ifndef I2C_MAX_BUS
     #define I2C_MAX_BUS 2
 #endif
+
+/**
+ * Init bitbanging I2C driver on given pins
+ * @param bus Bus i2c selection
+ * @param scl_pin SCL pin for I2C
+ * @param sda_pin SDA pin for I2C
+ * @param freq frequency of bus in hertz
+ * @param scl_pin_pullup Internal pull-up resistor for SCL pin
+ * @param sda_pin_pullup Internal pull-up resistor for SDA pin
+ * @return Non-zero if error occured
+ */
+int adv_i2c_init_hz(uint8_t bus, uint8_t scl_pin, uint8_t sda_pin, uint32_t freq, bool scl_pin_pullup, bool sda_pin_pullup);
+
+/**
+ * Issue a send operation of 'data' register adress, followed by reading 'len' bytes
+ * from slave into 'buf'.
+ * @param bus Bus i2c selection
+ * @param slave_addr slave device address
+ * @param data Pointer to register address to send if non-null
+ * @param data_len Number of byte of data to send
+ * @param buf Pointer to data buffer
+ * @param len Number of byte of buf to read
+ * @return Non-Zero if error occured
+ */
+int adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t len);
+
+/**
+ * Write 'len' bytes from 'buf' to slave at 'data' register adress .
+ * @param bus Bus i2c selection
+ * @param slave_addr slave device address
+ * @param data Pointer to register address to send if non-null
+ * @param data_len Number of byte of data to send
+ * @param buf Pointer to data buffer
+ * @param len Number of byte of buf to send
+ * @return Non-Zero if error occured
+ */
+int adv_i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t len);
+
+#ifndef ESPPLATFORM
 
 /* Set this to 1 if you intend to use GPIO 16 for I2C. It is not recommended
  * and will result in degradation of performance and timing accuracy.
@@ -72,15 +116,6 @@ typedef enum
   I2C_FREQ_1300K
 } i2c_freq_t;
 
-/**
- * Device descriptor
- */
-typedef struct i2c_dev
-{
-  uint8_t bus;
-  uint8_t addr;
-} i2c_dev_t;
-
 /// Level 0 API
 
 /**
@@ -91,17 +126,7 @@ typedef struct i2c_dev
  * @param freq frequency of bus (ex : I2C_FREQ_400K)
  * @return Non-zero if error occured
  */
-int i2c_init(uint8_t bus, uint8_t scl_pin, uint8_t sda_pin, i2c_freq_t freq);
-
-/**
- * Init bitbanging I2C driver on given pins
- * @param bus Bus i2c selection
- * @param scl_pin SCL pin for I2C
- * @param sda_pin SDA pin for I2C
- * @param freq frequency of bus in hertz
- * @return Non-zero if error occured
- */
-int i2c_init_hz(uint8_t bus, uint8_t scl_pin, uint8_t sda_pin, uint32_t freq);
+int adv_i2c_init(uint8_t bus, uint8_t scl_pin, uint8_t sda_pin, i2c_freq_t freq, bool scl_pin_pullup, bool sda_pin_pullup);
 
 /**
  * Change bus frequency
@@ -170,28 +195,7 @@ bool i2c_status(uint8_t bus);
  */
 void i2c_force_bus(uint8_t bus, bool state);
 
-/**
- * Write 'len' bytes from 'buf' to slave at 'data' register adress .
- * @param bus Bus i2c selection
- * @param slave_addr slave device address
- * @param data Pointer to register address to send if non-null
- * @param buf Pointer to data buffer
- * @param len Number of byte to send
- * @return Non-Zero if error occured
- */
-int i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const uint16_t data_len, const uint8_t *buf, uint32_t len);
-
-/**
- * Issue a send operation of 'data' register adress, followed by reading 'len' bytes
- * from slave into 'buf'.
- * @param bus Bus i2c selection
- * @param slave_addr slave device address
- * @param data Pointer to register address to send if non-null
- * @param buf Pointer to data buffer
- * @param len Number of byte to read
- * @return Non-Zero if error occured
- */
-int i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const uint16_t data_len, uint8_t *buf, uint32_t len);
+#endif  // no ESP_PLATFORM
 
 #ifdef	__cplusplus
 }

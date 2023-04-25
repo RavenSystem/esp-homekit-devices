@@ -1,0 +1,8 @@
+# Name,     Type,  SubType,   Offset,     Size, Flags
+# partition table            0x08000,   0x1000,
+otadata,    data,      ota,  0x09000,   0x2000,
+phy_init,   data,      phy,  0x0b000,   0x1000,
+hap,        0xfe,     0xfe,  0x0c000,   0x1000,
+nvs,        data,      nvs,  0x0d000,  0x16000,
+ota_0,       app,    ota_0,  0x30000, 0x110000,
+ota_1,       app,    ota_1, 0x140000,  0xc0000,

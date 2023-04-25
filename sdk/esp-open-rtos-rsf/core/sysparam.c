@@ -710,6 +710,10 @@ sysparam_status_t sysparam_get_data(const char *key, uint8_t **destptr, size_t *
     return status;
 }
 
+sysparam_status_t sysparam_get_blob(const char *key, uint8_t **destptr, size_t *actual_length) {
+    return sysparam_get_data(key, destptr, actual_length, NULL);
+}
+
 sysparam_status_t sysparam_get_data_static(const char *key, uint8_t *dest, size_t dest_size, size_t *actual_length, bool *is_binary) {
     struct sysparam_context ctx;
     sysparam_status_t status = SYSPARAM_OK;
@@ -1000,6 +1004,14 @@ sysparam_status_t sysparam_set_data(const char *key, const uint8_t *value, size_
     xSemaphoreGive(_sysparam_info.sem);
 
     return status;
+}
+
+sysparam_status_t sysparam_set_blob(const char *key, const uint8_t *value, size_t value_len) {
+    return sysparam_set_data(key, value, value_len, true);
+}
+
+sysparam_status_t sysparam_erase(const char *key) {
+    return sysparam_set_data(key, NULL, 0, true);
 }
 
 sysparam_status_t sysparam_set_string(const char *key, const char *value) {

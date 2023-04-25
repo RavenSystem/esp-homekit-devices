@@ -1,7 +1,7 @@
 /*
 * Advanced NRZ LED Driver
 *
-* Copyright 2021-2022 José Antonio Jiménez Campos (@RavenSystem)
+* Copyright 2021-2023 José Antonio Jiménez Campos (@RavenSystem)
 *
 */
 
@@ -9,18 +9,8 @@
 
 #include "adv_nrzled.h"
 
-#define CPU_FREQ_MHZ                        (80)
-#define NRZ_TICKS_OFFSET                    (4)
-
-int nrz_ticks(const float time_us) {
-    int cycles = CPU_FREQ_MHZ * time_us;
-    
-    if (cycles < NRZ_TICKS_OFFSET) {
-        cycles = NRZ_TICKS_OFFSET;
-    }
-    
-    return cycles - NRZ_TICKS_OFFSET;
-}
+#define ADV_NRZ_CPU_FREQ_MHZ                (80)
+#define ADV_NRZ_NRZ_TICKS_OFFSET            (4)
 
 static inline IRAM uint32_t get_cycle_count() {
     uint32_t cycles;
@@ -28,9 +18,20 @@ static inline IRAM uint32_t get_cycle_count() {
     return cycles;
 }
 
+uint32_t nrz_ticks(const float time_us) {
+    uint32_t cycles = time_us * ADV_NRZ_CPU_FREQ_MHZ;
+    
+    if (cycles < ADV_NRZ_NRZ_TICKS_OFFSET) {
+        cycles = ADV_NRZ_NRZ_TICKS_OFFSET;
+    }
+    
+    return cycles - ADV_NRZ_NRZ_TICKS_OFFSET;
+}
+
 void IRAM nrzled_set(const uint8_t gpio, const uint16_t ticks_0, const uint16_t ticks_1, const uint16_t period, uint8_t *colors, const uint16_t size) {
     uint32_t c, t;
     uint32_t start = 0;
+    
     uint8_t color;
     
     for (int i = 0; i < size; i++) {
@@ -43,11 +44,11 @@ void IRAM nrzled_set(const uint8_t gpio, const uint16_t ticks_0, const uint16_t 
             }
             
             while (((c = get_cycle_count()) - start) < period);
-            gpio_write(gpio, true);
+            gpio_write(gpio, 1);
             
             start = c;
             while (((c = get_cycle_count()) - start) < t);
-            gpio_write(gpio, false);
+            gpio_write(gpio, 0);
         }
     }
 }

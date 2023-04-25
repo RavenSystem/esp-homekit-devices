@@ -1,22 +1,24 @@
 #include <stdarg.h>
+#include <string.h>
 
 #ifdef ESP_PLATFORM
 
-#include <string.h>
-#include <esp_system.h>
-#include <mdns.h>
+#include "esp_random.h"
+#include "adv_logger.h"
 
 uint32_t homekit_random() {
     return esp_random();
 }
 
-void homekit_random_fill(uint8_t *data, size_t size) {
+void homekit_random_fill(uint8_t* data, size_t size) {
     uint32_t x;
-    for (int i=0; i<size; i+=sizeof(x)) {
+    for (int i = 0; i < size; i += sizeof(x)) {
         x = esp_random();
-        memcpy(data+i, &x, (size-i >= sizeof(x)) ? sizeof(x) : size-i);
+        memcpy(data + i, &x, (size - i >= sizeof(x)) ? sizeof(x) : size - i);
     }
 }
+/*
+#include <mdns.h>
 
 void homekit_mdns_init() {
     mdns_init();
@@ -43,19 +45,15 @@ void homekit_mdns_add_txt(const char *key, const char *format, ...) {
 }
 
 void homekit_mdns_configure_finalize(const uint16_t mdns_ttl, const uint16_t mdns_ttl_period) {
-    /*
-    printf("mDNS announcement: Name=%s %s Port=%d TTL=%d\n",
+    //printf("mDNS announcement: Name=%s %s Port=%d TTL=%d\n",
            name->value.string_value, txt_rec, PORT, 0);
-    */
 }
-
+*/
 #else
 
-#include <string.h>
 #include <esp/hwrand.h>
 #include <espressif/esp_common.h>
 #include <esplibs/libmain.h>
-#include "mdnsresponder.h"
 
 uint32_t homekit_random() {
     return hwrand();
@@ -64,22 +62,25 @@ uint32_t homekit_random() {
 void homekit_random_fill(uint8_t *data, size_t size) {
     hwrand_fill(data, size);
 }
+#endif
+
+#include "mdnsresponder.h"
 
 static char mdns_instance_name[65] = {0};
 static char mdns_txt_rec[128] = {0};
 static int mdns_port = 80;
-
-void homekit_mdns_init() {
-    mdns_init();
-}
 
 void homekit_mdns_buffer_set(const uint16_t size) {
     mdns_buffer_deinit();
     mdns_buffer_init(size);
 }
 
+void homekit_mdns_init() {
+    mdns_init();
+}
+
 void homekit_mdns_configure_init(const char *instance_name, int port) {
-    strncpy(mdns_instance_name, instance_name, sizeof(mdns_instance_name));
+    memcpy(mdns_instance_name, instance_name, sizeof(mdns_instance_name));
     mdns_txt_rec[0] = 0;
     mdns_port = port;
 }
@@ -106,7 +107,11 @@ void homekit_mdns_configure_finalize(const uint16_t mdns_ttl, const uint16_t mdn
     mdns_clear();
     mdns_add_facility(mdns_instance_name, "_hap", mdns_txt_rec, mdns_TCP, mdns_port, mdns_ttl, mdns_ttl_period);
 
-    printf("mDNS: Name=%s %s Port=%d TTL=%d\n", mdns_instance_name, mdns_txt_rec, mdns_port, mdns_ttl);
+#ifdef ESP_PLATFORM
+    adv_logger_printf("mDNS Name=%s %s Port=%d TTL=%d\n", mdns_instance_name, mdns_txt_rec, mdns_port, mdns_ttl);
+#else
+    printf("mDNS Name=%s %s Port=%d TTL=%d\n", mdns_instance_name, mdns_txt_rec, mdns_port, mdns_ttl);
+#endif
 }
 
 void homekit_port_mdns_announce() {
@@ -116,5 +121,3 @@ void homekit_port_mdns_announce() {
 void homekit_port_mdns_announce_pause() {
     mdns_announce_pause();
 }
-
-#endif

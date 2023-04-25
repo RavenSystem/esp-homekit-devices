@@ -13,24 +13,27 @@
 #ifndef __ADVANCED_BUTTON__
 #define __ADVANCED_BUTTON__
 
-#define INVSINGLEPRESS_TYPE         (0)
-#define SINGLEPRESS_TYPE            (1)
-#define DOUBLEPRESS_TYPE            (2)
-#define LONGPRESS_TYPE              (3)
-#define VERYLONGPRESS_TYPE          (4)
-#define HOLDPRESS_TYPE              (5)
+#define INVSINGLEPRESS_TYPE             (0)
+#define SINGLEPRESS_TYPE                (1)
+#define DOUBLEPRESS_TYPE                (2)
+#define LONGPRESS_TYPE                  (3)
+#define VERYLONGPRESS_TYPE              (4)
+#define HOLDPRESS_TYPE                  (5)
 
-#define ADV_BUTTON_NORMAL_MODE      (0)
-#define ADV_BUTTON_PULSE_MODE       (1)
+#define ADV_BUTTON_NORMAL_MODE          (0)
+#define ADV_BUTTON_PULSE_MODE           (1)
+
+#define ADV_BUTTON_CONTINUOS_MODE_OFF   (0)
+#define ADV_BUTTON_CONTINUOS_MODE_ON    (1)
+
 
 typedef void (*button_callback_fn)(uint16_t gpio, void *args, uint8_t param);
 
-void adv_button_set_evaluate_delay(const unsigned int new_delay);
-void adv_button_set_gpio_probes(const unsigned int gpio, const unsigned int max_eval);
-int adv_button_create(const uint16_t gpio, const bool inverted, const uint8_t mode, const uint8_t mcp_bus);
+void adv_button_init(const uint16_t new_delay_ms, const bool continuos_mode);
+int adv_button_create(const uint16_t gpio, const bool inverted, const uint8_t mode, const uint8_t mcp_bus, const uint8_t max_eval);
 //int adv_button_destroy(const int gpio);
 void adv_button_set_disable_time();
-int adv_button_read_by_gpio(const unsigned int gpio);
+int adv_button_read_by_gpio(const uint16_t gpio);
 
 /*
  * Button callback types:

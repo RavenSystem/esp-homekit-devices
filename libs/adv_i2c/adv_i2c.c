@@ -26,8 +26,6 @@
 
 #include <esp8266.h>
 #include <espressif/esp_system.h>
-#include <FreeRTOS.h>
-#include <task.h>
 
 //#define I2C_DEBUG true
 
@@ -93,12 +91,12 @@ static uint32_t freq_t_to_hz(i2c_freq_t freq)
     return 80000;
 }
 
-int i2c_init(uint8_t bus, uint8_t scl_pin, uint8_t sda_pin, i2c_freq_t freq)
+int adv_i2c_init(uint8_t bus, uint8_t scl_pin, uint8_t sda_pin, i2c_freq_t freq, bool scl_pin_pullup, bool sda_pin_pullup)
 {
-    return i2c_init_hz(bus, scl_pin, sda_pin, freq_t_to_hz(freq));
+    return adv_i2c_init_hz(bus, scl_pin, sda_pin, freq_t_to_hz(freq), scl_pin_pullup, sda_pin_pullup);
 }
 
-int i2c_init_hz(uint8_t bus, uint8_t scl_pin, uint8_t sda_pin, uint32_t freq)
+int adv_i2c_init_hz(uint8_t bus, uint8_t scl_pin, uint8_t sda_pin, uint32_t freq, bool scl_pin_pullup, bool sda_pin_pullup)
 {
     if (bus >= I2C_MAX_BUS) {
         debug("Invalid bus");
@@ -130,8 +128,8 @@ int i2c_init_hz(uint8_t bus, uint8_t scl_pin, uint8_t sda_pin, uint32_t freq)
     i2c_bus[bus].clk_stretch = I2C_DEFAULT_CLK_STRETCH;
 
     // Just to prevent these pins floating too much if not connected.
-    gpio_set_pullup(scl_pin, 1, 1);
-    gpio_set_pullup(sda_pin, 1, 1);
+    gpio_set_pullup(scl_pin, scl_pin_pullup, scl_pin_pullup);
+    gpio_set_pullup(sda_pin, sda_pin_pullup, sda_pin_pullup);
 
     gpio_enable(scl_pin, GPIO_OUT_OPEN_DRAIN);
     gpio_enable(sda_pin, GPIO_OUT_OPEN_DRAIN);
@@ -157,9 +155,9 @@ int i2c_set_frequency(uint8_t bus, i2c_freq_t freq)
 int i2c_set_frequency_hz(uint8_t bus, uint32_t freq)
 {
     if (freq == 0) return -EINVAL;
-
+    
     uint32_t tick_count = (1000000UL * DELAY_LOOPS_PER_US_160MHZ) / (2 * freq);
-
+    
     bool not_ok = false;
 
     int32_t delay_80 = tick_count / 2 - DELAY_OVERHEAD_80MHZ;
@@ -422,7 +420,7 @@ static int i2c_bus_test(uint8_t bus)
     return 0;
 }
 
-int i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const uint16_t data_len, const uint8_t *buf, uint32_t len)
+int adv_i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t len)
 {
     if (i2c_bus_test(bus))
         return -EBUSY;
@@ -430,7 +428,7 @@ int i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const 
     if (!i2c_write(bus, slave_addr << 1))
         goto error;
     if (data != NULL) {
-        for (int i = 0; i < data_len; i++) {
+        for (unsigned int i = 0; i < data_len; i++) {
             if (!i2c_write(bus, data[i]))
                 goto error;
         }
@@ -451,7 +449,7 @@ error:
     return -EIO;
 }
 
-int i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const uint16_t data_len, uint8_t *buf, uint32_t len)
+int adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t len)
 {
     if (i2c_bus_test(bus))
         return -EBUSY;
@@ -459,7 +457,7 @@ int i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const u
         i2c_start(bus);
         if (!i2c_write(bus, slave_addr << 1))
             goto error;
-        for (int i = 0; i < data_len; i++) {
+        for (unsigned int i = 0; i < data_len; i++) {
             if (!i2c_write(bus, data[i]))
                 goto error;
         }

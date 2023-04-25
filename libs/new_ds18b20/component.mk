@@ -1,7 +1,7 @@
 # Component makefile for new_ds18b20
 
 # expected anyone using bmp driver includes it as 'ds18b20/ds18b20.h'
-INC_DIRS += $(new_ds18b20_ROOT)..
+INC_DIRS += $(new_ds18b20_ROOT)
 
 # args for passing into compile rule generation
 new_ds18b20_SRC_DIR =  $(new_ds18b20_ROOT)

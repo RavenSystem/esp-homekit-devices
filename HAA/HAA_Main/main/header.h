@@ -12,7 +12,7 @@
 
 // Version
 #define HAA_FIRMWARE_VERSION                "12.0.0"
-#define HAA_FIRMWARE_BETA_REVISION          "b1"
+#define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
 // Characteristic types (ch_type)
@@ -99,18 +99,24 @@
 #define STATUS_LED_GPIO                     "l"
 #define INVERTED                            "i"
 #define BUTTON_FILTER                       "f"
+#define BUTTON_CONTINUOS_MODE               "c"
 #define PWM_FREQ                            "q"
 #define PWM_ZEROCROSSING_ARRAY_SET          "zc"
 #define ENABLE_HOMEKIT                      "h"
 #define HOMEKIT_SERVER_MAX_CLIENTS          "h"
-#define HOMEKIT_SERVER_MAX_CLIENTS_DEFAULT  (20)
-#define HOMEKIT_SERVER_MAX_CLIENTS_MAX      (20)
+#define HOMEKIT_SERVER_MAX_CLIENTS_MAX      (12)
+#define HOMEKIT_SERVER_MAX_CLIENTS_DEFAULT  (HOMEKIT_SERVER_MAX_CLIENTS_MAX)
 #define ALLOW_INSECURE_CONNECTIONS          "u"
 #define UART_CONFIG_ARRAY                   "r"
 #define UART_CONFIG_ENABLE                  "n"
 #define UART_CONFIG_STOPBITS                "b"
 #define UART_CONFIG_PARITY                  "p"
 #define UART_CONFIG_SPEED                   "s"
+#define UART_CONFIG_MODE                    "m"
+#define UART_CONFIG_GPIO_ARRAY              "g"
+#define RECV_UART_BUFFER_LEN_ARRAY_SET      "l"
+#define RECV_UART_BUFFER_MIN_LEN_DEFAULT    (1)
+#define RECV_UART_BUFFER_MAX_LEN_DEFAULT    (128)
 #define ACCESSORIES_ARRAY                   "a"
 #define EXTRA_SERVICES_ARRAY                "es"
 #define BUTTONS_ARRAY                       "b"
@@ -160,13 +166,14 @@
 #define EXEC_ACTIONS_ON_BOOT                "xa"
 #define KILLSWITCH                          "ks"
 #define IO_CONFIG_ARRAY                     "io"
-#define IO_GPIO                             io_value[0]
-#define IO_GPIO_MODE                        io_value[1]
-#define IO_GPIO_INPUT_MODE                  io_value[2]
-#define IO_GPIO_INPUT_FILTER                io_value[3]
+#define IO_GPIO_MODE                        io_value[0]
+#define IO_GPIO_PULL_UP_DOWN                io_value[1]
+#define IO_GPIO_BUTTON_MODE                 io_value[2]
+#define IO_GPIO_BUTTON_FILTER               io_value[3]
 #define IO_GPIO_OUTPUT_INIT_VALUE           io_value[2]
 #define IO_GPIO_PWM_MODE                    io_value[3]
 #define IO_GPIO_PWM_DITHERING               io_value[4]
+#define IO_GPIO_ADC_ATTENUATION             io_value[2]
 
 #define TIMETABLE_ACTION_ARRAY              "tt"
 #define ALL_MONS                            13
@@ -355,7 +362,7 @@
 #define AUTODIMMER_TASK_DELAY_DEFAULT       (1000)
 #define AUTODIMMER_TASK_STEP_SET            "e"
 #define AUTODIMMER_TASK_STEP_DEFAULT        (20)
-#define LIGHTBULB_SET_DELAY_MS              (200)
+#define LIGHTBULB_SET_DELAY_MS              (100)
 #define R                                   lightbulb_group->r
 #define G                                   lightbulb_group->g
 #define B                                   lightbulb_group->b
@@ -544,6 +551,8 @@
 #define FM_BUFFER_LEN_ARRAY_SET             "bl"
 #define FM_BUFFER_LEN_MIN                   ch_group->num_i[3]
 #define FM_BUFFER_LEN_MAX                   ch_group->num_i[4]
+#define FM_UART_PORT_SET                    "u"
+#define FM_UART_PORT                        ch_group->num_i[5]
 #define FM_TARGET_CH_ARRAY_SET              "tg"
 #define FM_POLL_PERIOD_DEFAULT              (30.f)
 #define FM_PATTERN_ARRAY_SET                "pt"
@@ -573,6 +582,8 @@
 #define LIGHT_SENSOR_TYPE_SET               "n"
 #define LIGHT_SENSOR_TYPE_DEFAULT           (0)
 #define LIGHT_SENSOR_TYPE                   ch_group->num_i[0]
+#define LIGHT_SENSOR_GPIO_SET               "g"
+#define LIGHT_SENSOR_GPIO                   ch_group->num_i[1]
 #define LIGHT_SENSOR_POLL_PERIOD_DEFAULT    (3.f)
 #define LIGHT_SENSOR_FACTOR_SET             "f"
 #define LIGHT_SENSOR_FACTOR_DEFAULT         (1)
@@ -657,8 +668,8 @@
 #define IRRF_ACTION_RAW_CODE                "w"
 #define IR_ACTION_TX_GPIO                   "t"
 #define IR_ACTION_TX_GPIO_INVERTED          "j"
-#define RF_ACTION_TX_GPIO                   "tf"
-#define RF_ACTION_TX_GPIO_INVERTED          "jf"
+#define RF_ACTION_TX_GPIO                   "g"
+#define RF_ACTION_TX_GPIO_INVERTED          "k"
 #define IRRF_ACTION_FREQ                    "x"
 #define IRRF_ACTION_REPEATS                 "r"
 #define IRRF_ACTION_REPEATS_PAUSE           "d"
@@ -729,10 +740,6 @@
 #define HOMEKIT_DEVICE_CATEGORY_SET         "ct"
 #define HOMEKIT_DEVICE_CATEGORY_DEFAULT     (1)
 
-#define RECV_UART_BUFFER_LEN_ARRAY_SET      "ul"
-#define RECV_UART_BUFFER_MIN_LEN_DEFAULT    (1)
-#define RECV_UART_BUFFER_MAX_LEN_DEFAULT    (128)
-
 #define ACC_CREATION_DELAY                  "cd"
 #define EXIT_EMERGENCY_SETUP_MODE_TIME      (2500)
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
@@ -753,6 +760,7 @@
 #define WIFI_STATUS_CONNECTING              (2)
 #define WIFI_STATUS_CONNECTED               (3)
 #define WIFI_PING_ERRORS                    "w"
+#define WIFI_SLEEP_MODE_SET                 "d"
 
 #define WIFI_RECONNECTION_POLL_PERIOD_MS    (5000)
 #define WIFI_DISCONNECTED_LONG_TIME         (60)    // * WIFI_RECONNECTION_POLL_PERIOD_MS
@@ -761,6 +769,10 @@
 #define WIFI_WATCHDOG_ARP_PERIOD_SET        "e"
 #define WIFI_WATCHDOG_ARP_PERIOD_DEFAULT    (40)    // * WIFI_WATCHDOG_POLL_PERIOD_MS
 #define WIFI_WATCHDOG_ROAMING_PERIOD        (1234)  // * WIFI_WATCHDOG_POLL_PERIOD_MS
+
+#define HAA_RMT_LED_STRIP_BLOCK_SYMBOLS     (256)
+#define HAA_RMT_LED_STRIP_RESOLUTION_HZ     (10000000)
+#define HAA_RMT_LED_STRIP_QUEUE_DEPTH       (2)
 
 #define STATUS_LED_DURATION_ON              (30)
 #define STATUS_LED_DURATION_OFF             (120)
@@ -778,8 +790,14 @@
 
 #define SYSTEM_UPTIME_MS                    ((float) sdk_system_get_time_raw() * 1e-3)
 
-#define MIN(x, y)                           (((x) < (y)) ? (x) : (y))
-#define MAX(x, y)                           (((x) > (y)) ? (x) : (y))
+#define HAA_MIN(x, y)                       (((x) < (y)) ? (x) : (y))
+#define HAA_MAX(x, y)                       (((x) > (y)) ? (x) : (y))
+
+#ifdef ESP_PLATFORM
+#define HAA_ADC_MAX_VALUE                   (4096)
+#else
+#define HAA_ADC_MAX_VALUE                   (1024)
+#endif
 
 #define KELVIN_TO_CELSIUS(x)                ((x) - 273.15)
 

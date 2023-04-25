@@ -1,7 +1,15 @@
 #ifndef DRIVER_DS18B20_H_
 #define DRIVER_DS18B20_H_
 
+#ifdef ESP_PLATFORM
+
+#include "onewire.h"
+
+#else
+
 #include "new_onewire/onewire.h"
+
+#endif
 
 #ifdef	__cplusplus
 extern "C" {

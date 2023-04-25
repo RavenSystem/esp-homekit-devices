@@ -1,7 +1,31 @@
-#include "onewire.h"
 #include "string.h"
+
+#ifdef ESP_PLATFORM
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/gpio.h"
+#include "rom/ets_sys.h"
+
+#define sdk_os_delay_us(time)       ets_delay_us(time)
+#define gpio_read(level)            gpio_get_level(level)
+#define gpio_write(gpio, level)     gpio_set_level(gpio, level)
+#define PORT_ENTER_CRITICAL()       portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED; taskENTER_CRITICAL(&mux)
+#define PORT_EXIT_CRITICAL()        taskEXIT_CRITICAL(&mux)
+
+#else
+
+#include "FreeRTOS.h"
 #include "task.h"
 #include "esp/gpio.h"
+#include <espressif/esp_misc.h>     // sdk_os_delay_us
+
+#define PORT_ENTER_CRITICAL()       taskENTER_CRITICAL()
+#define PORT_EXIT_CRITICAL()        taskEXIT_CRITICAL()
+
+#endif
+
+#include "onewire.h"
 
 #define ONEWIRE_SELECT_ROM 0x55
 #define ONEWIRE_SKIP_ROM   0xcc
@@ -23,6 +47,20 @@ static inline bool _onewire_wait_for_bus(int pin, int max_wait) {
     return state;
 }
 
+static void setup_pin(uint8_t pin, bool open_drain)
+{
+#ifdef ESP_PLATFORM
+    gpio_reset_pin(pin);
+    gpio_set_direction(pin, open_drain ? GPIO_MODE_INPUT_OUTPUT_OD : GPIO_MODE_OUTPUT);
+    gpio_set_pull_mode(pin, GPIO_PULLUP_ONLY);
+    gpio_sleep_set_pull_mode(pin, GPIO_PULLUP_ONLY);
+#else
+    gpio_disable(pin);
+    gpio_enable(pin, open_drain ? GPIO_OUT_OPEN_DRAIN : GPIO_OUTPUT);
+    gpio_set_pullup(pin, true, true);
+#endif
+}
+
 // Perform the onewire reset function.  We will wait up to 250uS for
 // the bus to come high, if it doesn't then it is broken or shorted
 // and we return false;
@@ -32,7 +70,7 @@ static inline bool _onewire_wait_for_bus(int pin, int max_wait) {
 bool onewire_reset(int pin) {
     bool r;
 
-    gpio_enable(pin, GPIO_OUT_OPEN_DRAIN);
+    setup_pin(pin, true);
     gpio_write(pin, 1);
     // wait until the wire is high... just in case
     if (!_onewire_wait_for_bus(pin, 250)) return false;
@@ -40,9 +78,11 @@ bool onewire_reset(int pin) {
     gpio_write(pin, 0);
     sdk_os_delay_us(480);
     
+    PORT_ENTER_CRITICAL();
     gpio_write(pin, 1); // allow it to float
     sdk_os_delay_us(70);
     r = !gpio_read(pin);
+    PORT_EXIT_CRITICAL();
 
     // Wait for all devices to finish pulling the bus low before returning
     if (!_onewire_wait_for_bus(pin, 410)) return false;
@@ -52,6 +92,7 @@ bool onewire_reset(int pin) {
 
 static bool _onewire_write_bit(int pin, bool v) {
     if (!_onewire_wait_for_bus(pin, 10)) return false;
+    PORT_ENTER_CRITICAL();
     if (v) {
         gpio_write(pin, 0);  // drive output low
         sdk_os_delay_us(10);
@@ -63,6 +104,7 @@ static bool _onewire_write_bit(int pin, bool v) {
         gpio_write(pin, 1); // allow output high
     }
     sdk_os_delay_us(1);
+    PORT_EXIT_CRITICAL();
 
     return true;
 }
@@ -71,12 +113,15 @@ static int _onewire_read_bit(int pin) {
     int r;
 
     if (!_onewire_wait_for_bus(pin, 10)) return -1;
+    
+    PORT_ENTER_CRITICAL();
     gpio_write(pin, 0);
     sdk_os_delay_us(2);
     gpio_write(pin, 1);  // let pin float, pull up will raise
     sdk_os_delay_us(11);
     r = gpio_read(pin);  // Must sample within 15us of start
     sdk_os_delay_us(48);
+    PORT_EXIT_CRITICAL();
 
     return r;
 }
@@ -163,15 +208,15 @@ bool onewire_power(int pin) {
     // Make sure the bus is not being held low before driving it high, or we
     // may end up shorting ourselves out.
     if (!_onewire_wait_for_bus(pin, 10)) return false;
-
-    gpio_enable(pin, GPIO_OUTPUT);
+    
+    setup_pin(pin, false);
     gpio_write(pin, 1);
 
     return true;
 }
 
 void onewire_depower(int pin) {
-    gpio_enable(pin, GPIO_OUT_OPEN_DRAIN);
+    setup_pin(pin, true);
 }
 
 void onewire_search_start(onewire_search_t *search) {
@@ -322,7 +367,12 @@ onewire_addr_t onewire_search_next(onewire_search_t *search, int pin) {
 // "Understanding and Using Cyclic Redundancy Checks with Maxim iButton Products"
 //
 
-#if ONEWIRE_CRC8_TABLE
+/** Select the table-lookup method of computing the 8-bit CRC
+ *  by setting this to 1 during compilation.  The lookup table enlarges code
+ *  size by about 250 bytes.  By default, a slower but very compact algorithm
+ *  is used.
+ */
+#ifdef ONEWIRE_CRC8_TABLE
 // This table comes from Dallas sample code where it is freely reusable,
 // though Copyright (C) 2000 Dallas Semiconductor Corporation
 static const uint8_t dscrc_table[] = {

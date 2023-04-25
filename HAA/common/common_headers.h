@@ -8,6 +8,29 @@
 #ifndef __HAA_COMMON_HEADER_H__
 #define __HAA_COMMON_HEADER_H__
 
+#ifdef ESP_PLATFORM
+    #define TASK_SIZE_FACTOR                (5)
+    #define MAX_SETUP_BODY_LEN              (70000)
+    #define MAX_GPIOS                       (GPIO_NUM_MAX)
+#else   // ESP-OPEN-RTOS
+    #define TASK_SIZE_FACTOR                (1)
+    #define MAX_SETUP_BODY_LEN              (16500)
+    #define MAX_GPIOS                       (18)
+#endif
+
+#ifdef HAA_SINGLE_CORE
+#define HAA_SINGLE_CORE_SUFIX   "_1"
+#else
+#define HAA_SINGLE_CORE_SUFIX   ""
+#endif
+
+// For ESP-OPEN-RTOS only
+#define BOOT0SECTOR                         (0x02000)
+#define BOOT1SECTOR                         (0x91000)   // Must match the sdk/ld/program1.ld value
+#define SYSPARAMSECTOR                      (0xF3000)
+#define SYSPARAMSIZE                        (8)
+
+
 #define CUSTOM_REPO_SYSPARAM                "ota_sever"
 #define PORT_NUMBER_SYSPARAM                "ota_port"
 #define PORT_SECURE_SYSPARAM                "ota_sec"
@@ -17,7 +40,11 @@
 #define WIFI_PASSWORD_SYSPARAM              "wifi_password"
 #define WIFI_MODE_SYSPARAM                  "wifi_mode"
 #define WIFI_BSSID_SYSPARAM                 "wifi_bssid"
+
+#ifndef ESP_PLATFORM
 #define WIFI_LAST_WORKING_PHY_SYSPARAM      "wifi_phy"
+#endif
+
 #define HOMEKIT_RE_PAIR_SYSPARAM            "re_pair"
 #define HOMEKIT_PAIRING_COUNT_SYSPARAM      "pair_count"
 #define TOTAL_SERV_SYSPARAM                 "total_ac"
@@ -25,25 +52,30 @@
 #define HAA_SETUP_MODE_SYSPARAM             "setup"
 #define LAST_CONFIG_NUMBER_SYSPARAM         "hkcf"
 
-#define BOOT0SECTOR                         (0x02000)
-#define BOOT1SECTOR                         (0x91000)   // Must match the sdk/ld/program1.ld value
-#define SYSPARAMSECTOR                      (0xF3000)
-#define SYSPARAMSIZE                        (8)
-
 #define WIFI_CONFIG_SERVER_PORT             (4567)
 #define AUTO_REBOOT_TIMEOUT                 (90000)
 #define AUTO_REBOOT_LONG_TIMEOUT            (900000)
 #define AUTO_REBOOT_ON_HANG_OTA_TIMEOUT     (2000000)
-#define MAX_BODY_LEN                        (16000)
 #define BEST_RSSI_MARGIN                    (1)
-
-#define TASK_SIZE_FACTOR                    (1)
 
 #define HIGH_HOMEKIT_CH_NUMBER              (6)
 
+#ifdef ESP_PLATFORM
+
+#define SDK_UART_BUFFER_SIZE                (256)   // Should be grater than UART_FIFO_LEN
+#include "adv_logger.h"
+
+#define INFO_NNL(message, ...)              adv_logger_printf(message, ##__VA_ARGS__)
+
+#else
+
+#define INFO_NNL(message, ...)              printf(message, ##__VA_ARGS__)
+
+#endif
+
 #define DEBUG(message, ...)                 printf("%s: " message "\n", __func__, ##__VA_ARGS__)
-#define INFO(message, ...)                  printf(message "\n", ##__VA_ARGS__)
-#define ERROR(message, ...)                 printf("! " message "\n", ##__VA_ARGS__)
+#define INFO(message, ...)                  INFO_NNL(message "\n", ##__VA_ARGS__)
+#define ERROR(message, ...)                 INFO("! " message, ##__VA_ARGS__)
 
 #define MS_TO_TICKS(x)                      ((x) / portTICK_PERIOD_MS)
 

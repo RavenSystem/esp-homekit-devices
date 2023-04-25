@@ -1,0 +1,29 @@
+idf_component_register(
+    SRC_DIRS
+        "."
+    INCLUDE_DIRS
+        "."
+    REQUIRES
+        esp_wifi
+        esp_netif
+        esp_timer
+        esp_adc
+        nvs_flash
+        app_update
+        http_parser
+        driver
+        form_urlencoded
+        timers_helper
+        unistring
+        raven_ntp
+        rs_ping
+        esp32_port
+        adv_hlw
+        adv_i2c
+        adv_button
+        adv_logger_ntp
+        adv_pwm
+        new_dht
+        new_ds18b20
+        homekit-rsf
+)

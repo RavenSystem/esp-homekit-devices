@@ -8,22 +8,42 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
+#ifdef ESP_PLATFORM
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_system.h"
+#include "esp_wifi.h"
+#include "esp_event.h"
+#include "esp_log.h"
+#include "esp_ota_ops.h"
+#include "esp_flash_partitions.h"
+#include "esp_partition.h"
+#include "nvs.h"
+#include "nvs_flash.h"
+#include "errno.h"
+#include "esp32_port.h"
+#include "driver/gpio.h"
+#include "driver/uart.h"
+
+#else   // ESP_OPEN_RTOS
+
+#include <espressif/esp_common.h>
 #include <esp/uart.h>
 #include <esp8266.h>
+#include <sysparam.h>
 #include <FreeRTOS.h>
 #include <task.h>
 #include <spiflash.h>
 
-#include <espressif/esp_common.h>
-
-#include "setup.h"
-#include <sysparam.h>
-
-#include <rboot-api.h>
+#endif
 
 #include <adv_logger.h>
 
+#include "setup.h"
 #include "ota.h"
+
 
 char* user_repo = NULL;
 char* haamain_installed_version = NULL;
@@ -42,13 +62,53 @@ int tries_partial_count;
 TaskHandle_t xHandle = NULL;
 
 void init_task() {
+#ifdef ESP_PLATFORM
+    uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity    = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_DEFAULT,
+    };
+    
+    uart_driver_install(0, SDK_UART_BUFFER_SIZE, 0, 0, NULL, 0);
+    uart_param_config(0, &uart_config);
+    gpio_reset_pin(1);
+    uart_set_pin(0, 1, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+#else
     uart_set_baud(0, 115200);
-    adv_logger_init(ADV_LOGGER_UART0_UDP_BUFFERED, NULL);
+#endif
+    
+    adv_logger_init();
     
     sysparam_status_t status = sysparam_init(SYSPARAMSECTOR, 0);
     if (status != SYSPARAM_OK) {
         setup_mode_reset_sysparam();
     }
+    
+#ifdef ESP_PLATFORM
+    esp_netif_init();
+    esp_event_loop_create_default();
+    setup_set_esp_netif(esp_netif_create_default_wifi_sta());
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    esp_wifi_init(&cfg);
+    esp_wifi_set_storage(WIFI_STORAGE_RAM);
+    esp_wifi_set_mode(WIFI_MODE_STA);
+    
+    const esp_partition_t* running_partition = esp_ota_get_running_partition();
+#ifdef HAABOOT
+    if (running_partition->subtype != ESP_PARTITION_SUBTYPE_APP_OTA_0) {
+        ota_reboot(0);
+    }
+#else
+    if (running_partition->subtype != ESP_PARTITION_SUBTYPE_APP_OTA_1 && running_partition->subtype != ESP_PARTITION_SUBTYPE_APP_FACTORY) {
+        ota_reboot(1);
+    }
+#endif // HAABOOT
+    
+    //free(running);
+#endif
     
     wifi_config_init("HAA", xHandle);
     
@@ -56,7 +116,7 @@ void init_task() {
 }
 
 void ota_task(void *arg) {
-    xTaskCreate(init_task, "INI", 512, NULL, (tskIDLE_PRIORITY + 2), NULL);
+    xTaskCreate(init_task, "INI", (TASK_SIZE_FACTOR * 512), NULL, (tskIDLE_PRIORITY + 2), NULL);
     
     vTaskSuspend(NULL);
     
@@ -81,25 +141,23 @@ void ota_task(void *arg) {
         }
     }
     
-    printf("HAA Installer "INSTALLER_VERSION"\nREPO http%s://%s %i\n**** ", is_ssl ? "s" : "", user_repo, port);
+    INFO_NNL("HAA Installer "INSTALLER_VERSION"\nREPO http%s://%s %i\n**** ", is_ssl ? "s" : "", user_repo, port);
     
 #ifdef HAABOOT
     INFO("HAABOOT");
     
-    sysparam_set_data(HAAMAIN_VERSION_SYSPARAM, NULL, 0, false);
+    sysparam_set_blob(HAAMAIN_VERSION_SYSPARAM, NULL, 0);
     sysparam_compact();
     
 #else   // HAABOOT
-    printf("OTAMAIN\nHAAMAIN ");
+    INFO_NNL("OTAMAIN\nHAAMAIN ");
     
     status = sysparam_get_string(HAAMAIN_VERSION_SYSPARAM, &haamain_installed_version);
-    if (status != SYSPARAM_OK) {
-        printf("not");
-        haamain_installed_version = strdup("");
-        
-    } else {
-        printf("%s", haamain_installed_version);
+    if (status != SYSPARAM_OK || haamain_installed_version[0] == 0) {
+        haamain_installed_version = strdup("not");
     }
+        
+    INFO_NNL("%s", haamain_installed_version);
     
     INFO(" installed");
 #endif  // HAABOOT
@@ -161,7 +219,7 @@ void ota_task(void *arg) {
             
             void enable_setup_mode() {
                 sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
-                ota_reboot();
+                ota_reboot(0);
             }
             
             result = ota_get_sign(user_repo, otamainfile, signature, port, is_ssl);
@@ -172,8 +230,7 @@ void ota_task(void *arg) {
                         ota_finalize_file(BOOT1SECTOR);
                         INFO("* OTAMAIN installed");
                         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
-                        rboot_set_temp_rom(1);
-                        ota_reboot();
+                        ota_reboot(1);
                     } else {
                         enable_setup_mode();
                     }
@@ -208,7 +265,7 @@ void ota_task(void *arg) {
                             INFO("* HAABOOT %s installed", installer_new_version);
                         }
                         
-                        ota_reboot();
+                        ota_reboot(0);
                     } else if (result < 0) {
                         ERROR("Installing HAABOOT %i", result);
                         break;
@@ -221,8 +278,8 @@ void ota_task(void *arg) {
             
             break;
         } else {
-            printf("HAA Installer");
-            INFO(" is in last version");
+            INFO_NNL("HAA Installer");
+            INFO(" no new version found");
         }
         
         if (haamain_new_version) {
@@ -244,7 +301,7 @@ void ota_task(void *arg) {
                             ota_finalize_file(BOOT0SECTOR);
                             sysparam_set_string(HAAMAIN_VERSION_SYSPARAM, haamain_new_version);
                             
-                            int last_config_number = 0;
+                            int32_t last_config_number = 0;
                             sysparam_get_int32(LAST_CONFIG_NUMBER_SYSPARAM, &last_config_number);
                             last_config_number++;
                             
@@ -257,7 +314,7 @@ void ota_task(void *arg) {
                             INFO("* HAAMAIN %s installed", haamain_new_version);
                         }
                         
-                        ota_reboot();
+                        ota_reboot(0);
                     } else if (result < 0) {
                         ERROR("Installing HAAMAIN %i", result);
                         break;
@@ -268,8 +325,8 @@ void ota_task(void *arg) {
                 }
             } while (tries_partial_count < TRIES_PARTIAL_COUNT_MAX);
         } else {
-            printf("HAAMAIN");
-            INFO(" is in last version");
+            INFO_NNL("HAAMAIN");
+            INFO(" no new version found");
         }
         
         break;
@@ -282,20 +339,72 @@ void ota_task(void *arg) {
         vTaskDelay(MS_TO_TICKS(5000));
     }
     
-    ota_reboot();
+    ota_reboot(0);
 }
 
 void user_init() {
-    // GPIO Init
-    for (int i = 0; i < 17; i++) {
+// GPIO Init
+#ifdef ESP_PLATFORM
+/*
+#if defined(CONFIG_IDF_TARGET_ESP32)
+#define FIRST_SPI_GPIO  (6)
+
+#elif defined(CONFIG_IDF_TARGET_ESP32C2) \
+    || defined(CONFIG_IDF_TARGET_ESP32C3)
+#define FIRST_SPI_GPIO  (12)
+
+#elif defined(CONFIG_IDF_TARGET_ESP32S2) \
+    || defined(CONFIG_IDF_TARGET_ESP32S3)
+#define FIRST_SPI_GPIO  (22)
+
+#endif
+
+#if defined(CONFIG_IDF_TARGET_ESP32S2)
+#define SPI_GPIO_COUNT  (11)
+    
+#elif defined(CONFIG_IDF_TARGET_ESP32S3)
+#define SPI_GPIO_COUNT  (16)
+    
+#else
+#define SPI_GPIO_COUNT  (6)
+    
+#endif
+    
+    for (unsigned int i = 0; i < GPIO_NUM_MAX; i++) {
+        if (i == FIRST_SPI_GPIO) {
+            i += SPI_GPIO_COUNT;
+#if defined(CONFIG_IDF_TARGET_ESP32)
+        } else if (i == 24) {
+            i ++;
+        } else if (i == 28) {
+            i += 4;
+#endif
+        } else if (i == 1) {
+            i += 1;
+        }
+        
+        gpio_reset_pin(i);
+        gpio_set_direction(i, GPIO_MODE_DISABLE);
+    }
+*/
+    for (unsigned int i = 0; i < 3; i++) {
+        uart_driver_delete(i);
+    }
+    
+#else // ESP-OPEN-RTOS
+    
+    for (unsigned int i = 0; i < 17; i++) {
         if (i == 6) {
             i += 6;
         } else if (i == 1) {
             i++;
         }
         
-        gpio_enable(i, GPIO_INPUT);
+        //gpio_enable(i, GPIO_INPUT);
+        gpio_disable(i);
     }
+    
+#endif
     
     xTaskCreate(ota_task, "OTA", (TASK_SIZE_FACTOR * 2048), NULL, (tskIDLE_PRIORITY + 1), &xHandle);
 }

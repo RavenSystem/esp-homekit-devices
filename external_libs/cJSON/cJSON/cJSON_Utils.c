@@ -587,7 +587,7 @@ static cJSON_bool compare_json(cJSON *a, cJSON *b, const cJSON_bool case_sensiti
     {
         case cJSON_Number:
             /* numeric mismatch. */
-            if ((a->valueint != b->valueint) || (a->valuedouble != b->valuedouble))
+            if (a->valuefloat != b->valuefloat)
             {
                 return false;
             }
@@ -767,7 +767,7 @@ static void overwrite_item(cJSON * const root, const cJSON replacement)
     {
         cJSON_free(root->string);
     }
-    if (root->valuestring != NULL)
+    if ((cJSON_IsString(root) || cJSON_IsRaw(root)) && root->valuestring != NULL)
     {
         cJSON_free(root->valuestring);
     }
@@ -815,7 +815,7 @@ static int apply_patch(cJSON *object, const cJSON *patch, const cJSON_bool case_
     {
         if (opcode == REMOVE)
         {
-            static const cJSON invalid = { NULL, NULL, NULL, cJSON_Invalid, NULL, 0, 0, NULL};
+            static const cJSON invalid = { NULL, NULL, NULL, cJSON_Invalid, { 0 }, NULL};
 
             overwrite_item(object, invalid);
 
@@ -1127,7 +1127,7 @@ static void create_patches(cJSON * const patches, const unsigned char * const pa
     switch (from->type & 0xFF)
     {
         case cJSON_Number:
-            if ((from->valueint != to->valueint) || (from->valuedouble != to->valuedouble))
+            if (from->valuefloat != to->valuefloat)
             {
                 compose_patch(patches, (const unsigned char*)"replace", path, NULL, to);
             }

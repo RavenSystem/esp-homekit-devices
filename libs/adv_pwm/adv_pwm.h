@@ -8,6 +8,8 @@
 #ifndef __ADV_PWM_H__
 #define __ADV_PWM_H__
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif

@@ -6,10 +6,25 @@
  */
 
 #include <string.h>
+
+#ifdef ESP_PLATFORM
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_system.h"
+#include "esp_timer.h"
+
+#define sdk_system_get_time_raw()         esp_timer_get_time()
+
+#else
+
 #include <espressif/esp_common.h>
 #include <esp8266.h>
 #include <esplibs/libmain.h>
 #include <FreeRTOS.h>
+
+#endif
+
 #include <lwip/err.h>
 #include <lwip/sockets.h>
 #include <lwip/sys.h>
@@ -23,7 +38,11 @@
 
 typedef struct _raven_ntp_config {
     time_t time;
+#ifdef ESP_PLATFORM
+    uint64_t last_system_time;
+#else
     uint32_t last_system_time;
+#endif
 } raven_ntp_config_t;
 
 static raven_ntp_config_t* raven_ntp_config = NULL;
@@ -37,16 +56,20 @@ static void raven_ntp_init() {
 
 time_t raven_ntp_get_time_t() {
     raven_ntp_init();
-    
+#ifdef ESP_PLATFORM
+    const uint64_t now = sdk_system_get_time_raw();
+    const uint64_t diff = (now - raven_ntp_config->last_system_time) / 1000000;
+#else
     const uint32_t now = sdk_system_get_time_raw();
     const uint32_t diff = (now - raven_ntp_config->last_system_time) / 1000000;
-    
+
     if (diff > 3550) {
         raven_ntp_config->last_system_time = now;
         raven_ntp_config->time += diff;
         
         return raven_ntp_config->time;
     }
+#endif
     
     return raven_ntp_config->time + diff;
 }

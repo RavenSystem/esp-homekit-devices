@@ -23,7 +23,7 @@ input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
 .nonetworks{text-align:center;margin:1em 0;}
 .field{margin-bottom:0.5em;}
 .field.required label::before{content:"*";color:red;}
-</style></head><body><div class="container"><h1>Home Accessory Architect<br>Installer @@@INSTALLER_VERSION@@@</h1>
+</style></head><body><div class="container"><h1>Home Accessory Architect<br>Installer v@@@INSTALLER_VERSION@@@ @@@HAA_CHIP_NAME@@@@@@HAA_SINGLE_CORE_SUFIX@@@</h1>
 <form action="/sn" method="post">
 <div class="field required">
 <!-- part HTML_SETTINGS_SCRIPT_START --><label> MEPLHAA Script</label>
@@ -44,7 +44,8 @@ input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
 <option value="1">QOUT</option>
 <option value="2">DIO</option>
 <option value="3">DOUT</option>
-</select></label>
+</select>
+<!-- part HTML_SETTINGS_BUTTONS --></label>
 <input type="submit" id="join" value="Save" /><br><br>
 <input type="button" id="refresh" value="⟲ Search WiFi" onClick="window.location.reload(true)"/>
 <div class="nonetworks" style="display:none;">

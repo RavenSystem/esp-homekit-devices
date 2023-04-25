@@ -6,7 +6,12 @@
  */
 
 #include <string.h>
+
+#ifndef ESP_PLATFORM
+
 #include <esplibs/libmain.h>
+
+#endif
 
 #include "unistring.h"
 

@@ -8,14 +8,6 @@
 #ifndef __HAA_TYPES_H__
 #define __HAA_TYPES_H__
 
-#if defined(ESP_OPEN_RTOS)
-    #define MAX_GPIOS                       (18)
-#elif defined(ESP_IDF)
-    #define MAX_GPIOS                       (40)
-#else
-    #error "!!! UNKNOWN PLATFORM: ESP_OPEN_RTOS or ESP_IDF"
-#endif
-
 typedef struct _last_state {
     uint8_t ch_type;
     uint16_t ch_state_id;
@@ -34,7 +26,7 @@ typedef struct _action_copy {
 
 typedef struct _action_binary_output {
     uint8_t action;
-    bool value: 1;
+    uint8_t value;
     uint16_t gpio;
     
     uint32_t inching;
@@ -45,8 +37,8 @@ typedef struct _action_binary_output {
 typedef struct _action_serv_manager {
     uint8_t action;
     
-    uint16_t serv_index: 10;
-
+    uint16_t serv_index;    // 10 bits
+    
     float value;
     
     struct _action_serv_manager* next;
@@ -68,7 +60,7 @@ typedef struct _action_network {
     
     uint16_t len;
     uint8_t wait_response;
-    bool is_running: 1;
+    bool is_running;    // 1 bit
     
     char* host;
     
@@ -105,7 +97,7 @@ typedef struct _action_irrf_tx {
 typedef struct _action_uart {
     uint8_t action;
     
-    uint8_t uart: 2;
+    uint8_t uart;   // 2 bits
     uint16_t len;
     
     uint16_t pause;
@@ -129,10 +121,11 @@ typedef struct _action_pwm {
 typedef struct _action_set_ch {
     uint8_t action;
     
-    uint8_t source_serv;
     uint8_t source_ch;
-    uint8_t target_serv;
     uint8_t target_ch;
+    
+    uint16_t source_serv;
+    uint16_t target_serv;
     
     struct _action_set_ch* next;
 } action_set_ch_t;
@@ -140,29 +133,29 @@ typedef struct _action_set_ch {
 typedef struct _wildcard_action {
     uint8_t index;
     uint8_t target_action;
-    bool repeat: 1;
+    bool repeat;    // 1 bit
     float value;
 
     struct _wildcard_action* next;
 } wildcard_action_t;
 
 typedef struct _pattern {
-    uint8_t* pattern;
-    
-    uint8_t len;
+    uint16_t len;
     int16_t offset;
+    
+    uint8_t* pattern;
     
     struct _pattern* next;
 } pattern_t;
 
 typedef struct _ch_group {
-    uint16_t serv_index: 10;
+    uint16_t serv_index: 13;
     bool main_enabled: 1;
     bool child_enabled: 1;
     bool homekit_enabled: 1;
     
     uint8_t chs;
-    uint8_t serv_type: 7;
+    uint8_t serv_type;
     
     homekit_characteristic_t** ch;
     
@@ -200,7 +193,7 @@ typedef struct _action_task {
 
 typedef struct _lightbulb_group {
     uint16_t autodimmer: 10;
-    uint8_t channels:3;
+    uint8_t channels: 3;
     bool armed_autodimmer: 1;
     bool autodimmer_reverse: 1;
     bool lightbulb_task_running: 1;
@@ -244,18 +237,26 @@ typedef struct _lightbulb_group {
     uint16_t target[5];
 } lightbulb_group_t;
 
+#ifndef CONFIG_IDF_TARGET_ESP32C2
 typedef struct _addressled {
     uint8_t map[5];
     
     uint8_t gpio;
     
     uint16_t max_range;
+    
+#ifdef ESP_PLATFORM
+    rmt_channel_handle_t rmt_channel_handle;
+    rmt_encoder_handle_t rmt_encoder_handle;
+#else
     uint16_t time_0;
     uint16_t time_1;
     uint16_t period;
+#endif
     
     struct _addressled* next;
 } addressled_t;
+#endif  // no CONFIG_IDF_TARGET_ESP32C2
 
 typedef void (*ping_callback_fn)(uint16_t gpio, void* args, uint8_t param);
 
@@ -300,11 +301,10 @@ typedef struct _mcp23017 {
 
 typedef struct _led {
     uint16_t gpio;
-    uint8_t count;
-    uint8_t times;
-    
-    bool inverted: 1;
+    uint8_t count: 7;
     bool status: 1;
+    uint8_t times: 7;
+    bool inverted: 1;
     
     TimerHandle_t timer;
 } led_t;
@@ -321,6 +321,24 @@ typedef struct _timetable_action {
     struct _timetable_action* next;
 } timetable_action_t;
 
+typedef struct _uart_receiver_data {
+    uint8_t uart_port: 7;
+    uint8_t uart_has_data: 1;
+    uint8_t uart_buffer_len;
+    uint8_t uart_min_len;
+    uint8_t uart_max_len;
+    
+    uint8_t* uart_buffer;
+    
+    struct _uart_receiver_data* next;
+} uart_receiver_data_t;
+
+#ifdef ESP_PLATFORM
+typedef struct _adc_dac_data {
+    adc_oneshot_unit_handle_t adc_oneshot_handle;
+} adc_dac_data_t;
+#endif
+
 typedef struct _main_config {
     uint8_t wifi_status: 2;
     uint8_t wifi_channel: 4;
@@ -332,31 +350,34 @@ typedef struct _main_config {
     int8_t setup_mode_toggle_counter;
     int8_t setup_mode_toggle_counter_max;
     
-    uint8_t ir_tx_freq: 6;
-    bool network_is_busy: 1;
-    bool enable_homekit_server: 1;
-    uint8_t wifi_ping_max_errors;
-    uint8_t wifi_error_count;
-    uint8_t wifi_arp_count;
-    
     uint16_t setup_mode_time;
     uint16_t wifi_roaming_count;
     
     //uint64_t used_gpio: MAX_GPIOS;
     
     uint8_t wifi_ip;
-    uint8_t uart_buffer_len;
+    uint8_t wifi_ping_max_errors;
+    uint8_t wifi_error_count;
     uint8_t rf_tx_gpio: 6;
-    uint8_t wifi_mode: 3;
+    bool enable_homekit_server: 1;
+    bool uart_recv_is_working: 1;
     
-    uint8_t uart_min_len;
-    uint8_t uart_max_len;
+    uint8_t wifi_mode;  // 3 bits
+    uint8_t ir_tx_freq; // 6 bits
+    
+#ifndef ESP_PLATFORM
+    uint8_t wifi_arp_count;
     uint8_t wifi_arp_count_max;
+#else
+    uint16_t _align;
+#endif
     
     float ping_poll_period;
     
     TimerHandle_t setup_mode_toggle_timer;
     TimerHandle_t set_lightbulb_timer;
+    
+    SemaphoreHandle_t network_busy_mutex;
     
     ch_group_t* ch_groups;
     ping_input_t* ping_inputs;
@@ -370,9 +391,15 @@ typedef struct _main_config {
     
     led_t* status_led;
     
-    uint8_t* uart_buffer;
-    
+#ifndef CONFIG_IDF_TARGET_ESP32C2
     addressled_t* addressleds;
+#endif  // no CONFIG_IDF_TARGET_ESP32C2
+    
+    uart_receiver_data_t* uart_receiver_data;
+    
+#ifdef ESP_PLATFORM
+    adc_dac_data_t* adc_dac_data;
+#endif
     
     char name_value[11];
 } main_config_t;

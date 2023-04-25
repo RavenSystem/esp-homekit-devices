@@ -7,7 +7,7 @@ EXTRA_COMPONENTS = \
 	extras/sntp \
 	extras/dhcpserver \
     extras/rboot-ota \
-	$(abspath esp-wolfssl) \
+	$(abspath ../../../external_libs/wolfssl) \
 	$(abspath ../../../external_libs/http-parser) \
 	$(abspath ../../../libs/form_urlencoded) \
 	$(abspath ../../../libs/adv_logger) \
@@ -73,13 +73,14 @@ esp-wolfssl_CFLAGS += $(EXTRA_WOLFSSL_CFLAGS)
 
 # Max HAA OTA MAIN Installer firmware size is 397296 bytes
 
+EXTRA_CFLAGS += -DSPIFLASH_HOMEKIT_BASE_ADDR=0xF2000
+EXTRA_CFLAGS += -DHAA_CHIP_NAME=\"esp8266\"
+
 EXTRA_CFLAGS += $(EXTRA_WOLFSSL_CFLAGS)
 #EXTRA_CFLAGS += -DTCP_MSS=1460 -DTCP_WND=2920
 EXTRA_CFLAGS += -DTCP_MSS=1460
 #EXTRA_CFLAGS += -DTCP_WND=8760
 EXTRA_CFLAGS += -DLWIP_WND_SCALE=2 -DTCP_RCV_SCALE=2
-
-EXTRA_CFLAGS += -DSPIFLASH_BASE_ADDR=0xF2000
 
 EXTRA_CFLAGS += -Os
 
@@ -97,7 +98,7 @@ EXTRA_CFLAGS += -DDHCP_DOES_ARP_CHECK=0
 EXTRA_CFLAGS += -DLWIP_DHCP_AGGRESSIVE
 #EXTRA_CFLAGS += -DCHECKSUM_CHECK_UDP=0
 
-EXTRA_CFLAGS += -DconfigMAX_TASK_NAME_LEN=10
+EXTRA_CFLAGS += -DconfigMAX_TASK_NAME_LEN=7
 EXTRA_CFLAGS += -DconfigCHECK_FOR_STACK_OVERFLOW=2
 EXTRA_CFLAGS += -DconfigMINIMAL_STACK_SIZE=256
 #EXTRA_CFLAGS += -DconfigTIMER_TASK_PRIORITY=\(configMAX_PRIORITIES-1\)
@@ -109,7 +110,7 @@ EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=600
 
 include $(abspath ../../../sdk/esp-open-rtos-rsf/common.mk)
 
-all:
+sign:
 	../../common/ota_sign.sh
 
 monitor:

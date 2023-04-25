@@ -5,14 +5,35 @@
 *
 */
 
-/*
- * Based on Life-Cycle-Manager (LCM) by HomeAccessoryKid (@HomeACcessoryKid), licensed under Apache License 2.0.
- * https://github.com/HomeACcessoryKid/life-cycle-manager
- */
-
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+
+#ifdef ESP_PLATFORM
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_system.h"
+#include "esp_wifi.h"
+#include "esp_event.h"
+#include "esp_log.h"
+#include "esp_ota_ops.h"
+#include "esp_flash_partitions.h"
+#include "esp_partition.h"
+#include "nvs.h"
+#include "nvs_flash.h"
+#include "errno.h"
+#include "esp32_port.h"
+
+#else   // ESP_OPEN_RTOS
+
+#include <esp8266.h>
+#include <sysparam.h>
+#include <spiflash.h>
+#include <rboot-api.h>
+
+#endif
+
 
 #include <lwip/api.h>
 #include "lwip/err.h"
@@ -21,7 +42,6 @@
 #include "lwip/netdb.h"
 #include "lwip/dns.h"
 #include "lwip/etharp.h"
-#include <esp8266.h>
 
 #include <wolfssl/ssl.h>
 #include <wolfssl/wolfcrypt/types.h>
@@ -31,29 +51,68 @@
 #include <wolfssl/wolfcrypt/asn_public.h>
 #include <ota.h>
 
-#include <spiflash.h>
-#include <sysparam.h>
-#include <rboot-api.h>
-
 #include "header.h"
 
+#ifdef ESP_PLATFORM
+
 #ifdef HAABOOT
-    #define MAXFILESIZE         ((SPIFLASH_BASE_ADDR - BOOT1SECTOR) - 16)
+    #define MAXFILESIZE         (0xc0000 - 16)      // From partitions.csv
+#else
+    #define MAXFILESIZE         (0x110000 - 16)     // From partitions.csv
+#endif  //HAABOOT
+
+#else   // ESP_OPEN_RTOS
+
+#ifdef HAABOOT
+    #define MAXFILESIZE         ((SPIFLASH_HOMEKIT_BASE_ADDR - BOOT1SECTOR) - 16)
 #else
     #define MAXFILESIZE         ((BOOT1SECTOR - BOOT0SECTOR) - 16)
 #endif  //HAABOOT
+
+#endif
+
 
 static ecc_key public_key;
 static uint8_t file_first_byte[] = { 0xff };
 static WOLFSSL_CTX* ctx = NULL;
 static char last_host[HOST_LEN];
-static char last_location[RECV_BUF_LEN];
+static char last_location[LOCATION_LEN];
 
 #ifdef DEBUG_WOLFSSL
 void MyLoggingCallback(const int logLevel, const char* const logMessage) {
     /*custom logging function*/
     INFO("loglevel: %d - %s", logLevel, logMessage);
 }
+#endif
+
+#ifdef ESP_PLATFORM
+esp_partition_t* partition_boot0 = NULL;
+esp_partition_t* partition_boot1 = NULL;
+
+void set_partitions() {
+    if (!partition_boot0) {
+        partition_boot0 = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_0, NULL);
+    }
+    
+    if (!partition_boot1) {
+        partition_boot1 = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_OTA_1, NULL);
+        if (!partition_boot1) {
+            partition_boot1 = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, NULL);
+        }
+    }
+}
+
+esp_partition_t* get_partition(const int sector) {
+    if (sector == BOOT0SECTOR) {
+        return partition_boot0;
+    }
+    
+    return partition_boot1;
+}
+#else
+
+#define set_partitions()
+
 #endif
 
 static char *strstr_lc(char *full_string, const char *search) {
@@ -87,7 +146,7 @@ static void ota_get_host(const char* repo) {
 }
 
 static void ota_get_location(const char* repo) {
-    memset(last_location, 0, RECV_BUF_LEN);
+    memset(last_location, 0, LOCATION_LEN);
     const char *found = strchr(repo, '/');
 
     if (found) {
@@ -100,9 +159,11 @@ static void ota_get_location(const char* repo) {
 void ota_init(char* repo, const bool is_ssl) {
     INFO("INIT");
 
-    //ip_addr_t target_ip;
+    // ip_addr_t target_ip;
     
-    //rboot setup
+    set_partitions();
+    
+#ifndef ESP_PLATFORM
     rboot_config conf;
     conf = rboot_get_config();
     if (conf.count != 2 || conf.roms[0] != BOOT0SECTOR || conf.roms[1] != BOOT1SECTOR || conf.current_rom != 0) {
@@ -112,6 +173,7 @@ void ota_init(char* repo, const bool is_ssl) {
         conf.current_rom = 0;
         rboot_set_config(&conf);
     }
+# endif
     
     if (is_ssl) {
 #ifdef DEBUG_WOLFSSL
@@ -152,7 +214,7 @@ void ota_init(char* repo, const bool is_ssl) {
 }
 
 static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, const bool is_ssl) {
-    printf("*** CONNECT\nDNS..");
+    INFO_NNL("*** CONNECT\nDNS..");
     int ret;
     const struct addrinfo hints = {
         .ai_family = AF_UNSPEC,
@@ -173,24 +235,24 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
         return -2;
     }
     
-    printf("OK\nSocket..");
-    *socket = socket(res->ai_family, res->ai_socktype, 0);
+    INFO_NNL("OK\nSocket..");
+    *socket = lwip_socket(res->ai_family, res->ai_socktype, 0);
     if (*socket < 0) {
         print_error();
         return -3;
     }
 
-    printf("OK\nConnect..");
+    INFO_NNL("OK\nConnect..");
     ret = connect(*socket, res->ai_addr, res->ai_addrlen);
     if (ret) {
         print_error();
         return -2;
     }
-    printf("OK\n");
+    INFO_NNL("OK\n");
 
     // SSL mode
     if (is_ssl) {
-        printf("SSL..");
+        INFO_NNL("SSL..");
         *ssl = wolfSSL_new(ctx);
         
         if (!*ssl) {
@@ -198,7 +260,7 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
             return -2;
         }
 
-        printf("OK\nFD..");
+        INFO_NNL("OK\nFD..");
         
         //wolfSSL_Debugging_ON();
         
@@ -211,7 +273,7 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
             return -1;
         }
         
-        printf("OK\nSNI..");
+        INFO_NNL("OK\nSNI..");
         ret = wolfSSL_UseSNI(*ssl, WOLFSSL_SNI_HOST_NAME, host, strlen(host));
         if (ret != SSL_SUCCESS) {
             freeaddrinfo(res);
@@ -224,7 +286,7 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
         //wolfSSL_Debugging_OFF();
         
         ret = wolfSSL_connect(*ssl);
-        printf("OK\nSSLConnect..");
+        INFO_NNL("OK\nSSLConnect..");
         if (ret != SSL_SUCCESS) {
             freeaddrinfo(res);
             ERROR("%i", ret);
@@ -294,7 +356,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
                 ret = lwip_write(socket, recv_buf, send_bytes);
             }
             
-            printf("Write..");
+            INFO_NNL("Write..");
             if (ret > 0) {
                 INFO("OK");
                 
@@ -588,21 +650,33 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
                             if (sector) { // Write to flash
                                 connection_tries = 0;
                                 if (writespace < ret) {
-                                    printf("0x%02X ", (sector + collected) / SPI_FLASH_SECTOR_SIZE);
+#ifdef ESP_PLATFORM
+                                    if (esp_partition_erase_range(get_partition(sector), collected, SPI_FLASH_SECTOR_SIZE) != ESP_OK) {
+#else
+                                    INFO_NNL("0x%02X ", (sector + collected) / SPI_FLASH_SECTOR_SIZE);
                                     if (!spiflash_erase_sector(sector + collected)) {
+#endif
                                         free(recv_buf);
                                         return -6; // Erase error
                                     }
                                     writespace += SPI_FLASH_SECTOR_SIZE;
                                 }
                                 if (collected) {
+#ifdef ESP_PLATFORM
+                                    if (esp_partition_write(get_partition(sector), collected, (uint8_t*) recv_buf, ret) != ESP_OK) {
+#else
                                     if (!spiflash_write(sector + collected, (uint8_t*) recv_buf, ret)) {
+#endif
                                         free(recv_buf);
                                         return -7; // Write error
                                     }
                                 } else { // At the very beginning, do not write the first byte yet but store it for later
                                     file_first_byte[0] = (uint8_t) recv_buf[0];
+#ifdef ESP_PLATFORM
+                                    if (esp_partition_write(get_partition(sector), 1, (uint8_t*) recv_buf + 1, ret - 1) != ESP_OK) {
+#else
                                     if (!spiflash_write(sector + 1, (uint8_t*) recv_buf + 1, ret - 1)) {
+#endif
                                         free(recv_buf);
                                         return -8; // Write error
                                     }
@@ -728,7 +802,7 @@ char* ota_get_version(char* repo, char* version_file, uint16_t port, const bool 
     } else {
         free(version);
         version = NULL;
-        ERROR("ERROR");
+        INFO("ERROR");
     }
     
     return (char*) version;
@@ -758,7 +832,11 @@ int ota_verify_sign(int start_sector, int filesize, uint8_t* signature) {
     wc_InitSha384(&sha);
 
     for (bytes = 0; bytes < filesize - 1024; bytes += 1024) {
-        if (!spiflash_read(start_sector + bytes, (uint8_t*) buffer, 1024)) {
+#ifdef ESP_PLATFORM
+        if (esp_partition_read(get_partition(start_sector), bytes, buffer, 1024) != ESP_OK) {
+#else
+        if (!spiflash_read(start_sector + bytes, buffer, 1024)) {
+#endif
             ERROR("Reading flash");
             break;
         }
@@ -769,8 +847,12 @@ int ota_verify_sign(int start_sector, int filesize, uint8_t* signature) {
         
         wc_Sha384Update(&sha, buffer, 1024);
     }
-
-    if (!spiflash_read(start_sector + bytes, (uint8_t*) buffer, filesize - bytes)) {
+    
+#ifdef ESP_PLATFORM
+    if (esp_partition_read(get_partition(start_sector), bytes, buffer, filesize - bytes) != ESP_OK) {
+#else
+    if (!spiflash_read(start_sector + bytes, buffer, filesize - bytes)) {
+#endif
         ERROR("Reading flash");
     }
     
@@ -781,9 +863,9 @@ int ota_verify_sign(int start_sector, int filesize, uint8_t* signature) {
     wc_Sha384Final(&sha, hash);
     
     int verify = 0;
-    wc_ecc_verify_hash(signature, SIGNSIZE, hash, HASHSIZE, &verify, &public_key);
+    int ret = wc_ecc_verify_hash(signature, SIGNSIZE, hash, HASHSIZE, &verify, &public_key);
     
-    INFO(">>> Result %s", verify == 1 ? "OK" : "ERR");
+    INFO(">>> Result %s (%i)", verify == 1 ? "OK" : "ERROR", ret);
 
     return verify - 1;
 }
@@ -791,13 +873,31 @@ int ota_verify_sign(int start_sector, int filesize, uint8_t* signature) {
 void ota_finalize_file(int sector) {
     INFO("*** FINISHING");
     
-    if (!spiflash_write(sector, file_first_byte, 1))
+#ifdef ESP_PLATFORM
+    if (esp_partition_write(get_partition(sector), 0, file_first_byte, 1) != ESP_OK) {
+#else
+    if (!spiflash_write(sector, file_first_byte, 1)) {
+#endif
+        
         ERROR("Writing flash");
+    }
 }
 
-void ota_reboot() {
+void ota_reboot(const uint8_t partition) {
     INFO("*** REBOOTING");
-
+    
+    set_partitions();
+    
+    if (partition == 1) {
+#ifndef ESP_PLATFORM
+        rboot_set_temp_rom(1);
+#else
+        esp_ota_set_boot_partition(partition_boot1);
+    } else {
+        esp_ota_set_boot_partition(partition_boot0);
+#endif
+    }
+    
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     sdk_system_restart();
 }

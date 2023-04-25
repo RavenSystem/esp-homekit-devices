@@ -1,6 +1,23 @@
+
+#include "math.h"
+
+#ifdef ESP_PLATFORM
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+#define PORT_ENTER_CRITICAL()       portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED; taskENTER_CRITICAL(&mux)
+#define PORT_EXIT_CRITICAL()        taskEXIT_CRITICAL(&mux)
+
+#else
+
 #include "FreeRTOS.h"
 #include "task.h"
-#include "math.h"
+
+#define PORT_ENTER_CRITICAL()       taskENTER_CRITICAL()
+#define PORT_EXIT_CRITICAL()        taskEXIT_CRITICAL()
+
+#endif
 
 #include "ds18b20.h"
 
@@ -43,9 +60,14 @@ uint8_t ds18b20_read_all(uint8_t pin, ds_sensor_t *result) {
 
         onewire_reset(pin);
         onewire_select(pin, addr);
+        
+        PORT_ENTER_CRITICAL();
         onewire_write(pin, DS18B20_CONVERT_T);
-
+        // For parasitic devices, power must be applied within 10us after issuing
+        // the convert command.
         onewire_power(pin);
+        PORT_EXIT_CRITICAL();
+        
         vTaskDelay(750 / portTICK_PERIOD_MS);
 
         onewire_reset(pin);
@@ -85,9 +107,14 @@ float ds18b20_read_single(uint8_t pin) {
 
     onewire_reset(pin);
     onewire_skip_rom(pin);
+    
+    PORT_ENTER_CRITICAL();
     onewire_write(pin, DS18B20_CONVERT_T);
-
+    // For parasitic devices, power must be applied within 10us after issuing
+    // the convert command.
     onewire_power(pin);
+    PORT_EXIT_CRITICAL();
+    
     vTaskDelay(750 / portTICK_PERIOD_MS);
 
     onewire_reset(pin);
@@ -130,10 +157,12 @@ bool ds18b20_measure(int pin, ds18b20_addr_t addr, bool wait) {
         onewire_select(pin, addr);
     }
     
+    PORT_ENTER_CRITICAL();
     onewire_write(pin, DS18B20_CONVERT_T);
     // For parasitic devices, power must be applied within 10us after issuing
     // the convert command.
     onewire_power(pin);
+    PORT_EXIT_CRITICAL();
 
     if (wait) {
         os_sleep_ms(750);

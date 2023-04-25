@@ -13,6 +13,10 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include "http_parser.h"
+#include "esp32_port.h"
+#include "esp_attr.h"
+#define IRAM                        IRAM_ATTR
 
 #else
 
@@ -20,12 +24,11 @@
 #include <task.h>
 #include <espressif/esp_common.h>
 #include <esplibs/libmain.h>
+#include <sysparam.h>
+#include <http-parser/http_parser.h>
 
 #endif
 
-#include <sysparam.h>
-
-#include <http-parser/http_parser.h>
 #include <cJSON.h>
 #include <wolfssl/wolfcrypt/hash.h>
 #include <wolfssl/wolfcrypt/coding.h>
@@ -90,9 +93,15 @@
 #define HOMEKIT_INFO(message, ...)              INFO(message, ##__VA_ARGS__)
 #define HOMEKIT_ERROR(message, ...)             ERROR(message, ##__VA_ARGS__)
 
+#ifdef ESP_PLATFORM
+#define CLIENT_DEBUG(client, message, ...)      DEBUG("[%li] " message, client->socket, ##__VA_ARGS__)
+#define CLIENT_INFO(client, message, ...)       INFO("[%li] " message, client->socket, ##__VA_ARGS__)
+#define CLIENT_ERROR(client, message, ...)      ERROR("[%li] " message, client->socket, ##__VA_ARGS__)
+#else
 #define CLIENT_DEBUG(client, message, ...)      DEBUG("[%d] " message, client->socket, ##__VA_ARGS__)
 #define CLIENT_INFO(client, message, ...)       INFO("[%d] " message, client->socket, ##__VA_ARGS__)
 #define CLIENT_ERROR(client, message, ...)      ERROR("[%d] " message, client->socket, ##__VA_ARGS__)
+#endif
 
 struct _client_context_t;
 typedef struct _client_context_t client_context_t;
@@ -161,8 +170,8 @@ typedef struct {
     
     notification_t* notifications;
     
-    int listen_fd;
-    int max_fd;
+    int32_t listen_fd;
+    int32_t max_fd;
     
     size_t data_available: 16;
     uint8_t client_count: 6;
@@ -181,7 +190,7 @@ typedef struct {
 static homekit_server_t *homekit_server = NULL;
 
 struct _client_context_t {
-    int socket;
+    int32_t socket;
     query_param_t *endpoint_params;
     
     char *body;
@@ -193,12 +202,12 @@ struct _client_context_t {
     
     http_parser *parser;
 
-    int pairing_id;
+    int32_t pairing_id;
     
     byte read_key[32];
     byte write_key[32];
-    int count_reads;
-    int count_writes;
+    int32_t count_reads;
+    int32_t count_writes;
     
     pair_verify_context_t *verify_context;
 
@@ -395,7 +404,11 @@ void pairing_context_free(pairing_context_t *context) {
 static int IRAM homekit_low_dram() {
     const uint32_t free_heap = xPortGetFreeHeapSize();
     if (free_heap < HOMEKIT_MIN_FREEHEAP) {
+#ifdef ESP_PLATFORM
+        HOMEKIT_ERROR("DRAM Free HEAP %li", free_heap);
+#else
         HOMEKIT_ERROR("DRAM Free HEAP %i", free_heap);
+#endif
         return true;
     }
     
@@ -1068,6 +1081,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
     
 #ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
     sdk_system_overclock();
+    HOMEKIT_DEBUG_LOG("CPU overclock");
 #endif // HOMEKIT_OVERCLOCK_PAIR_SETUP
     
     switch(tlv_get_integer_value(message, TLVType_State, -1)) {
@@ -1165,13 +1179,13 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 break;
             }
 
-#ifdef ESP_OPEN_RTOS
+#ifndef ESP_PLATFORM
             int low_mdns_buffer = false;
             if (xPortGetFreeHeapSize() < 25000) {
                 homekit_mdns_buffer_set(500);
                 low_mdns_buffer = true;
             }
-#endif //ESP_OPEN_RTOS
+#endif
             
             CLIENT_DEBUG(context, "Computing pairing code (SRP shared secret)");
             DEBUG_HEAP();
@@ -1182,11 +1196,11 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 homekit_server->pairing_context->public_key_size
             );
             
-#ifdef ESP_OPEN_RTOS
+#ifndef ESP_PLATFORM
             if (low_mdns_buffer) {
                 homekit_mdns_buffer_set(0);
             }
-#endif //ESP_OPEN_RTOS
+#endif
             
             if (r) {
                 CLIENT_ERROR(context, "Pairing code (%d). DRAM?", r);
@@ -1580,6 +1594,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
     
 #ifdef HOMEKIT_OVERCLOCK_PAIR_SETUP
     sdk_system_restoreclock();
+    HOMEKIT_DEBUG_LOG("CPU restoreclock");
 #endif // HOMEKIT_OVERCLOCK_PAIR_SETUP
     
     tlv_free(message);
@@ -1601,6 +1616,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
 
 #ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
     sdk_system_overclock();
+    HOMEKIT_DEBUG_LOG("CPU overclock");
 #endif // HOMEKIT_OVERCLOCK_PAIR_VERIFY
     
     int r;
@@ -2008,6 +2024,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
     
 #ifdef HOMEKIT_OVERCLOCK_PAIR_VERIFY
     sdk_system_restoreclock();
+    HOMEKIT_DEBUG_LOG("CPU restoreclock");
 #endif // HOMEKIT_OVERCLOCK_PAIR_VERIFY
 
     tlv_free(message);
@@ -2299,8 +2316,8 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
             return HAPStatus_NoResource;
         }
         
-        int aid = j_aid->valueint;
-        int iid = j_iid->valueint;
+        int aid = j_aid->valuefloat;
+        int iid = j_iid->valuefloat;
         
         homekit_characteristic_t *ch = homekit_characteristic_by_aid_and_iid(
             homekit_server->config->accessories, aid, iid
@@ -2327,8 +2344,8 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     } else if (j_value->type == cJSON_False) {
                         value = false;
                     } else if (j_value->type == cJSON_Number &&
-                            (j_value->valueint == 0 || j_value->valueint == 1)) {
-                        value = j_value->valueint == 1;
+                            (j_value->valuefloat == 0 || j_value->valuefloat == 1)) {
+                        value = j_value->valuefloat == 1;
                     } else {
                         CLIENT_ERROR(context, "for %d.%d: no bool or 0/1", aid, iid);
                         return HAPStatus_InvalidValue;
@@ -2406,7 +2423,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         max_value = (int) *ch->max_value;
                     }
 
-                    int value = j_value->valueint;
+                    int value = j_value->valuefloat;
 
                     // New style
                     /*
@@ -2417,7 +2434,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         max_value = *ch->max_value;
                     }
                     
-                    double value = j_value->valuedouble;
+                    double value = j_value->valuefloat;
                     */
                     
                     if (j_value->type == cJSON_True) {
@@ -2517,7 +2534,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                         return HAPStatus_InvalidValue;
                     }
 
-                    float value = j_value->valuedouble;
+                    float value = j_value->valuefloat;
                     if ((ch->min_value && value < *ch->min_value) ||
                             (ch->max_value && value > *ch->max_value)) {
                         CLIENT_ERROR(context, "for %d.%d: out range", aid, iid);
@@ -2725,8 +2742,8 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
             cJSON *j_ch = cJSON_GetArrayItem(characteristics, i);
 
             json_object_start(json1);
-            json_string(json1, "aid"); json_integer(json1, cJSON_GetObjectItem(j_ch, "aid")->valueint);
-            json_string(json1, "iid"); json_integer(json1, cJSON_GetObjectItem(j_ch, "iid")->valueint);
+            json_string(json1, "aid"); json_integer(json1, cJSON_GetObjectItem(j_ch, "aid")->valuefloat);
+            json_string(json1, "iid"); json_integer(json1, cJSON_GetObjectItem(j_ch, "iid")->valuefloat);
             json_string(json1, "status"); json_integer(json1, statuses[i]);
             json_object_end(json1);
             
@@ -3337,14 +3354,20 @@ static inline void IRAM homekit_server_accept_client() {
         if (s > homekit_server->max_fd) {
             homekit_server->max_fd = s;
         }
-        
+#ifdef ESP_PLATFORM
+        HOMEKIT_INFO("[%i] New %s:%d %i/%i Free HEAP %li", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
+#else
         HOMEKIT_INFO("[%d] New %s:%d %i/%i Free HEAP %d", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
-
+#endif
         HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_CLIENT_CONNECTED);
         
     } else {
         close(s);
+#ifdef ESP_PLATFORM
+        HOMEKIT_ERROR("[%i] DRAM %s:%d %i/%i Free HEAP %li", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
+#else
         HOMEKIT_ERROR("[%d] DRAM %s:%d %i/%i Free HEAP %d", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
+#endif
     }
 }
 
@@ -3650,7 +3673,7 @@ char *homekit_accessory_id_generate() {
     snprintf(accessory_id, 18, "%02X:%02X:%02X:%02X:%02X:%02X",
              buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]);
 
-    HOMEKIT_INFO("HK ID: %s", accessory_id);
+    HOMEKIT_INFO("HK ID %s", accessory_id);
     
     return accessory_id;
 }
@@ -3658,11 +3681,11 @@ char *homekit_accessory_id_generate() {
 ed25519_key *homekit_accessory_key_generate() {
     ed25519_key *key = crypto_ed25519_generate();
     if (!key) {
-        HOMEKIT_ERROR("Create key");
+        HOMEKIT_ERROR("HK New Key");
         return NULL;
     }
 
-    HOMEKIT_INFO("Created key");
+    HOMEKIT_INFO("HK New Key");
 
     return key;
 }
@@ -3732,11 +3755,11 @@ void homekit_server_init(homekit_server_config_t *config) {
     
     int server_task_stack = SERVER_TASK_STACK_PAIR;
 
-#ifdef ESP_OPEN_RTOS
+#ifndef ESP_PLATFORM
     if (homekit_server->paired) {
         server_task_stack = SERVER_TASK_STACK_NORMAL;
     }
-#endif //ESP_OPEN_RTOS
+#endif
     
     if (xTaskCreate(homekit_server_task, "HK", server_task_stack, NULL, SERVER_TASK_PRIORITY, NULL) != pdPASS) {
         ERROR("New HK");

@@ -16,11 +16,20 @@
 #include "header.h"
 
 #define OTAREPO                 "github.com/RavenSystem/haa/releases/latest/download"
-#define OTAMAINFILE             "otamain.bin"
-#define OTABOOTFILE             "haaboot.bin"
-#define HAAMAINFILE             "haamain.bin"
+
+#ifdef ESP_PLATFORM
+#define HAA_FINAL_NAME          "_"HAA_CHIP_NAME""HAA_SINGLE_CORE_SUFIX
+#else
+#define HAA_FINAL_NAME          ""
+#endif
+
+#define OTAMAINFILE             "otamain"HAA_FINAL_NAME".bin"
+#define OTABOOTFILE             "haaboot"HAA_FINAL_NAME".bin"
+#define HAAMAINFILE             "haamain"HAA_FINAL_NAME".bin"
+
 #define OTAVERSIONFILE          "otaversion"
 #define HAAVERSIONFILE          "haaversion"
+
 #define SIGNFILESUFIX           ".sec"
 #define VERSIONFILESIZE         (16)
 
@@ -34,7 +43,8 @@
 #define CRLFCRLF                "\r\n\r\n"
 #define RECV_BUF_LEN            (1371)
 #define HEADER_BUFFER_LEN       (8000)
-#define HOST_LEN                (256)
+#define HOST_LEN                (128)
+#define LOCATION_LEN            (1197)
 #define RANGE                   "\r\nRange: bytes="
 
 #define MAX_302_JUMPS           (10)
@@ -49,6 +59,6 @@ int ota_get_file(char* repo, char* file, int sector, uint16_t port, const bool i
 void ota_finalize_file(int sector);
 int ota_get_sign(char* repo, char* file, uint8_t* signature, uint16_t port, const bool is_ssl);
 int ota_verify_sign(int address, int file_size, uint8_t* signature);
-void ota_reboot();
+void ota_reboot(const uint8_t partition);
 
 #endif // __HAA_OTA_H__

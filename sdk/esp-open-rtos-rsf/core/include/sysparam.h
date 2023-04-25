@@ -179,6 +179,7 @@ sysparam_status_t sysparam_compact();
  *  @retval ::SYSPARAM_ERR_IO       I/O error reading/writing flash
  */
 sysparam_status_t sysparam_get_data(const char *key, uint8_t **destptr, size_t *actual_length, bool *is_binary);
+sysparam_status_t sysparam_get_blob(const char *key, uint8_t **destptr, size_t *actual_length);
 
 /** Get the value associated with a key (static value buffer)
  *
@@ -343,6 +344,8 @@ sysparam_status_t sysparam_get_bool(const char *key, bool *result);
  *  @retval ::SYSPARAM_ERR_IO       I/O error reading/writing flash
  */
 sysparam_status_t sysparam_set_data(const char *key, const uint8_t *value, size_t value_len, bool binary);
+sysparam_status_t sysparam_set_blob(const char *key, const uint8_t *value, size_t value_len);
+sysparam_status_t sysparam_erase(const char *key);
 
 /** Set a key's value from a string
  *

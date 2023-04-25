@@ -5,32 +5,66 @@
 #include "pairing.h"
 #include "port.h"
 
-#ifndef SPIFLASH_BASE_ADDR
-#error "!!! Define HOMEKIT_SPI_FLASH_BASE_ADDR or SPIFLASH_BASE_ADDR"
+#ifdef ESP_PLATFORM
+
+#define SPIFLASH_HOMEKIT_BASE_ADDR  (0)
+
+#else
+
+#ifndef SPIFLASH_HOMEKIT_BASE_ADDR
+#error "!!! Define SPIFLASH_HOMEKIT_BASE_ADDR"
 #endif
 
-#define MAGIC_OFFSET           (0)
-#define ACCESSORY_ID_OFFSET    (4)
-#define ACCESSORY_KEY_OFFSET   (32)
-#define PAIRINGS_OFFSET        (128)
+#endif
 
-#define MAGIC_ADDR              (SPIFLASH_BASE_ADDR + MAGIC_OFFSET)
-#define ACCESSORY_ID_ADDR       (SPIFLASH_BASE_ADDR + ACCESSORY_ID_OFFSET)
-#define ACCESSORY_KEY_ADDR      (SPIFLASH_BASE_ADDR + ACCESSORY_KEY_OFFSET)
-#define PAIRINGS_ADDR           (SPIFLASH_BASE_ADDR + PAIRINGS_OFFSET)
+#define MAGIC_OFFSET            (0)
+#define ACCESSORY_ID_OFFSET     (4)
+#define ACCESSORY_KEY_OFFSET    (32)
+#define PAIRINGS_OFFSET         (128)
 
-#define MAX_PAIRINGS            (48)
+#define MAGIC_ADDR              (SPIFLASH_HOMEKIT_BASE_ADDR + MAGIC_OFFSET)
+#define ACCESSORY_ID_ADDR       (SPIFLASH_HOMEKIT_BASE_ADDR + ACCESSORY_ID_OFFSET)
+#define ACCESSORY_KEY_ADDR      (SPIFLASH_HOMEKIT_BASE_ADDR + ACCESSORY_KEY_OFFSET)
+#define PAIRINGS_ADDR           (SPIFLASH_HOMEKIT_BASE_ADDR + PAIRINGS_OFFSET)
+
+#define MAX_PAIRINGS            (40)
 
 #define ACCESSORY_ID_SIZE       (17)
 #define ACCESSORY_KEY_SIZE      (64)
 
 const char magic1[] = "HAP";
 
+#ifdef ESP_PLATFORM
+esp_partition_t* hap_partition = NULL;
+
+static void enable_hap_partition() {
+    if (!hap_partition) {
+        hap_partition = esp_partition_find_first(0xFE, 0xFE, NULL);
+        
+        if (!hap_partition) {
+            hap_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, NULL);
+            
+            if (!hap_partition) {
+                hap_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, NULL);
+            }
+        }
+    }
+}
+#else
+#define enable_hap_partition()
+#endif
 
 int homekit_storage_reset() {
     byte blank[2];
     memset(blank, 0, sizeof(blank));
+    
+    enable_hap_partition();
+
+#ifdef ESP_PLATFORM
+    if (esp_partition_write(hap_partition, MAGIC_ADDR, blank, sizeof(blank)) != ESP_OK) {
+#else
     if (!spiflash_write(MAGIC_ADDR, blank, sizeof(blank))) {
+#endif
         ERROR("Reset flash");
         return -1;
     }
@@ -43,12 +77,14 @@ int homekit_storage_init() {
     char magic[sizeof(magic1)];
     memset(magic, 0, sizeof(magic));
     
+    enable_hap_partition();
+    
     if (!spiflash_read(MAGIC_ADDR, (byte*) magic, sizeof(magic))) {
         ERROR("Read magic");
     }
 
     if (strncmp(magic, magic1, 2)) {
-        if (!spiflash_erase_sector(SPIFLASH_BASE_ADDR)) {
+        if (!spiflash_erase_sector(SPIFLASH_HOMEKIT_BASE_ADDR)) {
             ERROR("Erase flash");
             return -1;
         }
@@ -146,9 +182,10 @@ typedef struct {
 bool homekit_storage_can_add_pairing() {
     pairing_data_t data;
     for (int i = 0; i < MAX_PAIRINGS; i++) {
-        spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data));
-        if (strncmp(data.magic, magic1, sizeof(magic1))) {
-            return true;
+        if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
+            if (strncmp(data.magic, magic1, sizeof(magic1))) {
+                return true;
+            }
         }
     }
     return false;
@@ -158,7 +195,7 @@ static int compact_data() {
     INFO("Compacting data");
     
     byte *data = malloc(SPI_FLASH_SECTOR_SIZE);
-    if (!spiflash_read(SPIFLASH_BASE_ADDR, data, SPI_FLASH_SECTOR_SIZE)) {
+    if (!spiflash_read(SPIFLASH_HOMEKIT_BASE_ADDR, data, SPI_FLASH_SECTOR_SIZE)) {
         free(data);
         ERROR("Compact read");
         return -1;
@@ -192,7 +229,7 @@ static int compact_data() {
         return -1;
     }
 
-    if (!spiflash_write(SPIFLASH_BASE_ADDR, data, PAIRINGS_OFFSET + sizeof(pairing_data_t) * next_pairing_idx)) {
+    if (!spiflash_write(SPIFLASH_HOMEKIT_BASE_ADDR, data, PAIRINGS_OFFSET + sizeof(pairing_data_t) * next_pairing_idx)) {
         ERROR("Compact writing");
         free(data);
         return -1;
@@ -206,17 +243,18 @@ static int find_empty_block() {
     byte data[sizeof(pairing_data_t)];
 
     for (unsigned int i = 0; i < MAX_PAIRINGS; i++) {
-        spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, data, sizeof(data));
-
-        bool block_empty = true;
-        for (unsigned int j = 0; j < sizeof(data); j++)
-            if (data[j] != 0xff) {
-                block_empty = false;
-                break;
+        if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, data, sizeof(data))) {
+            
+            bool block_empty = true;
+            for (unsigned int j = 0; j < sizeof(data); j++)
+                if (data[j] != 0xff) {
+                    block_empty = false;
+                    break;
+                }
+            
+            if (block_empty) {
+                return i;
             }
-
-        if (block_empty) {
-            return i;
         }
     }
 
@@ -240,7 +278,8 @@ int homekit_storage_add_pairing(const char *device_id, const ed25519_key *device
     memset(&data, 0, sizeof(data));
     strncpy(data.magic, magic1, sizeof(magic1));
     data.permissions = permissions;
-    strncpy(data.device_id, device_id, sizeof(data.device_id));
+    memset(data.device_id, 0, sizeof(data.device_id));
+    memcpy(data.device_id, device_id, sizeof(data.device_id));
     size_t device_public_key_size = sizeof(data.device_public_key);
     int r = crypto_ed25519_export_public_key(
         device_key, data.device_public_key, &device_public_key_size
@@ -249,12 +288,12 @@ int homekit_storage_add_pairing(const char *device_id, const ed25519_key *device
         ERROR("Export dev public key (%d)", r);
         return -1;
     }
-
+    
     if (!spiflash_write(PAIRINGS_ADDR + sizeof(data)*next_block_idx, (byte *)&data, sizeof(data))) {
         ERROR("Write pairing");
         return -1;
     }
-
+    
     return 0;
 }
 
@@ -262,38 +301,39 @@ int homekit_storage_add_pairing(const char *device_id, const ed25519_key *device
 int homekit_storage_update_pairing(const char *device_id, byte permissions) {
     pairing_data_t data;
     for (int i = 0; i < MAX_PAIRINGS; i++) {
-        spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data));
-        if (strncmp(data.magic, magic1, sizeof(magic1)))
-            continue;
-
-        if (!strncmp(data.device_id, device_id, sizeof(data.device_id))) {
-            int r;
-
-            ed25519_key *device_key = crypto_ed25519_new();
-            r = crypto_ed25519_import_public_key(device_key, data.device_public_key, sizeof(data.device_public_key));
-            if (r) {
-                ERROR("Import dev public key (%d)", r);
-                crypto_ed25519_free(device_key);
-                return -2;
-            }
-
-            if (memcmp(device_key, data.device_public_key, sizeof(data.device_public_key)) != 0) {
-                r = homekit_storage_add_pairing(data.device_id, device_key, permissions);
-                crypto_ed25519_free(device_key);
+        if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
+            if (strncmp(data.magic, magic1, sizeof(magic1)))
+                continue;
+            
+            if (!strncmp(data.device_id, device_id, sizeof(data.device_id))) {
+                int r;
+                
+                ed25519_key *device_key = crypto_ed25519_new();
+                r = crypto_ed25519_import_public_key(device_key, data.device_public_key, sizeof(data.device_public_key));
                 if (r) {
+                    ERROR("Import dev public key (%d)", r);
+                    crypto_ed25519_free(device_key);
                     return -2;
                 }
-
-                memset(&data, 0, sizeof(data));
-                if (!spiflash_write(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
-                    ERROR("Update pairing: erasing old");
-                    return -2;
+                
+                if (memcmp(device_key, data.device_public_key, sizeof(data.device_public_key)) != 0) {
+                    r = homekit_storage_add_pairing(data.device_id, device_key, permissions);
+                    crypto_ed25519_free(device_key);
+                    if (r) {
+                        return -2;
+                    }
+                    
+                    memset(&data, 0, sizeof(data));
+                    if (!spiflash_write(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
+                        ERROR("Update pairing: erasing old");
+                        return -2;
+                    }
+                } else {
+                    INFO("Device Public Key not needing updated");
                 }
-            } else {
-                INFO("Device Public Key not needing updated");
+                
+                return 0;
             }
-
-            return 0;
         }
     }
     
@@ -304,18 +344,19 @@ int homekit_storage_update_pairing(const char *device_id, byte permissions) {
 int homekit_storage_remove_pairing(const char *device_id) {
     pairing_data_t data;
     for (int i = 0; i<MAX_PAIRINGS; i++) {
-        spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data));
-        if (strncmp(data.magic, magic1, sizeof(magic1)))
-            continue;
-
-        if (!strncmp(data.device_id, device_id, sizeof(data.device_id))) {
-            memset(&data, 0, sizeof(data));
-            if (!spiflash_write(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
-                ERROR("Remove pairing");
-                return -2;
+        if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
+            if (strncmp(data.magic, magic1, sizeof(magic1)))
+                continue;
+            
+            if (!strncmp(data.device_id, device_id, sizeof(data.device_id))) {
+                memset(&data, 0, sizeof(data));
+                if (!spiflash_write(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
+                    ERROR("Remove pairing");
+                    return -2;
+                }
+                
+                return 0;
             }
-
-            return 0;
         }
     }
     
@@ -323,34 +364,40 @@ int homekit_storage_remove_pairing(const char *device_id) {
 }
 
 int homekit_storage_pairing_count() {
+    enable_hap_partition();
+    
     pairing_data_t data;
     int count = 0;
     for (int i = 0; i < MAX_PAIRINGS; i++) {
-        spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data));
-        if (strncmp(data.magic, magic1, sizeof(magic1)))
-            continue;
-        
-        count++;
+        if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
+            if (strncmp(data.magic, magic1, sizeof(magic1)))
+                continue;
+            
+            count++;
+        }
     }
     
     return count;
 }
 
 int homekit_storage_remove_extra_pairing(const int last_keep) {
+    enable_hap_partition();
+    
     pairing_data_t data;
     int count = 0;
     for (int i = 0; i < MAX_PAIRINGS; i++) {
-        spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data));
-        if (strncmp(data.magic, magic1, sizeof(magic1)))
-            continue;
-        
-        count++;
-        
-        if (count > last_keep) {
-            memset(&data, 0, sizeof(data));
-            if (!spiflash_write(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
-                ERROR("Remove pairing");
-                return -2;
+        if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
+            if (strncmp(data.magic, magic1, sizeof(magic1)))
+                continue;
+            
+            count++;
+            
+            if (count > last_keep) {
+                memset(&data, 0, sizeof(data));
+                if (!spiflash_write(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
+                    ERROR("Remove pairing");
+                    return -2;
+                }
             }
         }
     }
@@ -362,25 +409,26 @@ int homekit_storage_remove_extra_pairing(const int last_keep) {
 pairing_t *homekit_storage_find_pairing(const char *device_id) {
     pairing_data_t data;
     for (int i = 0; i < MAX_PAIRINGS; i++) {
-        spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data));
-        if (strncmp(data.magic, magic1, sizeof(magic1)))
-            continue;
-
-        if (!strncmp(data.device_id, device_id, sizeof(data.device_id))) {
-            ed25519_key *device_key = crypto_ed25519_new();
-            int r = crypto_ed25519_import_public_key(device_key, data.device_public_key, sizeof(data.device_public_key));
-            if (r) {
-                ERROR("Import dev public key (%d)", r);
-                return NULL;
+        if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
+            if (strncmp(data.magic, magic1, sizeof(magic1)))
+                continue;
+            
+            if (!strncmp(data.device_id, device_id, sizeof(data.device_id))) {
+                ed25519_key *device_key = crypto_ed25519_new();
+                int r = crypto_ed25519_import_public_key(device_key, data.device_public_key, sizeof(data.device_public_key));
+                if (r) {
+                    ERROR("Import dev public key (%d)", r);
+                    return NULL;
+                }
+                
+                pairing_t *pairing = pairing_new();
+                pairing->id = i;
+                pairing->device_id = strndup(data.device_id, sizeof(data.device_id));
+                pairing->device_key = device_key;
+                pairing->permissions = data.permissions;
+                
+                return pairing;
             }
-
-            pairing_t *pairing = pairing_new();
-            pairing->id = i;
-            pairing->device_id = strndup(data.device_id, sizeof(data.device_id));
-            pairing->device_key = device_key;
-            pairing->permissions = data.permissions;
-
-            return pairing;
         }
     }
 
@@ -410,24 +458,25 @@ pairing_t *homekit_storage_next_pairing(pairing_iterator_t *it) {
     while(it->idx < MAX_PAIRINGS) {
         int id = it->idx++;
 
-        spiflash_read(PAIRINGS_ADDR + sizeof(data) * id, (byte *)&data, sizeof(data));
-        if (!strncmp(data.magic, magic1, sizeof(magic1))) {
-            ed25519_key *device_key = crypto_ed25519_new();
-            int r = crypto_ed25519_import_public_key(device_key, data.device_public_key, sizeof(data.device_public_key));
-            if (r) {
-                ERROR("Import dev public key (%d)", r);
-                crypto_ed25519_free(device_key);
-                it->idx++;
-                continue;
+        if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * id, (byte *)&data, sizeof(data))) {
+            if (!strncmp(data.magic, magic1, sizeof(magic1))) {
+                ed25519_key *device_key = crypto_ed25519_new();
+                int r = crypto_ed25519_import_public_key(device_key, data.device_public_key, sizeof(data.device_public_key));
+                if (r) {
+                    ERROR("Import dev public key (%d)", r);
+                    crypto_ed25519_free(device_key);
+                    it->idx++;
+                    continue;
+                }
+                
+                pairing_t *pairing = pairing_new();
+                pairing->id = id;
+                pairing->device_id = strndup(data.device_id, sizeof(data.device_id));
+                pairing->device_key = device_key;
+                pairing->permissions = data.permissions;
+                
+                return pairing;
             }
-
-            pairing_t *pairing = pairing_new();
-            pairing->id = id;
-            pairing->device_id = strndup(data.device_id, sizeof(data.device_id));
-            pairing->device_key = device_key;
-            pairing->permissions = data.permissions;
-
-            return pairing;
         }
     }
 

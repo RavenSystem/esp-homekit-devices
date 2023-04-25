@@ -6,16 +6,36 @@
  */
 
 #include "dht.h"
-#include "FreeRTOS.h"
 #include "string.h"
-#include "task.h"
-#include "esp/gpio.h"
-
-#include <espressif/esp_misc.h> // sdk_os_delay_us
 
 // DHT timer precision in microseconds
-#define DHT_TIMER_INTERVAL 2
-#define DHT_DATA_BITS 40
+#define DHT_TIMER_INTERVAL          (2)
+#define DHT_DATA_BITS               (40)
+
+#ifdef ESP_PLATFORM
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "driver/gpio.h"
+#include "rom/ets_sys.h"
+
+#define sdk_os_delay_us(time)       ets_delay_us(time)
+#define gpio_read(level)            gpio_get_level(level)
+#define gpio_write(gpio, level)     gpio_set_level(gpio, level)
+#define PORT_ENTER_CRITICAL()       portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED; taskENTER_CRITICAL(&mux)
+#define PORT_EXIT_CRITICAL()        taskEXIT_CRITICAL(&mux)
+
+#else
+
+#include "FreeRTOS.h"
+#include "task.h"
+#include "esp/gpio.h"
+#include <espressif/esp_misc.h>     // sdk_os_delay_us
+
+#define PORT_ENTER_CRITICAL()       taskENTER_CRITICAL()
+#define PORT_EXIT_CRITICAL()        taskEXIT_CRITICAL()
+
+#endif
 
 // #define DEBUG_DHT
 #ifdef DEBUG_DHT
@@ -69,6 +89,10 @@
 static bool dht_await_pin_state(uint8_t pin, uint32_t timeout,
         bool expected_pin_state, uint32_t *duration)
 {
+#ifdef ESP_PLATFORM
+    gpio_set_direction(pin, GPIO_MODE_INPUT);
+#endif
+    
     for (uint32_t i = 0; i < timeout; i += DHT_TIMER_INTERVAL) {
         // need to wait at least a single interval to prevent reading a jitter
         sdk_os_delay_us(DHT_TIMER_INTERVAL);
@@ -94,6 +118,9 @@ static inline bool dht_fetch_data(dht_sensor_type_t sensor_type, uint8_t pin, bo
     uint32_t high_duration;
 
     // Phase 'A' pulling signal low to initiate read sequence
+#ifdef ESP_PLATFORM
+    gpio_set_direction(pin, GPIO_MODE_OUTPUT_OD);
+#endif
     gpio_write(pin, 0);
     sdk_os_delay_us(sensor_type == DHT_TYPE_SI7021 ? 500 : 20000);
     gpio_write(pin, 1);
@@ -158,13 +185,27 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
     bool bits[DHT_DATA_BITS];
     uint8_t data[DHT_DATA_BITS/8] = {0};
     bool result;
-
+    
+#ifdef ESP_PLATFORM
+    gpio_set_direction(pin, GPIO_MODE_OUTPUT_OD);
+    gpio_set_pull_mode(pin, false);
+    gpio_sleep_set_pull_mode(pin, false);
+#else
     gpio_enable(pin, GPIO_OUT_OPEN_DRAIN);
-
-    taskENTER_CRITICAL();
+    gpio_set_pullup(pin, false, false);
+#endif
+    
+    PORT_ENTER_CRITICAL();
     result = dht_fetch_data(sensor_type, pin, bits);
-    taskEXIT_CRITICAL();
+    PORT_EXIT_CRITICAL();
 
+#ifdef ESP_PLATFORM
+    gpio_reset_pin(pin);
+    gpio_set_direction(pin, GPIO_MODE_DISABLE);
+#else
+    gpio_disable(pin);
+#endif
+    
     if (!result) {
         return false;
     }

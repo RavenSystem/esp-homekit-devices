@@ -1,8 +1,8 @@
 #ifndef __ONEWIRE_H__
 #define __ONEWIRE_H__
 
-#include <espressif/esp_misc.h> // sdk_os_delay_us
-#include "FreeRTOS.h"
+#include <stdint.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -13,15 +13,6 @@ extern "C" {
  *  Routines to access devices using the Dallas Semiconductor 1-Wire(tm)
  *  protocol.
  */
-
-/** Select the table-lookup method of computing the 8-bit CRC
- *  by setting this to 1 during compilation.  The lookup table enlarges code
- *  size by about 250 bytes.  By default, a slower but very compact algorithm
- *  is used.
- */
-#ifndef ONEWIRE_CRC8_TABLE
-#define ONEWIRE_CRC8_TABLE 0
-#endif
 
 /** Type used to hold all 1-Wire device ROM addresses (64-bit) */
 typedef uint64_t onewire_addr_t;
