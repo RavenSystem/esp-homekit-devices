@@ -78,7 +78,6 @@ typedef struct _adv_logger_data {
     bool is_buffered: 1;
     
     TaskHandle_t xHandle;
-    SemaphoreHandle_t log_write_semaphore;
     SemaphoreHandle_t log_sender_semaphore;
     
     char* udplogstring;

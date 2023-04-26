@@ -393,7 +393,7 @@ void user_init() {
     
 #else // ESP-OPEN-RTOS
     
-    for (unsigned int i = 0; i < 17; i++) {
+    for (unsigned int i = 0; i < 16; i++) {
         if (i == 6) {
             i += 6;
         } else if (i == 1) {
@@ -403,6 +403,8 @@ void user_init() {
         //gpio_enable(i, GPIO_INPUT);
         gpio_disable(i);
     }
+    
+    gpio_enable(16, GPIO_INPUT);    // GPIO 16 can not be disable
     
 #endif
     
