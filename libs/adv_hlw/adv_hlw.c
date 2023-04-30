@@ -153,13 +153,9 @@ float adv_hlw_get_power_freq(const int gpio) {
 static void IRAM adv_hlw_cf1_callback(void* args) {
     const uint64_t now = esp_timer_get_time();
     const uint8_t gpio = (uint32_t) args;
-    
-    gpio_intr_disable(gpio);
 #else
 static void IRAM adv_hlw_cf1_callback(const uint8_t gpio) {
     const uint32_t now = sdk_system_get_time_raw();
-    
-    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
 #endif
     
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
@@ -192,25 +188,15 @@ static void IRAM adv_hlw_cf1_callback(const uint8_t gpio) {
     adv_hlw_unit->last_cf1 = now;
     
     //printf("ADV_HLW_CF: gpio: %i, period_cf_v: %i _c: %i\n", gpio, adv_hlw_unit->period_cf1_v, adv_hlw_unit->period_cf1_c);
-    
-#ifdef ESP_PLATFORM
-    gpio_intr_enable(gpio);
-#else
-    gpio_set_interrupt(gpio, adv_hlw_unit->interrupt_type, adv_hlw_cf1_callback);
-#endif
 }
 
 #ifdef ESP_PLATFORM
 static void IRAM adv_hlw_cf_callback(void* args) {
     const uint64_t now = esp_timer_get_time();
     const uint8_t gpio = (uint32_t) args;
-    
-    gpio_intr_disable(gpio);
 #else
 static void IRAM adv_hlw_cf_callback(const uint8_t gpio) {
     const uint32_t now = sdk_system_get_time_raw();
-    
-    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
 #endif
     
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
@@ -219,12 +205,6 @@ static void IRAM adv_hlw_cf_callback(const uint8_t gpio) {
     adv_hlw_unit->last_cf = now;
     
     //printf("ADV_HLW_CF: gpio: %i, period_cf: %i\n", gpio, adv_hlw_unit->period_cf);
-    
-#ifdef ESP_PLATFORM
-    gpio_intr_enable(gpio);
-#else
-    gpio_set_interrupt(gpio, adv_hlw_unit->interrupt_type, adv_hlw_cf_callback);
-#endif
 }
 
 int adv_hlw_unit_create(const int8_t gpio_cf, const int8_t gpio_cf1, const int8_t gpio_sel, const unsigned int current_mode, const unsigned int interrupt_type) {
@@ -259,7 +239,7 @@ int adv_hlw_unit_create(const int8_t gpio_cf, const int8_t gpio_cf1, const int8_
                 if (gpio_cf > -1) {
 #ifdef ESP_PLATFORM
                     gpio_set_intr_type(gpio_cf, interrupt_type);
-                    gpio_intr_enable(gpio_cf);
+                    //gpio_intr_enable(gpio_cf);
                     gpio_isr_handler_add(gpio_cf, adv_hlw_cf_callback, (void*) ((uint32_t) gpio_cf));
 #else
                     gpio_set_interrupt(gpio_cf, interrupt_type, adv_hlw_cf_callback);
@@ -269,7 +249,7 @@ int adv_hlw_unit_create(const int8_t gpio_cf, const int8_t gpio_cf1, const int8_
                 if (gpio_cf1 > -1) {
 #ifdef ESP_PLATFORM
                     gpio_set_intr_type(gpio_cf1, interrupt_type);
-                    gpio_intr_enable(gpio_cf1);
+                    //gpio_intr_enable(gpio_cf1);
                     gpio_isr_handler_add(gpio_cf1, adv_hlw_cf1_callback, (void*) ((uint32_t) gpio_cf1));
 #else
                     gpio_set_interrupt(gpio_cf1, interrupt_type, adv_hlw_cf1_callback);

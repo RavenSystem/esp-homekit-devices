@@ -12,13 +12,19 @@ def gen_embedded(content):
         print('Error: no parts found')
         return
 
+    def check_macro(str):
+        if str.find('@@@#') == 0:
+            return ""
+        else:
+            return "\""
+        
     def process_part(part):
         return "\n".join(
-            "\"" + line.lstrip().replace('"', '\\"').replace('@@@', '"') + "\""
+            check_macro(line.lstrip()) + line.lstrip().replace('"', '\\"').replace('@@@#', '#').replace('@@@', '"') + check_macro(line.lstrip())
             for line in part.split("\n")
             if line.strip()
         )
-
+        
     result = ''
 
     for p1, p2 in zip(part_headers, part_headers[1:]):

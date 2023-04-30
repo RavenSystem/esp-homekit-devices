@@ -73,10 +73,10 @@ typedef struct _adv_button {
     uint8_t max_eval;
     
     volatile uint8_t value;
-    uint8_t press_count: 4;
-    bool inverted: 1;
-    bool state: 1;
-    bool old_state: 1;
+    uint8_t press_count;    // 4 bits
+    bool inverted;          // 1 bit
+    bool state: 1;          // 1 bit
+    bool old_state: 1;      // 1 bit
 
     TimerHandle_t press_timer;
     TimerHandle_t hold_timer;
@@ -99,8 +99,8 @@ typedef struct _adv_button_mcp {
     uint8_t value_a;
     uint8_t value_b;
     
-    uint8_t bus: 1;
-    uint8_t channels: 2;
+    uint8_t bus;        // 1 bit
+    uint8_t channels;   // 2 bits
 
     struct _adv_button_mcp* next;
 } adv_button_mcp_t;
@@ -112,8 +112,7 @@ typedef struct _adv_button_main_config {
     uint16_t button_evaluate_sleep_time;
     
     uint8_t button_evaluate_delay;
-    bool button_evaluate_is_working: 1;
-    bool continuos_mode: 1;
+    bool continuos_mode;    // 1 bit
     
     TimerHandle_t button_evaluate_timer;
 
@@ -266,161 +265,144 @@ static inline void adv_button_hold_callback(TimerHandle_t xTimer) {
 #ifdef ESP_PLATFORM
 static void IRAM_ATTR adv_button_interrupt_pulse(void* args) {
     const uint8_t gpio = (uint32_t) args;
-    gpio_intr_disable(gpio);
 #else
 static void IRAM adv_button_interrupt_pulse(const uint8_t gpio) {
-    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
 #endif
 
     adv_button_t *button = button_find_by_gpio(gpio);
     button->value = ADV_BUTTON_MIN(button->value++, button->max_eval);
-    
-#ifdef ESP_PLATFORM
-    gpio_intr_enable(gpio);
-#else
-    gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_NEG, adv_button_interrupt_pulse);
-#endif
 }
 
 #ifdef ESP_PLATFORM
 static void IRAM_ATTR adv_button_interrupt_normal(void* args) {
     const uint8_t gpio = (uint32_t) args;
-    gpio_intr_disable(gpio);
 #else
 static void IRAM adv_button_interrupt_normal(const uint8_t gpio) {
-    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
 #endif
-    
-    adv_button_main_config->button_evaluate_sleep_countdown = 0;
-    
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    xTimerStartFromISR(adv_button_main_config->button_evaluate_timer, &xHigherPriorityTaskWoken);
+    if (xTimerStartFromISR(adv_button_main_config->button_evaluate_timer, &xHigherPriorityTaskWoken) == pdPASS) {
+        adv_button_main_config->button_evaluate_sleep_countdown = 0;
+        
+        adv_button_t* button = adv_button_main_config->buttons;
+        while (button) {
+            if (button->mode == ADV_BUTTON_NORMAL_MODE) {
+#ifdef ESP_PLATFORM
+                gpio_intr_disable(gpio);
+#else
+                gpio_set_interrupt(button->gpio, GPIO_INTTYPE_NONE, NULL);
+#endif
+            }
+            button = button->next;
+        }
+    }
     
+#ifdef ESP_PLATFORM
+    if (xHigherPriorityTaskWoken) {
+        portYIELD_FROM_ISR();
+    }
+#endif
+}
+
+static void button_evaluate_fn() {
+    if (!adv_button_main_config->continuos_mode) {
+        if (adv_button_main_config->button_evaluate_sleep_countdown < adv_button_main_config->button_evaluate_sleep_time) {
+            adv_button_main_config->button_evaluate_sleep_countdown++;
+        } else if (adv_button_main_config->button_evaluate_sleep_countdown == adv_button_main_config->button_evaluate_sleep_time) {
+            adv_button_main_config->button_evaluate_sleep_countdown++;
+            
+            adv_button_t* button = adv_button_main_config->buttons;
+            while (button) {
+                
+#ifdef ESP_PLATFORM
+                gpio_intr_enable(button->gpio);
+#else
+                gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt_normal);
+#endif
+                
+                button = button->next;
+            }
+        } else {
+            rs_esp_timer_stop(adv_button_main_config->button_evaluate_timer);
+        }
+    }
+    
+    adv_button_mcp_t* mcp = adv_button_main_config->mcps;
+    while (mcp) {
+        if (mcp->channels == MCP_CHANNEL_A || mcp->channels == MCP_CHANNEL_BOTH) {
+            const uint8_t reg = 0x12;
+            adv_i2c_slave_read(mcp->bus, mcp->addr, &reg, 1, &mcp->value_a, 1);
+        }
+        
+        if (mcp->channels > MCP_CHANNEL_A) {
+            const uint8_t reg = 0x13;
+            adv_i2c_slave_read(mcp->bus, mcp->addr, &reg, 1, &mcp->value_b, 1);
+        }
+        
+        mcp = mcp->next;
+    }
+
     adv_button_t* button = adv_button_main_config->buttons;
     while (button) {
         if (button->mode == ADV_BUTTON_NORMAL_MODE) {
             
 #ifdef ESP_PLATFORM
-            gpio_intr_disable(gpio);
+            int read_value = gpio_read(button->gpio);
 #else
-            gpio_set_interrupt(button->gpio, GPIO_INTTYPE_NONE, NULL);
+            int read_value = false;
+            if (button->gpio <= 16) {
+                read_value = gpio_read(button->gpio);
+            } else {
+                read_value = (sdk_system_adc_read() > ADC_MID_VALUE);
+            }
 #endif
             
-        }
-        button = button->next;
-    }
-    
-    if (xHigherPriorityTaskWoken) {
-        portYIELD();
-    }
-}
-
-static void button_evaluate_fn() {
-    if (!adv_button_main_config->button_evaluate_is_working) {
-        adv_button_main_config->button_evaluate_is_working = true;
-        
-        if (!adv_button_main_config->continuos_mode) {
-            if (adv_button_main_config->button_evaluate_sleep_countdown < adv_button_main_config->button_evaluate_sleep_time) {
-                adv_button_main_config->button_evaluate_sleep_countdown++;
-            } else if (adv_button_main_config->button_evaluate_sleep_countdown == adv_button_main_config->button_evaluate_sleep_time) {
-                adv_button_main_config->button_evaluate_sleep_countdown++;
-                
-                adv_button_t* button = adv_button_main_config->buttons;
-                while (button) {
-                    
-#ifdef ESP_PLATFORM
-                    gpio_intr_enable(button->gpio);
-#else
-                    gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt_normal);
-#endif
-                    
-                    button = button->next;
+            if (read_value) {
+                button->value = ADV_BUTTON_MIN(button->value++, button->max_eval);
+                if (button->value == button->max_eval) {
+                    button->state = true;
                 }
             } else {
-                rs_esp_timer_stop(adv_button_main_config->button_evaluate_timer);
-            }
-        }
-        
-        adv_button_mcp_t* mcp = adv_button_main_config->mcps;
-        while (mcp) {
-            if (mcp->channels == MCP_CHANNEL_A || mcp->channels == MCP_CHANNEL_BOTH) {
-                const uint8_t reg = 0x12;
-                adv_i2c_slave_read(mcp->bus, mcp->addr, &reg, 1, &mcp->value_a, 1);
-            }
-            
-            if (mcp->channels > MCP_CHANNEL_A) {
-                const uint8_t reg = 0x13;
-                adv_i2c_slave_read(mcp->bus, mcp->addr, &reg, 1, &mcp->value_b, 1);
-            }
-            
-            mcp = mcp->next;
-        }
-
-        adv_button_t* button = adv_button_main_config->buttons;
-        while (button) {
-            if (button->mode == ADV_BUTTON_NORMAL_MODE) {
-                
-#ifdef ESP_PLATFORM
-                int read_value = gpio_read(button->gpio);
-#else
-                int read_value = false;
-                if (button->gpio <= 16) {
-                    read_value = gpio_read(button->gpio);
-                } else {
-                    read_value = (sdk_system_adc_read() > ADC_MID_VALUE);
+                button->value = ADV_BUTTON_MAX(button->value--, 0);
+                if (button->value == 0) {
+                    button->state = false;
                 }
-#endif
-                
-                if (read_value) {
-                    button->value = ADV_BUTTON_MIN(button->value++, button->max_eval);
-                    if (button->value == button->max_eval) {
-                        button->state = true;
-                    }
-                } else {
-                    button->value = ADV_BUTTON_MAX(button->value--, 0);
-                    if (button->value == 0) {
-                        button->state = false;
-                    }
+            }
+        } else if (button->mode == ADV_BUTTON_PULSE_MODE) {
+            if (button->value == button->max_eval) {
+                button->value = button->value >> 1;
+                button->state = true;
+            } else {
+                button->value = ADV_BUTTON_MAX(button->value--, 0);
+                if (button->value == 0) {
+                    button->state = false;
                 }
-            } else if (button->mode == ADV_BUTTON_PULSE_MODE) {
+            }
+        } else {    // MCP23017
+            if (adv_button_read_mcp_gpio(button->gpio) != 0) {
+                button->value = ADV_BUTTON_MIN(button->value++, button->max_eval);
                 if (button->value == button->max_eval) {
-                    button->value = button->value >> 1;
                     button->state = true;
-                } else {
-                    button->value = ADV_BUTTON_MAX(button->value--, 0);
-                    if (button->value == 0) {
-                        button->state = false;
-                    }
                 }
-            } else {    // MCP23017
-                if (adv_button_read_mcp_gpio(button->gpio) != 0) {
-                    button->value = ADV_BUTTON_MIN(button->value++, button->max_eval);
-                    if (button->value == button->max_eval) {
-                        button->state = true;
-                    }
-                } else {
-                    button->value = ADV_BUTTON_MAX(button->value--, 0);
-                    if (button->value == 0) {
-                        button->state = false;
-                    }
+            } else {
+                button->value = ADV_BUTTON_MAX(button->value--, 0);
+                if (button->value == 0) {
+                    button->state = false;
                 }
             }
-            
-            if (button->state != button->old_state) {
-                button->old_state = button->state;
-                adv_button_main_config->button_evaluate_sleep_countdown = 0;
-                
-                if (button->state ^ button->inverted) {     // 1 HIGH
-                    push_up(button->gpio);
-                } else {                                    // 0 LOW
-                    push_down(button->gpio);
-                }
-            }
-            
-            button = button->next;
         }
         
-        adv_button_main_config->button_evaluate_is_working = false;
+        if (button->state != button->old_state) {
+            button->old_state = button->state;
+            adv_button_main_config->button_evaluate_sleep_countdown = 0;
+            
+            if (button->state ^ button->inverted) {     // 1 HIGH
+                push_up(button->gpio);
+            } else {                                    // 0 LOW
+                push_down(button->gpio);
+            }
+        }
+        
+        button = button->next;
     }
 }
 
@@ -519,7 +501,6 @@ int adv_button_create(const uint16_t gpio, const bool inverted, const uint8_t mo
 #ifdef ESP_PLATFORM
                 gpio_set_intr_type(gpio, GPIO_INTR_ANYEDGE);
                 gpio_isr_handler_add(gpio, adv_button_interrupt_normal, (void*) ((uint32_t) gpio));
-                gpio_intr_enable(gpio);
 #else
                 gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt_normal);
 #endif
@@ -531,7 +512,6 @@ int adv_button_create(const uint16_t gpio, const bool inverted, const uint8_t mo
 #ifdef ESP_PLATFORM
             gpio_set_intr_type(gpio, GPIO_INTR_NEGEDGE);
             gpio_isr_handler_add(gpio, adv_button_interrupt_pulse, (void*) ((uint32_t) gpio));
-            gpio_intr_enable(gpio);
 #else
             gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_NEG, adv_button_interrupt_pulse);
 #endif

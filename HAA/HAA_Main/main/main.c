@@ -140,6 +140,14 @@ main_config_t main_config = {
     .uart_recv_is_working = false,
 };
 
+#ifdef ESP_PLATFORM
+static unsigned int IRAM_ATTR private_abs(int number) {
+#else
+static unsigned int IRAM private_abs(int number) {
+#endif
+    return (number < 0 ? -number : number);
+}
+
 static void show_freeheap() {
 #ifdef ESP_PLATFORM
     INFO("Free Heap %li", xPortGetFreeHeapSize());
@@ -150,7 +158,7 @@ static void show_freeheap() {
 
 // https://martin.ankerl.com/2012/01/25/optimized-approximative-pow-in-c-and-cpp/
 double fast_precise_pow(double a, double b) {
-    int32_t e = abs((int32_t) b);
+    int32_t e = private_abs((int32_t) b);
     
     union {
         double d;
@@ -3377,7 +3385,7 @@ void rgbw_set_timer_worker() {
         if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL) {
             lightbulb_group->has_changed = false;
             for (int i = 0; i < LIGHTBULB_CHANNELS; i++) {
-                if (abs(lightbulb_group->target[i] - lightbulb_group->current[i]) > abs(LIGHTBULB_STEP_VALUE[i])) {
+                if (private_abs(lightbulb_group->target[i] - lightbulb_group->current[i]) > private_abs(LIGHTBULB_STEP_VALUE[i])) {
                     all_channels_ready = false;
                     lightbulb_group->current[i] += LIGHTBULB_STEP_VALUE[i];
                     lightbulb_group->has_changed = true;
@@ -3551,9 +3559,9 @@ void lightbulb_no_task(ch_group_t* ch_group) {
         lightbulb_group->target[4] != lightbulb_group->current[4]
         ) {
         if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL) {
-            int max_diff = abs(lightbulb_group->current[0] - lightbulb_group->target[0]);
+            int max_diff = private_abs(lightbulb_group->current[0] - lightbulb_group->target[0]);
             for (int i = 1; i < LIGHTBULB_CHANNELS; i++) {
-                const int diff = abs(lightbulb_group->current[i] - lightbulb_group->target[i]);
+                const int diff = private_abs(lightbulb_group->current[i] - lightbulb_group->target[i]);
                 if (diff > max_diff) {
                     max_diff = diff;
                 }
@@ -4779,29 +4787,25 @@ void reset_uart_buffer() {
 void IRAM_ATTR fm_pulse_interrupt(void* args) {
     const uint64_t time = esp_timer_get_time();
     const uint8_t gpio = (uint32_t) args;
-    gpio_intr_disable(gpio);
 #else
 void IRAM fm_pulse_interrupt(const uint8_t gpio) {
     const uint32_t time = sdk_system_get_time_raw();
-    gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
 #endif
     
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
         if ((ch_group->serv_type == SERV_TYPE_FREE_MONITOR ||
              ch_group->serv_type == SERV_TYPE_FREE_MONITOR_ACCUMULATVE) &&
-            abs(FM_SENSOR_TYPE) == FM_SENSOR_TYPE_PULSE_US_TIME &&
+            private_abs(FM_SENSOR_TYPE) == FM_SENSOR_TYPE_PULSE_US_TIME &&
             FM_SENSOR_GPIO == gpio) {
             if (FM_NEW_VALUE == 0) {
                 FM_NEW_VALUE = time;
-                
-#ifdef ESP_PLATFORM
-                gpio_intr_enable(gpio);
-#else
-                gpio_set_interrupt(gpio, FM_SENSOR_GPIO_INT_TYPE, fm_pulse_interrupt);
-#endif
-                
             } else {
+#ifdef ESP_PLATFORM
+                gpio_intr_disable(gpio);
+#else
+                gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
+#endif
                 FM_OVERRIDE_VALUE = time;
             }
             
@@ -4874,7 +4878,7 @@ void free_monitor_task(void* args) {
             float value = 0;
             int get_value = false;
             
-            const int fm_sensor_type = abs(FM_SENSOR_TYPE);
+            const int fm_sensor_type = private_abs(FM_SENSOR_TYPE);
             
             if (args) {
                 if (fm_sensor_type == FM_SENSOR_TYPE_FREE || FM_OVERRIDE_VALUE != NO_LAST_WILDCARD_ACTION) {
@@ -8312,16 +8316,8 @@ void normal_mode_init() {
         }
     }
     
-    // Button Continuos Mode
-    int adv_button_continuos_mode = false;
-    if (cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_CONTINUOS_MODE) != NULL) {
-        adv_button_continuos_mode = (bool) cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_CONTINUOS_MODE)->valuefloat;
-    }
-    
     // MCP23017 Interfaces
     if (cJSON_GetObjectItemCaseSensitive(json_config, MCP23017_ARRAY) != NULL) {
-        adv_button_continuos_mode = true;   // Force Button Continuos Mode if a MCP23017 is used.
-        
         cJSON* json_mcp23017s = cJSON_GetObjectItemCaseSensitive(json_config, MCP23017_ARRAY);
         for (int i = 0; i < cJSON_GetArraySize(json_mcp23017s); i++) {
             cJSON* json_mcp23017 = cJSON_GetArrayItem(json_mcp23017s, i);
@@ -8430,8 +8426,12 @@ void normal_mode_init() {
     if (cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER) != NULL) {
         adv_button_filter_value = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER)->valuefloat;
     }
-    if (adv_button_filter_value || adv_button_continuos_mode) {
-        adv_button_init(adv_button_filter_value, adv_button_continuos_mode);
+    int adv_button_continuous_mode = false;
+    if (cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_CONTINUOS_MODE) != NULL) {
+        adv_button_continuous_mode = (bool) cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_CONTINUOS_MODE)->valuefloat;
+    }
+    if (adv_button_filter_value || adv_button_continuous_mode) {
+        adv_button_init(adv_button_filter_value, adv_button_continuous_mode);
     }
     
     // PWM frequency
@@ -11853,6 +11853,7 @@ void normal_mode_init() {
                 gpio_install_isr_service(0);
                 gpio_set_intr_type(gpio, interrupt_type);
                 gpio_isr_handler_add(gpio, fm_pulse_interrupt, (void*) ((uint32_t) gpio));
+                gpio_intr_disable(gpio);
 #endif
                 FM_SENSOR_GPIO_INT_TYPE = interrupt_type;
                 
@@ -12342,13 +12343,24 @@ void irrf_capture_task(void* args) {
     const int irrf_capture_gpio = ((int) args) - 100;
     INFO("\nGPIO %i\n", irrf_capture_gpio);
     //set_used_gpio(irrf_capture_gpio);
-    //gpio_enable(irrf_capture_gpio, GPIO_INPUT);
+    
+#ifdef ESP_PLATFORM
+    gpio_set_direction(irrf_capture_gpio, GPIO_MODE_INPUT);
+    gpio_sleep_set_direction(irrf_capture_gpio, GPIO_MODE_INPUT);
+#else
+    gpio_enable(irrf_capture_gpio, GPIO_INPUT);
+#endif
+    
     //set_unused_gpios();
     
     int read, last = true;
     unsigned int i, c = 0;
     uint16_t* buffer = malloc(2048 * sizeof(uint16_t));
+#ifdef ESP_PLATFORM
+    uint64_t now, new_time, current_time = sdk_system_get_time_raw();
+#else
     uint32_t now, new_time, current_time = sdk_system_get_time_raw();
+#endif
     
     for (;;) {
         read = gpio_read(irrf_capture_gpio);
@@ -12399,11 +12411,7 @@ void irrf_capture_task(void* args) {
 }
 
 void wifi_done() {
-#ifdef ESP_PLATFORM
-    reset_uart();
-#endif
-                
-    adv_logger_init(ADV_LOGGER_UART0_UDP, NULL, false);
+
 }
 
 void init_task() {
@@ -12469,22 +12477,23 @@ void init_task() {
     }
     
     sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &haa_setup);
-    if (haa_setup > 99) {
+    if ((uint8_t) haa_setup > 99) {
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
         
         reset_uart();
         
-#ifdef ESP_PLATFORM
-        adv_logger_init(ADV_LOGGER_UART0, NULL, false);
-#endif
-        
         if (wifi_ssid) {
+            adv_logger_init(ADV_LOGGER_UART0_UDP, NULL, false);
             wifi_config_init("HAA", wifi_done, main_config.name_value, 0, 0);
+#ifdef ESP_PLATFORM
+        } else {
+            adv_logger_init(ADV_LOGGER_UART0, NULL, false);
+#endif
         }
         
         printf_header();
         
-        const int irrf_capture_gpio = haa_setup;
+        const int irrf_capture_gpio = (uint8_t) haa_setup;
         xTaskCreate(irrf_capture_task, "CAP", IRRF_CAPTURE_TASK_SIZE, (void*) irrf_capture_gpio, IRRF_CAPTURE_TASK_PRIORITY, NULL);
         
     } else if (haa_setup > 0 || !wifi_ssid) {

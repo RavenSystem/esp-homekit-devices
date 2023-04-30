@@ -10,7 +10,7 @@
 #ifdef ESP_PLATFORM
 
 #include "esp_attr.h"
-#define IRAM            _SECTION_ATTR_IMPL(".iram1", __COUNTER__)
+#define IRAM            IRAM_ATTR
 
 #endif
 

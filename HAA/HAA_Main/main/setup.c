@@ -881,8 +881,8 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
                 }
             } else if (irrx_param && irrx_param->value) {
-                const int8_t irrx_gpio = (strtol(irrx_param->value, NULL, 10)) + 100;
-                if (irrx_gpio >= 100) {
+                const uint8_t irrx_gpio = (strtol(irrx_param->value, NULL, 10)) + 100;
+                if (irrx_gpio >= 100) {     // If not GPIO is selected, irrx_gpio == 99
                     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, irrx_gpio);
                 }
             }
