@@ -121,7 +121,10 @@ typedef struct {
     SemaphoreHandle_t wifi_networks_mutex;
 
     uint8_t check_counter;
+
+#ifdef ESP_PLATFORM
     uint8_t wifi_sleep_mode;
+#endif
     
     bool end_setup; // 1 bit
 } wifi_config_context_t;
@@ -332,7 +335,7 @@ static void wifi_scan_sc_done() {
         return;
     }
     
-    INFO("Search %s BSSID", wifi_ssid);
+    INFO("Search BSSID for %s", wifi_ssid);
     
     int8_t best_rssi = INT8_MIN;
     uint8_t* best_bssid = malloc(6);
@@ -373,7 +376,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
         return;
     }
     
-    INFO("Search %s BSSID", wifi_ssid);
+    INFO("Search BSSID for %s", wifi_ssid);
     
     struct sdk_bss_info* bss = (struct sdk_bss_info*) arg;
     // first one is invalid
@@ -1132,7 +1135,6 @@ static void wifi_config_softap_start() {
     LOCK_TCPIP_CORE();
     sdk_wifi_set_opmode(STATIONAP_MODE);
     UNLOCK_TCPIP_CORE();
-    //sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
     
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
@@ -1342,13 +1344,13 @@ uint8_t wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool wi
     };
     
     sdk_wifi_station_set_config(&sta_config);
-#endif
     
     if (context->wifi_sleep_mode == 0) {
-        sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
+        esp_wifi_set_ps(WIFI_PS_NONE);
     } else {
-        sdk_wifi_set_sleep_type(WIFI_SLEEP_MODEM);
+        esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
     }
+#endif
     
     if (wifi_ssid) {
         if (with_reset) {
@@ -1506,16 +1508,21 @@ static void wifi_config_station_connect() {
     vTaskDelete(NULL);
 }
 
+#ifdef ESP_PLATFORM
 void wifi_config_init(const char* ssid_prefix, void (*on_wifi_ready)(), const char* custom_hostname, const int param, const uint8_t wifi_sleep_mode) {
+#else
+void wifi_config_init(const char* ssid_prefix, void (*on_wifi_ready)(), const char* custom_hostname, const int param) {
+#endif
     INFO("Wifi init");
     
     context = malloc(sizeof(wifi_config_context_t));
     memset(context, 0, sizeof(*context));
     
     context->ssid_prefix = strndup(ssid_prefix, 33 - 7);
-    context->wifi_sleep_mode = wifi_sleep_mode;
     
 #ifdef ESP_PLATFORM
+    context->wifi_sleep_mode = wifi_sleep_mode;
+    
     if (on_wifi_ready && custom_hostname) {
         esp_netif_set_hostname(setup_esp_netif, strdup(custom_hostname));
     } else {

@@ -8715,11 +8715,13 @@ void normal_mode_init() {
         main_config.ping_poll_period = (float) cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD)->valuefloat;
     }
     
+#ifdef ESP_PLATFORM
     // Wifi Sleep Mode
     int wifi_sleep_mode = 1;
     if (cJSON_GetObjectItemCaseSensitive(json_config, WIFI_SLEEP_MODE_SET) != NULL) {
         wifi_sleep_mode = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, WIFI_SLEEP_MODE_SET)->valuefloat;
     }
+#endif
     
 #ifndef ESP_PLATFORM
     // ARP Gratuitous period
@@ -12330,7 +12332,11 @@ void normal_mode_init() {
     
     //main_config.wifi_status = WIFI_STATUS_CONNECTING;     // Not needed
     
+#ifdef ESP_PLATFORM
     wifi_config_init("HAA", run_homekit_server, custom_hostname, 0, wifi_sleep_mode);
+#else
+    wifi_config_init("HAA", run_homekit_server, custom_hostname, 0);
+#endif
     
     led_blink(2);
     
@@ -12472,8 +12478,11 @@ void init_task() {
         
         printf_header();
         INFO("SETUP");
-        
+#ifdef ESP_PLATFORM
         wifi_config_init("HAA", NULL, main_config.name_value, param, 0);
+#else
+        wifi_config_init("HAA", NULL, main_config.name_value, param);
+#endif
     }
     
     sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &haa_setup);
@@ -12484,7 +12493,12 @@ void init_task() {
         
         if (wifi_ssid) {
             adv_logger_init(ADV_LOGGER_UART0_UDP, NULL, false);
+#ifdef ESP_PLATFORM
             wifi_config_init("HAA", wifi_done, main_config.name_value, 0, 0);
+#else
+            wifi_config_init("HAA", wifi_done, main_config.name_value, 0);
+#endif
+            
 #ifdef ESP_PLATFORM
         } else {
             adv_logger_init(ADV_LOGGER_UART0, NULL, false);

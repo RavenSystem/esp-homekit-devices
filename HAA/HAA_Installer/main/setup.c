@@ -296,7 +296,7 @@ static void wifi_scan_sc_done() {
         return;
     }
     
-    INFO("Search %s BSSID", wifi_ssid);
+    INFO("Search BSSID for %s", wifi_ssid);
     
     int8_t best_rssi = INT8_MIN;
     uint8_t* best_bssid = malloc(6);
@@ -337,7 +337,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
         return;
     }
     
-    INFO("Search %s BSSID", wifi_ssid);
+    INFO("Search BSSID for %s", wifi_ssid);
     
     struct sdk_bss_info* bss = (struct sdk_bss_info*) arg;
     // first one is invalid
@@ -1274,9 +1274,9 @@ static uint8_t wifi_config_connect(const uint8_t phy) {
     };
     
     sdk_wifi_station_set_config(&sta_config);
-#endif
     
-    sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
+    esp_wifi_set_ps(WIFI_PS_NONE);
+#endif
     
     if (wifi_ssid) {
         wifi_config_reset();
