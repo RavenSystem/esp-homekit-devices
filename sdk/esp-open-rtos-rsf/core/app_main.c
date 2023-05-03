@@ -403,6 +403,7 @@ void sdk_user_init_task(void *params) {
     printf("pp ver: %d.%d\n\n", (pp_ver >> 8) & 0xff, pp_ver & 0xff);
     */
     
+    sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
     sdk_wifi_mode_set(sdk_g_ic.s.wifi_mode);
     
     user_init();
