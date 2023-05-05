@@ -16,6 +16,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "driver/gpio.h"
 #include "rom/ets_sys.h"
 
@@ -29,6 +30,7 @@
 
 #include "FreeRTOS.h"
 #include "task.h"
+#include "semphr.h"
 #include "esp/gpio.h"
 #include <espressif/esp_misc.h>     // sdk_os_delay_us
 
@@ -79,6 +81,7 @@
  *
 */
 
+static SemaphoreHandle_t dht_lock = NULL;
 
 /**
  * Wait specified time for pin to go to a specified state.
@@ -183,8 +186,10 @@ static inline int16_t dht_convert_data(dht_sensor_type_t sensor_type, uint8_t ms
 bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity, int16_t *temperature)
 {
     bool bits[DHT_DATA_BITS];
-    uint8_t data[DHT_DATA_BITS/8] = {0};
+    uint8_t data[DHT_DATA_BITS / 8] = { 0 };
     bool result;
+    
+    xSemaphoreTake(dht_lock, pdMS_TO_TICKS(1000));
     
 #ifdef ESP_PLATFORM
     gpio_set_direction(pin, GPIO_MODE_OUTPUT_OD);
@@ -205,6 +210,8 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
 #else
     gpio_disable(pin);
 #endif
+    
+    xSemaphoreGive(dht_lock);
     
     if (!result) {
         return false;
@@ -231,6 +238,10 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
 
 bool dht_read_float_data(dht_sensor_type_t sensor_type, uint8_t pin, float *humidity, float *temperature)
 {
+    if (!dht_lock) {
+        dht_lock = xSemaphoreCreateMutex();
+    }
+    
     int16_t i_humidity, i_temp;
 
     if (dht_read_data(sensor_type, pin, &i_humidity, &i_temp)) {

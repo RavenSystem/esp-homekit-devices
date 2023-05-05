@@ -30,10 +30,15 @@
 #define __ADV_I2C_H__
 
 #include <stdint.h>
-
-#ifndef ESP_PLATFORM
-
 #include <stdbool.h>
+
+#ifdef ESP_PLATFORM
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+#else
+
 #include <errno.h>
 #include <FreeRTOS.h>
 #include <task.h>
@@ -43,6 +48,12 @@
 #ifdef	__cplusplus
 extern "C" {
 #endif
+
+#ifndef ADV_I2C_SEMAPHORE_TIMEOUT_MS
+#define ADV_I2C_SEMAPHORE_TIMEOUT_MS                (1000)
+#endif
+
+#define ADV_I2C_SEMAPHORE_TIMEOUT                   (ADV_I2C_SEMAPHORE_TIMEOUT_MS / portTICK_PERIOD_MS)
 
 /**
  * Define i2c bus max number
@@ -75,6 +86,7 @@ int adv_i2c_init_hz(uint8_t bus, uint8_t scl_pin, uint8_t sda_pin, uint32_t freq
  * @return Non-Zero if error occured
  */
 int adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t len);
+int adv_i2c_slave_read_no_wait(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t len);
 
 /**
  * Write 'len' bytes from 'buf' to slave at 'data' register adress .
@@ -87,8 +99,9 @@ int adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, con
  * @return Non-Zero if error occured
  */
 int adv_i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t len);
+int adv_i2c_slave_write_no_wait(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t len);
 
-#ifndef ESPPLATFORM
+#ifndef ESP_PLATFORM
 
 /* Set this to 1 if you intend to use GPIO 16 for I2C. It is not recommended
  * and will result in degradation of performance and timing accuracy.
@@ -187,13 +200,6 @@ bool i2c_status(uint8_t bus);
 
 /// Level 1 API (Don't need functions above)
 
-/**
- * This function will allow you to force a transmission I2C, cancel current transmission.
- * Warning: Use with precaution. Don't use it if you can avoid it. Usefull for priority transmission.
- * @param bus Bus i2c selection
- * @param state Force the next I2C transmission if true (Use with precaution)
- */
-void i2c_force_bus(uint8_t bus, bool state);
 
 #endif  // no ESP_PLATFORM
 

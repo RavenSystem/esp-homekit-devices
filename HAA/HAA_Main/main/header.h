@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.0.3"
+#define HAA_FIRMWARE_VERSION                "12.1.0"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -100,7 +100,10 @@
 #define INVERTED                            "i"
 #define BUTTON_FILTER                       "f"
 #define BUTTON_CONTINUOS_MODE               "c"
-#define PWM_FREQ                            "q"
+#define PWMS_FREQ                           "q"
+#define PWMH_FREQ_ARRAY                     "y"
+#define PWMH_FREQ_DEFAULT                   (5000)
+#define PWMH_BITS_DIVISOR                   (3)
 #define PWM_ZEROCROSSING_ARRAY_SET          "zc"
 #define ENABLE_HOMEKIT                      "h"
 #define HOMEKIT_SERVER_MAX_CLIENTS          "h"
@@ -173,6 +176,7 @@
 #define IO_GPIO_OUTPUT_INIT_VALUE           io_value[2]
 #define IO_GPIO_PWM_MODE                    io_value[3]
 #define IO_GPIO_PWM_DITHERING               io_value[4]
+#define IO_GPIO_PWMH_TIMER                  io_value[4]
 #define IO_GPIO_ADC_ATTENUATION             io_value[2]
 
 #define TIMETABLE_ACTION_ARRAY              "tt"

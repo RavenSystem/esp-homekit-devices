@@ -23,6 +23,7 @@
 #include "esp32_port.h"
 #include "driver/gpio.h"
 #include "driver/uart.h"
+#include "driver/ledc.h"
 #include "esp_adc/adc_oneshot.h"
 #include "esp_attr.h"
 
@@ -92,6 +93,7 @@
 main_config_t main_config = {
 #ifdef ESP_PLATFORM
     .adc_dac_data = NULL,
+    .pwmh_channels = NULL,
 #else
     .wifi_arp_count = 0,
     .wifi_arp_count_max = WIFI_WATCHDOG_ARP_PERIOD_DEFAULT,
@@ -156,6 +158,45 @@ static void show_freeheap() {
 #endif
 }
 
+// PWM Part
+#ifdef ESP_PLATFORM
+pwmh_channel_t* get_pwmh_channel(const uint8_t gpio) {
+    pwmh_channel_t* pwmh_channel = main_config.pwmh_channels;
+    while (pwmh_channel &&
+           pwmh_channel->gpio != gpio) {
+        pwmh_channel = pwmh_channel->next;
+    }
+    
+    return pwmh_channel;
+}
+
+void haa_pwm_set_duty(const uint8_t gpio, const uint16_t duty) {
+    portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED;
+    
+    pwmh_channel_t* pwmh_channel = get_pwmh_channel(gpio);
+    if (pwmh_channel) {
+        int new_duty = pwmh_channel->leading ? UINT16_MAX - duty : duty;
+        new_duty = new_duty >> PWMH_BITS_DIVISOR;
+        
+        taskENTER_CRITICAL(&mux);
+        
+        ledc_set_duty(LEDC_LOW_SPEED_MODE, pwmh_channel->channel, new_duty);
+        ledc_update_duty(LEDC_LOW_SPEED_MODE, pwmh_channel->channel);
+        
+        taskEXIT_CRITICAL(&mux);
+        
+    } else {
+        taskENTER_CRITICAL(&mux);
+        
+        adv_pwm_set_duty(gpio, duty);
+        
+        taskEXIT_CRITICAL(&mux);
+    }
+}
+#else
+#define haa_pwm_set_duty(gpio, duty)        adv_pwm_set_duty(gpio, duty)
+#endif
+
 // https://martin.ankerl.com/2012/01/25/optimized-approximative-pow-in-c-and-cpp/
 double fast_precise_pow(double a, double b) {
     int32_t e = private_abs((int32_t) b);
@@ -217,6 +258,7 @@ void set_unused_gpios() {
     }
 }
 */
+
 mcp23017_t* mcp_find_by_index(const int index) {
     mcp23017_t* mcp23017 = main_config.mcp23017s;
     while (mcp23017 && mcp23017->index != index) {
@@ -3391,14 +3433,14 @@ void rgbw_set_timer_worker() {
                     lightbulb_group->has_changed = true;
                     
                     if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM) {
-                        adv_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i]);
+                        haa_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i]);
                     }
                 } else if (lightbulb_group->current[i] != lightbulb_group->target[i]) {
                     lightbulb_group->current[i] = lightbulb_group->target[i];
                     lightbulb_group->has_changed = true;
                     
                     if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM) {
-                        adv_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i]);
+                        haa_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i]);
                     }
                 }
             }
@@ -4586,13 +4628,11 @@ void hkc_tv_volume(homekit_characteristic_t* ch, const homekit_value_t value) {
 void hkc_tv_configured_name(homekit_characteristic_t* ch1, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch1);
     
-    if (strcmp(value.string_value, ch1->value.string_value)) {
+    if (value.string_value && strcmp(value.string_value, ch1->value.string_value)) {
         INFO("<%i> -> TV Name %s", ch_group->serv_index, value.string_value);
         
-        char* new_name = strdup(value.string_value);
-        
-        homekit_value_destruct(&ch1->value);
-        ch1->value = HOMEKIT_STRING(new_name);
+        free(ch1->value.string_value);
+        ch1->value.string_value = strdup(value.string_value);
         
         homekit_characteristic_notify_safe(ch1);
         
@@ -6925,15 +6965,29 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     action_pwm_t* action_pwm = ch_group->action_pwm;
     while (action_pwm) {
         if (action_pwm->action == action) {
-            INFO("<%i> PWM %i->%i, d %i, f %i", ch_group->serv_index, action_pwm->gpio, action_pwm->duty, action_pwm->dithering, action_pwm->freq);
+            INFO("<%i> PWM %i->%i, f %i, d %i", ch_group->serv_index, action_pwm->gpio, action_pwm->duty, action_pwm->freq, action_pwm->dithering);
             
+#ifdef ESP_PLATFORM
+            pwmh_channel_t* pwmh_channel = get_pwmh_channel(action_pwm->gpio);
+            if ((!pwmh_channel && action_pwm->gpio >= 0) ||
+                (pwmh_channel && action_pwm->dithering)) {
+#else
             if (action_pwm->gpio >= 0) {
+#endif
                 adv_pwm_set_dithering(action_pwm->gpio, action_pwm->dithering);
-                adv_pwm_set_duty(action_pwm->gpio, action_pwm->duty);
+                haa_pwm_set_duty(action_pwm->gpio, action_pwm->duty);
             }
             
             if (action_pwm->freq > 0) {
+#ifdef ESP_PLATFORM
+                if (pwmh_channel) {
+                    ledc_set_freq(LEDC_LOW_SPEED_MODE, pwmh_channel->timer, action_pwm->freq);
+                } else {
+                    adv_pwm_set_freq(action_pwm->freq);
+                }
+#else
                 adv_pwm_set_freq(action_pwm->freq);
+#endif
             }
         }
         
@@ -7298,7 +7352,7 @@ void normal_mode_init() {
     }
     
     // Initial state function
-    float set_initial_state(const uint8_t service, const uint8_t ch_number, cJSON* json_context, homekit_characteristic_t* ch, const uint8_t ch_type, const float default_value) {
+    float set_initial_state_data(const uint8_t service, const uint8_t ch_number, cJSON* json_context, homekit_characteristic_t* ch, const uint8_t ch_type, const float default_value, char** string_pointer) {
         float state = default_value;
         INFO_NNL("<%i> Init Ch%i ", service, ch_number);
         if (cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
@@ -7324,7 +7378,6 @@ void normal_mode_init() {
                 bool saved_state_bool = false;
                 int8_t saved_state_int8;
                 int32_t saved_state_int;
-                char* saved_state_string = NULL;
                 
                 switch (ch_type) {
                     case CH_TYPE_INT8:
@@ -7352,10 +7405,10 @@ void normal_mode_init() {
                         break;
                         
                     case CH_TYPE_STRING:
-                        status = sysparam_get_string(saved_state_id, &saved_state_string);
+                        status = sysparam_get_string(saved_state_id, string_pointer);
                         
                         if (status == SYSPARAM_OK) {
-                            state = (uint32_t) saved_state_string;
+                            state = 1;
                         }
                         break;
                         
@@ -7379,12 +7432,16 @@ void normal_mode_init() {
         }
         
         if (ch_type == CH_TYPE_STRING && state > 0) {
-            INFO("\"%s\"", (char*) ((uint32_t) state));
+            INFO("\"%s\"", *string_pointer);
         } else {
             INFO("%g", state);
         }
         
         return state;
+    }
+    
+    float set_initial_state(const uint8_t service, const uint8_t ch_number, cJSON* json_context, homekit_characteristic_t* ch, const uint8_t ch_type, const float default_value) {
+        return set_initial_state_data(service, ch_number, json_context, ch, ch_type, default_value, NULL);
     }
     
     // REGISTER ACTIONS
@@ -8434,11 +8491,6 @@ void normal_mode_init() {
         adv_button_init(adv_button_filter_value, adv_button_continuous_mode);
     }
     
-    // PWM frequency
-    if (cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ) != NULL) {
-        adv_pwm_set_freq((uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, PWM_FREQ)->valuefloat);
-    }
-    
     // GPIO Hardware Setup
     if (cJSON_GetObjectItemCaseSensitive(json_config, IO_CONFIG_ARRAY) != NULL) {
         cJSON* json_io_configs = cJSON_GetObjectItemCaseSensitive(json_config, IO_CONFIG_ARRAY);
@@ -8527,7 +8579,20 @@ void normal_mode_init() {
                     }
                     
                 } else if (IO_GPIO_MODE <= 8) {
-                    use_software_pwm = true;
+                    if (!use_software_pwm) {
+                        use_software_pwm = true;
+                        
+                        // PWM-S frequency
+                        if (cJSON_GetObjectItemCaseSensitive(json_config, PWMS_FREQ) != NULL) {
+                            adv_pwm_set_freq((uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, PWMS_FREQ)->valuefloat);
+                        }
+                        
+                        // PWM-S Zero-Crossing GPIO
+                        if (cJSON_GetObjectItemCaseSensitive(json_config, PWM_ZEROCROSSING_ARRAY_SET) != NULL) {
+                            cJSON* zc_array = cJSON_GetObjectItemCaseSensitive(json_config, PWM_ZEROCROSSING_ARRAY_SET);
+                            adv_pwm_set_zc_gpio((uint8_t) cJSON_GetArrayItem(zc_array, 0)->valuefloat, (uint8_t) cJSON_GetArrayItem(zc_array, 1)->valuefloat);
+                        }
+                    }
                     
                     if (IO_GPIO_MODE == 7) {
 #ifdef ESP_PLATFORM
@@ -8546,12 +8611,75 @@ void normal_mode_init() {
                     const int inverted = (bool) (IO_GPIO_PWM_MODE & 0b0001);
                     const int leading = (bool) (IO_GPIO_PWM_MODE & 0b0010);
                     
-                    adv_pwm_new_channel(gpio, inverted, leading, IO_GPIO_PWM_DITHERING);
-                    adv_pwm_set_duty(gpio, IO_GPIO_OUTPUT_INIT_VALUE);
+                    adv_pwm_new_channel(gpio, inverted, leading, IO_GPIO_PWM_DITHERING, IO_GPIO_OUTPUT_INIT_VALUE);
                     
-                    INFO("PWM GPIO %i, m %i, v %i, i %i, l %i, d %i", gpio, IO_GPIO_MODE, IO_GPIO_OUTPUT_INIT_VALUE, inverted, leading, IO_GPIO_PWM_DITHERING);
+                    INFO("PWM-S GPIO %i, m %i, v %i, i %i, l %i, d %i", gpio, IO_GPIO_MODE, IO_GPIO_OUTPUT_INIT_VALUE, inverted, leading, IO_GPIO_PWM_DITHERING);
                     
 #ifdef ESP_PLATFORM
+                } else if (IO_GPIO_MODE == 9) {     // Only ESP32
+                    pwmh_channel_t* pwmh_channel = main_config.pwmh_channels;
+                    while (pwmh_channel &&
+                           pwmh_channel->timer != IO_GPIO_PWMH_TIMER) {
+                        pwmh_channel = pwmh_channel->next;
+                    }
+                    
+                    if (!pwmh_channel) {
+                        // PWM-H frequency
+                        unsigned int pwmh_freq = PWMH_FREQ_DEFAULT;
+                        if (cJSON_GetObjectItemCaseSensitive(json_config, PWMH_FREQ_ARRAY) != NULL) {
+                            cJSON* pwmh_freq_array = cJSON_GetObjectItemCaseSensitive(json_config, PWMH_FREQ_ARRAY);
+                            
+                            if (cJSON_GetArraySize(pwmh_freq_array) > IO_GPIO_PWMH_TIMER) {
+                                pwmh_freq = (uint16_t) cJSON_GetArrayItem(pwmh_freq_array, IO_GPIO_PWMH_TIMER)->valuefloat;
+                            }
+                        }
+                        
+                        ledc_timer_config_t ledc_timer = {
+                            .speed_mode       = LEDC_LOW_SPEED_MODE,
+                            .timer_num        = IO_GPIO_PWMH_TIMER,
+                            .duty_resolution  = LEDC_TIMER_13_BIT,
+                            .freq_hz          = pwmh_freq,
+                            .clk_cfg          = LEDC_AUTO_CLK,
+                        };
+                        ledc_timer_config(&ledc_timer);
+                    }
+                    
+                    pwmh_channel_t* new_pwmh_channel = malloc(sizeof(pwmh_channel_t));
+                    memset(new_pwmh_channel, 0, sizeof(pwmh_channel_t));
+                    
+                    unsigned int channel = 0;
+                    if (main_config.pwmh_channels) {
+                        channel = main_config.pwmh_channels->channel + 1;
+                    }
+                    
+                    const int inverted = (bool) (IO_GPIO_PWM_MODE & 0b0001);
+                    const int leading = (bool) (IO_GPIO_PWM_MODE & 0b0010);
+                    
+                    new_pwmh_channel->gpio = gpio;
+                    new_pwmh_channel->channel = channel;
+                    new_pwmh_channel->timer = IO_GPIO_PWMH_TIMER;
+                    new_pwmh_channel->leading = leading;
+                    
+                    new_pwmh_channel->next = main_config.pwmh_channels;
+                    main_config.pwmh_channels = new_pwmh_channel;
+                    
+                    unsigned int initial_duty = leading ? (UINT16_MAX - IO_GPIO_OUTPUT_INIT_VALUE) : IO_GPIO_OUTPUT_INIT_VALUE;
+                    initial_duty = initial_duty >> PWMH_BITS_DIVISOR;
+                    
+                    ledc_channel_config_t ledc_channel = {
+                        .speed_mode             = LEDC_LOW_SPEED_MODE,
+                        .channel                = channel,
+                        .timer_sel              = IO_GPIO_PWMH_TIMER,
+                        .intr_type              = LEDC_INTR_DISABLE,
+                        .gpio_num               = gpio,
+                        .duty                   = initial_duty,
+                        .hpoint                 = 0,
+                        .flags.output_invert    = inverted ^ leading,
+                    };
+                    ledc_channel_config(&ledc_channel);
+                    
+                    INFO("PWM-H GPIO %i, m %i, v %i, i %i, l %i", gpio, IO_GPIO_MODE, IO_GPIO_OUTPUT_INIT_VALUE, inverted, leading);
+                    
                 } else if (IO_GPIO_MODE == 10) {    // Only ESP32
                     if (main_config.adc_dac_data == NULL) {
                         main_config.adc_dac_data = malloc(sizeof(adc_dac_data_t));
@@ -8583,12 +8711,6 @@ void normal_mode_init() {
         if (use_software_pwm) {
             adv_pwm_start();
         }
-    }
-    
-    // PWM Zero-Crossing GPIO
-    if (cJSON_GetObjectItemCaseSensitive(json_config, PWM_ZEROCROSSING_ARRAY_SET) != NULL) {
-        cJSON* zc_array = cJSON_GetObjectItemCaseSensitive(json_config, PWM_ZEROCROSSING_ARRAY_SET);
-        adv_pwm_set_zc_gpio((uint8_t) cJSON_GetArrayItem(zc_array, 0)->valuefloat, (uint8_t) cJSON_GetArrayItem(zc_array, 1)->valuefloat);
     }
     
     // Custom Hostname
@@ -8780,7 +8902,7 @@ void normal_mode_init() {
     // Accessory to include HAA Settings
     unsigned int haa_setup_accessory = 1;
     if (cJSON_GetObjectItemCaseSensitive(json_config, HAA_SETUP_ACCESSORY_SET) != NULL) {
-        haa_setup_accessory = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, HAA_SETUP_ACCESSORY_SET)->valuefloat;
+        haa_setup_accessory = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, HAA_SETUP_ACCESSORY_SET)->valuefloat;
     }
     haa_setup_accessory--;
     
@@ -9613,7 +9735,7 @@ void normal_mode_init() {
                 //service_iid += 2;
             }
             
-            const uint32_t initial_time = (uint32_t) set_initial_state(ch_group->serv_index, 2, init_last_state_json, ch_group->ch[2], CH_TYPE_INT, 900);
+            const uint32_t initial_time = (uint32_t) set_initial_state(ch_group->serv_index, 2, init_last_state_json, ch_group->ch[2], CH_TYPE_INT, valve_max_duration);
             if (initial_time > valve_max_duration) {
                 ch_group->ch[2]->value.int_value = valve_max_duration;
             } else {
@@ -11292,10 +11414,10 @@ void normal_mode_init() {
             //service_iid += 5;
         }
         
-        uint32_t configured_name = set_initial_state(ch_group->serv_index, 1, init_last_state_json, ch_group->ch[1], CH_TYPE_STRING, 0);
-        if (configured_name > 0) {
-            homekit_value_destruct(&ch_group->ch[1]->value);
-            ch_group->ch[1]->value = HOMEKIT_STRING((char*) configured_name);
+        char* configured_name = NULL;
+        if (set_initial_state_data(ch_group->serv_index, 1, init_last_state_json, ch_group->ch[1], CH_TYPE_STRING, 0, &configured_name) > 0) {
+            free(ch_group->ch[1]->value.string_value);
+            ch_group->ch[1]->value.string_value = configured_name;
         }
         
         diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);

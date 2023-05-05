@@ -316,7 +316,7 @@ typedef struct _timetable_action {
     uint8_t mday: 5;
     uint8_t hour: 5;
     uint8_t min: 6;
-    uint8_t wday: 3;
+    uint8_t wday: 4;    // 3 bits
     
     struct _timetable_action* next;
 } timetable_action_t;
@@ -337,6 +337,15 @@ typedef struct _uart_receiver_data {
 typedef struct _adc_dac_data {
     adc_oneshot_unit_handle_t adc_oneshot_handle;
 } adc_dac_data_t;
+
+typedef struct _pwmh_channel {
+    uint8_t gpio;
+    uint8_t channel;
+    uint8_t timer;
+    bool leading;       // 1 bit
+    
+    struct _pwmh_channel* next;
+} pwmh_channel_t;
 #endif
 
 typedef struct _main_config {
@@ -399,6 +408,7 @@ typedef struct _main_config {
     
 #ifdef ESP_PLATFORM
     adc_dac_data_t* adc_dac_data;
+    pwmh_channel_t* pwmh_channels;
 #endif
     
     char name_value[11];

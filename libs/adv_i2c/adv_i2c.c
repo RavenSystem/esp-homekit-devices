@@ -26,6 +26,7 @@
 
 #include <esp8266.h>
 #include <espressif/esp_system.h>
+#include <semphr.h>
 
 //#define I2C_DEBUG true
 
@@ -62,9 +63,10 @@ typedef struct i2c_bus_description
   uint8_t delay_80;
   uint8_t delay_160;
   uint8_t delay;
-  bool started: 1;
-  bool flag: 1;
-  bool force: 1;
+  bool started;         // 1 bit
+    
+  SemaphoreHandle_t lock;
+    
   TickType_t clk_stretch;
 } i2c_bus_description_t;
 
@@ -117,7 +119,6 @@ int adv_i2c_init_hz(uint8_t bus, uint8_t scl_pin, uint8_t sda_pin, uint32_t freq
     }
 
     i2c_bus[bus].started = false;
-    i2c_bus[bus].flag = false;
 #if I2C_USE_GPIO16 == 1
     i2c_bus[bus].g_scl_pin = scl_pin;
     i2c_bus[bus].g_sda_pin = sda_pin;
@@ -143,6 +144,8 @@ int adv_i2c_init_hz(uint8_t bus, uint8_t scl_pin, uint8_t sda_pin, uint32_t freq
         debug("Frequency not supported");
         return -ENOTSUP;
     }
+    
+    i2c_bus[bus].lock = xSemaphoreCreateMutex();
 
     return 0;
 }
@@ -390,40 +393,10 @@ uint8_t i2c_read(uint8_t bus, bool ack)
     return byte;
 }
 
-void i2c_force_bus(uint8_t bus, bool state)
+int private_adv_i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t len, TickType_t xTicksToWait)
 {
-    i2c_bus[bus].force = state;
-}
-
-static int i2c_bus_test(uint8_t bus)
-{
-    taskENTER_CRITICAL(); // To prevent task swaping after checking flag and before set it!
-    bool status = i2c_bus[bus].flag; // get current status
-    if (i2c_bus[bus].force) {
-        i2c_bus[bus].flag = true; // force bus on
-        taskEXIT_CRITICAL();
-        if (status)
-           i2c_stop(bus); //Bus was busy, stop it.
-    }
-    else {
-        if (status) {
-            taskEXIT_CRITICAL();
-            debug("busy");
-            taskYIELD(); // If bus busy, change task to try finish last com.
-            return -EBUSY;  // If bus busy, inform user
-        }
-        else {
-            i2c_bus[bus].flag = true; // Set Bus busy
-            taskEXIT_CRITICAL();
-        }
-    }
-    return 0;
-}
-
-int adv_i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t len)
-{
-    if (i2c_bus_test(bus))
-        return -EBUSY;
+    xSemaphoreTake(i2c_bus[bus].lock, xTicksToWait);
+    
     i2c_start(bus);
     if (!i2c_write(bus, slave_addr << 1))
         goto error;
@@ -439,20 +412,22 @@ int adv_i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, co
     }
     if (!i2c_stop(bus))
         goto error;
-    i2c_bus[bus].flag = false; // Bus free
+    
+    xSemaphoreGive(i2c_bus[bus].lock);
+    
     return 0;
 
 error:
     debug("Bus %u Write Error", bus);
     i2c_stop(bus);
-    i2c_bus[bus].flag = false; // Bus free
+    xSemaphoreGive(i2c_bus[bus].lock);
     return -EIO;
 }
 
-int adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t len)
+int private_adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t len, TickType_t xTicksToWait)
 {
-    if (i2c_bus_test(bus))
-        return -EBUSY;
+    xSemaphoreTake(i2c_bus[bus].lock, xTicksToWait);
+    
     if (data != NULL) {
         i2c_start(bus);
         if (!i2c_write(bus, slave_addr << 1))
@@ -472,12 +447,30 @@ int adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, con
     }
     if (!i2c_stop(bus))
         goto error;
-    i2c_bus[bus].flag = false; // Bus free
+    
+    xSemaphoreGive(i2c_bus[bus].lock);
+    
     return 0;
 
 error:
     debug("Read Error");
     i2c_stop(bus);
-    i2c_bus[bus].flag = false; // Bus free
+    xSemaphoreGive(i2c_bus[bus].lock);
     return -EIO;
+}
+
+int adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t len) {
+    return private_adv_i2c_slave_read(bus, slave_addr, data, data_len, buf, len, ADV_I2C_SEMAPHORE_TIMEOUT);
+}
+
+int adv_i2c_slave_read_no_wait(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t len) {
+    return private_adv_i2c_slave_read(bus, slave_addr, data, data_len, buf, len, 0);
+}
+
+int adv_i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t len) {
+    return private_adv_i2c_slave_write(bus, slave_addr, data, data_len, buf, len, ADV_I2C_SEMAPHORE_TIMEOUT);
+}
+
+int adv_i2c_slave_write_no_wait(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t len) {
+    return private_adv_i2c_slave_write(bus, slave_addr, data, data_len, buf, len, 0);
 }

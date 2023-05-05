@@ -443,9 +443,16 @@ typedef enum {
 } characteristic_format_t;
 
 
-void write_characteristic_json(json_stream *json, client_context_t *client, const homekit_characteristic_t *ch, characteristic_format_t format, const homekit_value_t *value) {
-    json_string(json, "aid"); json_integer(json, ch->service->accessory->id);
-    json_string(json, "iid"); json_integer(json, ch->id);
+void write_characteristic_json(json_stream *json, client_context_t *client, const homekit_characteristic_t *ch, characteristic_format_t format, const homekit_value_t *value, const uint16_t override_aid) {
+    json_string(json, "aid");
+    if (override_aid > 0) {
+        json_integer(json, override_aid);
+    } else {
+        json_integer(json, ch->service->accessory->id);
+    }
+    
+    json_string(json, "iid");
+    json_integer(json, ch->id);
 
     if (format & characteristic_format_type) {
         json_string(json, "type"); json_string(json, ch->type);
@@ -2086,7 +2093,8 @@ void homekit_server_on_get_accessories(client_context_t *context) {
                     | characteristic_format_meta
                     | characteristic_format_perms
                     | characteristic_format_events,
-                    NULL
+                    NULL,
+                    accessory->id
                 );
                 json_object_end(json);
                 
@@ -2240,7 +2248,7 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
         }
 
         json_object_start(json);
-        write_characteristic_json(json, context, ch, format, NULL);
+        write_characteristic_json(json, context, ch, format, NULL, aid);
         if (!success) {
             json_string(json, "status"); json_integer(json, HAPStatus_Success);
         }
@@ -2571,7 +2579,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 #endif //HOMEKIT_DISABLE_MAXLEN_CHECK
 
                     CLIENT_DEBUG(context, "for %d.%d=\"%s\"", aid, iid, value);
-
+                    
                     h_value = HOMEKIT_STRING(value);
                     if (ch->setter_ex) {
                         ch->setter_ex(ch, h_value);
@@ -3431,7 +3439,7 @@ static inline void IRAM homekit_server_process_notifications() {
                 notification = notifications;
                 while (notification) {
                     json_object_start(json);
-                    write_characteristic_json(json, context, notification->ch, 0, &notification->ch->value);
+                    write_characteristic_json(json, context, notification->ch, 0, &notification->ch->value, 0);
                     json_object_end(json);
                     
                     if (json->error) {

@@ -63,7 +63,6 @@ static adv_pwm_config_t* adv_pwm_config = NULL;
 static adv_pwm_channel_t* adv_pwm_channel_find_by_gpio(const uint8_t gpio) {
     if (adv_pwm_config) {
         adv_pwm_channel_t* adv_pwm_channel = adv_pwm_config->adv_pwm_channels;
-        
         while (adv_pwm_channel && adv_pwm_channel->gpio != gpio) {
             adv_pwm_channel = adv_pwm_channel->next;
         }
@@ -320,7 +319,7 @@ void adv_pwm_set_duty(const uint8_t gpio, uint16_t duty) {
     }
 }
 
-void adv_pwm_new_channel(const uint8_t gpio, const bool inverted, const bool leading, const uint16_t dithering) {
+void adv_pwm_new_channel(const uint8_t gpio, const bool inverted, const bool leading, const uint16_t dithering, const uint16_t duty) {
     adv_pwm_init(0);
     
     if (!adv_pwm_channel_find_by_gpio(gpio)) {
@@ -339,6 +338,8 @@ void adv_pwm_new_channel(const uint8_t gpio, const bool inverted, const bool lea
         
         adv_pwm_channel->next = adv_pwm_config->adv_pwm_channels;
         adv_pwm_config->adv_pwm_channels = adv_pwm_channel;
+        
+        adv_pwm_set_duty(gpio, duty);
         
         if (is_running) {
             adv_pwm_start();

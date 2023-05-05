@@ -330,12 +330,12 @@ static void button_evaluate_fn() {
     while (mcp) {
         if (mcp->channels == MCP_CHANNEL_A || mcp->channels == MCP_CHANNEL_BOTH) {
             const uint8_t reg = 0x12;
-            adv_i2c_slave_read(mcp->bus, mcp->addr, &reg, 1, &mcp->value_a, 1);
+            adv_i2c_slave_read_no_wait(mcp->bus, mcp->addr, &reg, 1, &mcp->value_a, 1);
         }
         
         if (mcp->channels > MCP_CHANNEL_A) {
             const uint8_t reg = 0x13;
-            adv_i2c_slave_read(mcp->bus, mcp->addr, &reg, 1, &mcp->value_b, 1);
+            adv_i2c_slave_read_no_wait(mcp->bus, mcp->addr, &reg, 1, &mcp->value_b, 1);
         }
         
         mcp = mcp->next;
