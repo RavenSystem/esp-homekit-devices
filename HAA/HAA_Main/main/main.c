@@ -1950,22 +1950,15 @@ void set_zones_task(void* args) {
         do_actions(iairzoning_group, iairzoning_final_main_mode);
     }
     
-    ch_group->is_working = false;
-    
     vTaskDelete(NULL);
 }
 
 void set_zones_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
-        ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
-        if (!ch_group->is_working) {
-            if (xTaskCreate(set_zones_task, "iAZ", SET_ZONES_TASK_SIZE, (void*) ch_group, SET_ZONES_TASK_PRIORITY, NULL) == pdPASS) {
-                ch_group->is_working = true;
-            } else {
-                ERROR("New iAZ");
-                homekit_remove_oldest_client();
-                rs_esp_timer_start(xTimer);
-            }
+        if (xTaskCreate(set_zones_task, "iAZ", SET_ZONES_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), SET_ZONES_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("New iAZ");
+            homekit_remove_oldest_client();
+            rs_esp_timer_start(xTimer);
         }
     } else {
         ERROR("HK pair");
@@ -2194,21 +2187,14 @@ void process_th_task(void* args) {
     
     save_data_history(ch_group->ch[3]);
     
-    ch_group->is_working = false;
-    
     vTaskDelete(NULL);
 }
 
 void process_th_timer(TimerHandle_t xTimer) {
-    ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
-    if (!ch_group->is_working) {
-        if (xTaskCreate(process_th_task, "TH", PROCESS_TH_TASK_SIZE, (void*) ch_group, PROCESS_TH_TASK_PRIORITY, NULL) == pdPASS) {
-            ch_group->is_working = true;
-        } else {
-            ERROR("New TH");
-            homekit_remove_oldest_client();
-            rs_esp_timer_start(xTimer);
-        }
+    if (xTaskCreate(process_th_task, "TH", PROCESS_TH_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_TH_TASK_PRIORITY, NULL) != pdPASS) {
+        ERROR("New TH");
+        homekit_remove_oldest_client();
+        rs_esp_timer_start(xTimer);
     }
 }
 
@@ -2547,21 +2533,14 @@ void process_hum_task(void* args) {
     
     save_data_history(ch_group->ch[3]);
     
-    ch_group->is_working = false;
-    
     vTaskDelete(NULL);
 }
 
 void process_humidif_timer(TimerHandle_t xTimer) {
-    ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
-    if (!ch_group->is_working) {
-        if (xTaskCreate(process_hum_task, "HUM", PROCESS_HUMIDIF_TASK_SIZE, (void*) ch_group, PROCESS_HUMIDIF_TASK_PRIORITY, NULL) == pdPASS) {
-            ch_group->is_working = true;
-        } else {
-            ERROR("New HUM");
-            homekit_remove_oldest_client();
-            rs_esp_timer_start(xTimer);
-        }
+    if (xTaskCreate(process_hum_task, "HUM", PROCESS_HUMIDIF_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_HUMIDIF_TASK_PRIORITY, NULL) != pdPASS) {
+        ERROR("New HUM");
+        homekit_remove_oldest_client();
+        rs_esp_timer_start(xTimer);
     }
 }
 
@@ -2728,8 +2707,8 @@ void temperature_task(void* args) {
     unsigned int iairzoning = 0;
     
     if (ch_group->serv_type == SERV_TYPE_IAIRZONING) {
-        INFO("<%i> iAZ sensors", ch_group->serv_index);
         iairzoning = ch_group->serv_index;
+        INFO("<%i> iAZ sensors", iairzoning);
         ch_group = main_config.ch_groups;
     }
     
@@ -2919,11 +2898,14 @@ void temperature_task(void* args) {
             ch_group = ch_group->next;
             
         } else {
+            ch_group->is_working = false;
             ch_group = NULL;
         }
     }
     
-    ch_group->is_working = false;
+    if (iairzoning > 0) {
+        ch_group_find_by_serv(iairzoning)->is_working = false;
+    }
     
     vTaskDelete(NULL);
 }
