@@ -12,6 +12,8 @@
 #define DHT_TIMER_INTERVAL          (2)
 #define DHT_DATA_BITS               (40)
 
+#define DHT_TIMEOUT_MS              (2000)
+
 #ifdef ESP_PLATFORM
 
 #include "freertos/FreeRTOS.h"
@@ -189,7 +191,7 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
     uint8_t data[DHT_DATA_BITS / 8] = { 0 };
     bool result;
     
-    xSemaphoreTake(dht_lock, pdMS_TO_TICKS(1000));
+    xSemaphoreTake(dht_lock, pdMS_TO_TICKS(DHT_TIMEOUT_MS));
     
 #ifdef ESP_PLATFORM
     gpio_set_direction(pin, GPIO_MODE_OUTPUT_OD);

@@ -15,7 +15,7 @@
 #else   // ESP-OPEN-RTOS
     #define TASK_SIZE_FACTOR                (1)
     #define MAX_SETUP_BODY_LEN              (16500)
-    #define MAX_GPIOS                       (18)
+    #define MAX_GPIOS                       (17)
 #endif
 
 #ifdef HAA_SINGLE_CORE

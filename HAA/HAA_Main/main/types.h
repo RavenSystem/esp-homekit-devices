@@ -149,10 +149,11 @@ typedef struct _pattern {
 } pattern_t;
 
 typedef struct _ch_group {
-    uint16_t serv_index: 13;
+    uint16_t serv_index: 12;
     bool main_enabled: 1;
     bool child_enabled: 1;
     bool homekit_enabled: 1;
+    bool is_working: 1;
     
     uint8_t chs;
     uint8_t serv_type;
@@ -373,13 +374,8 @@ typedef struct _main_config {
     
     uint8_t wifi_mode;  // 3 bits
     uint8_t ir_tx_freq; // 6 bits
-    
-#ifndef ESP_PLATFORM
     uint8_t wifi_arp_count;
     uint8_t wifi_arp_count_max;
-#else
-    uint16_t _align;
-#endif
     
     float ping_poll_period;
     

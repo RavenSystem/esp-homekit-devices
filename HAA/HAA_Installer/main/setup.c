@@ -33,6 +33,17 @@
 #include "esp32_port.h"
 #include "http_parser.h"
 
+#define spiflash_read(address, buffer, length)      esp_flash_read(NULL, buffer, address, length)
+#define spiflash_write(address, buffer, length)     esp_flash_write(NULL, buffer, address, length)
+#define spiflash_erase_sector(address)              esp_flash_erase_region(NULL, address, SPI_FLASH_SECTOR_SIZE)
+
+#if defined(CONFIG_IDF_TARGET_ESP32) \
+    || defined(CONFIG_IDF_TARGET_ESP32S2)
+#define SPIFLASHMODE_OFFSET                         (0x1000)
+#else
+#define SPIFLASHMODE_OFFSET                         (0x0)
+#endif
+
 #else   // ESP_OPEN_RTOS
 
 #include <sysparam.h>
@@ -45,12 +56,13 @@
 #include <rboot-api.h>
 #include <adv_logger.h>
 
+#define SPIFLASHMODE_OFFSET                         (0x0)
+
 #endif
 
 
 #include <lwip/sockets.h>
 #include <lwip/dhcp.h>
-#include <lwip/etharp.h>
 
 #include <semphr.h>
 #include "form_urlencoded.h"
@@ -59,10 +71,10 @@
 
 #include "setup.h"
 
-#define ENDPOINT_UNKNOWN            (0)
-#define ENDPOINT_INDEX              (1)
-#define ENDPOINT_SETTINGS           (2)
-#define ENDPOINT_SETTINGS_UPDATE    (3)
+#define ENDPOINT_UNKNOWN                (0)
+#define ENDPOINT_INDEX                  (1)
+#define ENDPOINT_SETTINGS               (2)
+#define ENDPOINT_SETTINGS_UPDATE        (3)
 
 #ifdef ESP_PLATFORM
 int got_ip = false;
@@ -70,6 +82,7 @@ esp_netif_t* setup_esp_netif = NULL;
 
 void setup_set_esp_netif(esp_netif_t* esp_netif) {
     setup_esp_netif = esp_netif;
+    //esp_netif_set_default_netif(esp_netif);
 }
 #endif
 
@@ -179,15 +192,6 @@ bool wifi_config_got_ip() {
 }
 
 #ifndef ESP_PLATFORM
-static void wifi_config_resend_arp() {
-    struct netif *netif = sdk_system_get_netif(STATION_IF);
-    if (netif && netif->flags & NETIF_FLAG_LINK_UP && netif->flags & NETIF_FLAG_UP) {
-        LOCK_TCPIP_CORE();
-        etharp_gratuitous(netif);
-        UNLOCK_TCPIP_CORE();
-    }
-}
-
 static void wifi_config_toggle_phy_mode(const uint8_t phy) {
     switch (phy) {
         case 1:
@@ -428,25 +432,23 @@ static void wifi_config_smart_connect() {
 static uint8_t wifi_config_connect();
 #else
 static uint8_t wifi_config_connect(const uint8_t phy);
-#endif
 
 static void wifi_config_reset() {
     INFO("Wifi clean");
     sdk_wifi_station_disconnect();
     
-#ifndef ESP_PLATFORM
     struct sdk_station_config sta_config;
     memset(&sta_config, 0, sizeof(sta_config));
 
     strncpy((char *)sta_config.ssid, "none", sizeof(sta_config.ssid) - 1);
     sdk_wifi_station_set_config(&sta_config);
     sdk_wifi_station_set_auto_connect(false);
-#endif
     
     sdk_wifi_station_connect();
 
     vTaskDelay(MS_TO_TICKS(5000));
 }
+#endif
 
 static void wifi_networks_free() {
     wifi_network_info_t* wifi_network = context->wifi_networks;
@@ -647,10 +649,10 @@ static void wifi_config_server_on_settings(client_t *client) {
     itoa(flash_id, flash_id_text, 16);
     strcat(flash_id_text, " ");
     client_send_chunk(client, flash_id_text);
-
-#ifndef ESP_PLATFORM
+    
     uint8_t flash_mode = 0;
-    spiflash_read(0x02, &flash_mode, 1);
+    
+    spiflash_read(0x02 + SPIFLASHMODE_OFFSET, &flash_mode, 1);
     
     switch (flash_mode) {
         case 0:
@@ -670,14 +672,11 @@ static void wifi_config_server_on_settings(client_t *client) {
             break;
             
         default:
-            client_send_chunk(client, "!!!");
+            client_send_chunk(client, "???");
             break;
     }
     
     client_send_chunk(client, html_settings_flash_mode);
-#endif
-    
-    client_send_chunk(client, html_settings_buttons);
     
     // Wifi Networks
     char buffer[150];
@@ -798,9 +797,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             
         } else {
             form_param_t *nowifi_param = form_params_find(form, "now");
-#ifndef ESP_PLATFORM
             form_param_t *fm_param = form_params_find(form, "fm");
-#endif
             form_param_t *ssid_param = form_params_find(form, "sid");
             form_param_t *bssid_param = form_params_find(form, "bid");
             form_param_t *password_param = form_params_find(form, "psw");
@@ -890,26 +887,23 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                 }
             }
             
-#ifndef ESP_PLATFORM
             if (fm_param && fm_param->value) {
                 int8_t new_fm = strtol(fm_param->value, NULL, 10);
                 if (new_fm >= 0 && new_fm <= 3) {
                     uint8_t* sector = malloc(SPI_FLASH_SECTOR_SIZE);
                     if (sector) {
-                        spiflash_read(0x0, sector, SPI_FLASH_SECTOR_SIZE);
+                        spiflash_read(0x0 + SPIFLASHMODE_OFFSET, sector, SPI_FLASH_SECTOR_SIZE);
                         
                         if (sector[2] != new_fm) {
                             sector[2] = new_fm;
-                            
-                            spiflash_erase_sector(0x0);
-                            spiflash_write(0x0, sector, SPI_FLASH_SECTOR_SIZE);
+                            spiflash_erase_sector(0x0 + SPIFLASHMODE_OFFSET);
+                            spiflash_write(0x0 + SPIFLASHMODE_OFFSET, sector, SPI_FLASH_SECTOR_SIZE);
                         }
                         
                         free(sector);
                     }
                 }
             }
-#endif
             
 #ifdef HAABOOT
             if (wifimode_param && wifimode_param->value) {
@@ -922,7 +916,6 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             
 #ifndef ESP_PLATFORM
             wifi_config_reset();
-            vTaskDelay(MS_TO_TICKS(5000));
 #endif
         }
     }
@@ -1225,9 +1218,6 @@ static void wifi_config_sta_connect_timeout_task() {
             if (context->check_counter % 32 == 0) {
                 wifi_config_connect(4);
                 vTaskDelay(MS_TO_TICKS(1000));
-                
-            } else if (context->check_counter % 5 == 0) {
-                wifi_config_resend_arp();
 
             } else if (context->check_counter > 240) {
 #endif
@@ -1279,7 +1269,9 @@ static uint8_t wifi_config_connect(const uint8_t phy) {
 #endif
     
     if (wifi_ssid) {
+#ifndef ESP_PLATFORM
         wifi_config_reset();
+#endif
         
         sdk_wifi_station_disconnect();
 

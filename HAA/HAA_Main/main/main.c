@@ -94,11 +94,10 @@ main_config_t main_config = {
 #ifdef ESP_PLATFORM
     .adc_dac_data = NULL,
     .pwmh_channels = NULL,
-#else
-    .wifi_arp_count = 0,
-    .wifi_arp_count_max = WIFI_WATCHDOG_ARP_PERIOD_DEFAULT,
 #endif
     
+    .wifi_arp_count = 0,
+    .wifi_arp_count_max = WIFI_WATCHDOG_ARP_PERIOD_DEFAULT,
     .wifi_status = WIFI_STATUS_DISCONNECTED,
     .wifi_channel = 0,
     .wifi_ip = 0,
@@ -111,7 +110,7 @@ main_config_t main_config = {
     .setup_mode_time = 0,
     
     .enable_homekit_server = false,
-
+    
     .ir_tx_freq = 13,
     .ir_tx_gpio = MAX_GPIOS,
     .ir_tx_inv = false,
@@ -223,8 +222,8 @@ double fast_precise_pow(double a, double b) {
 }
 
 /*
-int get_used_gpio(const uint16_t gpio) {
-    if (gpio < MAX_GPIOS) {
+int get_used_gpio(const int16_t gpio) {
+    if (gpio > -1 && gpio < MAX_GPIOS) {
         const uint64_t bit = 1 << gpio;
         return (bool) (main_config.used_gpio & bit);
     }
@@ -246,16 +245,22 @@ void set_used_gpio(const int16_t gpio) {
 }
 
 void set_unused_gpios() {
-    for (int i = 0; i < 17; i++) {
+
+#ifndef ESP_PLATFORM
+
+    for (int i = 0; i < MAX_GPIOS; i++) {
         if (i == 6) {
             i += 6;
         }
         
         if (!get_used_gpio(i)) {
-            gpio_enable(i, GPIO_INPUT);
-            //gpio_set_pullup(i, false, false);
+            //gpio_enable(i, GPIO_INPUT);
+            gpio_disable(i);
         }
     }
+
+#endif
+
 }
 */
 
@@ -697,9 +702,9 @@ void data_history_timer_worker(TimerHandle_t xTimer) {
 
 void wifi_resend_arp() {
 #ifdef ESP_PLATFORM
-    struct netif *netif = netif_default;
+    struct netif* netif = netif_default;
 #else
-    struct netif *netif = sdk_system_get_netif(STATION_IF);
+    struct netif* netif = sdk_system_get_netif(STATION_IF);
 #endif
     
     if (netif && (netif->flags & NETIF_FLAG_LINK_UP) && (netif->flags & NETIF_FLAG_UP)) {
@@ -907,10 +912,7 @@ void wifi_reconnection_task(void* args) {
         if (new_ip >= 0) {
             main_config.wifi_status = WIFI_STATUS_CONNECTED;
             main_config.wifi_error_count = 0;
-            
-#ifndef ESP_PLATFORM
             main_config.wifi_arp_count = 0;
-#endif
             
 #ifdef ESP_PLATFORM
             uint8_t channel_primary = main_config.wifi_channel;
@@ -1013,14 +1015,12 @@ void wifi_watchdog() {
             do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 7);
         }
         
-#ifndef ESP_PLATFORM
         main_config.wifi_arp_count++;
         if (main_config.wifi_arp_count >= main_config.wifi_arp_count_max) {
             main_config.wifi_arp_count = 0;
             
             wifi_resend_arp();
         }
-#endif
         
         if (main_config.wifi_ping_max_errors != 255 && !homekit_is_pairing()) {
             if (xTaskCreate(wifi_ping_gw_task, "GWP", WIFI_PING_GW_TASK_SIZE, NULL, WIFI_PING_GW_TASK_PRIORITY, NULL) != pdPASS) {
@@ -1658,19 +1658,26 @@ void power_monitor_task(void* args) {
         ERROR("<%i> PM P", ch_group->serv_index);
     }
     
+    ch_group->is_working = false;
+    
     vTaskDelete(NULL);
 }
 
 void power_monitor_timer_worker(TimerHandle_t xTimer) {
-    if (((ch_group_t*) pvTimerGetTimerID(xTimer))->main_enabled) {
-        if (!homekit_is_pairing()) {
-            if (xTaskCreate(power_monitor_task, "PM", POWER_MONITOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), POWER_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
-                ERROR("New PM");
-                homekit_remove_oldest_client();
+    if (!homekit_is_pairing()) {
+        ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
+        if (ch_group->main_enabled) {
+            if (!ch_group->is_working) {
+                if (xTaskCreate(power_monitor_task, "PM", POWER_MONITOR_TASK_SIZE, (void*) ch_group, POWER_MONITOR_TASK_PRIORITY, NULL) == pdPASS) {
+                    ch_group->is_working = true;
+                } else {
+                    ERROR("New PM");
+                    homekit_remove_oldest_client();
+                }
             }
-        } else {
-            ERROR("HK pair");
         }
+    } else {
+        ERROR("HK pair");
     }
 }
 
@@ -1943,15 +1950,22 @@ void set_zones_task(void* args) {
         do_actions(iairzoning_group, iairzoning_final_main_mode);
     }
     
+    ch_group->is_working = false;
+    
     vTaskDelete(NULL);
 }
 
 void set_zones_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
-        if (xTaskCreate(set_zones_task, "iAZ", SET_ZONES_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), SET_ZONES_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("New iAZ");
-            homekit_remove_oldest_client();
-            rs_esp_timer_start(xTimer);
+        ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
+        if (!ch_group->is_working) {
+            if (xTaskCreate(set_zones_task, "iAZ", SET_ZONES_TASK_SIZE, (void*) ch_group, SET_ZONES_TASK_PRIORITY, NULL) == pdPASS) {
+                ch_group->is_working = true;
+            } else {
+                ERROR("New iAZ");
+                homekit_remove_oldest_client();
+                rs_esp_timer_start(xTimer);
+            }
         }
     } else {
         ERROR("HK pair");
@@ -2180,14 +2194,21 @@ void process_th_task(void* args) {
     
     save_data_history(ch_group->ch[3]);
     
+    ch_group->is_working = false;
+    
     vTaskDelete(NULL);
 }
 
 void process_th_timer(TimerHandle_t xTimer) {
-    if (xTaskCreate(process_th_task, "TH", PROCESS_TH_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_TH_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("New TH");
-        homekit_remove_oldest_client();
-        rs_esp_timer_start(xTimer);
+    ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
+    if (!ch_group->is_working) {
+        if (xTaskCreate(process_th_task, "TH", PROCESS_TH_TASK_SIZE, (void*) ch_group, PROCESS_TH_TASK_PRIORITY, NULL) == pdPASS) {
+            ch_group->is_working = true;
+        } else {
+            ERROR("New TH");
+            homekit_remove_oldest_client();
+            rs_esp_timer_start(xTimer);
+        }
     }
 }
 
@@ -2526,14 +2547,21 @@ void process_hum_task(void* args) {
     
     save_data_history(ch_group->ch[3]);
     
+    ch_group->is_working = false;
+    
     vTaskDelete(NULL);
 }
 
 void process_humidif_timer(TimerHandle_t xTimer) {
-    if (xTaskCreate(process_hum_task, "HUM", PROCESS_HUMIDIF_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_HUMIDIF_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("New HUM");
-        homekit_remove_oldest_client();
-        rs_esp_timer_start(xTimer);
+    ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
+    if (!ch_group->is_working) {
+        if (xTaskCreate(process_hum_task, "HUM", PROCESS_HUMIDIF_TASK_SIZE, (void*) ch_group, PROCESS_HUMIDIF_TASK_PRIORITY, NULL) == pdPASS) {
+            ch_group->is_working = true;
+        } else {
+            ERROR("New HUM");
+            homekit_remove_oldest_client();
+            rs_esp_timer_start(xTimer);
+        }
     }
 }
 
@@ -2895,14 +2923,21 @@ void temperature_task(void* args) {
         }
     }
     
+    ch_group->is_working = false;
+    
     vTaskDelete(NULL);
 }
 
 void temperature_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
-        if (xTaskCreate(temperature_task, "TEM", TEMPERATURE_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), TEMPERATURE_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("New TEM");
-            homekit_remove_oldest_client();
+        ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
+        if (!ch_group->is_working) {
+            if (xTaskCreate(temperature_task, "TEM", TEMPERATURE_TASK_SIZE, (void*) ch_group, TEMPERATURE_TASK_PRIORITY, NULL) == pdPASS) {
+                ch_group->is_working = true;
+            } else {
+                ERROR("New TEM");
+                homekit_remove_oldest_client();
+            }
         }
     } else {
         ERROR("HK pair");
@@ -4428,14 +4463,21 @@ void light_sensor_task(void* args) {
         }
     }
     
+    ch_group->is_working = false;
+    
     vTaskDelete(NULL);
 }
 
 void light_sensor_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
-        if (xTaskCreate(light_sensor_task, "LUX", LIGHT_SENSOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), LIGHT_SENSOR_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("New LUX");
-            homekit_remove_oldest_client();
+        ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
+        if (!ch_group->is_working) {
+            if (xTaskCreate(light_sensor_task, "LUX", LIGHT_SENSOR_TASK_SIZE, (void*) ch_group, LIGHT_SENSOR_TASK_PRIORITY, NULL) == pdPASS) {
+                ch_group->is_working = true;
+            } else {
+                ERROR("New LUX");
+                homekit_remove_oldest_client();
+            }
         }
     } else {
         ERROR("HK pair");
@@ -5450,19 +5492,26 @@ void free_monitor_task(void* args) {
         reset_uart_buffer();
     }
     
+    ch_group->is_working = false;
+    
     vTaskDelete(NULL);
 }
 
 void free_monitor_timer_worker(TimerHandle_t xTimer) {
-    if (((ch_group_t*) pvTimerGetTimerID(xTimer))->main_enabled) {
-        if (!homekit_is_pairing()) {
-            if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), FREE_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
-                ERROR("New FM");
-                homekit_remove_oldest_client();
+    if (!homekit_is_pairing()) {
+        ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
+        if (ch_group->main_enabled) {
+            if (!ch_group->is_working) {
+                if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) == pdPASS) {
+                    ch_group->is_working = true;
+                } else {
+                    ERROR("New FM");
+                    homekit_remove_oldest_client();
+                }
             }
-        } else {
-            ERROR("HK pair");
         }
+    } else {
+        ERROR("HK pair");
     }
 }
 
@@ -7223,7 +7272,7 @@ void printf_header() {
 
 void reset_uart() {
 #ifdef ESP_PLATFORM
-    uart_driver_delete(0);
+    //uart_driver_delete(0);
     
     uart_config_t uart_config_data = {
         .baud_rate = 115200,
@@ -7240,7 +7289,7 @@ void reset_uart() {
     uart_set_pin(0, 1, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 #else
     //set_used_gpio(1);
-    gpio_disable(1);
+    //gpio_disable(1);
     iomux_set_pullup_flags(5, 0);
     iomux_set_function(5, IOMUX_GPIO1_FUNC_UART0_TXD);
     uart_set_baud(0, 115200);
@@ -8122,6 +8171,11 @@ void normal_mode_init() {
     
     // ----- CONFIG SECTION
     
+    // Boot early delay
+    if (cJSON_GetObjectItemCaseSensitive(json_config, BOOT_EARLY_DELAY) != NULL) {
+        vTaskDelay(cJSON_GetObjectItemCaseSensitive(json_config, BOOT_EARLY_DELAY)->valuefloat * MS_TO_TICKS(1000));
+    }
+    
     // UART configuration
 #ifndef ESP_PLATFORM
     int is_uart_swap = false;
@@ -8173,13 +8227,13 @@ void normal_mode_init() {
                 switch (uart_config) {
                     case 1:
                         //set_used_gpio(2);
-                        gpio_disable(2);
+                        //gpio_disable(2);
                         gpio_set_iomux_function(2, IOMUX_GPIO2_FUNC_UART1_TXD);
                         break;
                         
                     case 2:
                         //set_used_gpio(15);
-                        gpio_disable(15);
+                        //gpio_disable(15);
                         sdk_system_uart_swap();
                         is_uart_swap = true;
                         uart_config = 0;
@@ -8845,12 +8899,10 @@ void normal_mode_init() {
     }
 #endif
     
-#ifndef ESP_PLATFORM
     // ARP Gratuitous period
     if (cJSON_GetObjectItemCaseSensitive(json_config, WIFI_WATCHDOG_ARP_PERIOD_SET) != NULL) {
         main_config.wifi_arp_count_max = ((uint32_t) cJSON_GetObjectItemCaseSensitive(json_config, WIFI_WATCHDOG_ARP_PERIOD_SET)->valuefloat) / (WIFI_WATCHDOG_POLL_PERIOD_MS / 1000.0f);
     }
-#endif
     
     // Allowed Setup Mode Time
     if (cJSON_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME) != NULL) {
@@ -12167,8 +12219,8 @@ void normal_mode_init() {
     do_actions(root_device_ch_group, 0);
     
     // Initial delay
-    if (cJSON_GetObjectItemCaseSensitive(json_config, ACC_CREATION_DELAY) != NULL) {
-        vTaskDelay(cJSON_GetObjectItemCaseSensitive(json_config, ACC_CREATION_DELAY)->valuefloat * MS_TO_TICKS(1000));
+    if (cJSON_GetObjectItemCaseSensitive(json_config, NEXT_SERV_CREATION_DELAY) != NULL) {
+        vTaskDelay(cJSON_GetObjectItemCaseSensitive(json_config, NEXT_SERV_CREATION_DELAY)->valuefloat * MS_TO_TICKS(1000));
     } else {
         vTaskDelay(1);
     }
@@ -12292,11 +12344,11 @@ void normal_mode_init() {
                     main_config.setup_mode_toggle_counter = INT8_MIN;
                     
                     // Extra service creation delay
-                    if (cJSON_GetObjectItemCaseSensitive(json_extra_service, ACC_CREATION_DELAY) != NULL) {
-                        vTaskDelay(cJSON_GetObjectItemCaseSensitive(json_extra_service, ACC_CREATION_DELAY)->valuefloat * MS_TO_TICKS(1000));
+                    if (cJSON_GetObjectItemCaseSensitive(json_extra_service, NEXT_SERV_CREATION_DELAY) != NULL) {
+                        vTaskDelay(cJSON_GetObjectItemCaseSensitive(json_extra_service, NEXT_SERV_CREATION_DELAY)->valuefloat * MS_TO_TICKS(1000));
+                    } else {
+                        taskYIELD();
                     }
-                    
-                    taskYIELD();
                 }
             }
             
@@ -12306,11 +12358,11 @@ void normal_mode_init() {
         main_config.setup_mode_toggle_counter = INT8_MIN;
         
         // Accessory creation delay
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, ACC_CREATION_DELAY) != NULL) {
-            vTaskDelay(cJSON_GetObjectItemCaseSensitive(json_accessory, ACC_CREATION_DELAY)->valuefloat * MS_TO_TICKS(1000));
+        if (cJSON_GetObjectItemCaseSensitive(json_accessory, NEXT_SERV_CREATION_DELAY) != NULL) {
+            vTaskDelay(cJSON_GetObjectItemCaseSensitive(json_accessory, NEXT_SERV_CREATION_DELAY)->valuefloat * MS_TO_TICKS(1000));
+        } else {
+            taskYIELD();
         }
-        
-        taskYIELD();
     }
     
     sysparam_set_int32(TOTAL_SERV_SYSPARAM, service_numerator);
@@ -12718,13 +12770,13 @@ void user_init() {
         gpio_set_direction(i, GPIO_MODE_DISABLE);
     }
 */
-    for (unsigned int i = 0; i < 3; i++) {
+    for (unsigned int i = 0; i < UART_NUM_MAX; i++) {
         uart_driver_delete(i);
     }
     
 #else // ESP-OPEN-RTOS
     
-    for (unsigned int i = 0; i < 16; i++) {
+    for (unsigned int i = 0; i < (MAX_GPIOS - 1); i++) {
         if (i == 6) {
             i += 6;
         }

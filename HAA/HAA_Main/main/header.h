@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.1.1"
+#define HAA_FIRMWARE_VERSION                "12.2.0"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -744,7 +744,8 @@
 #define HOMEKIT_DEVICE_CATEGORY_SET         "ct"
 #define HOMEKIT_DEVICE_CATEGORY_DEFAULT     (1)
 
-#define ACC_CREATION_DELAY                  "cd"
+#define BOOT_EARLY_DELAY                    "v"
+#define NEXT_SERV_CREATION_DELAY            "cd"
 #define EXIT_EMERGENCY_SETUP_MODE_TIME      (2500)
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)

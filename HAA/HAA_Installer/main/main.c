@@ -63,6 +63,7 @@ TaskHandle_t xHandle = NULL;
 
 void init_task() {
 #ifdef ESP_PLATFORM
+    
     uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,
@@ -76,8 +77,13 @@ void init_task() {
     uart_param_config(0, &uart_config);
     gpio_reset_pin(1);
     uart_set_pin(0, 1, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    
 #else
+    
+    iomux_set_pullup_flags(5, 0);
+    iomux_set_function(5, IOMUX_GPIO1_FUNC_UART0_TXD);
     uart_set_baud(0, 115200);
+    
 #endif
     
     adv_logger_init();
@@ -387,17 +393,15 @@ void user_init() {
         gpio_set_direction(i, GPIO_MODE_DISABLE);
     }
 */
-    for (unsigned int i = 0; i < 3; i++) {
+    for (unsigned int i = 0; i < UART_NUM_MAX; i++) {
         uart_driver_delete(i);
     }
     
 #else // ESP-OPEN-RTOS
     
-    for (unsigned int i = 0; i < 16; i++) {
+    for (unsigned int i = 0; i < (MAX_GPIOS - 1); i++) {
         if (i == 6) {
             i += 6;
-        } else if (i == 1) {
-            i++;
         }
         
         //gpio_enable(i, GPIO_INPUT);

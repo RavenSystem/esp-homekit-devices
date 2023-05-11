@@ -69,7 +69,7 @@ static int private_adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uin
     i2c_master_read(cmd, buf, len, I2C_MASTER_LAST_NACK);
     i2c_master_stop(cmd);
 
-    esp_err_t res = i2c_master_cmd_begin(bus, cmd, xTicksToWait);
+    esp_err_t res = i2c_master_cmd_begin(bus, cmd, xTicksToWait >> 1);
 
     i2c_cmd_link_delete(cmd);
 
@@ -79,7 +79,7 @@ static int private_adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uin
 
 static int private_adv_i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t len, TickType_t xTicksToWait) {
     xSemaphoreTake(adv_i2c_bus_lock[bus], xTicksToWait);
-
+    
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
     i2c_master_write_byte(cmd, slave_addr << 1, true);
@@ -91,10 +91,10 @@ static int private_adv_i2c_slave_write(uint8_t bus, uint8_t slave_addr, const ui
     i2c_master_write(cmd, (void*) buf, len, true);
     i2c_master_stop(cmd);
     
-    esp_err_t res = i2c_master_cmd_begin(bus, cmd, xTicksToWait);
+    esp_err_t res = i2c_master_cmd_begin(bus, cmd, xTicksToWait >> 1);
     
     i2c_cmd_link_delete(cmd);
-
+    
     xSemaphoreGive(adv_i2c_bus_lock[bus]);
     return res;
 }

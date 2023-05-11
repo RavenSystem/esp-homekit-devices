@@ -51,7 +51,6 @@
 #include <lwip/netdb.h>
 #include <lwip/dns.h>
 #include <lwip/dhcp.h>
-#include <lwip/etharp.h>
 
 #include <semphr.h>
 #include "form_urlencoded.h"
@@ -76,6 +75,7 @@ esp_netif_t* setup_esp_netif = NULL;
 
 void setup_set_esp_netif(esp_netif_t* esp_netif) {
     setup_esp_netif = esp_netif;
+    //esp_netif_set_default_netif(esp_netif);
 }
 
 esp_netif_t* setup_get_esp_netif() {
