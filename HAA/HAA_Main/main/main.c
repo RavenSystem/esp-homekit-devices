@@ -5470,11 +5470,11 @@ void free_monitor_task(void* args) {
         ch_group = ch_group->next;
     }
     
-    if (!args) {
+    if (args) {
+        ch_group->is_working = false;
+    } else {
         reset_uart_buffer();
     }
-    
-    ch_group->is_working = false;
     
     vTaskDelete(NULL);
 }
