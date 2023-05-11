@@ -6902,10 +6902,14 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                         case SERV_TYPE_FREE_MONITOR:
                         case SERV_TYPE_FREE_MONITOR_ACCUMULATVE:
                             if (ch_group->main_enabled) {
-                                FM_OVERRIDE_VALUE = action_serv_manager->value;
-                                if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
-                                    ERROR("New FM");
-                                    homekit_remove_oldest_client();
+                                if (!ch_group->is_working) {
+                                    FM_OVERRIDE_VALUE = action_serv_manager->value;
+                                    if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) == pdPASS) {
+                                        ch_group->is_working = true;
+                                    } else {
+                                        ERROR("New FM");
+                                        homekit_remove_oldest_client();
+                                    }
                                 }
                             }
                             break;
