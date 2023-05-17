@@ -107,7 +107,7 @@ typedef struct {
     TaskHandle_t ota_task;
     
     wifi_network_info_t* wifi_networks;
-    SemaphoreHandle_t wifi_networks_mutex;
+    SemaphoreHandle_t wifi_networks_semaph;
     
     uint8_t check_counter;
     
@@ -462,7 +462,7 @@ static void wifi_networks_free() {
 
 #ifdef ESP_PLATFORM
 static void wifi_scan_done_cb() {
-    xSemaphoreTake(context->wifi_networks_mutex, portMAX_DELAY);
+    xSemaphoreTake(context->wifi_networks_semaph, portMAX_DELAY);
 
     wifi_networks_free();
 
@@ -497,7 +497,7 @@ static void wifi_scan_done_cb() {
         }
     }
 
-    xSemaphoreGive(context->wifi_networks_mutex);
+    xSemaphoreGive(context->wifi_networks_semaph);
 }
 #else
 static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
@@ -506,7 +506,7 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
         return;
     }
 
-    xSemaphoreTake(context->wifi_networks_mutex, portMAX_DELAY);
+    xSemaphoreTake(context->wifi_networks_semaph, portMAX_DELAY);
 
     wifi_networks_free();
 
@@ -541,7 +541,7 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
         bss = bss->next.stqe_next;
     }
 
-    xSemaphoreGive(context->wifi_networks_mutex);
+    xSemaphoreGive(context->wifi_networks_semaph);
 }
 #endif
 
@@ -681,7 +681,7 @@ static void wifi_config_server_on_settings(client_t *client) {
     // Wifi Networks
     char buffer[150];
     char bssid[13];
-    if (xSemaphoreTake(context->wifi_networks_mutex, MS_TO_TICKS(4000))) {
+    if (xSemaphoreTake(context->wifi_networks_semaph, MS_TO_TICKS(4000))) {
         wifi_network_info_t* net = context->wifi_networks;
         while (net) {
             snprintf(bssid, sizeof(bssid), "%02x%02x%02x%02x%02x%02x", net->bssid[0], net->bssid[1], net->bssid[2], net->bssid[3], net->bssid[4], net->bssid[5]);
@@ -695,7 +695,7 @@ static void wifi_config_server_on_settings(client_t *client) {
             net = net->next;
         }
 
-        xSemaphoreGive(context->wifi_networks_mutex);
+        xSemaphoreGive(context->wifi_networks_semaph);
     }
     
     client_send_chunk(client, html_settings_wifi);
@@ -1100,11 +1100,13 @@ static void wifi_config_softap_start() {
     
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
-
+    
+    const uint8_t wifi_channel = ((hwrand() % 3) * 5) + 1;
+    
 #ifdef ESP_PLATFORM
     wifi_config_t softap_config = {
         .ap = {
-            .channel = 6,
+            .channel = wifi_channel,
             .authmode = WIFI_AUTH_OPEN,
             .max_connection = 2,
             .ssid_hidden = 0,
@@ -1116,7 +1118,7 @@ static void wifi_config_softap_start() {
         "%s-%02X%02X%02X", context->ssid_prefix, macaddr[3], macaddr[4], macaddr[5]
     );
     
-    INFO("Start AP %s", softap_config.ap.ssid);
+    INFO("Wifi AP %s Ch%i", softap_config.ap.ssid, softap_config.ap.channel);
     
     esp_netif_t* ap_netif = esp_netif_create_default_wifi_ap();
     assert(ap_netif);
@@ -1126,12 +1128,12 @@ static void wifi_config_softap_start() {
     IP4_ADDR(&ap_ip.gw, 0, 0, 0, 0);
     esp_netif_set_ip_info(ap_netif, &ap_ip);
     
-    INFO("Start DHCP");
     esp_wifi_set_config(WIFI_IF_AP, &softap_config);
+    esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20);
 #else
     struct sdk_softap_config softap_config;
     softap_config.ssid_hidden = 0;
-    softap_config.channel = 6;
+    softap_config.channel = wifi_channel;
     softap_config.authmode = AUTH_OPEN;
     softap_config.max_connection = 2;
     softap_config.beacon_interval = 100;
@@ -1140,8 +1142,8 @@ static void wifi_config_softap_start() {
         (char*) softap_config.ssid, sizeof(softap_config.ssid),
         "%s-%02X%02X%02X", context->ssid_prefix, macaddr[3], macaddr[4], macaddr[5]
     );
-
-    INFO("Start AP %s", softap_config.ssid);
+    
+    INFO("Wifi AP %s Ch%i", softap_config.ssid, softap_config.channel);
     
     struct ip_info ap_ip;
     IP4_ADDR(&ap_ip.ip, 192, 168, 4, 1);
@@ -1154,12 +1156,11 @@ static void wifi_config_softap_start() {
     ip4_addr_t first_client_ip;
     first_client_ip.addr = ap_ip.ip.addr + htonl(1);
     
-    INFO("Start DHCP");
     dhcpserver_start(&first_client_ip, 4);
 #endif
     
-    context->wifi_networks_mutex = xSemaphoreCreateBinary();
-    xSemaphoreGive(context->wifi_networks_mutex);
+    context->wifi_networks_semaph = xSemaphoreCreateBinary();
+    xSemaphoreGive(context->wifi_networks_semaph);
     
     xTaskCreate(http_task, "WEB", (TASK_SIZE_FACTOR * 640), NULL, (tskIDLE_PRIORITY + 1), NULL);
 }
@@ -1264,7 +1265,7 @@ static uint8_t wifi_config_connect(const uint8_t phy) {
     };
     
     sdk_wifi_station_set_config(&sta_config);
-    
+    esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20);
     esp_wifi_set_ps(WIFI_PS_NONE);
 #endif
     

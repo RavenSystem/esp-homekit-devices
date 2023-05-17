@@ -18,6 +18,8 @@
 #include "esp_attr.h"
 #define IRAM                        IRAM_ATTR
 
+#define HK_LONGINT_F                "li"
+
 #else
 
 #include <FreeRTOS.h>
@@ -26,6 +28,8 @@
 #include <esplibs/libmain.h>
 #include <sysparam.h>
 #include <http-parser/http_parser.h>
+
+#define HK_LONGINT_F                "i"
 
 #endif
 
@@ -93,15 +97,9 @@
 #define HOMEKIT_INFO(message, ...)              INFO(message, ##__VA_ARGS__)
 #define HOMEKIT_ERROR(message, ...)             ERROR(message, ##__VA_ARGS__)
 
-#ifdef ESP_PLATFORM
-#define CLIENT_DEBUG(client, message, ...)      DEBUG("[%li] " message, client->socket, ##__VA_ARGS__)
-#define CLIENT_INFO(client, message, ...)       INFO("[%li] " message, client->socket, ##__VA_ARGS__)
-#define CLIENT_ERROR(client, message, ...)      ERROR("[%li] " message, client->socket, ##__VA_ARGS__)
-#else
-#define CLIENT_DEBUG(client, message, ...)      DEBUG("[%d] " message, client->socket, ##__VA_ARGS__)
-#define CLIENT_INFO(client, message, ...)       INFO("[%d] " message, client->socket, ##__VA_ARGS__)
-#define CLIENT_ERROR(client, message, ...)      ERROR("[%d] " message, client->socket, ##__VA_ARGS__)
-#endif
+#define CLIENT_DEBUG(client, message, ...)      DEBUG("[%"HK_LONGINT_F"] " message, client->socket, ##__VA_ARGS__)
+#define CLIENT_INFO(client, message, ...)       INFO("[%"HK_LONGINT_F"] " message, client->socket, ##__VA_ARGS__)
+#define CLIENT_ERROR(client, message, ...)      ERROR("[%"HK_LONGINT_F"] " message, client->socket, ##__VA_ARGS__)
 
 struct _client_context_t;
 typedef struct _client_context_t client_context_t;
@@ -404,11 +402,7 @@ void pairing_context_free(pairing_context_t *context) {
 static int IRAM homekit_low_dram() {
     const uint32_t free_heap = xPortGetFreeHeapSize();
     if (free_heap < HOMEKIT_MIN_FREEHEAP) {
-#ifdef ESP_PLATFORM
-        HOMEKIT_ERROR("DRAM Free HEAP %li", free_heap);
-#else
-        HOMEKIT_ERROR("DRAM Free HEAP %i", free_heap);
-#endif
+        HOMEKIT_ERROR("DRAM Free HEAP %"HK_LONGINT_F, free_heap);
         return true;
     }
     
@@ -3362,20 +3356,15 @@ static inline void IRAM homekit_server_accept_client() {
         if (s > homekit_server->max_fd) {
             homekit_server->max_fd = s;
         }
-#ifdef ESP_PLATFORM
-        HOMEKIT_INFO("[%i] New %s:%d %i/%i Free HEAP %li", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
-#else
-        HOMEKIT_INFO("[%d] New %s:%d %i/%i Free HEAP %d", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
-#endif
+        
+        HOMEKIT_INFO("[%i] New %s:%d %i/%i Free HEAP %"HK_LONGINT_F, s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
+        
         HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_CLIENT_CONNECTED);
         
     } else {
         close(s);
-#ifdef ESP_PLATFORM
-        HOMEKIT_ERROR("[%i] DRAM %s:%d %i/%i Free HEAP %li", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
-#else
-        HOMEKIT_ERROR("[%d] DRAM %s:%d %i/%i Free HEAP %d", s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
-#endif
+        
+        HOMEKIT_ERROR("[%i] DRAM %s:%d %i/%i Free HEAP %"HK_LONGINT_F, s, address_buffer, addr.sin_port, homekit_server->client_count, homekit_server->config->max_clients, free_heap);
     }
 }
 

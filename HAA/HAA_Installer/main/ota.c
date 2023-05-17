@@ -81,7 +81,7 @@ static char last_location[LOCATION_LEN];
 #ifdef DEBUG_WOLFSSL
 void MyLoggingCallback(const int logLevel, const char* const logMessage) {
     /*custom logging function*/
-    INFO("loglevel: %d - %s", logLevel, logMessage);
+    INFO("loglevel: %i - %s", logLevel, logMessage);
 }
 #endif
 

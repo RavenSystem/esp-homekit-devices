@@ -7,7 +7,7 @@ uint32_t wifi_config_get_full_gw();
 
 #ifdef ESP_PLATFORM
 
-void wifi_config_init(const char* ssid_prefix, void (*on_wifi_ready)(), const char* custom_hostname, const int param, const uint8_t wifi_sleep_mode);
+void wifi_config_init(const char* ssid_prefix, void (*on_wifi_ready)(), const char* custom_hostname, const int param, const uint8_t wifi_sleep_mode, const bool bandwidth_40);
 void setup_set_esp_netif(esp_netif_t* esp_net_if);
 esp_netif_t* setup_get_esp_netif();
 void setup_set_boot_installer();

@@ -32,6 +32,8 @@
 #define HAA_ENTER_CRITICAL_TASK()           portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED; taskENTER_CRITICAL(&mux)
 #define HAA_EXIT_CRITICAL_TASK()            taskEXIT_CRITICAL(&mux)
 
+#define HAA_LONGINT_F                       "li"
+
 #ifndef CONFIG_IDF_TARGET_ESP32C2
 #include "driver/rmt_tx.h"
 #include "driver/rmt_encoder.h"
@@ -52,6 +54,8 @@
 
 #define HAA_ENTER_CRITICAL_TASK()           taskENTER_CRITICAL()
 #define HAA_EXIT_CRITICAL_TASK()            taskEXIT_CRITICAL()
+
+#define HAA_LONGINT_F                       "i"
 
 #endif
 
@@ -150,11 +154,7 @@ static unsigned int IRAM private_abs(int number) {
 }
 
 static void show_freeheap() {
-#ifdef ESP_PLATFORM
-    INFO("Free Heap %li", xPortGetFreeHeapSize());
-#else
-    INFO("Free Heap %d", xPortGetFreeHeapSize());
-#endif
+    INFO("Free Heap %"HAA_LONGINT_F, xPortGetFreeHeapSize());
 }
 
 // PWM Part
@@ -432,8 +432,16 @@ void free_heap_watchdog() {
 }
 #endif  // HAA_DEBUG
 
-void random_task_delay() {
-    vTaskDelay( ( hwrand() % MS_TO_TICKS(RANDOM_DELAY_MS) ) + MS_TO_TICKS(200) );
+static void _random_task_delay(const uint16_t ticks) {
+    vTaskDelay( ( hwrand() % ticks ) + MS_TO_TICKS(200) );
+}
+
+void random_task_short_delay() {
+    _random_task_delay(MS_TO_TICKS(RANDOM_DELAY_MS));
+}
+
+void random_task_long_delay() {
+    _random_task_delay(MS_TO_TICKS(RANDOM_DELAY_MS * 2));
 }
 
 void disable_emergency_setup(TimerHandle_t xTimer) {
@@ -760,7 +768,7 @@ void reboot_task() {
     INFO("\nRebooting\n");
     rs_esp_timer_stop_forced(WIFI_WATCHDOG_TIMER);
     
-    random_task_delay();
+    random_task_short_delay();
     
     sdk_system_restart();
 }
@@ -926,7 +934,7 @@ void wifi_reconnection_task(void* args) {
             
             save_last_working_phy();
             
-            random_task_delay();
+            random_task_short_delay();
             
             homekit_mdns_announce();
             
@@ -1015,11 +1023,13 @@ void wifi_watchdog() {
             do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 7);
         }
         
-        main_config.wifi_arp_count++;
-        if (main_config.wifi_arp_count >= main_config.wifi_arp_count_max) {
-            main_config.wifi_arp_count = 0;
-            
-            wifi_resend_arp();
+        if (main_config.wifi_arp_count_max > 0) {
+            main_config.wifi_arp_count++;
+            if (main_config.wifi_arp_count >= main_config.wifi_arp_count_max) {
+                main_config.wifi_arp_count = 0;
+                
+                wifi_resend_arp();
+            }
         }
         
         if (main_config.wifi_ping_max_errors != 255 && !homekit_is_pairing()) {
@@ -6584,11 +6594,8 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     while (action_binary_output) {
         if (action_binary_output->action == action) {
             extended_gpio_write(action_binary_output->gpio, action_binary_output->value);
-#ifdef ESP_PLATFORM
-            INFO("<%i> DigO %i->%i (%li)", ch_group->serv_index, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
-#else
-            INFO("<%i> DigO %i->%i (%i)", ch_group->serv_index, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
-#endif
+            
+            INFO("<%i> DigO %i->%i (%"HAA_LONGINT_F")", ch_group->serv_index, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
             
             if (action_binary_output->inching > 0) {
                 rs_esp_timer_start(rs_esp_timer_create(action_binary_output->inching, false, (void*) action_binary_output, autoswitch_timer));
@@ -7217,7 +7224,7 @@ void run_homekit_server() {
     show_freeheap();
     
     if (main_config.enable_homekit_server) {
-        random_task_delay();
+        random_task_short_delay();
         homekit_server_init(&config);
         show_freeheap();
     }
@@ -7318,20 +7325,29 @@ void normal_mode_init() {
         int active = false;
         
         for (int j = 0; j < cJSON_GetArraySize(json_buttons); j++) {
-            const int gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), PIN_GPIO)->valuefloat;
+            int button_data[2] = { 0, 1 };
             
-            int button_type = 1;
-            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE) != NULL) {
-                button_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_buttons, j), BUTTON_PRESS_TYPE)->valuefloat;
+            cJSON* json_button = cJSON_GetArrayItem(json_buttons, j);
+            
+            if (cJSON_GetObjectItemCaseSensitive(json_button, PIN_GPIO) == NULL) {
+                for (int k = 0; k < cJSON_GetArraySize(json_button); k++) {
+                    button_data[k] = (uint16_t) cJSON_GetArrayItem(json_button, k)->valuefloat;
+                }
+            } else {    // OLD WAY
+                button_data[0] = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_button, PIN_GPIO)->valuefloat;
+                
+                if (cJSON_GetObjectItemCaseSensitive(json_button, BUTTON_PRESS_TYPE) != NULL) {
+                    button_data[1] = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_button, BUTTON_PRESS_TYPE)->valuefloat;
+                }
             }
             
-            adv_button_register_callback_fn(gpio, callback, button_type, (void*) ch_group, param);
+            adv_button_register_callback_fn(button_data[0], callback, button_data[1], (void*) ch_group, param);
             
-            if (adv_button_read_by_gpio(gpio) == button_type) {
+            if (adv_button_read_by_gpio(button_data[0]) == button_data[1]) {
                 active = true;
             }
             
-            INFO("New DigI GPIO %i t %i, s %i", gpio, button_type, active);
+            INFO("DigI GPIO %i t %i, s %i", button_data[0], button_data[1], active);
         }
         
         return active;
@@ -7382,7 +7398,7 @@ void normal_mode_init() {
                 ping_input->callback_0 = ping_input_callback_fn;
             }
             
-            INFO("New PingI h %s, r %i", ping_input->host, response_type);
+            INFO("PingI h %s, r %i", ping_input->host, response_type);
         }
     }
     
@@ -7499,7 +7515,7 @@ void normal_mode_init() {
                     action_copy->next = last_action;
                     last_action = action_copy;
                     
-                    INFO("New A%i Copy v %i", new_int_action, action_copy->new_action);
+                    INFO("A%i Copy v %i", new_int_action, action_copy->new_action);
                 }
             }
         }
@@ -7526,30 +7542,42 @@ void normal_mode_init() {
                 if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), BINARY_OUTPUTS_ARRAY) != NULL) {
                     cJSON* json_relays = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), BINARY_OUTPUTS_ARRAY);
                     for (int i = cJSON_GetArraySize(json_relays) - 1; i >= 0; i--) {
-                        action_binary_output_t* action_binary_output = malloc(sizeof(action_binary_output_t));
-                        memset(action_binary_output, 0, sizeof(*action_binary_output));
+                        int binary_output_data[3] = { 0, 0, 0 };
                         
                         cJSON* json_relay = cJSON_GetArrayItem(json_relays, i);
                         
+                        if (cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO) == NULL) {
+                            for (int k = 0; k < cJSON_GetArraySize(json_relay); k++) {
+                                if (k == 2) {
+                                    binary_output_data[2] = cJSON_GetArrayItem(json_relay, k)->valuefloat * 1000;
+                                } else {
+                                    binary_output_data[k] = (uint16_t) cJSON_GetArrayItem(json_relay, k)->valuefloat;
+                                }
+                            }
+                        } else {    // OLD WAY
+                            binary_output_data[0] = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuefloat;
+                            
+                            if (cJSON_GetObjectItemCaseSensitive(json_relay, VALUE) != NULL) {
+                                binary_output_data[1] = (bool) cJSON_GetObjectItemCaseSensitive(json_relay, VALUE)->valuefloat;
+                            }
+                            
+                            if (cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME) != NULL) {
+                                binary_output_data[2] = cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME)->valuefloat * 1000;
+                            }
+                        }
+                        
+                        action_binary_output_t* action_binary_output = malloc(sizeof(action_binary_output_t));
+                        memset(action_binary_output, 0, sizeof(*action_binary_output));
+                        
                         action_binary_output->action = new_int_action;
-                        action_binary_output->gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuefloat;
-                        
-                        if (cJSON_GetObjectItemCaseSensitive(json_relay, VALUE) != NULL) {
-                            action_binary_output->value = (bool) cJSON_GetObjectItemCaseSensitive(json_relay, VALUE)->valuefloat;
-                        }
-                        
-                        if (cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME) != NULL) {
-                            action_binary_output->inching = cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME)->valuefloat * 1000;
-                        }
+                        action_binary_output->gpio = binary_output_data[0];
+                        action_binary_output->value = binary_output_data[1];
+                        action_binary_output->inching = binary_output_data[2];
                         
                         action_binary_output->next = last_action;
                         last_action = action_binary_output;
                         
-#ifdef ESP_PLATFORM
-                        INFO("New A%i DigO g %i, v %i, i %li", new_int_action, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
-#else
-                        INFO("New A%i DigO g %i, v %i, i %i", new_int_action, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
-#endif
+                        INFO("A%i DigO g %i, v %i, i %"HAA_LONGINT_F"ms", new_int_action, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
                     }
                 }
             }
@@ -7602,7 +7630,7 @@ void normal_mode_init() {
                             }
                         }
                         
-                        INFO("New A%i ServNot %i->%g", new_int_action, action_serv_manager->serv_index, action_serv_manager->value);
+                        INFO("A%i ServNot %i->%g", new_int_action, action_serv_manager->serv_index, action_serv_manager->value);
                     }
                 }
             }
@@ -7619,7 +7647,7 @@ void normal_mode_init() {
         ch_group->action_serv_manager = last_action;
     }
     
-    // Service Manager
+    // Set Characteristic Actions
     inline void new_action_set_ch(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
         action_set_ch_t* last_action = ch_group->action_set_ch;
         
@@ -7662,7 +7690,7 @@ void normal_mode_init() {
                             }
                         }
                         
-                        INFO("New A%i SetCh %i.%i->%i.%i", new_int_action, action_set_ch->source_serv, action_set_ch->source_ch, action_set_ch->target_serv, action_set_ch->target_ch);
+                        INFO("A%i SetCh %i.%i->%i.%i", new_int_action, action_set_ch->source_serv, action_set_ch->source_ch, action_set_ch->target_serv, action_set_ch->target_ch);
                     }
                 }
             }
@@ -7693,16 +7721,14 @@ void normal_mode_init() {
                         action_system_t* action_system = malloc(sizeof(action_system_t));
                         memset(action_system, 0, sizeof(*action_system));
                         
-                        cJSON* json_action_system = cJSON_GetArrayItem(json_action_systems, i);
-                        
                         action_system->action = new_int_action;
                         
-                        action_system->value = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_action_system, SYSTEM_ACTION)->valuefloat;
+                        action_system->value = (uint8_t) cJSON_GetArrayItem(json_action_systems, i)->valuefloat;
                         
                         action_system->next = last_action;
                         last_action = action_system;
                         
-                        INFO("New A%i Sys v %i", new_int_action, action_system->value);
+                        INFO("A%i Sys v %i", new_int_action, action_system->value);
                     }
                 }
             }
@@ -7785,7 +7811,7 @@ void normal_mode_init() {
                             }
                         }
                         
-                        INFO("New A%i Net %s:%i", new_int_action, action_network->host, action_network->port_n);
+                        INFO("A%i Net %s:%i", new_int_action, action_network->host, action_network->port_n);
                         
                         action_network->next = last_action;
                         last_action = action_network;
@@ -7857,7 +7883,7 @@ void normal_mode_init() {
                         action_irrf_tx->next = last_action;
                         last_action = action_irrf_tx;
                         
-                        INFO("New A%i IRRF r %i, p %i", new_int_action, action_irrf_tx->repeats, action_irrf_tx->pause);
+                        INFO("A%i IRRF r %i, p %i", new_int_action, action_irrf_tx->repeats, action_irrf_tx->pause);
                     }
                 }
             }
@@ -7885,10 +7911,10 @@ void normal_mode_init() {
                 if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), UART_ACTIONS_ARRAY) != NULL) {
                     cJSON* json_action_uarts = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), UART_ACTIONS_ARRAY);
                     for (int i = cJSON_GetArraySize(json_action_uarts) - 1; i >= 0; i--) {
+                        cJSON* json_action_uart = cJSON_GetArrayItem(json_action_uarts, i);
+                        
                         action_uart_t* action_uart = malloc(sizeof(action_uart_t));
                         memset(action_uart, 0, sizeof(*action_uart));
-                        
-                        cJSON* json_action_uart = cJSON_GetArrayItem(json_action_uarts, i);
                         
                         action_uart->action = new_int_action;
                         
@@ -7916,7 +7942,7 @@ void normal_mode_init() {
                         action_uart->next = last_action;
                         last_action = action_uart;
                         
-                        INFO("New A%i UART%i p %i, l %i", new_int_action, action_uart->uart, action_uart->pause, action_uart->len);
+                        INFO("A%i UART%i p %i, l %i", new_int_action, action_uart->uart, action_uart->pause, action_uart->len);
                     }
                 }
             }
@@ -7974,7 +8000,7 @@ void normal_mode_init() {
                             }
                         }
                         
-                        INFO("New A%i PWM g %i->%i, d %i, f %i", new_int_action, action_pwm->gpio, action_pwm->duty, action_pwm->freq, action_pwm->dithering);
+                        INFO("A%i PWM g %i->%i, d %i, f %i", new_int_action, action_pwm->gpio, action_pwm->duty, action_pwm->freq, action_pwm->dithering);
                     }
                 }
             }
@@ -8405,11 +8431,7 @@ void normal_mode_init() {
             
             const unsigned int i2c_res = adv_i2c_init_hz(i, i2c_scl_gpio, i2c_sda_gpio, i2c_freq_hz, i2c_scl_gpio_pullup, i2c_sda_gpio_pullup);
             
-#ifdef ESP_PLATFORM
-            INFO("I2C bus %i: scl %i, sda %i, f %li, r %i", i, i2c_scl_gpio, i2c_sda_gpio, i2c_freq_hz, i2c_res);
-#else
-            INFO("I2C bus %i: scl %i, sda %i, f %i, r %i", i, i2c_scl_gpio, i2c_sda_gpio, i2c_freq_hz, i2c_res);
-#endif
+            INFO("I2C bus %i: scl %i, sda %i, f %"HAA_LONGINT_F", r %i", i, i2c_scl_gpio, i2c_sda_gpio, i2c_freq_hz, i2c_res);
         }
     }
     
@@ -8549,6 +8571,10 @@ void normal_mode_init() {
                     io_value[j - 1] = cJSON_GetArrayItem(json_io_config, j)->valuefloat;
                 }
                 
+#ifdef ESP_PLATFORM
+                int gpio_ret = -99;
+#endif
+                
                 if (gpio < 100) {
 #ifdef ESP_PLATFORM
                     gpio_reset_pin(gpio);
@@ -8579,7 +8605,7 @@ void normal_mode_init() {
                 
                 if (IO_GPIO_MODE <= 5) {
 #ifdef ESP_PLATFORM
-                    gpio_set_direction(gpio, IO_GPIO_MODE);
+                    gpio_ret = gpio_set_direction(gpio, IO_GPIO_MODE);
                     gpio_sleep_set_direction(gpio, IO_GPIO_MODE);
 #else
                     if (IO_GPIO_MODE == 0) {
@@ -8593,7 +8619,11 @@ void normal_mode_init() {
                         gpio_write(gpio, IO_GPIO_OUTPUT_INIT_VALUE);
                     }
                     
-                    INFO("GPIO %i, m %i, p %i, v %i", gpio, IO_GPIO_MODE, IO_GPIO_PULL_UP_DOWN, IO_GPIO_OUTPUT_INIT_VALUE);
+#ifdef ESP_PLATFORM
+                    INFO("GPIO %i: M %i (0x%x), p %i, v %i", gpio, IO_GPIO_MODE, gpio_ret, IO_GPIO_PULL_UP_DOWN, IO_GPIO_OUTPUT_INIT_VALUE);
+#else
+                    INFO("GPIO %i: M %i, p %i, v %i", gpio, IO_GPIO_MODE, IO_GPIO_PULL_UP_DOWN, IO_GPIO_OUTPUT_INIT_VALUE);
+#endif
                     
                 } else if (IO_GPIO_MODE == 6) {
                     const int inverted = (bool) (IO_GPIO_BUTTON_MODE & 0b01);
@@ -8607,15 +8637,19 @@ void normal_mode_init() {
                         
                         const int pulse_mode = (bool) (IO_GPIO_BUTTON_MODE & 0b10);
                         
+#ifdef ESP_PLATFORM
+                        gpio_ret = adv_button_create(gpio, inverted, pulse_mode, 0, IO_GPIO_BUTTON_FILTER);
+                        INFO("GPIO %i: M 6 (0x%x), p %i, i %i, f %i, m %i", gpio, gpio_ret, IO_GPIO_PULL_UP_DOWN, inverted, IO_GPIO_BUTTON_FILTER, pulse_mode);
+#else
                         adv_button_create(gpio, inverted, pulse_mode, 0, IO_GPIO_BUTTON_FILTER);
-                        
-                        INFO("DigI GPIO %i, p %i, i %i, f %i, m %i", gpio, IO_GPIO_PULL_UP_DOWN, inverted, IO_GPIO_BUTTON_FILTER, pulse_mode);
+                        INFO("GPIO %i: M 6, p %i, i %i, f %i, m %i", gpio, IO_GPIO_PULL_UP_DOWN, inverted, IO_GPIO_BUTTON_FILTER, pulse_mode);
+#endif
                         
                     } else {    // MCP23017
                         mcp23017_t* mcp = mcp_find_by_index(gpio / 100);
                         adv_button_create(gpio, inverted, mcp->addr, mcp->bus, IO_GPIO_BUTTON_FILTER);
                         
-                        INFO("DigI MCP Pin %i i %i, f %i, b %i, a %i", gpio, inverted, IO_GPIO_BUTTON_FILTER, mcp->bus, mcp->addr);
+                        INFO("MCP Pin %i: M 6, i %i, f %i, b %i, a %i", gpio, inverted, IO_GPIO_BUTTON_FILTER, mcp->bus, mcp->addr);
                     }
                     
                 } else if (IO_GPIO_MODE <= 8) {
@@ -8636,13 +8670,13 @@ void normal_mode_init() {
                     
                     if (IO_GPIO_MODE == 7) {
 #ifdef ESP_PLATFORM
-                        gpio_set_direction(gpio, GPIO_MODE_OUTPUT);
+                        gpio_ret = gpio_set_direction(gpio, GPIO_MODE_OUTPUT);
 #else
                         gpio_enable(gpio, GPIO_OUTPUT);
 #endif
                     } else {
 #ifdef ESP_PLATFORM
-                        gpio_set_direction(gpio, GPIO_MODE_OUTPUT_OD);
+                        gpio_ret = gpio_set_direction(gpio, GPIO_MODE_OUTPUT_OD);
 #else
                         gpio_enable(gpio, GPIO_OUT_OPEN_DRAIN);
 #endif
@@ -8653,7 +8687,11 @@ void normal_mode_init() {
                     
                     adv_pwm_new_channel(gpio, inverted, leading, IO_GPIO_PWM_DITHERING, IO_GPIO_OUTPUT_INIT_VALUE);
                     
-                    INFO("PWM-S GPIO %i, m %i, v %i, i %i, l %i, d %i", gpio, IO_GPIO_MODE, IO_GPIO_OUTPUT_INIT_VALUE, inverted, leading, IO_GPIO_PWM_DITHERING);
+#ifdef ESP_PLATFORM
+                    INFO("GPIO %i: M %i (0x%x), v %i, i %i, l %i, d %i", gpio, IO_GPIO_MODE, gpio_ret, IO_GPIO_OUTPUT_INIT_VALUE, inverted, leading, IO_GPIO_PWM_DITHERING);
+#else
+                    INFO("GPIO %i: M %i, v %i, i %i, l %i, d %i", gpio, IO_GPIO_MODE, IO_GPIO_OUTPUT_INIT_VALUE, inverted, leading, IO_GPIO_PWM_DITHERING);
+#endif
                     
 #ifdef ESP_PLATFORM
                 } else if (IO_GPIO_MODE == 9) {     // Only ESP32
@@ -8716,9 +8754,9 @@ void normal_mode_init() {
                         .hpoint                 = 0,
                         .flags.output_invert    = inverted ^ leading,
                     };
-                    ledc_channel_config(&ledc_channel);
+                    gpio_ret = ledc_channel_config(&ledc_channel);
                     
-                    INFO("PWM-H GPIO %i, m %i, v %i, i %i, l %i", gpio, IO_GPIO_MODE, IO_GPIO_OUTPUT_INIT_VALUE, inverted, leading);
+                    INFO("GPIO %i: M 9 (0x%x), v %i, i %i, l %i", gpio, gpio_ret, IO_GPIO_OUTPUT_INIT_VALUE, inverted, leading);
                     
                 } else if (IO_GPIO_MODE == 10) {    // Only ESP32
                     if (main_config.adc_dac_data == NULL) {
@@ -8739,9 +8777,9 @@ void normal_mode_init() {
                         .bitwidth = ADC_BITWIDTH_12,    // Max supported width: 12 bits (0 - 4095)
                         .atten = IO_GPIO_ADC_ATTENUATION,
                     };
-                    adc_oneshot_config_channel(main_config.adc_dac_data->adc_oneshot_handle, adc_channel, &config);
+                    gpio_ret = adc_oneshot_config_channel(main_config.adc_dac_data->adc_oneshot_handle, adc_channel, &config);
                     
-                    INFO("ADC GPIO %i, m %i a %i", gpio, IO_GPIO_MODE, IO_GPIO_ADC_ATTENUATION);
+                    INFO("GPIO %i: M 10 (0x%x), a %i", gpio, gpio_ret, IO_GPIO_ADC_ATTENUATION);
 #endif
                     
                 }
@@ -8882,6 +8920,11 @@ void normal_mode_init() {
     int wifi_sleep_mode = 1;
     if (cJSON_GetObjectItemCaseSensitive(json_config, WIFI_SLEEP_MODE_SET) != NULL) {
         wifi_sleep_mode = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, WIFI_SLEEP_MODE_SET)->valuefloat;
+    }
+    
+    int wifi_bandwidth_40 = false;
+    if (cJSON_GetObjectItemCaseSensitive(json_config, WIFI_BANDWIDTH_40_SET) != NULL) {
+        wifi_bandwidth_40 = (bool) cJSON_GetObjectItemCaseSensitive(json_config, WIFI_BANDWIDTH_40_SET)->valuefloat;
     }
 #endif
     
@@ -9079,11 +9122,7 @@ void normal_mode_init() {
             serial_index--;
         }
         if (use_config_number) {
-#ifdef ESP_PLATFORM
-            snprintf(serial_str, serial_str_len, "%li-%02X%02X%02X-%i",
-#else
-            snprintf(serial_str, serial_str_len, "%i-%02X%02X%02X-%i",
-#endif
+            snprintf(serial_str, serial_str_len, "%"HAA_LONGINT_F"-%02X%02X%02X-%i",
                      last_config_number, macaddr[3], macaddr[4], macaddr[5], serial_index);
         } else {
             snprintf(serial_str, serial_str_len, "%s%s%02X%02X%02X-%i",
@@ -12221,11 +12260,8 @@ void normal_mode_init() {
     // New HomeKit Service
     void new_service(const uint16_t acc_count, uint16_t serv_count, const uint16_t total_services, cJSON* json_accessory, const uint8_t serv_type) {
         service_numerator++;
-#ifdef ESP_PLATFORM
-        INFO("\n* SERV %li (%i)", service_numerator, serv_type);
-#else
-        INFO("\n* SERV %i (%i)", service_numerator, serv_type);
-#endif
+        
+        INFO("\n* SERV %"HAA_LONGINT_F" (%i)", service_numerator, serv_type);
         
         if (serv_type == SERV_TYPE_BUTTON ||
             serv_type == SERV_TYPE_DOORBELL) {
@@ -12488,12 +12524,12 @@ void normal_mode_init() {
     }
     main_config.wifi_mode = (uint8_t) wifi_mode;
     
-    random_task_delay();
+    random_task_long_delay();
     
     //main_config.wifi_status = WIFI_STATUS_CONNECTING;     // Not needed
     
 #ifdef ESP_PLATFORM
-    wifi_config_init("HAA", run_homekit_server, custom_hostname, 0, wifi_sleep_mode);
+    wifi_config_init("HAA", run_homekit_server, custom_hostname, 0, wifi_sleep_mode, wifi_bandwidth_40);
 #else
     wifi_config_init("HAA", run_homekit_server, custom_hostname, 0);
 #endif
@@ -12577,7 +12613,7 @@ void irrf_capture_task(void* args) {
 }
 
 void wifi_done() {
-
+    // Do noting, but needed to be not NULL
 }
 
 void init_task() {
@@ -12623,9 +12659,10 @@ void init_task() {
     char *wifi_ssid = NULL;
     sysparam_get_string(WIFI_SSID_SYSPARAM, &wifi_ssid);
     
+    // DEBUG
     //sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);    // Force to enter always in setup mode. Only for tests. Keep commented for releases
-    
     //sysparam_set_string("ota_repo", "1");             // Simulates Installation with OTA. Only for tests. Keep commented for releases
+    
     
     void enter_setup(const int param) {
         reset_uart();
@@ -12639,7 +12676,7 @@ void init_task() {
         printf_header();
         INFO("SETUP");
 #ifdef ESP_PLATFORM
-        wifi_config_init("HAA", NULL, main_config.name_value, param, 0);
+        wifi_config_init("HAA", NULL, main_config.name_value, param, 0, false);
 #else
         wifi_config_init("HAA", NULL, main_config.name_value, param);
 #endif
@@ -12654,7 +12691,7 @@ void init_task() {
         if (wifi_ssid) {
             adv_logger_init(ADV_LOGGER_UART0_UDP, NULL, false);
 #ifdef ESP_PLATFORM
-            wifi_config_init("HAA", wifi_done, main_config.name_value, 0, 0);
+            wifi_config_init("HAA", wifi_done, main_config.name_value, 0, 0, false);
 #else
             wifi_config_init("HAA", wifi_done, main_config.name_value, 0);
 #endif

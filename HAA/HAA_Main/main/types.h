@@ -101,6 +101,7 @@ typedef struct _action_uart {
     uint16_t len;
     
     uint16_t pause;
+    
     uint8_t* command;
     
     struct _action_uart* next;

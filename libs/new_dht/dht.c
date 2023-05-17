@@ -129,13 +129,13 @@ static inline bool dht_fetch_data(dht_sensor_type_t sensor_type, uint8_t pin, bo
     gpio_write(pin, 0);
     sdk_os_delay_us(sensor_type == DHT_TYPE_SI7021 ? 500 : 20000);
     gpio_write(pin, 1);
-
+    
     // Step through Phase 'B', 200us
     if (!dht_await_pin_state(pin, sensor_type == DHT_TYPE_SI7021 ? 200 : 40, false, NULL)) {
         debug("Initialization error, problem in phase 'B'\n");
         return false;
     }
-
+    
     // Step through Phase 'C', 88us
     if (!dht_await_pin_state(pin, 88, true, NULL)) {
         debug("Initialization error, problem in phase 'C'\n");
@@ -189,7 +189,7 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
 {
     bool bits[DHT_DATA_BITS];
     uint8_t data[DHT_DATA_BITS / 8] = { 0 };
-    bool result;
+    bool result = false;
     
     xSemaphoreTake(dht_lock, pdMS_TO_TICKS(DHT_TIMEOUT_MS));
     
@@ -213,6 +213,8 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
     gpio_disable(pin);
 #endif
     
+    vTaskDelay(pdMS_TO_TICKS(50));
+    
     xSemaphoreGive(dht_lock);
     
     if (!result) {
@@ -221,8 +223,8 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
 
     for (int i = 0; i < DHT_DATA_BITS; i++) {
         // Read each bit into 'result' byte array...
-        data[i/8] <<= 1;
-        data[i/8] |= bits[i];
+        data[i / 8] <<= 1;
+        data[i / 8] |= bits[i];
     }
 
     if (data[4] != ((data[0] + data[1] + data[2] + data[3]) & 0xFF)) {

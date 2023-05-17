@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.2.3"
+#define HAA_FIRMWARE_VERSION                "12.3.0"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -123,7 +123,6 @@
 #define ACCESSORIES_ARRAY                   "a"
 #define EXTRA_SERVICES_ARRAY                "es"
 #define BUTTONS_ARRAY                       "b"
-#define BUTTONS_ARRAY_1                     "b1"
 #define FIXED_BUTTONS_ARRAY_0               "f0"
 #define FIXED_BUTTONS_ARRAY_1               "f1"
 #define FIXED_BUTTONS_ARRAY_2               "f2"
@@ -750,7 +749,7 @@
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
-#define CUSTOM_HAA_COMMAND                  "io"
+#define CUSTOM_HAA_COMMAND                  "zc"
 #define HAA_SETUP_ACCESSORY_SET             "s"
 
 #define ACTION_TASK_TYPE_UART               (0)
@@ -766,13 +765,14 @@
 #define WIFI_STATUS_CONNECTED               (3)
 #define WIFI_PING_ERRORS                    "w"
 #define WIFI_SLEEP_MODE_SET                 "d"
+#define WIFI_BANDWIDTH_40_SET               "dt"
 
 #define WIFI_RECONNECTION_POLL_PERIOD_MS    (5000)
 #define WIFI_DISCONNECTED_LONG_TIME         (60)    // * WIFI_RECONNECTION_POLL_PERIOD_MS
 
 #define WIFI_WATCHDOG_POLL_PERIOD_MS        (1500)
 #define WIFI_WATCHDOG_ARP_PERIOD_SET        "e"
-#define WIFI_WATCHDOG_ARP_PERIOD_DEFAULT    (40)    // * WIFI_WATCHDOG_POLL_PERIOD_MS
+#define WIFI_WATCHDOG_ARP_PERIOD_DEFAULT    (190)   // * WIFI_WATCHDOG_POLL_PERIOD_MS
 #define WIFI_WATCHDOG_ROAMING_PERIOD        (1234)  // * WIFI_WATCHDOG_POLL_PERIOD_MS
 
 #define HAA_RMT_LED_STRIP_BLOCK_SYMBOLS     (256)
@@ -783,7 +783,7 @@
 #define STATUS_LED_DURATION_OFF             (120)
 
 #define SAVE_STATES_DELAY_MS                (3000)
-#define RANDOM_DELAY_MS                     (4000)
+#define RANDOM_DELAY_MS                     (4500)
 
 #define HOMEKIT_RE_PAIR_TIME_MS             (300000)
 
