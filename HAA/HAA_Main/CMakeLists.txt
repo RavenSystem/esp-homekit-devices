@@ -17,8 +17,8 @@ set(EXTRA_COMPONENT_DIRS
     ../../libs/unistring
     ../../libs/raven_ntp
     ../../libs/rs_ping
+    ../../libs/cJSON-rsf
     ../../external_libs/wolfssl
-    ../../external_libs/cJSON
     ../../libs/homekit-rsf
 )
 

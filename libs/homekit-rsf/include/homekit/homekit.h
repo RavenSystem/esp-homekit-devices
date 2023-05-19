@@ -31,8 +31,8 @@ typedef struct {
     uint16_t mdns_ttl_period;
     
     uint16_t config_number;
-    homekit_device_category_t category: 6;
-    uint8_t max_clients: 5;
+    homekit_device_category_t category: 8;  // 6 bits
+    uint8_t max_clients: 6;                 // 5 bits
     bool insecure: 1;
     bool re_pair: 1;
     

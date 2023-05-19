@@ -25,5 +25,6 @@ idf_component_register(
         adv_pwm
         new_dht
         new_ds18b20
+        cJSON-rsf
         homekit-rsf
 )

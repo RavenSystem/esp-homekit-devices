@@ -33,7 +33,7 @@
 
 #endif
 
-#include <cJSON.h>
+#include <cJSON_rsf.h>
 #include <wolfssl/wolfcrypt/hash.h>
 #include <wolfssl/wolfcrypt/coding.h>
 
@@ -2274,7 +2274,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
     CLIENT_INFO(context, "Upd CH");
     DEBUG_HEAP();
     
-    cJSON *json = cJSON_Parse((char*) data);
+    cJSON_rsf *json = cJSON_rsf_Parse((char*) data);
 
     if (!json) {
         CLIENT_ERROR(context, "Parse JSON");
@@ -2282,38 +2282,38 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
         return;
     }
 
-    cJSON *characteristics = cJSON_GetObjectItem(json, "characteristics");
+    cJSON_rsf *characteristics = cJSON_rsf_GetObjectItem(json, "characteristics");
     if (!characteristics) {
         CLIENT_ERROR(context, "No \"characteristics\"");
-        cJSON_Delete(json);
+        cJSON_rsf_Delete(json);
         send_json_error_response(context, 400, HAPStatus_InvalidValue);
         return;
     }
     
-    if (characteristics->type != cJSON_Array) {
+    if (characteristics->type != cJSON_rsf_Array) {
         CLIENT_ERROR(context, "\"characteristics\" no list");
-        cJSON_Delete(json);
+        cJSON_rsf_Delete(json);
         send_json_error_response(context, 400, HAPStatus_InvalidValue);
         return;
     }
 
-    HAPStatus process_characteristics_update(const cJSON *j_ch) {
-        cJSON *j_aid = cJSON_GetObjectItem(j_ch, "aid");
+    HAPStatus process_characteristics_update(const cJSON_rsf *j_ch) {
+        cJSON_rsf *j_aid = cJSON_rsf_GetObjectItem(j_ch, "aid");
         if (!j_aid) {
             CLIENT_ERROR(context, "No \"aid\"");
             return HAPStatus_NoResource;
         }
-        if (j_aid->type != cJSON_Number) {
+        if (j_aid->type != cJSON_rsf_Number) {
             CLIENT_ERROR(context, "\"aid\" no number");
             return HAPStatus_NoResource;
         }
         
-        cJSON *j_iid = cJSON_GetObjectItem(j_ch, "iid");
+        cJSON_rsf *j_iid = cJSON_rsf_GetObjectItem(j_ch, "iid");
         if (!j_iid) {
             CLIENT_ERROR(context, "No \"iid\"");
             return HAPStatus_NoResource;
         }
-        if (j_iid->type != cJSON_Number) {
+        if (j_iid->type != cJSON_rsf_Number) {
             CLIENT_ERROR(context, "\"iid\" no number");
             return HAPStatus_NoResource;
         }
@@ -2329,7 +2329,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
             return HAPStatus_NoResource;
         }
         
-        cJSON *j_value = cJSON_GetObjectItem(j_ch, "value");
+        cJSON_rsf *j_value = cJSON_rsf_GetObjectItem(j_ch, "value");
         if (j_value) {
             homekit_value_t h_value = HOMEKIT_NULL();
 
@@ -2341,11 +2341,11 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
             switch (ch->format) {
                 case HOMEKIT_FORMAT_BOOL: {
                     int value = false;
-                    if (j_value->type == cJSON_True) {
+                    if (j_value->type == cJSON_rsf_True) {
                         value = true;
-                    } else if (j_value->type == cJSON_False) {
+                    } else if (j_value->type == cJSON_rsf_False) {
                         value = false;
-                    } else if (j_value->type == cJSON_Number &&
+                    } else if (j_value->type == cJSON_rsf_Number &&
                             (j_value->valuefloat == 0 || j_value->valuefloat == 1)) {
                         value = j_value->valuefloat == 1;
                     } else {
@@ -2369,7 +2369,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                 case HOMEKIT_FORMAT_UINT64:
                 case HOMEKIT_FORMAT_INT: {
                     // We accept boolean values here in order to fix a bug in HomeKit. HomeKit sometimes sends a boolean instead of an integer of value 0 or 1.
-                    if (j_value->type != cJSON_Number && j_value->type != cJSON_False && j_value->type != cJSON_True) {
+                    if (j_value->type != cJSON_rsf_Number && j_value->type != cJSON_rsf_False && j_value->type != cJSON_rsf_True) {
                         CLIENT_ERROR(context, "for %d.%d: no number", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
@@ -2439,9 +2439,9 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     double value = j_value->valuefloat;
                     */
                     
-                    if (j_value->type == cJSON_True) {
+                    if (j_value->type == cJSON_rsf_True) {
                         value = 1;
-                    } else if (j_value->type == cJSON_False) {
+                    } else if (j_value->type == cJSON_rsf_False) {
                         value = 0;
                     }
                     
@@ -2531,7 +2531,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     break;
                 }
                 case HOMEKIT_FORMAT_FLOAT: {
-                    if (j_value->type != cJSON_Number) {
+                    if (j_value->type != cJSON_rsf_Number) {
                         CLIENT_ERROR(context, "for %d.%d: no number", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
@@ -2554,7 +2554,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     break;
                 }
                 case HOMEKIT_FORMAT_STRING: {
-                    if (j_value->type != cJSON_String) {
+                    if (j_value->type != cJSON_rsf_String) {
                         CLIENT_ERROR(context, "for %d.%d: no string", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
@@ -2584,7 +2584,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     break;
                 }
                 case HOMEKIT_FORMAT_TLV: {
-                    if (j_value->type != cJSON_String) {
+                    if (j_value->type != cJSON_rsf_String) {
                         CLIENT_ERROR(context, "for %d.%d: no string", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
@@ -2639,7 +2639,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     break;
                 }
                 case HOMEKIT_FORMAT_DATA: {
-                    if (j_value->type != cJSON_String) {
+                    if (j_value->type != cJSON_rsf_String) {
                         CLIENT_ERROR(context, "for %d.%d: no string", aid, iid);
                         return HAPStatus_InvalidValue;
                     }
@@ -2685,18 +2685,18 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
             }
         }
 
-        cJSON *j_events = cJSON_GetObjectItem(j_ch, "ev");
+        cJSON_rsf *j_events = cJSON_rsf_GetObjectItem(j_ch, "ev");
         if (j_events) {
             if (!(ch->permissions & HOMEKIT_PERMISSIONS_NOTIFY)) {
                 CLIENT_ERROR(context, "Notification for %d.%d: no supported", aid, iid);
                 return HAPStatus_NotificationsUnsupported;
             }
 
-            if ((j_events->type != cJSON_True) && (j_events->type != cJSON_False)) {
+            if ((j_events->type != cJSON_rsf_True) && (j_events->type != cJSON_rsf_False)) {
                 CLIENT_ERROR(context, "Notification for %d.%d: invalid state", aid, iid);
             }
 
-            if (j_events->type == cJSON_True) {
+            if (j_events->type == cJSON_rsf_True) {
                 homekit_characteristic_add_notify_subscription(ch, context);
             } else {
                 homekit_characteristic_remove_notify_subscription(ch, context);
@@ -2706,13 +2706,13 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
         return HAPStatus_Success;
     }
 
-    HAPStatus *statuses = malloc(sizeof(HAPStatus) * cJSON_GetArraySize(characteristics));
+    HAPStatus *statuses = malloc(sizeof(HAPStatus) * cJSON_rsf_GetArraySize(characteristics));
     int has_errors = false;
-    for (int i = 0; i < cJSON_GetArraySize(characteristics); i++) {
-        cJSON *j_ch = cJSON_GetArrayItem(characteristics, i);
+    for (int i = 0; i < cJSON_rsf_GetArraySize(characteristics); i++) {
+        cJSON_rsf *j_ch = cJSON_rsf_GetArrayItem(characteristics, i);
 
 #ifdef HOMEKIT_DEBUG
-        char *s = cJSON_Print(j_ch);
+        char *s = cJSON_rsf_Print(j_ch);
         CLIENT_INFO(context, "Processing Ch: %s", s);
         free(s);
 #endif
@@ -2740,12 +2740,12 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
         json_object_start(json1);
         json_string(json1, "characteristics"); json_array_start(json1);
 
-        for (int i = 0; i < cJSON_GetArraySize(characteristics); i++) {
-            cJSON *j_ch = cJSON_GetArrayItem(characteristics, i);
+        for (int i = 0; i < cJSON_rsf_GetArraySize(characteristics); i++) {
+            cJSON_rsf *j_ch = cJSON_rsf_GetArrayItem(characteristics, i);
 
             json_object_start(json1);
-            json_string(json1, "aid"); json_integer(json1, cJSON_GetObjectItem(j_ch, "aid")->valuefloat);
-            json_string(json1, "iid"); json_integer(json1, cJSON_GetObjectItem(j_ch, "iid")->valuefloat);
+            json_string(json1, "aid"); json_integer(json1, cJSON_rsf_GetObjectItem(j_ch, "aid")->valuefloat);
+            json_string(json1, "iid"); json_integer(json1, cJSON_rsf_GetObjectItem(j_ch, "iid")->valuefloat);
             json_string(json1, "status"); json_integer(json1, statuses[i]);
             json_object_end(json1);
             
@@ -2770,7 +2770,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
     }
 
     free(statuses);
-    cJSON_Delete(json);
+    cJSON_rsf_Delete(json);
 }
 
 void homekit_server_on_pairings(client_context_t *context, const byte *data, size_t size) {

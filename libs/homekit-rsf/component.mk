@@ -1,17 +1,5 @@
 # Component makefile for homekit
 
-ifndef wolfssl_ROOT
-$(error Please include wolfssl component prior to homekit)
-endif
-
-ifndef cJSON_ROOT
-$(error Please include cJSON component prior to homekit)
-endif
-
-ifndef http-parser_ROOT
-$(error Please include http-parser component prior to homekit)
-endif
-
 INC_DIRS += $(homekit_ROOT)/include
 
 homekit_INC_DIR = $(homekit_ROOT)/include $(homekit_ROOT)/src

@@ -11,7 +11,7 @@ idf_component_register(
         app_update
         timers_helper
         wolfssl
-        cJSON
+        cJSON-rsf
         http_parser
         esp32_port
         adv_logger_ntp

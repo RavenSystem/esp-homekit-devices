@@ -7,7 +7,7 @@ EXTRA_COMPONENTS = \
 	extras/rboot-ota \
 	$(abspath ../../../external_libs/http-parser) \
     $(abspath ../../../external_libs/wolfssl) \
-    $(abspath ../../../external_libs/cJSON) \
+    $(abspath ../../../libs/cJSON-rsf) \
     $(abspath ../../../libs/homekit-rsf) \
 	$(abspath ../../../libs/adv_i2c) \
     $(abspath ../../../libs/adv_button) \

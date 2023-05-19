@@ -73,7 +73,7 @@
 #endif // HAA_DEBUG
 
 #include <timers_helper.h>
-#include <cJSON.h>
+#include <cJSON_rsf.h>
 #include <homekit/homekit.h>
 #include <homekit/characteristics.h>
 #include <rs_ping.h>
@@ -7083,7 +7083,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
 }
 
 void do_wildcard_actions(ch_group_t* ch_group, uint8_t index, const float action_value) {
-    float last_value;
+    float last_value = 0;
     float last_diff = 10000000.f;
     wildcard_action_t* wildcard_action = ch_group->wildcard_action;
     wildcard_action_t* last_wildcard_action = NULL;
@@ -7305,12 +7305,12 @@ void normal_mode_init() {
     char* txt_config = NULL;
     sysparam_get_string(HAA_SCRIPT_SYSPARAM, &txt_config);
     
-    cJSON* json_haa = cJSON_Parse(txt_config);
+    cJSON_rsf* json_haa = cJSON_rsf_Parse(txt_config);
     
-    cJSON* json_config = cJSON_GetObjectItemCaseSensitive(json_haa, GENERAL_CONFIG);
-    cJSON* json_accessories = cJSON_GetObjectItemCaseSensitive(json_haa, ACCESSORIES_ARRAY);
+    cJSON_rsf* json_config = cJSON_rsf_GetObjectItemCaseSensitive(json_haa, GENERAL_CONFIG);
+    cJSON_rsf* json_accessories = cJSON_rsf_GetObjectItemCaseSensitive(json_haa, ACCESSORIES_ARRAY);
     
-    const unsigned int total_accessories = cJSON_GetArraySize(json_accessories);
+    const unsigned int total_accessories = cJSON_rsf_GetArraySize(json_accessories);
     
     if (total_accessories == 0) {
         sysparam_set_int32(TOTAL_SERV_SYSPARAM, 0);
@@ -7321,23 +7321,23 @@ void normal_mode_init() {
     }
     
     // Binary Inputs GPIO Setup function
-    bool diginput_register(cJSON* json_buttons, void* callback, ch_group_t* ch_group, const uint8_t param) {
+    bool diginput_register(cJSON_rsf* json_buttons, void* callback, ch_group_t* ch_group, const uint8_t param) {
         int active = false;
         
-        for (int j = 0; j < cJSON_GetArraySize(json_buttons); j++) {
+        for (int j = 0; j < cJSON_rsf_GetArraySize(json_buttons); j++) {
             int button_data[2] = { 0, 1 };
             
-            cJSON* json_button = cJSON_GetArrayItem(json_buttons, j);
+            cJSON_rsf* json_button = cJSON_rsf_GetArrayItem(json_buttons, j);
             
-            if (cJSON_GetObjectItemCaseSensitive(json_button, PIN_GPIO) == NULL) {
-                for (int k = 0; k < cJSON_GetArraySize(json_button); k++) {
-                    button_data[k] = (uint16_t) cJSON_GetArrayItem(json_button, k)->valuefloat;
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_button, PIN_GPIO) == NULL) {
+                for (int k = 0; k < cJSON_rsf_GetArraySize(json_button); k++) {
+                    button_data[k] = (uint16_t) cJSON_rsf_GetArrayItem(json_button, k)->valuefloat;
                 }
             } else {    // OLD WAY
-                button_data[0] = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_button, PIN_GPIO)->valuefloat;
+                button_data[0] = (uint16_t) cJSON_rsf_GetObjectItemCaseSensitive(json_button, PIN_GPIO)->valuefloat;
                 
-                if (cJSON_GetObjectItemCaseSensitive(json_button, BUTTON_PRESS_TYPE) != NULL) {
-                    button_data[1] = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_button, BUTTON_PRESS_TYPE)->valuefloat;
+                if (cJSON_rsf_GetObjectItemCaseSensitive(json_button, BUTTON_PRESS_TYPE) != NULL) {
+                    button_data[1] = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_button, BUTTON_PRESS_TYPE)->valuefloat;
                 }
             }
             
@@ -7354,36 +7354,36 @@ void normal_mode_init() {
     }
     
     // Ping Setup function
-    void ping_register(cJSON* json_pings, void* callback, ch_group_t* ch_group, const uint8_t param) {
-        for (int j = 0; j < cJSON_GetArraySize(json_pings); j++) {
-            ping_input_t* ping_input = ping_input_find_by_host(cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_HOST)->valuestring);
+    void ping_register(cJSON_rsf* json_pings, void* callback, ch_group_t* ch_group, const uint8_t param) {
+        for (int j = 0; j < cJSON_rsf_GetArraySize(json_pings); j++) {
+            ping_input_t* ping_input = ping_input_find_by_host(cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetArrayItem(json_pings, j), PING_HOST)->valuestring);
             
             if (!ping_input) {
                 ping_input = malloc(sizeof(ping_input_t));
                 memset(ping_input, 0, sizeof(*ping_input));
                 
-                ping_input->host = uni_strdup(cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_HOST)->valuestring, &unistrings);
+                ping_input->host = uni_strdup(cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetArrayItem(json_pings, j), PING_HOST)->valuestring, &unistrings);
                 
                 ping_input->next = main_config.ping_inputs;
                 main_config.ping_inputs = ping_input;
             }
             
             int response_type = true;
-            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_RESPONSE_TYPE) != NULL) {
-                response_type = (bool) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_RESPONSE_TYPE)->valuefloat;
+            if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetArrayItem(json_pings, j), PING_RESPONSE_TYPE) != NULL) {
+                response_type = (bool) cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetArrayItem(json_pings, j), PING_RESPONSE_TYPE)->valuefloat;
             }
             
             ping_input->ignore_last_response = false;
-            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_IGNORE_LAST_RESPONSE) != NULL) {
-                ping_input->ignore_last_response = (bool) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_IGNORE_LAST_RESPONSE)->valuefloat;
+            if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetArrayItem(json_pings, j), PING_IGNORE_LAST_RESPONSE) != NULL) {
+                ping_input->ignore_last_response = (bool) cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetArrayItem(json_pings, j), PING_IGNORE_LAST_RESPONSE)->valuefloat;
             }
             
             ping_input_callback_fn_t* ping_input_callback_fn;
             ping_input_callback_fn = malloc(sizeof(ping_input_callback_fn_t));
             memset(ping_input_callback_fn, 0, sizeof(*ping_input_callback_fn));
             
-            if (cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_DISABLE_WITHOUT_WIFI) != NULL) {
-                ping_input_callback_fn->disable_without_wifi = (bool) cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(json_pings, j), PING_DISABLE_WITHOUT_WIFI)->valuefloat;
+            if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetArrayItem(json_pings, j), PING_DISABLE_WITHOUT_WIFI) != NULL) {
+                ping_input_callback_fn->disable_without_wifi = (bool) cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetArrayItem(json_pings, j), PING_DISABLE_WITHOUT_WIFI)->valuefloat;
             }
             
             ping_input_callback_fn->callback = callback;
@@ -7403,11 +7403,11 @@ void normal_mode_init() {
     }
     
     // Initial state function
-    float set_initial_state_data(const uint8_t service, const uint8_t ch_number, cJSON* json_context, homekit_characteristic_t* ch, const uint8_t ch_type, const float default_value, char** string_pointer) {
+    float set_initial_state_data(const uint8_t service, const uint8_t ch_number, cJSON_rsf* json_context, homekit_characteristic_t* ch, const uint8_t ch_type, const float default_value, char** string_pointer) {
         float state = default_value;
         INFO_NNL("<%i> Init Ch%i ", service, ch_number);
-        if (cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
-            const unsigned int initial_state = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
+            const unsigned int initial_state = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, INITIAL_STATE)->valuefloat;
             if (initial_state < INIT_STATE_LAST) {
                 state = initial_state;
                 
@@ -7491,26 +7491,26 @@ void normal_mode_init() {
         return state;
     }
     
-    float set_initial_state(const uint8_t service, const uint8_t ch_number, cJSON* json_context, homekit_characteristic_t* ch, const uint8_t ch_type, const float default_value) {
+    float set_initial_state(const uint8_t service, const uint8_t ch_number, cJSON_rsf* json_context, homekit_characteristic_t* ch, const uint8_t ch_type, const float default_value) {
         return set_initial_state_data(service, ch_number, json_context, ch, ch_type, default_value, NULL);
     }
     
     // REGISTER ACTIONS
     // Copy actions
-    inline void new_action_copy(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+    inline void new_action_copy(ch_group_t* ch_group, cJSON_rsf* json_context, uint8_t fixed_action) {
         action_copy_t* last_action = ch_group->action_copy;
         
-        void register_action(cJSON* json_accessory, uint8_t new_int_action) {
+        void register_action(cJSON_rsf* json_accessory, uint8_t new_int_action) {
             char action[4];
             itoa(new_int_action, action, 10);
-            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
-                cJSON* json_action = cJSON_GetObjectItemCaseSensitive(json_accessory, action);
-                if (cJSON_GetObjectItemCaseSensitive(json_action, COPY_ACTIONS) != NULL) {
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                cJSON_rsf* json_action = cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action);
+                if (cJSON_rsf_GetObjectItemCaseSensitive(json_action, COPY_ACTIONS) != NULL) {
                     action_copy_t* action_copy = malloc(sizeof(action_copy_t));
                     memset(action_copy, 0, sizeof(*action_copy));
                     
                     action_copy->action = new_int_action;
-                    action_copy->new_action = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_action, COPY_ACTIONS)->valuefloat;
+                    action_copy->new_action = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_action, COPY_ACTIONS)->valuefloat;
                     
                     action_copy->next = last_action;
                     last_action = action_copy;
@@ -7532,37 +7532,37 @@ void normal_mode_init() {
     }
     
     // Binary outputs
-    inline void new_action_binary_output(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+    inline void new_action_binary_output(ch_group_t* ch_group, cJSON_rsf* json_context, uint8_t fixed_action) {
         action_binary_output_t* last_action = ch_group->action_binary_output;
         
-        void register_action(cJSON* json_accessory, uint8_t new_int_action) {
+        void register_action(cJSON_rsf* json_accessory, uint8_t new_int_action) {
             char action[4];
             itoa(new_int_action, action, 10);
-            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
-                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), BINARY_OUTPUTS_ARRAY) != NULL) {
-                    cJSON* json_relays = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), BINARY_OUTPUTS_ARRAY);
-                    for (int i = cJSON_GetArraySize(json_relays) - 1; i >= 0; i--) {
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), BINARY_OUTPUTS_ARRAY) != NULL) {
+                    cJSON_rsf* json_relays = cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), BINARY_OUTPUTS_ARRAY);
+                    for (int i = cJSON_rsf_GetArraySize(json_relays) - 1; i >= 0; i--) {
                         int binary_output_data[3] = { 0, 0, 0 };
                         
-                        cJSON* json_relay = cJSON_GetArrayItem(json_relays, i);
+                        cJSON_rsf* json_relay = cJSON_rsf_GetArrayItem(json_relays, i);
                         
-                        if (cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO) == NULL) {
-                            for (int k = 0; k < cJSON_GetArraySize(json_relay); k++) {
+                        if (cJSON_rsf_GetObjectItemCaseSensitive(json_relay, PIN_GPIO) == NULL) {
+                            for (int k = 0; k < cJSON_rsf_GetArraySize(json_relay); k++) {
                                 if (k == 2) {
-                                    binary_output_data[2] = cJSON_GetArrayItem(json_relay, k)->valuefloat * 1000;
+                                    binary_output_data[2] = cJSON_rsf_GetArrayItem(json_relay, k)->valuefloat * 1000;
                                 } else {
-                                    binary_output_data[k] = (uint16_t) cJSON_GetArrayItem(json_relay, k)->valuefloat;
+                                    binary_output_data[k] = (uint16_t) cJSON_rsf_GetArrayItem(json_relay, k)->valuefloat;
                                 }
                             }
                         } else {    // OLD WAY
-                            binary_output_data[0] = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuefloat;
+                            binary_output_data[0] = (uint16_t) cJSON_rsf_GetObjectItemCaseSensitive(json_relay, PIN_GPIO)->valuefloat;
                             
-                            if (cJSON_GetObjectItemCaseSensitive(json_relay, VALUE) != NULL) {
-                                binary_output_data[1] = (bool) cJSON_GetObjectItemCaseSensitive(json_relay, VALUE)->valuefloat;
+                            if (cJSON_rsf_GetObjectItemCaseSensitive(json_relay, VALUE) != NULL) {
+                                binary_output_data[1] = (bool) cJSON_rsf_GetObjectItemCaseSensitive(json_relay, VALUE)->valuefloat;
                             }
                             
-                            if (cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME) != NULL) {
-                                binary_output_data[2] = cJSON_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME)->valuefloat * 1000;
+                            if (cJSON_rsf_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME) != NULL) {
+                                binary_output_data[2] = cJSON_rsf_GetObjectItemCaseSensitive(json_relay, AUTOSWITCH_TIME)->valuefloat * 1000;
                             }
                         }
                         
@@ -7595,17 +7595,17 @@ void normal_mode_init() {
     }
     
     // Service Manager
-    inline void new_action_serv_manager(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+    inline void new_action_serv_manager(ch_group_t* ch_group, cJSON_rsf* json_context, uint8_t fixed_action) {
         action_serv_manager_t* last_action = ch_group->action_serv_manager;
         
-        void register_action(cJSON* json_accessory, uint8_t new_int_action) {
+        void register_action(cJSON_rsf* json_accessory, uint8_t new_int_action) {
             char action[4];
             itoa(new_int_action, action, 10);
-            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
-                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SERVICE_MANAGER_ACTIONS_ARRAY) != NULL) {
-                    cJSON* json_acc_managers = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SERVICE_MANAGER_ACTIONS_ARRAY);
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), SERVICE_MANAGER_ACTIONS_ARRAY) != NULL) {
+                    cJSON_rsf* json_acc_managers = cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), SERVICE_MANAGER_ACTIONS_ARRAY);
                     
-                    for (int i = cJSON_GetArraySize(json_acc_managers) - 1; i >= 0; i--) {
+                    for (int i = cJSON_rsf_GetArraySize(json_acc_managers) - 1; i >= 0; i--) {
                         action_serv_manager_t* action_serv_manager = malloc(sizeof(action_serv_manager_t));
                         memset(action_serv_manager, 0, sizeof(*action_serv_manager));
 
@@ -7615,9 +7615,9 @@ void normal_mode_init() {
                         action_serv_manager->next = last_action;
                         last_action = action_serv_manager;
                         
-                        cJSON* json_acc_manager = cJSON_GetArrayItem(json_acc_managers, i);
-                        for (int j = 0; j < cJSON_GetArraySize(json_acc_manager); j++) {
-                            const float value = (float) cJSON_GetArrayItem(json_acc_manager, j)->valuefloat;
+                        cJSON_rsf* json_acc_manager = cJSON_rsf_GetArrayItem(json_acc_managers, i);
+                        for (int j = 0; j < cJSON_rsf_GetArraySize(json_acc_manager); j++) {
+                            const float value = (float) cJSON_rsf_GetArrayItem(json_acc_manager, j)->valuefloat;
                             
                             switch (j) {
                                 case 0:
@@ -7648,17 +7648,17 @@ void normal_mode_init() {
     }
     
     // Set Characteristic Actions
-    inline void new_action_set_ch(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+    inline void new_action_set_ch(ch_group_t* ch_group, cJSON_rsf* json_context, uint8_t fixed_action) {
         action_set_ch_t* last_action = ch_group->action_set_ch;
         
-        void register_action(cJSON* json_accessory, uint8_t new_int_action) {
+        void register_action(cJSON_rsf* json_accessory, uint8_t new_int_action) {
             char action[4];
             itoa(new_int_action, action, 10);
-            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
-                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SET_CH_ACTIONS_ARRAY) != NULL) {
-                    cJSON* json_set_chs = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SET_CH_ACTIONS_ARRAY);
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), SET_CH_ACTIONS_ARRAY) != NULL) {
+                    cJSON_rsf* json_set_chs = cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), SET_CH_ACTIONS_ARRAY);
                     
-                    for (int i = cJSON_GetArraySize(json_set_chs) - 1; i >= 0; i--) {
+                    for (int i = cJSON_rsf_GetArraySize(json_set_chs) - 1; i >= 0; i--) {
                         action_set_ch_t* action_set_ch = malloc(sizeof(action_set_ch_t));
                         memset(action_set_ch, 0, sizeof(*action_set_ch));
 
@@ -7667,9 +7667,9 @@ void normal_mode_init() {
                         action_set_ch->next = last_action;
                         last_action = action_set_ch;
                         
-                        cJSON* json_set_ch = cJSON_GetArrayItem(json_set_chs, i);
+                        cJSON_rsf* json_set_ch = cJSON_rsf_GetArrayItem(json_set_chs, i);
                         for (int j = 0; j < 4; j++) {
-                            const int value = (uint8_t) cJSON_GetArrayItem(json_set_ch, j)->valuefloat;
+                            const int value = (uint8_t) cJSON_rsf_GetArrayItem(json_set_ch, j)->valuefloat;
                             
                             switch (j) {
                                 case 0:
@@ -7708,22 +7708,22 @@ void normal_mode_init() {
     }
     
     // System Actions
-    inline void new_action_system(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+    inline void new_action_system(ch_group_t* ch_group, cJSON_rsf* json_context, uint8_t fixed_action) {
         action_system_t* last_action = ch_group->action_system;
         
-        void register_action(cJSON* json_accessory, uint8_t new_int_action) {
+        void register_action(cJSON_rsf* json_accessory, uint8_t new_int_action) {
             char action[4];
             itoa(new_int_action, action, 10);
-            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
-                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SYSTEM_ACTIONS_ARRAY) != NULL) {
-                    cJSON* json_action_systems = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), SYSTEM_ACTIONS_ARRAY);
-                    for (int i = cJSON_GetArraySize(json_action_systems) - 1; i >= 0; i--) {
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), SYSTEM_ACTIONS_ARRAY) != NULL) {
+                    cJSON_rsf* json_action_systems = cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), SYSTEM_ACTIONS_ARRAY);
+                    for (int i = cJSON_rsf_GetArraySize(json_action_systems) - 1; i >= 0; i--) {
                         action_system_t* action_system = malloc(sizeof(action_system_t));
                         memset(action_system, 0, sizeof(*action_system));
                         
                         action_system->action = new_int_action;
                         
-                        action_system->value = (uint8_t) cJSON_GetArrayItem(json_action_systems, i)->valuefloat;
+                        action_system->value = (uint8_t) cJSON_rsf_GetArrayItem(json_action_systems, i)->valuefloat;
                         
                         action_system->next = last_action;
                         last_action = action_system;
@@ -7746,55 +7746,55 @@ void normal_mode_init() {
     }
     
     // Network Actions
-    inline void new_action_network(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+    inline void new_action_network(ch_group_t* ch_group, cJSON_rsf* json_context, uint8_t fixed_action) {
         action_network_t* last_action = ch_group->action_network;
         
-        void register_action(cJSON* json_accessory, uint8_t new_int_action) {
+        void register_action(cJSON_rsf* json_accessory, uint8_t new_int_action) {
             char action[4];
             itoa(new_int_action, action, 10);
-            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
-                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), NETWORK_ACTIONS_ARRAY) != NULL) {
-                    cJSON* json_action_networks = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), NETWORK_ACTIONS_ARRAY);
-                    for (int i = cJSON_GetArraySize(json_action_networks) - 1; i >= 0; i--) {
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), NETWORK_ACTIONS_ARRAY) != NULL) {
+                    cJSON_rsf* json_action_networks = cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), NETWORK_ACTIONS_ARRAY);
+                    for (int i = cJSON_rsf_GetArraySize(json_action_networks) - 1; i >= 0; i--) {
                         action_network_t* action_network = malloc(sizeof(action_network_t));
                         memset(action_network, 0, sizeof(*action_network));
                         
-                        cJSON* json_action_network = cJSON_GetArrayItem(json_action_networks, i);
+                        cJSON_rsf* json_action_network = cJSON_rsf_GetArrayItem(json_action_networks, i);
                         
                         action_network->action = new_int_action;
                         
-                        action_network->host = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_HOST)->valuestring, &unistrings);
+                        action_network->host = uni_strdup(cJSON_rsf_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_HOST)->valuestring, &unistrings);
                         
                         action_network->port_n = 80;
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_PORT) != NULL) {
-                            action_network->port_n = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_PORT)->valuefloat;
+                        if (cJSON_rsf_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_PORT) != NULL) {
+                            action_network->port_n = (uint16_t) cJSON_rsf_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_PORT)->valuefloat;
                         }
                         
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_WAIT_RESPONSE_SET) != NULL) {
-                            action_network->wait_response = (uint8_t) (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_WAIT_RESPONSE_SET)->valuefloat * 10);
+                        if (cJSON_rsf_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_WAIT_RESPONSE_SET) != NULL) {
+                            action_network->wait_response = (uint8_t) (cJSON_rsf_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_WAIT_RESPONSE_SET)->valuefloat * 10);
                         }
                         
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_METHOD) != NULL) {
-                            action_network->method_n = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_METHOD)->valuefloat;
+                        if (cJSON_rsf_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_METHOD) != NULL) {
+                            action_network->method_n = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_METHOD)->valuefloat;
                         }
                         
                         if (action_network->method_n < 3) {
-                            if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_URL) != NULL) {
-                                action_network->url = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_URL)->valuestring, &unistrings);
+                            if (cJSON_rsf_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_URL) != NULL) {
+                                action_network->url = uni_strdup(cJSON_rsf_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_URL)->valuestring, &unistrings);
                             } else {
                                 action_network->url = uni_strdup("", &unistrings);
                             }
                             
-                            if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_HEADER) != NULL) {
-                                action_network->header = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_HEADER)->valuestring, &unistrings);
+                            if (cJSON_rsf_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_HEADER) != NULL) {
+                                action_network->header = uni_strdup(cJSON_rsf_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_HEADER)->valuestring, &unistrings);
                             } else {
                                 action_network->header = uni_strdup("Content-type: text/html\r\n", &unistrings);
                             }
                         }
                         
                         if (action_network->method_n > 0) {
-                            if (cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT) != NULL) {
-                                action_network->content = strdup(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT)->valuestring);
+                            if (cJSON_rsf_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT) != NULL) {
+                                action_network->content = strdup(cJSON_rsf_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT)->valuestring);
                             } else {
                                 action_network->content = uni_strdup("", &unistrings);
                             }
@@ -7807,7 +7807,7 @@ void normal_mode_init() {
                                        action_network->method_n == 14) {
                                 
                                 free(action_network->content);
-                                action_network->len = process_hexstr(cJSON_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT)->valuestring, &action_network->raw, &unistrings);
+                                action_network->len = process_hexstr(cJSON_rsf_GetObjectItemCaseSensitive(json_action_network, NETWORK_ACTION_CONTENT)->valuestring, &action_network->raw, &unistrings);
                             }
                         }
                         
@@ -7832,37 +7832,37 @@ void normal_mode_init() {
     }
     
     // IR TX Actions
-    inline void new_action_irrf_tx(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+    inline void new_action_irrf_tx(ch_group_t* ch_group, cJSON_rsf* json_context, uint8_t fixed_action) {
         action_irrf_tx_t* last_action = ch_group->action_irrf_tx;
         
-        void register_action(cJSON* json_accessory, uint8_t new_int_action) {
+        void register_action(cJSON_rsf* json_accessory, uint8_t new_int_action) {
             char action[4];
             itoa(new_int_action, action, 10);
-            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
-                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), IRRF_ACTIONS_ARRAY) != NULL) {
-                    cJSON* json_action_irrf_txs = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), IRRF_ACTIONS_ARRAY);
-                    for (int i = cJSON_GetArraySize(json_action_irrf_txs) - 1; i >= 0; i--) {
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), IRRF_ACTIONS_ARRAY) != NULL) {
+                    cJSON_rsf* json_action_irrf_txs = cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), IRRF_ACTIONS_ARRAY);
+                    for (int i = cJSON_rsf_GetArraySize(json_action_irrf_txs) - 1; i >= 0; i--) {
                         action_irrf_tx_t* action_irrf_tx = malloc(sizeof(action_irrf_tx_t));
                         memset(action_irrf_tx, 0, sizeof(*action_irrf_tx));
                         
-                        cJSON* json_action_irrf_tx = cJSON_GetArrayItem(json_action_irrf_txs, i);
+                        cJSON_rsf* json_action_irrf_tx = cJSON_rsf_GetArrayItem(json_action_irrf_txs, i);
                         
                         action_irrf_tx->action = new_int_action;
                         
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_PROTOCOL) != NULL) {
-                            action_irrf_tx->prot = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_PROTOCOL)->valuestring, &unistrings);
+                        if (cJSON_rsf_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_PROTOCOL) != NULL) {
+                            action_irrf_tx->prot = uni_strdup(cJSON_rsf_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_PROTOCOL)->valuestring, &unistrings);
                         }
                         
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_PROTOCOL_CODE) != NULL) {
-                            action_irrf_tx->prot_code = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_PROTOCOL_CODE)->valuestring, &unistrings);
+                        if (cJSON_rsf_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_PROTOCOL_CODE) != NULL) {
+                            action_irrf_tx->prot_code = uni_strdup(cJSON_rsf_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_PROTOCOL_CODE)->valuestring, &unistrings);
                         }
                         
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_RAW_CODE) != NULL) {
-                            action_irrf_tx->raw_code = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_RAW_CODE)->valuestring, &unistrings);
+                        if (cJSON_rsf_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_RAW_CODE) != NULL) {
+                            action_irrf_tx->raw_code = uni_strdup(cJSON_rsf_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_RAW_CODE)->valuestring, &unistrings);
                         }
                         
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_FREQ) != NULL) {
-                            unsigned int freq = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_FREQ)->valuefloat;
+                        if (cJSON_rsf_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_FREQ) != NULL) {
+                            unsigned int freq = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_FREQ)->valuefloat;
                             if (freq == 1) {    // RF
                                 action_irrf_tx->freq = 1;
                             } else {            // IR
@@ -7871,13 +7871,13 @@ void normal_mode_init() {
                         }
                         
                         action_irrf_tx->repeats = 1;
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_REPEATS) != NULL) {
-                            action_irrf_tx->repeats = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_REPEATS)->valuefloat;
+                        if (cJSON_rsf_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_REPEATS) != NULL) {
+                            action_irrf_tx->repeats = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_REPEATS)->valuefloat;
                         }
                         
                         action_irrf_tx->pause = MS_TO_TICKS(100);
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_REPEATS_PAUSE) != NULL) {
-                            action_irrf_tx->pause = MS_TO_TICKS(cJSON_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_REPEATS_PAUSE)->valuefloat);
+                        if (cJSON_rsf_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_REPEATS_PAUSE) != NULL) {
+                            action_irrf_tx->pause = MS_TO_TICKS(cJSON_rsf_GetObjectItemCaseSensitive(json_action_irrf_tx, IRRF_ACTION_REPEATS_PAUSE)->valuefloat);
                         }
                         
                         action_irrf_tx->next = last_action;
@@ -7901,41 +7901,41 @@ void normal_mode_init() {
     }
     
     // UART Actions
-    inline void new_action_uart(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+    inline void new_action_uart(ch_group_t* ch_group, cJSON_rsf* json_context, uint8_t fixed_action) {
         action_uart_t* last_action = ch_group->action_uart;
         
-        void register_action(cJSON* json_accessory, uint8_t new_int_action) {
+        void register_action(cJSON_rsf* json_accessory, uint8_t new_int_action) {
             char action[4];
             itoa(new_int_action, action, 10);
-            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
-                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), UART_ACTIONS_ARRAY) != NULL) {
-                    cJSON* json_action_uarts = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), UART_ACTIONS_ARRAY);
-                    for (int i = cJSON_GetArraySize(json_action_uarts) - 1; i >= 0; i--) {
-                        cJSON* json_action_uart = cJSON_GetArrayItem(json_action_uarts, i);
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), UART_ACTIONS_ARRAY) != NULL) {
+                    cJSON_rsf* json_action_uarts = cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), UART_ACTIONS_ARRAY);
+                    for (int i = cJSON_rsf_GetArraySize(json_action_uarts) - 1; i >= 0; i--) {
+                        cJSON_rsf* json_action_uart = cJSON_rsf_GetArrayItem(json_action_uarts, i);
                         
                         action_uart_t* action_uart = malloc(sizeof(action_uart_t));
                         memset(action_uart, 0, sizeof(*action_uart));
                         
                         action_uart->action = new_int_action;
                         
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_PAUSE) != NULL) {
-                            action_uart->pause = MS_TO_TICKS(cJSON_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_PAUSE)->valuefloat);
+                        if (cJSON_rsf_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_PAUSE) != NULL) {
+                            action_uart->pause = MS_TO_TICKS(cJSON_rsf_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_PAUSE)->valuefloat);
                         }
                         
                         int uart = 0;
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_UART) != NULL) {
-                            uart = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_UART)->valuefloat;
+                        if (cJSON_rsf_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_UART) != NULL) {
+                            uart = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_UART)->valuefloat;
                         }
                         
                         action_uart->uart = uart % 10;
                         int is_text = uart / 10;
                         
-                        if (cJSON_GetObjectItemCaseSensitive(json_action_uart, VALUE) != NULL) {
+                        if (cJSON_rsf_GetObjectItemCaseSensitive(json_action_uart, VALUE) != NULL) {
                             if (is_text) {
-                                action_uart->command = (uint8_t*) uni_strdup(cJSON_GetObjectItemCaseSensitive(json_action_uart, VALUE)->valuestring, &unistrings);
+                                action_uart->command = (uint8_t*) uni_strdup(cJSON_rsf_GetObjectItemCaseSensitive(json_action_uart, VALUE)->valuestring, &unistrings);
                                 action_uart->len = strlen((char*) action_uart->command);
                             } else {
-                                action_uart->len = process_hexstr(cJSON_GetObjectItemCaseSensitive(json_action_uart, VALUE)->valuestring, &action_uart->command, &unistrings);
+                                action_uart->len = process_hexstr(cJSON_rsf_GetObjectItemCaseSensitive(json_action_uart, VALUE)->valuestring, &action_uart->command, &unistrings);
                             }
                         }
                         
@@ -7959,16 +7959,16 @@ void normal_mode_init() {
         ch_group->action_uart = last_action;
     }
     
-    inline void new_action_pwm(ch_group_t* ch_group, cJSON* json_context, uint8_t fixed_action) {
+    inline void new_action_pwm(ch_group_t* ch_group, cJSON_rsf* json_context, uint8_t fixed_action) {
         action_pwm_t* last_action = ch_group->action_pwm;
         
-        void register_action(cJSON* json_accessory, uint8_t new_int_action) {
+        void register_action(cJSON_rsf* json_accessory, uint8_t new_int_action) {
             char action[4];
             itoa(new_int_action, action, 10);
-            if (cJSON_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
-                if (cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), PWM_ACTIONS_ARRAY) != NULL) {
-                    cJSON* json_action_pwms = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json_accessory, action), PWM_ACTIONS_ARRAY);
-                    for (int i = cJSON_GetArraySize(json_action_pwms) - 1; i >= 0; i--) {
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
+                if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), PWM_ACTIONS_ARRAY) != NULL) {
+                    cJSON_rsf* json_action_pwms = cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), PWM_ACTIONS_ARRAY);
+                    for (int i = cJSON_rsf_GetArraySize(json_action_pwms) - 1; i >= 0; i--) {
                         action_pwm_t* action_pwm = malloc(sizeof(action_pwm_t));
                         memset(action_pwm, 0, sizeof(*action_pwm));
                         
@@ -7977,9 +7977,9 @@ void normal_mode_init() {
                         action_pwm->next = last_action;
                         last_action = action_pwm;
                         
-                        cJSON* json_action_pwm = cJSON_GetArrayItem(json_action_pwms, i);
-                        for (int j = 0; j < cJSON_GetArraySize(json_action_pwm); j++) {
-                            const int value = cJSON_GetArrayItem(json_action_pwm, j)->valuefloat;
+                        cJSON_rsf* json_action_pwm = cJSON_rsf_GetArrayItem(json_action_pwms, i);
+                        for (int j = 0; j < cJSON_rsf_GetArraySize(json_action_pwm); j++) {
+                            const int value = cJSON_rsf_GetArrayItem(json_action_pwm, j)->valuefloat;
                             
                             switch (j) {
                                 case 0:
@@ -8017,7 +8017,7 @@ void normal_mode_init() {
         ch_group->action_pwm = last_action;
     }
     
-    void register_actions(ch_group_t* ch_group, cJSON* json_accessory, uint8_t fixed_action) {
+    void register_actions(ch_group_t* ch_group, cJSON_rsf* json_accessory, uint8_t fixed_action) {
         new_action_copy(ch_group, json_accessory, fixed_action);
         new_action_binary_output(ch_group, json_accessory, fixed_action);
         new_action_serv_manager(ch_group, json_accessory, fixed_action);
@@ -8029,7 +8029,7 @@ void normal_mode_init() {
         new_action_set_ch(ch_group, json_accessory, fixed_action);
     }
     
-    void register_wildcard_actions(ch_group_t* ch_group, cJSON* json_accessory) {
+    void register_wildcard_actions(ch_group_t* ch_group, cJSON_rsf* json_accessory) {
         int global_index = MAX_ACTIONS;     // First wirldcard action must have a higher index than highest possible normal action
         wildcard_action_t* last_action = ch_group->wildcard_action;
         
@@ -8040,27 +8040,27 @@ void normal_mode_init() {
             char index[6];
             snprintf(index, 5, "%s%s", WILDCARD_ACTIONS_ARRAY_HEADER, number);
             
-            cJSON* json_wilcard_actions = cJSON_GetObjectItemCaseSensitive(json_accessory, index);
-            for (int i = 0; i < cJSON_GetArraySize(json_wilcard_actions); i++) {
+            cJSON_rsf* json_wilcard_actions = cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, index);
+            for (int i = 0; i < cJSON_rsf_GetArraySize(json_wilcard_actions); i++) {
                 wildcard_action_t* wildcard_action = malloc(sizeof(wildcard_action_t));
                 memset(wildcard_action, 0, sizeof(*wildcard_action));
                 
-                cJSON* json_wilcard_action = cJSON_GetArrayItem(json_wilcard_actions, i);
+                cJSON_rsf* json_wilcard_action = cJSON_rsf_GetArrayItem(json_wilcard_actions, i);
                 
                 wildcard_action->index = int_index;
-                wildcard_action->value = (float) cJSON_GetObjectItemCaseSensitive(json_wilcard_action, VALUE)->valuefloat;
+                wildcard_action->value = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_wilcard_action, VALUE)->valuefloat;
                 
-                if (cJSON_GetObjectItemCaseSensitive(json_wilcard_action, WILDCARD_ACTION_REPEAT) != NULL) {
-                    wildcard_action->repeat = (bool) cJSON_GetObjectItemCaseSensitive(json_wilcard_action, WILDCARD_ACTION_REPEAT)->valuefloat;
+                if (cJSON_rsf_GetObjectItemCaseSensitive(json_wilcard_action, WILDCARD_ACTION_REPEAT) != NULL) {
+                    wildcard_action->repeat = (bool) cJSON_rsf_GetObjectItemCaseSensitive(json_wilcard_action, WILDCARD_ACTION_REPEAT)->valuefloat;
                 }
                 
-                if (cJSON_GetObjectItemCaseSensitive(json_wilcard_action, "0") != NULL) {
+                if (cJSON_rsf_GetObjectItemCaseSensitive(json_wilcard_action, "0") != NULL) {
                     char action[4];
                     itoa(global_index, action, 10);
-                    cJSON* json_new_input_action = cJSON_CreateObject();
-                    cJSON_AddItemReferenceToObject(json_new_input_action, action, cJSON_GetObjectItemCaseSensitive(json_wilcard_action, "0"));
+                    cJSON_rsf* json_new_input_action = cJSON_rsf_CreateObject();
+                    cJSON_rsf_AddItemReferenceToObject(json_new_input_action, action, cJSON_rsf_GetObjectItemCaseSensitive(json_wilcard_action, "0"));
                     register_actions(ch_group, json_new_input_action, global_index);
-                    cJSON_Delete(json_new_input_action);
+                    cJSON_rsf_Delete(json_new_input_action);
                 }
                 
                 wildcard_action->target_action = global_index;
@@ -8075,16 +8075,16 @@ void normal_mode_init() {
     }
     
     // REGISTER SERVICE CONFIGURATION
-    uint8_t acc_homekit_enabled(cJSON* json_accessory) {
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, ENABLE_HOMEKIT) != NULL) {
-            return (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, ENABLE_HOMEKIT)->valuefloat;
+    uint8_t acc_homekit_enabled(cJSON_rsf* json_accessory) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, ENABLE_HOMEKIT) != NULL) {
+            return (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, ENABLE_HOMEKIT)->valuefloat;
         }
         return 1;
     }
     
-    TimerHandle_t autoswitch_time(cJSON* json_accessory, ch_group_t* ch_group) {
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, AUTOSWITCH_TIME) != NULL) {
-            const uint32_t time = cJSON_GetObjectItemCaseSensitive(json_accessory, AUTOSWITCH_TIME)->valuefloat * 1000.f;
+    TimerHandle_t autoswitch_time(cJSON_rsf* json_accessory, ch_group_t* ch_group) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, AUTOSWITCH_TIME) != NULL) {
+            const uint32_t time = cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, AUTOSWITCH_TIME)->valuefloat * 1000.f;
             if (time > 0) {
                 return rs_esp_timer_create(time, false, (void*) ch_group, hkc_autooff_setter_task);
             }
@@ -8092,50 +8092,50 @@ void normal_mode_init() {
         return NULL;
     }
     
-    int8_t th_sensor_gpio(cJSON* json_accessory) {
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO) != NULL) {
+    int8_t th_sensor_gpio(cJSON_rsf* json_accessory) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO) != NULL) {
             /*
-            const uint8_t sensor_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO)->valuefloat;
+            const uint8_t sensor_gpio = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO)->valuefloat;
             set_used_gpio(sensor_gpio);
             return sensor_gpio;
             */
             
-            return (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO)->valuefloat;
+            return (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO)->valuefloat;
         }
         return -1;
     }
     
-    uint8_t th_sensor_type(cJSON* json_accessory) {
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_TYPE) != NULL) {
-            return (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_TYPE)->valuefloat;
+    uint8_t th_sensor_type(cJSON_rsf* json_accessory) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_TYPE) != NULL) {
+            return (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_TYPE)->valuefloat;
         }
         return 2;
     }
     
-    float th_sensor_temp_offset(cJSON* json_accessory) {
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_OFFSET) != NULL) {
-            return (float) cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_OFFSET)->valuefloat;
+    float th_sensor_temp_offset(cJSON_rsf* json_accessory) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_OFFSET) != NULL) {
+            return (float) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_OFFSET)->valuefloat;
         }
         return 0;
     }
     
-    float th_sensor_hum_offset(cJSON* json_accessory) {
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, HUMIDITY_OFFSET) != NULL) {
-            return (float) cJSON_GetObjectItemCaseSensitive(json_accessory, HUMIDITY_OFFSET)->valuefloat;
+    float th_sensor_hum_offset(cJSON_rsf* json_accessory) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, HUMIDITY_OFFSET) != NULL) {
+            return (float) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, HUMIDITY_OFFSET)->valuefloat;
         }
         return 0;
     }
     
-    uint8_t th_sensor_index(cJSON* json_accessory) {
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_INDEX) != NULL) {
-            return (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_INDEX)->valuefloat;
+    uint8_t th_sensor_index(cJSON_rsf* json_accessory) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_INDEX) != NULL) {
+            return (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_INDEX)->valuefloat;
         }
         return 1;
     }
     
-    float sensor_poll_period(cJSON* json_accessory, float poll_period) {
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_POLL_PERIOD) != NULL) {
-            poll_period = (float) cJSON_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_POLL_PERIOD)->valuefloat;
+    float sensor_poll_period(cJSON_rsf* json_accessory, float poll_period) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_POLL_PERIOD) != NULL) {
+            poll_period = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_POLL_PERIOD)->valuefloat;
             
             if (poll_period < TH_SENSOR_POLL_PERIOD_MIN && poll_period > 0.00f) {
                 poll_period = TH_SENSOR_POLL_PERIOD_MIN;
@@ -8145,9 +8145,9 @@ void normal_mode_init() {
         return poll_period;
     }
     
-    float th_update_delay(cJSON* json_accessory) {
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, THERMOSTAT_UPDATE_DELAY) != NULL) {
-            float th_delay = (float) cJSON_GetObjectItemCaseSensitive(json_accessory, THERMOSTAT_UPDATE_DELAY)->valuefloat;
+    float th_update_delay(cJSON_rsf* json_accessory) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, THERMOSTAT_UPDATE_DELAY) != NULL) {
+            float th_delay = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, THERMOSTAT_UPDATE_DELAY)->valuefloat;
             if (th_delay < THERMOSTAT_UPDATE_DELAY_MIN) {
                 return THERMOSTAT_UPDATE_DELAY_MIN;
             }
@@ -8156,7 +8156,7 @@ void normal_mode_init() {
         return THERMOSTAT_UPDATE_DELAY_DEFAULT;
     }
     
-    float th_sensor(ch_group_t* ch_group, cJSON* json_accessory) {
+    float th_sensor(ch_group_t* ch_group, cJSON_rsf* json_accessory) {
         TH_SENSOR_GPIO = th_sensor_gpio(json_accessory);
         const unsigned int sensor_type = th_sensor_type(json_accessory);
         TH_SENSOR_TYPE = sensor_type;
@@ -8174,9 +8174,9 @@ void normal_mode_init() {
         ch_group->timer = rs_esp_timer_create(poll_period * 1000, true, (void*) ch_group, temperature_timer_worker);
     }
     
-    int virtual_stop(cJSON* json_accessory) {
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, VIRTUAL_STOP_SET) != NULL) {
-            return (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, VIRTUAL_STOP_SET)->valuefloat;
+    int virtual_stop(cJSON_rsf* json_accessory) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, VIRTUAL_STOP_SET) != NULL) {
+            return (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, VIRTUAL_STOP_SET)->valuefloat;
         }
         return VIRTUAL_STOP_DEFAULT;
     }
@@ -8184,8 +8184,8 @@ void normal_mode_init() {
     // ----- CONFIG SECTION
     
     // Boot early delay
-    if (cJSON_GetObjectItemCaseSensitive(json_config, BOOT_EARLY_DELAY) != NULL) {
-        vTaskDelay(cJSON_GetObjectItemCaseSensitive(json_config, BOOT_EARLY_DELAY)->valuefloat * MS_TO_TICKS(1000));
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, BOOT_EARLY_DELAY) != NULL) {
+        vTaskDelay(cJSON_rsf_GetObjectItemCaseSensitive(json_config, BOOT_EARLY_DELAY)->valuefloat * MS_TO_TICKS(1000));
     }
     
     // UART configuration
@@ -8193,13 +8193,13 @@ void normal_mode_init() {
     int is_uart_swap = false;
 #endif
     
-    if (cJSON_GetObjectItemCaseSensitive(json_config, UART_CONFIG_ARRAY) != NULL) {
-        cJSON* json_uarts = cJSON_GetObjectItemCaseSensitive(json_config, UART_CONFIG_ARRAY);
-        for (int i = 0; i < cJSON_GetArraySize(json_uarts); i++) {
-            cJSON* json_uart = cJSON_GetArrayItem(json_uarts, i);
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, UART_CONFIG_ARRAY) != NULL) {
+        cJSON_rsf* json_uarts = cJSON_rsf_GetObjectItemCaseSensitive(json_config, UART_CONFIG_ARRAY);
+        for (int i = 0; i < cJSON_rsf_GetArraySize(json_uarts); i++) {
+            cJSON_rsf* json_uart = cJSON_rsf_GetArrayItem(json_uarts, i);
             
-            if (cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_ENABLE) != NULL) {
-                int uart_config = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_ENABLE)->valuefloat;
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_ENABLE) != NULL) {
+                int uart_config = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_ENABLE)->valuefloat;
                 
                 int uart_with_receiver = false;
                 if (uart_config >= 10) {
@@ -8209,12 +8209,12 @@ void normal_mode_init() {
                 
 #ifdef ESP_PLATFORM
                 int uart_pin[4] = { -1, -1, -1, -1 };
-                cJSON* json_uart_gpios = cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_GPIO_ARRAY);
-                for (unsigned int j = 0; j < cJSON_GetArraySize(json_uart_gpios); j++) {
-                    uart_pin[j] = cJSON_GetArrayItem(json_uart_gpios, j)->valuefloat;
+                cJSON_rsf* json_uart_gpios = cJSON_rsf_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_GPIO_ARRAY);
+                for (unsigned int j = 0; j < cJSON_rsf_GetArraySize(json_uart_gpios); j++) {
+                    uart_pin[j] = cJSON_rsf_GetArrayItem(json_uart_gpios, j)->valuefloat;
                 }
                 
-                uart_driver_delete(uart_config);
+                //uart_driver_delete(uart_config);
                 
                 uart_config_t uart_config_data = {
                     .baud_rate = 115200,
@@ -8258,24 +8258,24 @@ void normal_mode_init() {
 #endif
                 
                 uint32_t speed = 115200;
-                if (cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_SPEED) != NULL) {
-                    speed = (uint32_t) cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_SPEED)->valuefloat;
+                if (cJSON_rsf_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_SPEED) != NULL) {
+                    speed = (uint32_t) cJSON_rsf_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_SPEED)->valuefloat;
                 }
                 
                 unsigned int stopbits = 1;
-                if (cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_STOPBITS) != NULL) {
-                    stopbits = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_STOPBITS)->valuefloat;
+                if (cJSON_rsf_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_STOPBITS) != NULL) {
+                    stopbits = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_STOPBITS)->valuefloat;
                 }
                 
                 unsigned int parity = 0;
-                if (cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_PARITY) != NULL) {
-                    parity = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_PARITY)->valuefloat;
+                if (cJSON_rsf_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_PARITY) != NULL) {
+                    parity = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_PARITY)->valuefloat;
                 }
                 
 #ifdef ESP_PLATFORM
                 unsigned int uart_mode = 0;
-                if (cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_MODE) != NULL) {
-                    uart_mode = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_MODE)->valuefloat;
+                if (cJSON_rsf_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_MODE) != NULL) {
+                    uart_mode = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_MODE)->valuefloat;
                 }
                 uart_set_mode(uart_config, uart_mode);
                 
@@ -8342,10 +8342,10 @@ void normal_mode_init() {
                     uart_receiver_data->uart_port = uart_config;
                     uart_receiver_data->uart_min_len = RECV_UART_BUFFER_MIN_LEN_DEFAULT;
                     uart_receiver_data->uart_max_len = RECV_UART_BUFFER_MAX_LEN_DEFAULT;
-                    if (cJSON_GetObjectItemCaseSensitive(json_uart, RECV_UART_BUFFER_LEN_ARRAY_SET) != NULL) {
-                        cJSON* uart_len_array = cJSON_GetObjectItemCaseSensitive(json_uart, RECV_UART_BUFFER_LEN_ARRAY_SET);
-                        uart_receiver_data->uart_min_len = (uint8_t) cJSON_GetArrayItem(uart_len_array, 0)->valuefloat;
-                        uart_receiver_data->uart_max_len = (uint8_t) cJSON_GetArrayItem(uart_len_array, 1)->valuefloat;
+                    if (cJSON_rsf_GetObjectItemCaseSensitive(json_uart, RECV_UART_BUFFER_LEN_ARRAY_SET) != NULL) {
+                        cJSON_rsf* uart_len_array = cJSON_rsf_GetObjectItemCaseSensitive(json_uart, RECV_UART_BUFFER_LEN_ARRAY_SET);
+                        uart_receiver_data->uart_min_len = (uint8_t) cJSON_rsf_GetArrayItem(uart_len_array, 0)->valuefloat;
+                        uart_receiver_data->uart_max_len = (uint8_t) cJSON_rsf_GetArrayItem(uart_len_array, 1)->valuefloat;
                     }
                     
 #ifndef ESP_PLATFORM
@@ -8363,13 +8363,13 @@ void normal_mode_init() {
     
     // Log output type
     unsigned int log_output_type = 0;
-    if (cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT) != NULL) {
-        log_output_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT)->valuefloat;
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT) != NULL) {
+        log_output_type = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT)->valuefloat;
     }
     
     char* log_output_target = NULL;
-    if (cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT_TARGET) != NULL) {
-        log_output_target = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT_TARGET)->valuestring, &unistrings);
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT_TARGET) != NULL) {
+        log_output_target = uni_strdup(cJSON_rsf_GetObjectItemCaseSensitive(json_config, LOG_OUTPUT_TARGET)->valuestring, &unistrings);
     }
     
     adv_logger_init(log_output_type, log_output_target, true);
@@ -8403,29 +8403,29 @@ void normal_mode_init() {
     free(txt_config);
     
     // I2C Bus
-    if (cJSON_GetObjectItemCaseSensitive(json_config, I2C_CONFIG_ARRAY) != NULL) {
-        cJSON* json_i2cs = cJSON_GetObjectItemCaseSensitive(json_config, I2C_CONFIG_ARRAY);
-        for (int i = 0; i < cJSON_GetArraySize(json_i2cs); i++) {
-            cJSON* json_i2c = cJSON_GetArrayItem(json_i2cs, i);
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, I2C_CONFIG_ARRAY) != NULL) {
+        cJSON_rsf* json_i2cs = cJSON_rsf_GetObjectItemCaseSensitive(json_config, I2C_CONFIG_ARRAY);
+        for (int i = 0; i < cJSON_rsf_GetArraySize(json_i2cs); i++) {
+            cJSON_rsf* json_i2c = cJSON_rsf_GetArrayItem(json_i2cs, i);
             
-            unsigned int i2c_scl_gpio = (uint8_t) cJSON_GetArrayItem(json_i2c, 0)->valuefloat;
+            unsigned int i2c_scl_gpio = (uint8_t) cJSON_rsf_GetArrayItem(json_i2c, 0)->valuefloat;
             //set_used_gpio(i2c_scl_gpio);
             
-            unsigned int i2c_sda_gpio = (uint8_t) cJSON_GetArrayItem(json_i2c, 1)->valuefloat;
+            unsigned int i2c_sda_gpio = (uint8_t) cJSON_rsf_GetArrayItem(json_i2c, 1)->valuefloat;
             //set_used_gpio(i2c_sda_gpio);
             
-            uint32_t i2c_freq_hz = (uint32_t) (cJSON_GetArrayItem(json_i2c, 2)->valuefloat * 1000.f);
+            uint32_t i2c_freq_hz = (uint32_t) (cJSON_rsf_GetArrayItem(json_i2c, 2)->valuefloat * 1000.f);
             
             unsigned int i2c_scl_gpio_pullup = false;
             unsigned int i2c_sda_gpio_pullup = false;
             
-            const size_t json_i2c_array_size = cJSON_GetArraySize(json_i2c);
+            const size_t json_i2c_array_size = cJSON_rsf_GetArraySize(json_i2c);
             
             if (json_i2c_array_size > 3) {
-                i2c_scl_gpio_pullup = (bool) cJSON_GetArrayItem(json_i2c, 3)->valuefloat;
+                i2c_scl_gpio_pullup = (bool) cJSON_rsf_GetArrayItem(json_i2c, 3)->valuefloat;
                 
                 if (json_i2c_array_size > 4) {
-                    i2c_sda_gpio_pullup = (bool) cJSON_GetArrayItem(json_i2c, 4)->valuefloat;
+                    i2c_sda_gpio_pullup = (bool) cJSON_rsf_GetArrayItem(json_i2c, 4)->valuefloat;
                 }
             }
             
@@ -8436,10 +8436,10 @@ void normal_mode_init() {
     }
     
     // MCP23017 Interfaces
-    if (cJSON_GetObjectItemCaseSensitive(json_config, MCP23017_ARRAY) != NULL) {
-        cJSON* json_mcp23017s = cJSON_GetObjectItemCaseSensitive(json_config, MCP23017_ARRAY);
-        for (int i = 0; i < cJSON_GetArraySize(json_mcp23017s); i++) {
-            cJSON* json_mcp23017 = cJSON_GetArrayItem(json_mcp23017s, i);
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, MCP23017_ARRAY) != NULL) {
+        cJSON_rsf* json_mcp23017s = cJSON_rsf_GetObjectItemCaseSensitive(json_config, MCP23017_ARRAY);
+        for (int i = 0; i < cJSON_rsf_GetArraySize(json_mcp23017s); i++) {
+            cJSON_rsf* json_mcp23017 = cJSON_rsf_GetArrayItem(json_mcp23017s, i);
             
             mcp23017_t* mcp23017 = malloc(sizeof(mcp23017_t));
             memset(mcp23017, 0, sizeof(*mcp23017));
@@ -8449,8 +8449,8 @@ void normal_mode_init() {
             
             mcp23017->index = i + 1;
 
-            mcp23017->bus = (uint8_t) cJSON_GetArrayItem(json_mcp23017, 0)->valuefloat;
-            mcp23017->addr = (uint8_t) cJSON_GetArrayItem(json_mcp23017, 1)->valuefloat;
+            mcp23017->bus = (uint8_t) cJSON_rsf_GetArrayItem(json_mcp23017, 0)->valuefloat;
+            mcp23017->addr = (uint8_t) cJSON_rsf_GetArrayItem(json_mcp23017, 1)->valuefloat;
             
             INFO("MCP %i: b %i, a %i", mcp23017->index, mcp23017->bus, mcp23017->addr);
             
@@ -8469,15 +8469,15 @@ void normal_mode_init() {
             for (int channel = 0; channel < 2; channel++) {
                 unsigned int mcp_mode = 258;   // Default set to INPUT and not pullup
                 if (channel == 0) {
-                    if (cJSON_GetArrayItem(json_mcp23017, 2) != NULL) {
-                        mcp_mode = (uint16_t) cJSON_GetArrayItem(json_mcp23017, 2)->valuefloat;
+                    if (cJSON_rsf_GetArrayItem(json_mcp23017, 2) != NULL) {
+                        mcp_mode = (uint16_t) cJSON_rsf_GetArrayItem(json_mcp23017, 2)->valuefloat;
                     }
                     
                     INFO("MCP %i ChA: %i", mcp23017->index, mcp_mode);
                     
                 } else {
-                    if (cJSON_GetArrayItem(json_mcp23017, 3) != NULL) {
-                        mcp_mode = (uint16_t) cJSON_GetArrayItem(json_mcp23017, 3)->valuefloat;
+                    if (cJSON_rsf_GetArrayItem(json_mcp23017, 3) != NULL) {
+                        mcp_mode = (uint16_t) cJSON_rsf_GetArrayItem(json_mcp23017, 3)->valuefloat;
                     }
                     
                     INFO("MCP %i ChB: %i", mcp23017->index, mcp_mode);
@@ -8542,33 +8542,33 @@ void normal_mode_init() {
     
     // Buttons Main Config
     unsigned int adv_button_filter_value = 0;
-    if (cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER) != NULL) {
-        adv_button_filter_value = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER)->valuefloat;
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER) != NULL) {
+        adv_button_filter_value = (uint16_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER)->valuefloat;
     }
     int adv_button_continuous_mode = false;
-    if (cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_CONTINUOS_MODE) != NULL) {
-        adv_button_continuous_mode = (bool) cJSON_GetObjectItemCaseSensitive(json_config, BUTTON_CONTINUOS_MODE)->valuefloat;
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, BUTTON_CONTINUOS_MODE) != NULL) {
+        adv_button_continuous_mode = (bool) cJSON_rsf_GetObjectItemCaseSensitive(json_config, BUTTON_CONTINUOS_MODE)->valuefloat;
     }
     if (adv_button_filter_value || adv_button_continuous_mode) {
         adv_button_init(adv_button_filter_value, adv_button_continuous_mode);
     }
     
     // GPIO Hardware Setup
-    if (cJSON_GetObjectItemCaseSensitive(json_config, IO_CONFIG_ARRAY) != NULL) {
-        cJSON* json_io_configs = cJSON_GetObjectItemCaseSensitive(json_config, IO_CONFIG_ARRAY);
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, IO_CONFIG_ARRAY) != NULL) {
+        cJSON_rsf* json_io_configs = cJSON_rsf_GetObjectItemCaseSensitive(json_config, IO_CONFIG_ARRAY);
         
         int use_software_pwm = false;
         
-        for (int i = 0; i < cJSON_GetArraySize(json_io_configs); i++) {
+        for (int i = 0; i < cJSON_rsf_GetArraySize(json_io_configs); i++) {
             int io_value[5] = { 0, 0, 0, 0, 0 };
             
-            cJSON* json_io_config = cJSON_GetArrayItem(json_io_configs, i);
-            cJSON* json_io_config_gpios = cJSON_GetArrayItem(json_io_config, 0);
-            for (int gpio_index = 0; gpio_index < cJSON_GetArraySize(json_io_config_gpios); gpio_index++) {
-                const unsigned int gpio = cJSON_GetArrayItem(json_io_config_gpios, gpio_index)->valuefloat;
+            cJSON_rsf* json_io_config = cJSON_rsf_GetArrayItem(json_io_configs, i);
+            cJSON_rsf* json_io_config_gpios = cJSON_rsf_GetArrayItem(json_io_config, 0);
+            for (int gpio_index = 0; gpio_index < cJSON_rsf_GetArraySize(json_io_config_gpios); gpio_index++) {
+                const unsigned int gpio = cJSON_rsf_GetArrayItem(json_io_config_gpios, gpio_index)->valuefloat;
                 
-                for (int j = 1; j < cJSON_GetArraySize(json_io_config); j++) {
-                    io_value[j - 1] = cJSON_GetArrayItem(json_io_config, j)->valuefloat;
+                for (int j = 1; j < cJSON_rsf_GetArraySize(json_io_config); j++) {
+                    io_value[j - 1] = cJSON_rsf_GetArrayItem(json_io_config, j)->valuefloat;
                 }
                 
 #ifdef ESP_PLATFORM
@@ -8657,14 +8657,14 @@ void normal_mode_init() {
                         use_software_pwm = true;
                         
                         // PWM-S frequency
-                        if (cJSON_GetObjectItemCaseSensitive(json_config, PWMS_FREQ) != NULL) {
-                            adv_pwm_set_freq((uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, PWMS_FREQ)->valuefloat);
+                        if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, PWMS_FREQ) != NULL) {
+                            adv_pwm_set_freq((uint16_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, PWMS_FREQ)->valuefloat);
                         }
                         
                         // PWM-S Zero-Crossing GPIO
-                        if (cJSON_GetObjectItemCaseSensitive(json_config, PWM_ZEROCROSSING_ARRAY_SET) != NULL) {
-                            cJSON* zc_array = cJSON_GetObjectItemCaseSensitive(json_config, PWM_ZEROCROSSING_ARRAY_SET);
-                            adv_pwm_set_zc_gpio((uint8_t) cJSON_GetArrayItem(zc_array, 0)->valuefloat, (uint8_t) cJSON_GetArrayItem(zc_array, 1)->valuefloat);
+                        if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, PWM_ZEROCROSSING_ARRAY_SET) != NULL) {
+                            cJSON_rsf* zc_array = cJSON_rsf_GetObjectItemCaseSensitive(json_config, PWM_ZEROCROSSING_ARRAY_SET);
+                            adv_pwm_set_zc_gpio((uint8_t) cJSON_rsf_GetArrayItem(zc_array, 0)->valuefloat, (uint8_t) cJSON_rsf_GetArrayItem(zc_array, 1)->valuefloat);
                         }
                     }
                     
@@ -8704,11 +8704,11 @@ void normal_mode_init() {
                     if (!pwmh_channel) {
                         // PWM-H frequency
                         unsigned int pwmh_freq = PWMH_FREQ_DEFAULT;
-                        if (cJSON_GetObjectItemCaseSensitive(json_config, PWMH_FREQ_ARRAY) != NULL) {
-                            cJSON* pwmh_freq_array = cJSON_GetObjectItemCaseSensitive(json_config, PWMH_FREQ_ARRAY);
+                        if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, PWMH_FREQ_ARRAY) != NULL) {
+                            cJSON_rsf* pwmh_freq_array = cJSON_rsf_GetObjectItemCaseSensitive(json_config, PWMH_FREQ_ARRAY);
                             
-                            if (cJSON_GetArraySize(pwmh_freq_array) > IO_GPIO_PWMH_TIMER) {
-                                pwmh_freq = (uint16_t) cJSON_GetArrayItem(pwmh_freq_array, IO_GPIO_PWMH_TIMER)->valuefloat;
+                            if (cJSON_rsf_GetArraySize(pwmh_freq_array) > IO_GPIO_PWMH_TIMER) {
+                                pwmh_freq = (uint16_t) cJSON_rsf_GetArrayItem(pwmh_freq_array, IO_GPIO_PWMH_TIMER)->valuefloat;
                             }
                         }
                         
@@ -8793,25 +8793,25 @@ void normal_mode_init() {
     
     // Custom Hostname
     char* custom_hostname = name.value.string_value;
-    if (cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME) != NULL) {
-        custom_hostname = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring, &unistrings);
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME) != NULL) {
+        custom_hostname = uni_strdup(cJSON_rsf_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring, &unistrings);
     }
     
     // Custom NTP Host
-    if (cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_NTP_HOST) != NULL) {
-        main_config.ntp_host = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_config, CUSTOM_NTP_HOST)->valuestring, &unistrings);
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, CUSTOM_NTP_HOST) != NULL) {
+        main_config.ntp_host = uni_strdup(cJSON_rsf_GetObjectItemCaseSensitive(json_config, CUSTOM_NTP_HOST)->valuestring, &unistrings);
     }
     
     // Timezone
-    if (cJSON_GetObjectItemCaseSensitive(json_config, TIMEZONE) != NULL) {
-        setenv("TZ", cJSON_GetObjectItemCaseSensitive(json_config, TIMEZONE)->valuestring, 1);
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, TIMEZONE) != NULL) {
+        setenv("TZ", cJSON_rsf_GetObjectItemCaseSensitive(json_config, TIMEZONE)->valuestring, 1);
         tzset();
     }
     
     // Timetable Actions
-    if (cJSON_GetObjectItemCaseSensitive(json_config, TIMETABLE_ACTION_ARRAY) != NULL) {
-        cJSON* json_timetable_actions = cJSON_GetObjectItemCaseSensitive(json_config, TIMETABLE_ACTION_ARRAY);
-        for (int i = 0; i < cJSON_GetArraySize(json_timetable_actions); i++) {
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, TIMETABLE_ACTION_ARRAY) != NULL) {
+        cJSON_rsf* json_timetable_actions = cJSON_rsf_GetObjectItemCaseSensitive(json_config, TIMETABLE_ACTION_ARRAY);
+        for (int i = 0; i < cJSON_rsf_GetArraySize(json_timetable_actions); i++) {
             timetable_action_t* timetable_action = malloc(sizeof(timetable_action_t));
             memset(timetable_action, 0, sizeof(*timetable_action));
             timetable_action->mon  = ALL_MONS;
@@ -8823,9 +8823,9 @@ void normal_mode_init() {
             timetable_action->next = main_config.timetable_actions;
             main_config.timetable_actions = timetable_action;
             
-            cJSON* json_timetable_action = cJSON_GetArrayItem(json_timetable_actions, i);
-            for (int j = 0; j < cJSON_GetArraySize(json_timetable_action); j++) {
-                const int value = (int8_t) cJSON_GetArrayItem(json_timetable_action, j)->valuefloat;
+            cJSON_rsf* json_timetable_action = cJSON_rsf_GetArrayItem(json_timetable_actions, i);
+            for (int j = 0; j < cJSON_rsf_GetArraySize(json_timetable_action); j++) {
+                const int value = (int8_t) cJSON_rsf_GetArrayItem(json_timetable_action, j)->valuefloat;
                 
                 if (value >= 0) {
                     switch (j) {
@@ -8861,12 +8861,12 @@ void normal_mode_init() {
     }
     
     // Status LED
-    if (cJSON_GetObjectItemCaseSensitive(json_config, STATUS_LED_GPIO) != NULL) {
-        const unsigned int led_gpio = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, STATUS_LED_GPIO)->valuefloat;
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, STATUS_LED_GPIO) != NULL) {
+        const unsigned int led_gpio = (uint16_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, STATUS_LED_GPIO)->valuefloat;
         
         int led_inverted = true;
-        if (cJSON_GetObjectItemCaseSensitive(json_config, INVERTED) != NULL) {
-            led_inverted = (bool) cJSON_GetObjectItemCaseSensitive(json_config, INVERTED)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, INVERTED) != NULL) {
+            led_inverted = (bool) cJSON_rsf_GetObjectItemCaseSensitive(json_config, INVERTED)->valuefloat;
         }
         
         //set_used_gpio(led_gpio);
@@ -8874,74 +8874,74 @@ void normal_mode_init() {
     }
     
     // IR TX LED GPIO
-    if (cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO) != NULL) {
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO) != NULL) {
         // IR TX LED Frequency
-        if (cJSON_GetObjectItemCaseSensitive(json_config, IRRF_ACTION_FREQ) != NULL) {
-            main_config.ir_tx_freq = 1000 / cJSON_GetObjectItemCaseSensitive(json_config, IRRF_ACTION_FREQ)->valuefloat / 2;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, IRRF_ACTION_FREQ) != NULL) {
+            main_config.ir_tx_freq = 1000 / cJSON_rsf_GetObjectItemCaseSensitive(json_config, IRRF_ACTION_FREQ)->valuefloat / 2;
         }
         
         // IR TX LED Inverted
         int inverted_value = 0;
-        if (cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO_INVERTED) != NULL) {
-            inverted_value = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO_INVERTED)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO_INVERTED) != NULL) {
+            inverted_value = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO_INVERTED)->valuefloat;
         }
         
         main_config.ir_tx_inv = inverted_value;
         
-        main_config.ir_tx_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO)->valuefloat;
+        main_config.ir_tx_gpio = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO)->valuefloat;
         //set_used_gpio(main_config.ir_tx_gpio);
         
         gpio_write(main_config.ir_tx_gpio, false ^ main_config.ir_tx_inv);
     }
     
     // RF TX GPIO
-    if (cJSON_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO) != NULL) {
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO) != NULL) {
         // RF TX Inverted
         int inverted_value = 0;
-        if (cJSON_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO_INVERTED) != NULL) {
-            inverted_value = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO_INVERTED)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO_INVERTED) != NULL) {
+            inverted_value = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO_INVERTED)->valuefloat;
         }
         
         main_config.rf_tx_inv = inverted_value;
         
-        main_config.rf_tx_gpio = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO)->valuefloat;
+        main_config.rf_tx_gpio = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO)->valuefloat;
         //set_used_gpio(main_config.rf_tx_gpio);
         
         gpio_write(main_config.rf_tx_gpio, false ^ main_config.rf_tx_inv);
     }
     
     // Ping poll period
-    if (cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD) != NULL) {
-        main_config.ping_poll_period = (float) cJSON_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD)->valuefloat;
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD) != NULL) {
+        main_config.ping_poll_period = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_config, PING_POLL_PERIOD)->valuefloat;
     }
     
 #ifdef ESP_PLATFORM
     // Wifi Sleep Mode
     int wifi_sleep_mode = 1;
-    if (cJSON_GetObjectItemCaseSensitive(json_config, WIFI_SLEEP_MODE_SET) != NULL) {
-        wifi_sleep_mode = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, WIFI_SLEEP_MODE_SET)->valuefloat;
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_SLEEP_MODE_SET) != NULL) {
+        wifi_sleep_mode = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_SLEEP_MODE_SET)->valuefloat;
     }
     
     int wifi_bandwidth_40 = false;
-    if (cJSON_GetObjectItemCaseSensitive(json_config, WIFI_BANDWIDTH_40_SET) != NULL) {
-        wifi_bandwidth_40 = (bool) cJSON_GetObjectItemCaseSensitive(json_config, WIFI_BANDWIDTH_40_SET)->valuefloat;
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_BANDWIDTH_40_SET) != NULL) {
+        wifi_bandwidth_40 = (bool) cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_BANDWIDTH_40_SET)->valuefloat;
     }
 #endif
     
     // ARP Gratuitous period
-    if (cJSON_GetObjectItemCaseSensitive(json_config, WIFI_WATCHDOG_ARP_PERIOD_SET) != NULL) {
-        main_config.wifi_arp_count_max = ((uint32_t) cJSON_GetObjectItemCaseSensitive(json_config, WIFI_WATCHDOG_ARP_PERIOD_SET)->valuefloat) / (WIFI_WATCHDOG_POLL_PERIOD_MS / 1000.0f);
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_WATCHDOG_ARP_PERIOD_SET) != NULL) {
+        main_config.wifi_arp_count_max = ((uint32_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_WATCHDOG_ARP_PERIOD_SET)->valuefloat) / (WIFI_WATCHDOG_POLL_PERIOD_MS / 1000.0f);
     }
     
     // Allowed Setup Mode Time
-    if (cJSON_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME) != NULL) {
-        main_config.setup_mode_time = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME)->valuefloat;
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME) != NULL) {
+        main_config.setup_mode_time = (uint16_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME)->valuefloat;
     }
     
     // HomeKit Server Clients
     config.max_clients = HOMEKIT_SERVER_MAX_CLIENTS_DEFAULT;
-    if (cJSON_GetObjectItemCaseSensitive(json_config, HOMEKIT_SERVER_MAX_CLIENTS) != NULL) {
-        config.max_clients = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, HOMEKIT_SERVER_MAX_CLIENTS)->valuefloat;
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, HOMEKIT_SERVER_MAX_CLIENTS) != NULL) {
+        config.max_clients = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, HOMEKIT_SERVER_MAX_CLIENTS)->valuefloat;
         if (config.max_clients > HOMEKIT_SERVER_MAX_CLIENTS_MAX) {
             config.max_clients = HOMEKIT_SERVER_MAX_CLIENTS_MAX;
         }
@@ -8951,45 +8951,45 @@ void normal_mode_init() {
     }
     
     // Allow unsecure connections
-    if (cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS) != NULL) {
-        config.insecure = (bool) cJSON_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS)->valuefloat;
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS) != NULL) {
+        config.insecure = (bool) cJSON_rsf_GetObjectItemCaseSensitive(json_config, ALLOW_INSECURE_CONNECTIONS)->valuefloat;
     }
     
     // mDNS TTL
     config.mdns_ttl = MDNS_TTL_DEFAULT;
     config.mdns_ttl_period = MDNS_TTL_PERIOD_DEFAULT;
-    if (cJSON_GetObjectItemCaseSensitive(json_config, MDNS_TTL) != NULL) {
-        cJSON* mdns_ttl_array = cJSON_GetObjectItemCaseSensitive(json_config, MDNS_TTL);
-        config.mdns_ttl = (uint16_t) cJSON_GetArrayItem(mdns_ttl_array, 0)->valuefloat;
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, MDNS_TTL) != NULL) {
+        cJSON_rsf* mdns_ttl_array = cJSON_rsf_GetObjectItemCaseSensitive(json_config, MDNS_TTL);
+        config.mdns_ttl = (uint16_t) cJSON_rsf_GetArrayItem(mdns_ttl_array, 0)->valuefloat;
         config.mdns_ttl_period = config.mdns_ttl;
         
-        if (cJSON_GetArraySize(mdns_ttl_array) > 1) {
-            config.mdns_ttl_period = (uint16_t) cJSON_GetArrayItem(mdns_ttl_array, 1)->valuefloat;
+        if (cJSON_rsf_GetArraySize(mdns_ttl_array) > 1) {
+            config.mdns_ttl_period = (uint16_t) cJSON_rsf_GetArrayItem(mdns_ttl_array, 1)->valuefloat;
         }
     }
     
     // Gateway Ping
-    if (cJSON_GetObjectItemCaseSensitive(json_config, WIFI_PING_ERRORS) != NULL) {
-        main_config.wifi_ping_max_errors = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, WIFI_PING_ERRORS)->valuefloat;
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_PING_ERRORS) != NULL) {
+        main_config.wifi_ping_max_errors = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_PING_ERRORS)->valuefloat;
         main_config.wifi_ping_max_errors++;
     }
     
     // Common serial prefix
     char* common_serial_prefix = NULL;
-    if (cJSON_GetObjectItemCaseSensitive(json_config, SERIAL_STRING) != NULL) {
-        common_serial_prefix = cJSON_GetObjectItemCaseSensitive(json_config, SERIAL_STRING)->valuestring;
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, SERIAL_STRING) != NULL) {
+        common_serial_prefix = cJSON_rsf_GetObjectItemCaseSensitive(json_config, SERIAL_STRING)->valuestring;
     }
     
     // Accessory to include HAA Settings
     unsigned int haa_setup_accessory = 1;
-    if (cJSON_GetObjectItemCaseSensitive(json_config, HAA_SETUP_ACCESSORY_SET) != NULL) {
-        haa_setup_accessory = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_config, HAA_SETUP_ACCESSORY_SET)->valuefloat;
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, HAA_SETUP_ACCESSORY_SET) != NULL) {
+        haa_setup_accessory = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, HAA_SETUP_ACCESSORY_SET)->valuefloat;
     }
     haa_setup_accessory--;
     
     // Times to toggle quickly an accessory status to enter setup mode
-    if (cJSON_GetObjectItemCaseSensitive(json_config, SETUP_MODE_ACTIVATE_COUNT) != NULL) {
-        main_config.setup_mode_toggle_counter_max = (int8_t) cJSON_GetObjectItemCaseSensitive(json_config, SETUP_MODE_ACTIVATE_COUNT)->valuefloat;
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, SETUP_MODE_ACTIVATE_COUNT) != NULL) {
+        main_config.setup_mode_toggle_counter_max = (int8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, SETUP_MODE_ACTIVATE_COUNT)->valuefloat;
     }
     
     if (main_config.setup_mode_toggle_counter_max > 0) {
@@ -8997,20 +8997,20 @@ void normal_mode_init() {
     }
     
     // Buttons to enter setup mode
-    diginput_register(cJSON_GetObjectItemCaseSensitive(json_config, BUTTONS_ARRAY), setup_mode_call, NULL, 0);
+    diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_config, BUTTONS_ARRAY), setup_mode_call, NULL, 0);
     
     // ----- END CONFIG SECTION
     
-    uint8_t get_serv_type(cJSON* json_accessory) {
+    uint8_t get_serv_type(cJSON_rsf* json_accessory) {
         unsigned int serv_type = SERV_TYPE_SWITCH;
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, SERVICE_TYPE_SET) != NULL) {
-            serv_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_accessory, SERVICE_TYPE_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, SERVICE_TYPE_SET) != NULL) {
+            serv_type = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, SERVICE_TYPE_SET)->valuefloat;
         }
         
         return serv_type;
     }
     
-    unsigned int get_service_recount(const uint8_t serv_type, cJSON* json_context) {
+    unsigned int get_service_recount(const uint8_t serv_type, cJSON_rsf* json_context) {
         unsigned int service_recount = 1;
         
         switch (serv_type) {
@@ -9023,8 +9023,8 @@ void normal_mode_init() {
                 
             case SERV_TYPE_TV:
                 service_recount = 2;
-                cJSON* json_inputs = cJSON_GetObjectItemCaseSensitive(json_context, TV_INPUTS_ARRAY);
-                uint8_t inputs = cJSON_GetArraySize(json_inputs);
+                cJSON_rsf* json_inputs = cJSON_rsf_GetObjectItemCaseSensitive(json_context, TV_INPUTS_ARRAY);
+                uint8_t inputs = cJSON_rsf_GetArraySize(json_inputs);
                 
                 if (inputs == 0) {
                     inputs = 1;
@@ -9040,13 +9040,13 @@ void normal_mode_init() {
         return service_recount;
     }
     
-    unsigned int get_total_services(const uint16_t serv_type, cJSON* json_accessory) {
+    unsigned int get_total_services(const uint16_t serv_type, cJSON_rsf* json_accessory) {
         unsigned int total_services = 2 + get_service_recount(serv_type, json_accessory);
         
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, EXTRA_SERVICES_ARRAY) != NULL) {
-            cJSON* json_extra_services = cJSON_GetObjectItemCaseSensitive(json_accessory, EXTRA_SERVICES_ARRAY);
-            for (int i = 0; i < cJSON_GetArraySize(json_extra_services); i++) {
-                cJSON* json_extra_service = cJSON_GetArrayItem(json_extra_services, i);
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, EXTRA_SERVICES_ARRAY) != NULL) {
+            cJSON_rsf* json_extra_services = cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, EXTRA_SERVICES_ARRAY);
+            for (int i = 0; i < cJSON_rsf_GetArraySize(json_extra_services); i++) {
+                cJSON_rsf* json_extra_service = cJSON_rsf_GetArrayItem(json_extra_services, i);
                 total_services += get_service_recount(get_serv_type(json_extra_service), json_extra_service);
             }
         }
@@ -9058,7 +9058,7 @@ void normal_mode_init() {
     int bridge_needed = false;
     
     for (unsigned int i = 0; i < total_accessories; i++) {
-        cJSON* json_accessory = cJSON_GetArrayItem(json_accessories, i);
+        cJSON_rsf* json_accessory = cJSON_rsf_GetArrayItem(json_accessories, i);
         if (acc_homekit_enabled(json_accessory) && get_serv_type(json_accessory) != SERV_TYPE_IAIRZONING) {
             hk_total_ac += 1;
         }
@@ -9082,7 +9082,7 @@ void normal_mode_init() {
     
     //unsigned int service_iid = 100;
     
-    void new_accessory(const uint16_t accessory, uint16_t services, const bool homekit_enabled, cJSON* json_context) {
+    void new_accessory(const uint16_t accessory, uint16_t services, const bool homekit_enabled, cJSON_rsf* json_context) {
         if (!homekit_enabled) {
             return;
         }
@@ -9096,8 +9096,8 @@ void normal_mode_init() {
         }
         
         char* serial_prefix = NULL;
-        if (json_context && cJSON_GetObjectItemCaseSensitive(json_context, SERIAL_STRING) != NULL) {
-            serial_prefix = cJSON_GetObjectItemCaseSensitive(json_context, SERIAL_STRING)->valuestring;
+        if (json_context && cJSON_rsf_GetObjectItemCaseSensitive(json_context, SERIAL_STRING) != NULL) {
+            serial_prefix = cJSON_rsf_GetObjectItemCaseSensitive(json_context, SERIAL_STRING)->valuestring;
         } else {
             serial_prefix = common_serial_prefix;
         }
@@ -9171,9 +9171,9 @@ void normal_mode_init() {
         //service_iid = 100;
     }
     
-    void set_killswitch(ch_group_t* ch_group, cJSON* json_context) {
-        if (cJSON_GetObjectItemCaseSensitive(json_context, KILLSWITCH) != NULL) {
-            const unsigned int killswitch = cJSON_GetObjectItemCaseSensitive(json_context, KILLSWITCH)->valuefloat;
+    void set_killswitch(ch_group_t* ch_group, cJSON_rsf* json_context) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, KILLSWITCH) != NULL) {
+            const unsigned int killswitch = cJSON_rsf_GetObjectItemCaseSensitive(json_context, KILLSWITCH)->valuefloat;
             ch_group->main_enabled = killswitch & 0b01;
             ch_group->child_enabled = killswitch & 0b10;
         }
@@ -9181,16 +9181,16 @@ void normal_mode_init() {
         //INFO("<%i> KS 0b%i%i", ch_group->serv_index, ch_group->main_enabled, ch_group->child_enabled);
     }
     
-    void set_accessory_ir_protocol(ch_group_t* ch_group, cJSON* json_context) {
-        if (cJSON_GetObjectItemCaseSensitive(json_context, IRRF_ACTION_PROTOCOL) != NULL) {
-            ch_group->ir_protocol = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_context, IRRF_ACTION_PROTOCOL)->valuestring, &unistrings);
+    void set_accessory_ir_protocol(ch_group_t* ch_group, cJSON_rsf* json_context) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, IRRF_ACTION_PROTOCOL) != NULL) {
+            ch_group->ir_protocol = uni_strdup(cJSON_rsf_GetObjectItemCaseSensitive(json_context, IRRF_ACTION_PROTOCOL)->valuestring, &unistrings);
         }
     }
     
-    bool get_exec_actions_on_boot(cJSON* json_context) {
+    bool get_exec_actions_on_boot(cJSON_rsf* json_context) {
         int exec_actions_on_boot = true;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, EXEC_ACTIONS_ON_BOOT) != NULL) {
-            exec_actions_on_boot = (bool) cJSON_GetObjectItemCaseSensitive(json_context, EXEC_ACTIONS_ON_BOOT)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, EXEC_ACTIONS_ON_BOOT) != NULL) {
+            exec_actions_on_boot = (bool) cJSON_rsf_GetObjectItemCaseSensitive(json_context, EXEC_ACTIONS_ON_BOOT)->valuefloat;
         }
         
         //INFO("Run Ac Boot %i", exec_actions_on_boot);
@@ -9198,10 +9198,10 @@ void normal_mode_init() {
         return exec_actions_on_boot;
     }
     
-    uint8_t get_initial_state(cJSON* json_context) {
+    uint8_t get_initial_state(cJSON_rsf* json_context) {
         unsigned int initial_state = 0;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
-            initial_state = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, INITIAL_STATE)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, INITIAL_STATE) != NULL) {
+            initial_state = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, INITIAL_STATE)->valuefloat;
         }
         
         //INFO("Get Init %i", initial_state);
@@ -9209,17 +9209,17 @@ void normal_mode_init() {
         return initial_state;
     }
     
-    cJSON* init_last_state_json = cJSON_Parse(INIT_STATE_LAST_STR);
+    cJSON_rsf* init_last_state_json = cJSON_rsf_Parse(INIT_STATE_LAST_STR);
     
     // Helpers to use common code
-    void register_bool_inputs(cJSON* json_context, ch_group_t* ch_group, const bool exec_actions_on_boot) {
+    void register_bool_inputs(cJSON_rsf* json_context, ch_group_t* ch_group, const bool exec_actions_on_boot) {
         int initial_state = 2;
         
-        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
+        if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
             initial_state = 1;
         }
         
-        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
+        if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
             ch_group->ch[0]->value.bool_value = true;
             initial_state = 0;
         }
@@ -9234,11 +9234,11 @@ void normal_mode_init() {
         
         initial_state = 2;
         
-        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
+        if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
             initial_state = 1;
         }
         
-        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
+        if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
             ch_group->ch[0]->value.bool_value = true;
             initial_state = 0;
         }
@@ -9249,10 +9249,10 @@ void normal_mode_init() {
     }
     
     // *** NEW SWITCH / OUTLET
-    void new_switch(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context, const uint8_t serv_type) {
+    void new_switch(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context, const uint8_t serv_type) {
         uint32_t max_duration = 0;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, VALVE_MAX_DURATION) != NULL) {
-            max_duration = (uint32_t) cJSON_GetObjectItemCaseSensitive(json_context, VALVE_MAX_DURATION)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, VALVE_MAX_DURATION) != NULL) {
+            max_duration = (uint32_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, VALVE_MAX_DURATION)->valuefloat;
         }
         
         unsigned int ch_calloc = 2;
@@ -9316,20 +9316,20 @@ void normal_mode_init() {
             ch_group->timer = rs_esp_timer_create(1000, true, (void*) ch_group, on_timer_worker);
         }
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
         
         const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0);
             
             ch_group->ch[0]->value.bool_value = !((bool) set_initial_state(ch_group->serv_index, 0, json_context, ch_group->ch[0], CH_TYPE_BOOL, 0));
             if (exec_actions_on_boot) {
@@ -9353,7 +9353,7 @@ void normal_mode_init() {
     }
     
     // *** NEW BUTTON EVENT / DOORBELL
-    void new_button_event(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context, const uint8_t serv_type) {
+    void new_button_event(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context, const uint8_t serv_type) {
         ch_group_t* ch_group = new_ch_group(1 + (serv_type == SERV_TYPE_DOORBELL), 0, 0, 0);
         ch_group->serv_index = service_numerator;
         int homekit_enabled = acc_homekit_enabled(json_context);
@@ -9404,18 +9404,18 @@ void normal_mode_init() {
             }
         }
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), button_event_diginput, ch_group, SINGLEPRESS_EVENT);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), button_event_diginput, ch_group, DOUBLEPRESS_EVENT);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), button_event_diginput, ch_group, LONGPRESS_EVENT);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), button_event_diginput, ch_group, SINGLEPRESS_EVENT);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), button_event_diginput, ch_group, DOUBLEPRESS_EVENT);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_2), button_event_diginput, ch_group, LONGPRESS_EVENT);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), button_event_diginput, ch_group, SINGLEPRESS_EVENT);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), button_event_diginput, ch_group, DOUBLEPRESS_EVENT);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), button_event_diginput, ch_group, LONGPRESS_EVENT);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), button_event_diginput, ch_group, SINGLEPRESS_EVENT);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), button_event_diginput, ch_group, DOUBLEPRESS_EVENT);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_2), button_event_diginput, ch_group, LONGPRESS_EVENT);
         
         set_killswitch(ch_group, json_context);
     }
     
     // *** NEW LOCK
-    void new_lock(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+    void new_lock(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         ch_group_t* ch_group = new_ch_group(2, 0, 0, 0);
         ch_group->serv_index = service_numerator;
         int homekit_enabled = acc_homekit_enabled(json_context);
@@ -9455,20 +9455,20 @@ void normal_mode_init() {
             //service_iid += 3;
         }
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
         
         const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0);
             
             ch_group->ch[1]->value.int_value = !((uint8_t) set_initial_state(ch_group->serv_index, 0, json_context, ch_group->ch[1], CH_TYPE_INT8, 1));
             if (exec_actions_on_boot) {
@@ -9479,11 +9479,11 @@ void normal_mode_init() {
         } else {
             int initial_state = 2;
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
                 initial_state = 0;
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
                 ch_group->ch[1]->value.int_value = 0;
                 initial_state = 1;
             }
@@ -9498,11 +9498,11 @@ void normal_mode_init() {
             
             initial_state = 2;
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
                 initial_state = 0;
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
                 ch_group->ch[1]->value.int_value = 0;
                 initial_state = 1;
             }
@@ -9516,7 +9516,7 @@ void normal_mode_init() {
     }
     
     // *** NEW BINARY SENSOR
-    void new_binary_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context, uint8_t serv_type) {
+    void new_binary_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context, uint8_t serv_type) {
         ch_group_t* ch_group = new_ch_group(1, 0, 0, 0);
         ch_group->serv_type = SERV_TYPE_CONTACT_SENSOR;
         ch_group->serv_index = service_numerator;
@@ -9611,18 +9611,18 @@ void normal_mode_init() {
             //service_iid += 2;
         }
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), binary_sensor, ch_group, 4);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), binary_sensor, ch_group, 4);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), binary_sensor, ch_group, 0);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), binary_sensor, ch_group, 1);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), binary_sensor, ch_group, 2);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), binary_sensor, ch_group, 3);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), binary_sensor, ch_group, 4);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), binary_sensor, ch_group, 4);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), binary_sensor, ch_group, 0);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), binary_sensor, ch_group, 1);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), binary_sensor, ch_group, 2);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), binary_sensor, ch_group, 3);
         
         const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         int initial_state = 4;
         
-        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), binary_sensor, ch_group, 0)) {
+        if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), binary_sensor, ch_group, 0)) {
             if (serv_type == SERV_TYPE_MOTION_SENSOR) {
                 ch_group->ch[0]->value.int_value = 1;
             } else {
@@ -9632,7 +9632,7 @@ void normal_mode_init() {
             initial_state = 0;
         }
         
-        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), binary_sensor, ch_group, 1)) {
+        if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), binary_sensor, ch_group, 1)) {
             initial_state = 1;
         }
         
@@ -9646,7 +9646,7 @@ void normal_mode_init() {
         
         initial_state = 4;
         
-        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), binary_sensor, ch_group, 2)) {
+        if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), binary_sensor, ch_group, 2)) {
             if (serv_type == SERV_TYPE_MOTION_SENSOR) {
                 ch_group->ch[0]->value.int_value = 1;
             } else {
@@ -9656,7 +9656,7 @@ void normal_mode_init() {
             initial_state = 2;
         }
         
-        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), binary_sensor, ch_group, 3)) {
+        if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), binary_sensor, ch_group, 3)) {
             initial_state = 3;
         }
         
@@ -9668,12 +9668,12 @@ void normal_mode_init() {
     }
     
     // *** NEW AIR QUALITY
-    void new_air_quality(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+    void new_air_quality(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         size_t extra_data_size = 0;
-        cJSON* json_extra_data = NULL;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, AQ_EXTRA_DATA_ARRAY_SET) != NULL) {
-            json_extra_data = cJSON_GetObjectItemCaseSensitive(json_context, AQ_EXTRA_DATA_ARRAY_SET);
-            extra_data_size = cJSON_GetArraySize(json_extra_data);
+        cJSON_rsf* json_extra_data = NULL;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, AQ_EXTRA_DATA_ARRAY_SET) != NULL) {
+            json_extra_data = cJSON_rsf_GetObjectItemCaseSensitive(json_context, AQ_EXTRA_DATA_ARRAY_SET);
+            extra_data_size = cJSON_rsf_GetArraySize(json_extra_data);
         }
         
         ch_group_t* ch_group = new_ch_group(1 + extra_data_size, 0, 0, 0);
@@ -9691,7 +9691,7 @@ void normal_mode_init() {
         ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(AIR_QUALITY, 0);
         
         for (unsigned int i = 1; i <= extra_data_size; i++) {
-            const unsigned int extra_data_type = (uint8_t) cJSON_GetArrayItem(json_extra_data, i - 1)->valuefloat;
+            const unsigned int extra_data_type = (uint8_t) cJSON_rsf_GetArrayItem(json_extra_data, i - 1)->valuefloat;
             switch (extra_data_type) {
                 case AQ_OZONE_DENSITY:
                     ch_group->ch[i] = NEW_HOMEKIT_CHARACTERISTIC(OZONE_DENSITY, 0);
@@ -9749,10 +9749,10 @@ void normal_mode_init() {
     }
     
     // *** NEW WATER VALVE
-    void new_valve(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+    void new_valve(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         uint32_t valve_max_duration = VALVE_MAX_DURATION_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, VALVE_MAX_DURATION) != NULL) {
-            valve_max_duration = (uint32_t) cJSON_GetObjectItemCaseSensitive(json_context, VALVE_MAX_DURATION)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, VALVE_MAX_DURATION) != NULL) {
+            valve_max_duration = (uint32_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, VALVE_MAX_DURATION)->valuefloat;
         }
         
         unsigned int calloc_count = 4;
@@ -9773,8 +9773,8 @@ void normal_mode_init() {
         service++;
         
         unsigned int valve_type = VALVE_SYSTEM_TYPE_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, VALVE_SYSTEM_TYPE) != NULL) {
-            valve_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, VALVE_SYSTEM_TYPE)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, VALVE_SYSTEM_TYPE) != NULL) {
+            valve_type = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, VALVE_SYSTEM_TYPE)->valuefloat;
         }
         
         ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(ACTIVE, 0, .setter_ex=hkc_valve_setter);
@@ -9828,20 +9828,20 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics[2] = NEW_HOMEKIT_CHARACTERISTIC(VALVE_TYPE, valve_type);
         }
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
         
         const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0);
             
             ch_group->ch[0]->value.int_value = !((uint8_t) set_initial_state(ch_group->serv_index, 0, json_context, ch_group->ch[0], CH_TYPE_INT8, 0));
             if (exec_actions_on_boot) {
@@ -9853,11 +9853,11 @@ void normal_mode_init() {
         } else {
             int initial_state = 2;
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
                 initial_state = 1;
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
                 ch_group->ch[0]->value.int_value = 1;
                 initial_state = 0;
             }
@@ -9872,11 +9872,11 @@ void normal_mode_init() {
             
             initial_state = 2;
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
                 initial_state = 1;
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
                 ch_group->ch[0]->value.int_value = 1;
                 initial_state = 0;
             }
@@ -9890,7 +9890,7 @@ void normal_mode_init() {
     }
     
     // *** NEW THERMOSTAT
-    void new_thermostat(const uint8_t accessory,  uint8_t service, const uint8_t total_services, cJSON* json_context, const uint8_t serv_type) {
+    void new_thermostat(const uint8_t accessory,  uint8_t service, const uint8_t total_services, cJSON_rsf* json_context, const uint8_t serv_type) {
         ch_group_t* ch_group = new_ch_group(7, 8, 5, 4);
         ch_group->serv_type = SERV_TYPE_THERMOSTAT;
         ch_group->serv_index = service_numerator;
@@ -9907,37 +9907,37 @@ void normal_mode_init() {
         
         // Custom ranges of Target Temperatures
         float min_temp = THERMOSTAT_DEFAULT_MIN_TEMP;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MIN_TEMP) != NULL) {
-            min_temp = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MIN_TEMP)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MIN_TEMP) != NULL) {
+            min_temp = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MIN_TEMP)->valuefloat;
         }
         
         float max_temp = THERMOSTAT_DEFAULT_MAX_TEMP;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MAX_TEMP) != NULL) {
-            max_temp = (float) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MAX_TEMP)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MAX_TEMP) != NULL) {
+            max_temp = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_MAX_TEMP)->valuefloat;
         }
         
         const float default_target_temp = (min_temp + max_temp) / 2;
         
         // Temperature Deadbands
         TH_DEADBAND = 0;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND) != NULL) {
-            TH_DEADBAND = cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND)->valuefloat / 2.000f;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND) != NULL) {
+            TH_DEADBAND = cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND)->valuefloat / 2.000f;
         }
         
         TH_DEADBAND_FORCE_IDLE = 0;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_FORCE_IDLE) != NULL) {
-            TH_DEADBAND_FORCE_IDLE = cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_FORCE_IDLE)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_FORCE_IDLE) != NULL) {
+            TH_DEADBAND_FORCE_IDLE = cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_FORCE_IDLE)->valuefloat;
         }
         
         TH_DEADBAND_SOFT_ON = 0;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_SOFT_ON) != NULL) {
-            TH_DEADBAND_SOFT_ON = cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_SOFT_ON)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_SOFT_ON) != NULL) {
+            TH_DEADBAND_SOFT_ON = cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_SOFT_ON)->valuefloat;
         }
         
         // Thermostat Type
         unsigned int th_type = THERMOSTAT_TYPE_HEATER;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TYPE) != NULL) {
-            th_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TYPE)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TYPE) != NULL) {
+            th_type = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TYPE)->valuefloat;
         }
         
         TH_TYPE = th_type;
@@ -9948,8 +9948,8 @@ void normal_mode_init() {
         ch_group->ch[3] = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_HEATER_COOLER_STATE, 0);
         
         float temp_step = 0.1;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TARGET_TEMP_STEP) != NULL) {
-            temp_step = cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TARGET_TEMP_STEP)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TARGET_TEMP_STEP) != NULL) {
+            temp_step = cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_TARGET_TEMP_STEP)->valuefloat;
         }
         
         if (th_type != THERMOSTAT_TYPE_COOLER) {
@@ -10060,8 +10060,8 @@ void normal_mode_init() {
         register_wildcard_actions(ch_group, json_context);
         const float poll_period = th_sensor(ch_group, json_context);
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER) != NULL) {
-            TH_IAIRZONING_CONTROLLER = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER) != NULL) {
+            TH_IAIRZONING_CONTROLLER = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER)->valuefloat;
         }
         
         ch_group->timer2 = rs_esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, process_th_timer);
@@ -10072,29 +10072,29 @@ void normal_mode_init() {
             th_sensor_starter(ch_group, poll_period);
         }
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), th_input, ch_group, 9);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), th_input_temp, ch_group, THERMOSTAT_TEMP_UP);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), th_input_temp, ch_group, THERMOSTAT_TEMP_DOWN);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), th_input, ch_group, 9);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_3), th_input_temp, ch_group, THERMOSTAT_TEMP_UP);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_4), th_input_temp, ch_group, THERMOSTAT_TEMP_DOWN);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), th_input, ch_group, 1);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), th_input, ch_group, 0);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), th_input, ch_group, 9);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), th_input_temp, ch_group, THERMOSTAT_TEMP_UP);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), th_input_temp, ch_group, THERMOSTAT_TEMP_DOWN);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), th_input, ch_group, 9);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_3), th_input_temp, ch_group, THERMOSTAT_TEMP_UP);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_4), th_input_temp, ch_group, THERMOSTAT_TEMP_DOWN);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), th_input, ch_group, 1);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), th_input, ch_group, 0);
         
         if (th_type >= THERMOSTAT_TYPE_HEATERCOOLER) {
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), th_input, ch_group, 5);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), th_input, ch_group, 6);
-            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_5), th_input, ch_group, 5);
-            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), th_input, ch_group, 6);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), th_input, ch_group, 5);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), th_input, ch_group, 6);
+            ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_5), th_input, ch_group, 5);
+            ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), th_input, ch_group, 6);
             
             if (th_type == THERMOSTAT_TYPE_HEATERCOOLER) {
-                diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_7), th_input, ch_group, 7);
-                ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_7), th_input, ch_group, 7);
+                diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_7), th_input, ch_group, 7);
+                ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_7), th_input, ch_group, 7);
             }
             
             int initial_target_mode = THERMOSTAT_INIT_TARGET_MODE_DEFAULT;
-            if (cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_INIT_TARGET_MODE) != NULL) {
-                initial_target_mode = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, THERMOSTAT_INIT_TARGET_MODE)->valuefloat;
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_INIT_TARGET_MODE) != NULL) {
+                initial_target_mode = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_INIT_TARGET_MODE)->valuefloat;
             }
             
             if (initial_target_mode == THERMOSTAT_INIT_TARGET_MODE_DEFAULT) {
@@ -10107,8 +10107,8 @@ void normal_mode_init() {
         const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), th_input, ch_group, 1);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), th_input, ch_group, 0);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), th_input, ch_group, 1);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), th_input, ch_group, 0);
             
             ch_group->ch[2]->value.int_value = !((uint8_t) set_initial_state(ch_group->serv_index, 2, json_context, ch_group->ch[2], CH_TYPE_INT8, 0));
             
@@ -10120,10 +10120,10 @@ void normal_mode_init() {
         } else {
             int initial_state = 2;
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), th_input, ch_group, 1)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), th_input, ch_group, 1)) {
                 initial_state = 1;
             }
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), th_input, ch_group, 0)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), th_input, ch_group, 0)) {
                 ch_group->ch[2]->value.int_value = 1;
                 initial_state = 0;
             }
@@ -10141,7 +10141,7 @@ void normal_mode_init() {
     }
     
     // *** NEW IAIRZONING
-    void new_iairzoning(cJSON* json_context) {
+    void new_iairzoning(cJSON_rsf* json_context) {
         ch_group_t* ch_group = new_ch_group(0, 2, 2, 0);
         ch_group->serv_index = service_numerator;
         ch_group->serv_type = SERV_TYPE_IAIRZONING;
@@ -10152,13 +10152,13 @@ void normal_mode_init() {
         set_accessory_ir_protocol(ch_group, json_context);
         
         IAIRZONING_DELAY_ACTION_CH_GROUP = IAIRZONING_DELAY_ACTION_DEFAULT * MS_TO_TICKS(1000);
-        if (cJSON_GetObjectItemCaseSensitive(json_context, IAIRZONING_DELAY_ACTION_SET) != NULL) {
-            IAIRZONING_DELAY_ACTION_CH_GROUP = cJSON_GetObjectItemCaseSensitive(json_context, IAIRZONING_DELAY_ACTION_SET)->valuefloat * MS_TO_TICKS(1000);
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, IAIRZONING_DELAY_ACTION_SET) != NULL) {
+            IAIRZONING_DELAY_ACTION_CH_GROUP = cJSON_rsf_GetObjectItemCaseSensitive(json_context, IAIRZONING_DELAY_ACTION_SET)->valuefloat * MS_TO_TICKS(1000);
         }
         
         IAIRZONING_DELAY_AFT_CLOSE_CH_GROUP = IAIRZONING_DELAY_AFT_CLOSE_DEFAULT * MS_TO_TICKS(1000);
-        if (cJSON_GetObjectItemCaseSensitive(json_context, IAIRZONING_DELAY_AFT_CLOSE_SET) != NULL) {
-            IAIRZONING_DELAY_AFT_CLOSE_CH_GROUP = cJSON_GetObjectItemCaseSensitive(json_context, IAIRZONING_DELAY_AFT_CLOSE_SET)->valuefloat * MS_TO_TICKS(1000);
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, IAIRZONING_DELAY_AFT_CLOSE_SET) != NULL) {
+            IAIRZONING_DELAY_AFT_CLOSE_CH_GROUP = cJSON_rsf_GetObjectItemCaseSensitive(json_context, IAIRZONING_DELAY_AFT_CLOSE_SET)->valuefloat * MS_TO_TICKS(1000);
         }
         
         ch_group->timer2 = rs_esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, set_zones_timer_worker);
@@ -10167,7 +10167,7 @@ void normal_mode_init() {
     }
     
     // *** NEW TEMPERATURE SENSOR
-    void new_temp_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+    void new_temp_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         ch_group_t* ch_group = new_ch_group(1, 4, 2, 1);
         ch_group->serv_type = SERV_TYPE_TEMP_SENSOR;
         ch_group->serv_index = service_numerator;
@@ -10216,7 +10216,7 @@ void normal_mode_init() {
     }
     
     // *** NEW HUMIDITY SENSOR
-    void new_hum_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+    void new_hum_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         ch_group_t* ch_group = new_ch_group(2, 4, 2, 2);
         ch_group->serv_type = SERV_TYPE_HUM_SENSOR;
         ch_group->serv_index = service_numerator;
@@ -10265,7 +10265,7 @@ void normal_mode_init() {
     }
     
     // *** NEW TEMPERATURE AND HUMIDITY SENSOR
-    void new_th_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+    void new_th_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         ch_group_t* ch_group = new_ch_group(2, 4, 2, 2);
         ch_group->serv_type = SERV_TYPE_TH_SENSOR;
         ch_group->serv_index = service_numerator;
@@ -10333,7 +10333,7 @@ void normal_mode_init() {
     }
     
     // *** NEW HUMIDIFIER
-    void new_humidifier(const uint8_t accessory,  uint8_t service, const uint8_t total_services, cJSON* json_context, const uint8_t serv_type) {
+    void new_humidifier(const uint8_t accessory,  uint8_t service, const uint8_t total_services, cJSON_rsf* json_context, const uint8_t serv_type) {
         ch_group_t* ch_group = new_ch_group(7, 6, 4, 4);
         ch_group->serv_type = SERV_TYPE_HUMIDIFIER;
         ch_group->serv_index = service_numerator;
@@ -10349,24 +10349,24 @@ void normal_mode_init() {
         
         // Humidity Deadbands
         HM_DEADBAND = 0;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND) != NULL) {
-            HM_DEADBAND = cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND)->valuefloat / 2.000f;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND) != NULL) {
+            HM_DEADBAND = cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND)->valuefloat / 2.000f;
         }
         
         HM_DEADBAND_FORCE_IDLE = 0;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_FORCE_IDLE) != NULL) {
-            HM_DEADBAND_FORCE_IDLE = cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_FORCE_IDLE)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_FORCE_IDLE) != NULL) {
+            HM_DEADBAND_FORCE_IDLE = cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_FORCE_IDLE)->valuefloat;
         }
         
         HM_DEADBAND_SOFT_ON = 0;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_SOFT_ON) != NULL) {
-            HM_DEADBAND_SOFT_ON = cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_SOFT_ON)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_SOFT_ON) != NULL) {
+            HM_DEADBAND_SOFT_ON = cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_SOFT_ON)->valuefloat;
         }
         
         // Humidifier Type
         int hm_type = HUMIDIF_TYPE_HUM;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_TYPE) != NULL) {
-            hm_type = cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_TYPE)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_TYPE) != NULL) {
+            hm_type = cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_TYPE)->valuefloat;
         }
         
         HM_TYPE = hm_type;
@@ -10493,30 +10493,30 @@ void normal_mode_init() {
             th_sensor_starter(ch_group, poll_period);
         }
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), humidif_input, ch_group, 9);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), humidif_input_hum, ch_group, HUMIDIF_UP);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), humidif_input_hum, ch_group, HUMIDIF_DOWN);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), humidif_input, ch_group, 9);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_3), humidif_input_hum, ch_group, HUMIDIF_UP);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_4), humidif_input_hum, ch_group, HUMIDIF_DOWN);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), humidif_input, ch_group, 1);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), humidif_input, ch_group, 0);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), humidif_input, ch_group, 9);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), humidif_input_hum, ch_group, HUMIDIF_UP);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), humidif_input_hum, ch_group, HUMIDIF_DOWN);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), humidif_input, ch_group, 9);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_3), humidif_input_hum, ch_group, HUMIDIF_UP);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_4), humidif_input_hum, ch_group, HUMIDIF_DOWN);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), humidif_input, ch_group, 1);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), humidif_input, ch_group, 0);
         
         if (TH_TYPE >= HUMIDIF_TYPE_HUMDEHUM) {
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), humidif_input, ch_group, 5);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), humidif_input, ch_group, 6);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), humidif_input, ch_group, 5);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), humidif_input, ch_group, 6);
             
-            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_5), humidif_input, ch_group, 5);
-            ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), humidif_input, ch_group, 6);
+            ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_5), humidif_input, ch_group, 5);
+            ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), humidif_input, ch_group, 6);
             
             if (TH_TYPE == HUMIDIF_TYPE_HUMDEHUM) {
-                diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_7), humidif_input, ch_group, 7);
-                ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_7), humidif_input, ch_group, 7);
+                diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_7), humidif_input, ch_group, 7);
+                ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_7), humidif_input, ch_group, 7);
             }
             
             int initial_target_mode = HUMIDIF_INIT_TARGET_MODE_DEFAULT;
-            if (cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_INIT_TARGET_MODE) != NULL) {
-                initial_target_mode = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, HUMIDIF_INIT_TARGET_MODE)->valuefloat;
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_INIT_TARGET_MODE) != NULL) {
+                initial_target_mode = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_INIT_TARGET_MODE)->valuefloat;
             }
             
             if (initial_target_mode == HUMIDIF_INIT_TARGET_MODE_DEFAULT) {
@@ -10529,8 +10529,8 @@ void normal_mode_init() {
         const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), humidif_input, ch_group, 1);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), humidif_input, ch_group, 0);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), humidif_input, ch_group, 1);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), humidif_input, ch_group, 0);
             
             ch_group->ch[2]->value.int_value = !((uint8_t) set_initial_state(ch_group->serv_index, 2, json_context, ch_group->ch[2], CH_TYPE_INT8, 0));
             
@@ -10542,10 +10542,10 @@ void normal_mode_init() {
         } else {
             int initial_state = 2;
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), humidif_input, ch_group, 1)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), humidif_input, ch_group, 1)) {
                 initial_state = 1;
             }
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), humidif_input, ch_group, 0)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), humidif_input, ch_group, 0)) {
                 ch_group->ch[2]->value.int_value = 1;
                 initial_state = 0;
             }
@@ -10563,7 +10563,7 @@ void normal_mode_init() {
     }
     
     // *** NEW LIGHTBULB
-    void new_lightbulb(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+    void new_lightbulb(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         ch_group_t* ch_group = new_ch_group(4, 0, 2, 1);
         ch_group->serv_type = SERV_TYPE_LIGHTBULB;
         ch_group->serv_index = service_numerator;
@@ -10632,11 +10632,11 @@ void normal_mode_init() {
         LIGHTBULB_SET_DELAY_TIMER = rs_esp_timer_create(LIGHTBULB_SET_DELAY_MS, false, (void*) ch_group, lightbulb_task_timer);
         
         LIGHTBULB_TYPE = LIGHTBULB_TYPE_PWM;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_TYPE_SET) != NULL) {
-            LIGHTBULB_TYPE = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_TYPE_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_TYPE_SET) != NULL) {
+            LIGHTBULB_TYPE = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_TYPE_SET)->valuefloat;
         }
         
-        cJSON* gpio_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_GPIO_ARRAY_SET);
+        cJSON_rsf* gpio_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_GPIO_ARRAY_SET);
         if (!gpio_array) {
             LIGHTBULB_TYPE = LIGHTBULB_TYPE_VIRTUAL;
             LIGHTBULB_CHANNELS = 1;
@@ -10644,8 +10644,8 @@ void normal_mode_init() {
             LIGHTBULB_CHANNELS = 3;
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CHANNELS_SET) != NULL) {
-            LIGHTBULB_CHANNELS = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CHANNELS_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CHANNELS_SET) != NULL) {
+            LIGHTBULB_CHANNELS = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CHANNELS_SET)->valuefloat;
         }
         
         if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL) {
@@ -10655,15 +10655,15 @@ void normal_mode_init() {
         }
         
         if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM || LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM_CWWW) {
-            LIGHTBULB_CHANNELS = cJSON_GetArraySize(gpio_array);
+            LIGHTBULB_CHANNELS = cJSON_rsf_GetArraySize(gpio_array);
             for (int i = 0; i < LIGHTBULB_CHANNELS; i++) {
-                lightbulb_group->gpio[i] = (uint8_t) cJSON_GetArrayItem(gpio_array, i)->valuefloat;
+                lightbulb_group->gpio[i] = (uint8_t) cJSON_rsf_GetArrayItem(gpio_array, i)->valuefloat;
             }
             
         /*
         } else if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_SM16716) {
-            lightbulb_group->gpio[0] = cJSON_GetArrayItem(gpio_array, 0)->valuefloat;
-            lightbulb_group->gpio[1] = cJSON_GetArrayItem(gpio_array, 1)->valuefloat;
+            lightbulb_group->gpio[0] = cJSON_rsf_GetArrayItem(gpio_array, 0)->valuefloat;
+            lightbulb_group->gpio[1] = cJSON_rsf_GetArrayItem(gpio_array, 1)->valuefloat;
             
             //
             // TO-DO
@@ -10672,31 +10672,31 @@ void normal_mode_init() {
             
 #ifndef CONFIG_IDF_TARGET_ESP32C2
         } else if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_NRZ) {
-            lightbulb_group->gpio[0] = cJSON_GetArrayItem(gpio_array, 0)->valuefloat;
+            lightbulb_group->gpio[0] = cJSON_rsf_GetArrayItem(gpio_array, 0)->valuefloat;
             //set_used_gpio(lightbulb_group->gpio[0]);
             
-            LIGHTBULB_RANGE_START = cJSON_GetArrayItem(gpio_array, 1)->valuefloat;
+            LIGHTBULB_RANGE_START = cJSON_rsf_GetArrayItem(gpio_array, 1)->valuefloat;
             LIGHTBULB_RANGE_START -= 1;
             LIGHTBULB_RANGE_START = LIGHTBULB_RANGE_START * LIGHTBULB_CHANNELS;
-            LIGHTBULB_RANGE_END = cJSON_GetArrayItem(gpio_array, 2)->valuefloat;
+            LIGHTBULB_RANGE_END = cJSON_rsf_GetArrayItem(gpio_array, 2)->valuefloat;
             LIGHTBULB_RANGE_END = LIGHTBULB_RANGE_END * LIGHTBULB_CHANNELS;
             
             float nrz_time[3] = { 0.4, 0.8, 0.85 };
             
-            cJSON* nrz_times = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_NRZ_TIMES_ARRAY_SET);
+            cJSON_rsf* nrz_times = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_NRZ_TIMES_ARRAY_SET);
             if (nrz_times) {
                 for (unsigned int n = 0; n < 3; n++) {
-                    nrz_time[n] = cJSON_GetArrayItem(nrz_times, n)->valuefloat;
+                    nrz_time[n] = cJSON_rsf_GetArrayItem(nrz_times, n)->valuefloat;
                 }
             }
             
             addressled_t* addressled = new_addressled(lightbulb_group->gpio[0], LIGHTBULB_RANGE_END, nrz_time[0], nrz_time[1], nrz_time[2]);
             
-            cJSON* color_map = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COLOR_MAP_SET);
+            cJSON_rsf* color_map = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COLOR_MAP_SET);
             if (color_map) {
-                const unsigned int size = cJSON_GetArraySize(color_map);
+                const unsigned int size = cJSON_rsf_GetArraySize(color_map);
                 for (unsigned int i = 0; i < size; i++) {
-                    addressled->map[i] = cJSON_GetArrayItem(color_map, i)->valuefloat;
+                    addressled->map[i] = cJSON_rsf_GetArrayItem(color_map, i)->valuefloat;
                 }
             }
 #endif  // no CONFIG_IDF_TARGET_ESP32C2
@@ -10707,45 +10707,45 @@ void normal_mode_init() {
         
         int is_custom_initial = false;
         uint16_t custom_initial[3];
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_INITITAL_STATE_ARRAY_SET) != NULL) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_INITITAL_STATE_ARRAY_SET) != NULL) {
             is_custom_initial = true;
-            cJSON* init_values_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_INITITAL_STATE_ARRAY_SET);
-            for (int i = 0; i < cJSON_GetArraySize(init_values_array); i++) {
-                custom_initial[i] = (uint16_t) cJSON_GetArrayItem(init_values_array, i)->valuefloat;
+            cJSON_rsf* init_values_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_INITITAL_STATE_ARRAY_SET);
+            for (int i = 0; i < cJSON_rsf_GetArraySize(init_values_array); i++) {
+                custom_initial[i] = (uint16_t) cJSON_rsf_GetArrayItem(init_values_array, i)->valuefloat;
             }
         }
         
         if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL) {
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_MAX_POWER_SET) != NULL) {
-                LIGHTBULB_MAX_POWER = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_MAX_POWER_SET)->valuefloat;
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_MAX_POWER_SET) != NULL) {
+                LIGHTBULB_MAX_POWER = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_MAX_POWER_SET)->valuefloat;
             }
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CURVE_FACTOR_SET) != NULL) {
-                LIGHTBULB_CURVE_FACTOR = (float) cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CURVE_FACTOR_SET)->valuefloat;
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CURVE_FACTOR_SET) != NULL) {
+                LIGHTBULB_CURVE_FACTOR = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CURVE_FACTOR_SET)->valuefloat;
             }
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FLUX_ARRAY_SET) != NULL) {
-                cJSON* flux_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FLUX_ARRAY_SET);
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FLUX_ARRAY_SET) != NULL) {
+                cJSON_rsf* flux_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FLUX_ARRAY_SET);
                 for (int i = 0; i < LIGHTBULB_CHANNELS; i++) {
-                    lightbulb_group->flux[i] = (float) cJSON_GetArrayItem(flux_array, i)->valuefloat;
+                    lightbulb_group->flux[i] = (float) cJSON_rsf_GetArrayItem(flux_array, i)->valuefloat;
                 }
             }
             
             //INFO("Flux %g, %g, %g, %g, %g", lightbulb_group->flux[0], lightbulb_group->flux[1], lightbulb_group->flux[2], lightbulb_group->flux[3], lightbulb_group->flux[4]);
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_RGB_ARRAY_SET) != NULL) {
-                cJSON* rgb_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_RGB_ARRAY_SET);
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_RGB_ARRAY_SET) != NULL) {
+                cJSON_rsf* rgb_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_RGB_ARRAY_SET);
                 for (int i = 0; i < 6; i++) {
-                    lightbulb_group->rgb[i >> 1][i % 2] = (float) cJSON_GetArrayItem(rgb_array, i)->valuefloat;
+                    lightbulb_group->rgb[i >> 1][i % 2] = (float) cJSON_rsf_GetArrayItem(rgb_array, i)->valuefloat;
                 }
             }
             
             //INFO("Target RGB %g, %g, %g, %g, %g, %g", lightbulb_group->rgb[0][0], lightbulb_group->rgb[0][1], lightbulb_group->rgb[1][0], lightbulb_group->rgb[1][1], lightbulb_group->rgb[2][0], lightbulb_group->rgb[2][1]);
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CMY_ARRAY_SET) != NULL) {
-                cJSON* cmy_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CMY_ARRAY_SET);
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CMY_ARRAY_SET) != NULL) {
+                cJSON_rsf* cmy_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CMY_ARRAY_SET);
                 for (int i = 0; i < 6; i++) {
-                    lightbulb_group->cmy[i >> 1][i % 2] = (float) cJSON_GetArrayItem(cmy_array, i)->valuefloat;
+                    lightbulb_group->cmy[i >> 1][i % 2] = (float) cJSON_rsf_GetArrayItem(cmy_array, i)->valuefloat;
                 }
             }
             
@@ -10753,23 +10753,23 @@ void normal_mode_init() {
             
             //INFO("CMY [%g, %g, %g], [%g, %g, %g]", lightbulb_group->cmy[0][0], lightbulb_group->cmy[0][1], lightbulb_group->cmy[0][2], lightbulb_group->cmy[1][0], lightbulb_group->cmy[1][1], lightbulb_group->cmy[1][2]);
             
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY_SET) != NULL) {
-                cJSON* coordinate_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY_SET);
-                lightbulb_group->r[0] = (float) cJSON_GetArrayItem(coordinate_array, 0)->valuefloat;
-                lightbulb_group->r[1] = (float) cJSON_GetArrayItem(coordinate_array, 1)->valuefloat;
-                lightbulb_group->g[0] = (float) cJSON_GetArrayItem(coordinate_array, 2)->valuefloat;
-                lightbulb_group->g[1] = (float) cJSON_GetArrayItem(coordinate_array, 3)->valuefloat;
-                lightbulb_group->b[0] = (float) cJSON_GetArrayItem(coordinate_array, 4)->valuefloat;
-                lightbulb_group->b[1] = (float) cJSON_GetArrayItem(coordinate_array, 5)->valuefloat;
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY_SET) != NULL) {
+                cJSON_rsf* coordinate_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COORDINATE_ARRAY_SET);
+                lightbulb_group->r[0] = (float) cJSON_rsf_GetArrayItem(coordinate_array, 0)->valuefloat;
+                lightbulb_group->r[1] = (float) cJSON_rsf_GetArrayItem(coordinate_array, 1)->valuefloat;
+                lightbulb_group->g[0] = (float) cJSON_rsf_GetArrayItem(coordinate_array, 2)->valuefloat;
+                lightbulb_group->g[1] = (float) cJSON_rsf_GetArrayItem(coordinate_array, 3)->valuefloat;
+                lightbulb_group->b[0] = (float) cJSON_rsf_GetArrayItem(coordinate_array, 4)->valuefloat;
+                lightbulb_group->b[1] = (float) cJSON_rsf_GetArrayItem(coordinate_array, 5)->valuefloat;
                 
                 if (LIGHTBULB_CHANNELS >= 4) {
-                    lightbulb_group->cw[0] = (float) cJSON_GetArrayItem(coordinate_array, 6)->valuefloat;
-                    lightbulb_group->cw[1] = (float) cJSON_GetArrayItem(coordinate_array, 7)->valuefloat;
+                    lightbulb_group->cw[0] = (float) cJSON_rsf_GetArrayItem(coordinate_array, 6)->valuefloat;
+                    lightbulb_group->cw[1] = (float) cJSON_rsf_GetArrayItem(coordinate_array, 7)->valuefloat;
                 }
                 
                 if (LIGHTBULB_CHANNELS == 5) {
-                    lightbulb_group->ww[0] = (float) cJSON_GetArrayItem(coordinate_array, 8)->valuefloat;
-                    lightbulb_group->ww[1] = (float) cJSON_GetArrayItem(coordinate_array, 9)->valuefloat;
+                    lightbulb_group->ww[0] = (float) cJSON_rsf_GetArrayItem(coordinate_array, 8)->valuefloat;
+                    lightbulb_group->ww[1] = (float) cJSON_rsf_GetArrayItem(coordinate_array, 9)->valuefloat;
                 }
             }
             /*
@@ -10779,25 +10779,25 @@ void normal_mode_init() {
                                                                                         lightbulb_group->cw[0], lightbulb_group->cw[1],
                                                                                         lightbulb_group->ww[0], lightbulb_group->ww[1]);
             */
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_WHITE_POINT_SET) != NULL) {
-                cJSON* white_point = cJSON_GetObjectItemCaseSensitive(json_context, LIGHTBULB_WHITE_POINT_SET);
-                lightbulb_group->wp[0] = (float) cJSON_GetArrayItem(white_point, 0)->valuefloat;
-                lightbulb_group->wp[1] = (float) cJSON_GetArrayItem(white_point, 1)->valuefloat;
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_WHITE_POINT_SET) != NULL) {
+                cJSON_rsf* white_point = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_WHITE_POINT_SET);
+                lightbulb_group->wp[0] = (float) cJSON_rsf_GetArrayItem(white_point, 0)->valuefloat;
+                lightbulb_group->wp[1] = (float) cJSON_rsf_GetArrayItem(white_point, 1)->valuefloat;
             }
             
             //INFO("White point [%g, %g]", lightbulb_group->wp[0], lightbulb_group->wp[1]);
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, RGBW_STEP_SET) != NULL) {
-            lightbulb_group->step = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_context, RGBW_STEP_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, RGBW_STEP_SET) != NULL) {
+            lightbulb_group->step = (uint16_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, RGBW_STEP_SET)->valuefloat;
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, AUTODIMMER_TASK_DELAY_SET) != NULL) {
-            lightbulb_group->autodimmer_task_delay = cJSON_GetObjectItemCaseSensitive(json_context, AUTODIMMER_TASK_DELAY_SET)->valuefloat * MS_TO_TICKS(1000);
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, AUTODIMMER_TASK_DELAY_SET) != NULL) {
+            lightbulb_group->autodimmer_task_delay = cJSON_rsf_GetObjectItemCaseSensitive(json_context, AUTODIMMER_TASK_DELAY_SET)->valuefloat * MS_TO_TICKS(1000);
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, AUTODIMMER_TASK_STEP_SET) != NULL) {
-            lightbulb_group->autodimmer_task_step = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, AUTODIMMER_TASK_STEP_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, AUTODIMMER_TASK_STEP_SET) != NULL) {
+            lightbulb_group->autodimmer_task_step = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, AUTODIMMER_TASK_STEP_SET)->valuefloat;
         }
         
         if (ch_group->homekit_enabled) {
@@ -10885,29 +10885,29 @@ void normal_mode_init() {
             ch_group->ch[1]->value.int_value = 100;
         }
 
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), rgbw_brightness, ch_group, LIGHTBULB_BRIGHTNESS_UP);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), rgbw_brightness, ch_group, LIGHTBULB_BRIGHTNESS_DOWN);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_2), rgbw_brightness, ch_group, LIGHTBULB_BRIGHTNESS_UP);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_3), rgbw_brightness, ch_group, LIGHTBULB_BRIGHTNESS_DOWN);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), rgbw_brightness, ch_group, LIGHTBULB_BRIGHTNESS_UP);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), rgbw_brightness, ch_group, LIGHTBULB_BRIGHTNESS_DOWN);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_2), rgbw_brightness, ch_group, LIGHTBULB_BRIGHTNESS_UP);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_3), rgbw_brightness, ch_group, LIGHTBULB_BRIGHTNESS_DOWN);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
         
         if (lightbulb_group->autodimmer_task_step > 0) {
             LIGHTBULB_AUTODIMMER_TIMER = rs_esp_timer_create(AUTODIMMER_DELAY, false, (void*) ch_group->ch[0], no_autodimmer_called);
         }
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
             
             ch_group->ch[0]->value.bool_value = !((bool) set_initial_state(ch_group->serv_index, 0, json_context, ch_group->ch[0], CH_TYPE_BOOL, 0));
         } else {
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
                 ch_group->ch[0]->value.bool_value = false;
             }
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
                 ch_group->ch[0]->value.bool_value = true;
             }
         }
@@ -10923,7 +10923,7 @@ void normal_mode_init() {
     }
     
     // *** NEW GARAGE DOOR
-    void new_garage_door(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+    void new_garage_door(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         ch_group_t* ch_group = new_ch_group(3, 6, 3, 0);
         ch_group->serv_type = SERV_TYPE_GARAGE_DOOR;
         ch_group->serv_index = service_numerator;
@@ -10973,34 +10973,34 @@ void normal_mode_init() {
         
         AUTOOFF_TIMER = autoswitch_time(json_context, ch_group);
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN_SET) != NULL) {
-            GARAGE_DOOR_TIME_MARGIN = cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN_SET) != NULL) {
+            GARAGE_DOOR_TIME_MARGIN = cJSON_rsf_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_MARGIN_SET)->valuefloat;
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_OPEN_SET) != NULL) {
-            GARAGE_DOOR_WORKING_TIME = cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_OPEN_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_OPEN_SET) != NULL) {
+            GARAGE_DOOR_WORKING_TIME = cJSON_rsf_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_OPEN_SET)->valuefloat;
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_CLOSE_SET) != NULL) {
-            GARAGE_DOOR_CLOSE_TIME_FACTOR = GARAGE_DOOR_WORKING_TIME / cJSON_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_CLOSE_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_CLOSE_SET) != NULL) {
+            GARAGE_DOOR_CLOSE_TIME_FACTOR = GARAGE_DOOR_WORKING_TIME / cJSON_rsf_GetObjectItemCaseSensitive(json_context, GARAGE_DOOR_TIME_CLOSE_SET)->valuefloat;
         }
         
         GARAGE_DOOR_WORKING_TIME += (GARAGE_DOOR_TIME_MARGIN << 1);
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_8), garage_door_stop, ch_group, 0);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_8), garage_door_stop, ch_group, 0);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_5), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSING);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_4), garage_door_sensor, ch_group, GARAGE_DOOR_OPENING);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_3), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSED);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_2), garage_door_sensor, ch_group, GARAGE_DOOR_OPENED);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), garage_door_obstruction, ch_group, 0);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_7), garage_door_obstruction, ch_group, 1);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_8), garage_door_stop, ch_group, 0);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_8), garage_door_stop, ch_group, 0);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_5), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSING);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_4), garage_door_sensor, ch_group, GARAGE_DOOR_OPENING);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_3), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSED);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_2), garage_door_sensor, ch_group, GARAGE_DOOR_OPENED);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), garage_door_obstruction, ch_group, 0);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_7), garage_door_obstruction, ch_group, 1);
         
         GD_CURRENT_DOOR_STATE_INT = (uint8_t) set_initial_state(ch_group->serv_index, 0, json_context, GD_CURRENT_DOOR_STATE, CH_TYPE_INT8, 1);
         if (GD_CURRENT_DOOR_STATE_INT > 1) {
@@ -11015,34 +11015,34 @@ void normal_mode_init() {
         
         int initial_sensor = 2;
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5) != NULL) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5) != NULL) {
             GARAGE_DOOR_HAS_F5 = 1;
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSING)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSING)) {
                 initial_sensor = GARAGE_DOOR_OPENED;
             }
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4) != NULL) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4) != NULL) {
             GARAGE_DOOR_HAS_F4 = 1;
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), garage_door_sensor, ch_group, GARAGE_DOOR_OPENING)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), garage_door_sensor, ch_group, GARAGE_DOOR_OPENING)) {
                 initial_sensor = GARAGE_DOOR_OPENED;
             }
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3) != NULL) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3) != NULL) {
             GARAGE_DOOR_HAS_F3 = 1;
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSED)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSED)) {
                 initial_sensor = GARAGE_DOOR_CLOSED;
             }
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2) != NULL) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2) != NULL) {
             GARAGE_DOOR_HAS_F2 = 1;
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), garage_door_sensor, ch_group, GARAGE_DOOR_OPENED)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), garage_door_sensor, ch_group, GARAGE_DOOR_OPENED)) {
                 initial_sensor = GARAGE_DOOR_OPENED;
             }
         }
@@ -11053,10 +11053,10 @@ void normal_mode_init() {
         
         initial_sensor = 2;
         
-        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), garage_door_obstruction, ch_group, 0)) {
+        if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), garage_door_obstruction, ch_group, 0)) {
             initial_sensor = 0;
         }
-        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_7), garage_door_obstruction, ch_group, 1)) {
+        if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_7), garage_door_obstruction, ch_group, 1)) {
             initial_sensor = 1;
         }
         
@@ -11068,7 +11068,7 @@ void normal_mode_init() {
     }
     
     // *** NEW WINDOW COVER
-    void new_window_cover(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+    void new_window_cover(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         ch_group_t* ch_group = new_ch_group(4, 4, 5, 1);
         ch_group->serv_type = SERV_TYPE_WINDOW_COVER;
         ch_group->serv_index = service_numerator;
@@ -11082,8 +11082,8 @@ void normal_mode_init() {
         service++;
         
         int cover_type = WINDOW_COVER_TYPE_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TYPE_SET) != NULL) {
-            cover_type = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TYPE_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TYPE_SET) != NULL) {
+            cover_type = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TYPE_SET)->valuefloat;
         }
         
         WINDOW_COVER_CH_CURRENT_POSITION = NEW_HOMEKIT_CHARACTERISTIC(CURRENT_POSITION, 0);
@@ -11138,20 +11138,20 @@ void normal_mode_init() {
         
         ch_group->timer2 = rs_esp_timer_create(WINDOW_COVER_STOP_ENABLE_DELAY_MS, false, (void*) ch_group, window_cover_timer_rearm_stop);
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_OPEN_SET) != NULL) {
-            WINDOW_COVER_TIME_OPEN = cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_OPEN_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_OPEN_SET) != NULL) {
+            WINDOW_COVER_TIME_OPEN = cJSON_rsf_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_OPEN_SET)->valuefloat;
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_CLOSE_SET) != NULL) {
-            WINDOW_COVER_TIME_CLOSE = cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_CLOSE_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_CLOSE_SET) != NULL) {
+            WINDOW_COVER_TIME_CLOSE = cJSON_rsf_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_CLOSE_SET)->valuefloat;
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_CORRECTION_SET) != NULL) {
-            WINDOW_COVER_CORRECTION = cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_CORRECTION_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_CORRECTION_SET) != NULL) {
+            WINDOW_COVER_CORRECTION = cJSON_rsf_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_CORRECTION_SET)->valuefloat;
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_MARGIN_SYNC_SET) != NULL) {
-            WINDOW_COVER_MARGIN_SYNC = cJSON_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_MARGIN_SYNC_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_MARGIN_SYNC_SET) != NULL) {
+            WINDOW_COVER_MARGIN_SYNC = cJSON_rsf_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_MARGIN_SYNC_SET)->valuefloat;
         }
         
         WINDOW_COVER_HOMEKIT_POSITION = set_initial_state(ch_group->serv_index, 0, init_last_state_json, WINDOW_COVER_CH_CURRENT_POSITION, CH_TYPE_INT8, 0);
@@ -11159,20 +11159,20 @@ void normal_mode_init() {
         WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_HOMEKIT_POSITION;
         WINDOW_COVER_CH_TARGET_POSITION->value.int_value = WINDOW_COVER_CH_CURRENT_POSITION->value.int_value;
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), window_cover_diginput, ch_group, WINDOW_COVER_CLOSING);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), window_cover_diginput, ch_group, WINDOW_COVER_OPENING);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), window_cover_diginput, ch_group, WINDOW_COVER_STOP);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), window_cover_diginput, ch_group, WINDOW_COVER_CLOSING + 3);
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), window_cover_diginput, ch_group, WINDOW_COVER_OPENING + 3);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), window_cover_diginput, ch_group, WINDOW_COVER_CLOSING);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), window_cover_diginput, ch_group, WINDOW_COVER_OPENING);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_2), window_cover_diginput, ch_group, WINDOW_COVER_STOP);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_3), window_cover_diginput, ch_group, WINDOW_COVER_CLOSING + 3);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_4), window_cover_diginput, ch_group, WINDOW_COVER_OPENING + 3);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_5), window_cover_obstruction, ch_group, 0);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), window_cover_obstruction, ch_group, 1);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), window_cover_diginput, ch_group, WINDOW_COVER_CLOSING);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), window_cover_diginput, ch_group, WINDOW_COVER_OPENING);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), window_cover_diginput, ch_group, WINDOW_COVER_STOP);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), window_cover_diginput, ch_group, WINDOW_COVER_CLOSING + 3);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), window_cover_diginput, ch_group, WINDOW_COVER_OPENING + 3);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), window_cover_diginput, ch_group, WINDOW_COVER_CLOSING);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), window_cover_diginput, ch_group, WINDOW_COVER_OPENING);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_2), window_cover_diginput, ch_group, WINDOW_COVER_STOP);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_3), window_cover_diginput, ch_group, WINDOW_COVER_CLOSING + 3);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_4), window_cover_diginput, ch_group, WINDOW_COVER_OPENING + 3);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_5), window_cover_obstruction, ch_group, 0);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), window_cover_obstruction, ch_group, 1);
         
         if (get_exec_actions_on_boot(json_context)) {
             window_cover_stop(ch_group);
@@ -11180,10 +11180,10 @@ void normal_mode_init() {
         
         int initial_sensor = 2;
         
-        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), window_cover_obstruction, ch_group, 0)) {
+        if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), window_cover_obstruction, ch_group, 0)) {
             initial_sensor = 0;
         }
-        if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), window_cover_obstruction, ch_group, 1)) {
+        if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_6), window_cover_obstruction, ch_group, 1)) {
             initial_sensor = 1;
         }
         
@@ -11195,7 +11195,7 @@ void normal_mode_init() {
     }
     
     // *** NEW LIGHT SENSOR
-    void new_light_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+    void new_light_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         ch_group_t* ch_group = new_ch_group(1, 3, 4, 1);
         ch_group->serv_type = SERV_TYPE_LIGHT_SENSOR;
         ch_group->serv_index = service_numerator;
@@ -11234,40 +11234,40 @@ void normal_mode_init() {
         }
         
         int light_sensor_type = LIGHT_SENSOR_TYPE_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_TYPE_SET) != NULL) {
-            light_sensor_type = cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_TYPE_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_TYPE_SET) != NULL) {
+            light_sensor_type = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_TYPE_SET)->valuefloat;
         }
         
         LIGHT_SENSOR_TYPE = light_sensor_type;
         
         LIGHT_SENSOR_FACTOR = LIGHT_SENSOR_FACTOR_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_FACTOR_SET) != NULL) {
-            LIGHT_SENSOR_FACTOR = cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_FACTOR_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_FACTOR_SET) != NULL) {
+            LIGHT_SENSOR_FACTOR = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_FACTOR_SET)->valuefloat;
         }
         
         LIGHT_SENSOR_OFFSET = LIGHT_SENSOR_OFFSET_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_OFFSET_SET) != NULL) {
-            LIGHT_SENSOR_OFFSET = cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_OFFSET_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_OFFSET_SET) != NULL) {
+            LIGHT_SENSOR_OFFSET = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_OFFSET_SET)->valuefloat;
         }
         
         if (light_sensor_type < 2) {
             LIGHT_SENSOR_RESISTOR = LIGHT_SENSOR_RESISTOR_DEFAULT;
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_RESISTOR_SET) != NULL) {
-                LIGHT_SENSOR_RESISTOR = cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_RESISTOR_SET)->valuefloat * 1000;
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_RESISTOR_SET) != NULL) {
+                LIGHT_SENSOR_RESISTOR = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_RESISTOR_SET)->valuefloat * 1000;
             }
             
             LIGHT_SENSOR_POW = LIGHT_SENSOR_POW_DEFAULT;
-            if (cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_POW_SET) != NULL) {
-                LIGHT_SENSOR_POW = cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_POW_SET)->valuefloat;
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_POW_SET) != NULL) {
+                LIGHT_SENSOR_POW = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_POW_SET)->valuefloat;
             }
             
 #ifdef ESP_PLATFORM
-            LIGHT_SENSOR_GPIO = cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_GPIO_SET)->valuefloat;
+            LIGHT_SENSOR_GPIO = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_GPIO_SET)->valuefloat;
 #endif
         } else if (light_sensor_type == 2) {
-            cJSON* data_array = cJSON_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_I2C_DATA_ARRAY_SET);
-            LIGHT_SENSOR_I2C_BUS = cJSON_GetArrayItem(data_array, 0)->valuefloat;
-            LIGHT_SENSOR_I2C_ADDR = (uint8_t) cJSON_GetArrayItem(data_array, 1)->valuefloat;
+            cJSON_rsf* data_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_I2C_DATA_ARRAY_SET);
+            LIGHT_SENSOR_I2C_BUS = cJSON_rsf_GetArrayItem(data_array, 0)->valuefloat;
+            LIGHT_SENSOR_I2C_ADDR = (uint8_t) cJSON_rsf_GetArrayItem(data_array, 1)->valuefloat;
             
             const uint8_t start_bh1750 = 0x10;
             adv_i2c_slave_write(LIGHT_SENSOR_I2C_BUS, (uint8_t) LIGHT_SENSOR_I2C_ADDR, NULL, 0, &start_bh1750, 1);
@@ -11280,7 +11280,7 @@ void normal_mode_init() {
     }
     
     // *** NEW SECURITY SYSTEM
-    void new_sec_system(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+    void new_sec_system(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         ch_group_t* ch_group = new_ch_group(2, 0, 0, 0);
         ch_group->serv_type = SERV_TYPE_SECURITY_SYSTEM;
         ch_group->serv_index = service_numerator;
@@ -11295,10 +11295,10 @@ void normal_mode_init() {
         
         uint8_t valid_values_len = 4;
         
-        cJSON* modes_array = NULL;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, SEC_SYSTEM_MODES_ARRAY_SET) != NULL) {
-            modes_array = cJSON_GetObjectItemCaseSensitive(json_context, SEC_SYSTEM_MODES_ARRAY_SET);
-            valid_values_len = cJSON_GetArraySize(modes_array);
+        cJSON_rsf* modes_array = NULL;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, SEC_SYSTEM_MODES_ARRAY_SET) != NULL) {
+            modes_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, SEC_SYSTEM_MODES_ARRAY_SET);
+            valid_values_len = cJSON_rsf_GetArraySize(modes_array);
         }
 
         uint8_t* current_valid_values = (uint8_t*) malloc(valid_values_len + 1);
@@ -11306,7 +11306,7 @@ void normal_mode_init() {
         
         if (valid_values_len < 4) {
             for (int i = 0; i < valid_values_len; i++) {
-                current_valid_values[i] = (uint8_t) cJSON_GetArrayItem(modes_array, i)->valuefloat;
+                current_valid_values[i] = (uint8_t) cJSON_rsf_GetArrayItem(modes_array, i)->valuefloat;
                 target_valid_values[i] = current_valid_values[i];
             }
         } else {
@@ -11367,9 +11367,9 @@ void normal_mode_init() {
     }
     
     // *** NEW TV
-    void new_tv(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
-        cJSON* json_inputs = cJSON_GetObjectItemCaseSensitive(json_context, TV_INPUTS_ARRAY);
-        uint8_t inputs = cJSON_GetArraySize(json_inputs);
+    void new_tv(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
+        cJSON_rsf* json_inputs = cJSON_rsf_GetObjectItemCaseSensitive(json_context, TV_INPUTS_ARRAY);
+        uint8_t inputs = cJSON_rsf_GetArraySize(json_inputs);
         
         if (inputs == 0) {
             inputs = 1;
@@ -11455,20 +11455,20 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->linked = calloc(inputs + 1, sizeof(homekit_service_t*));
             
             for (int i = 0; i < inputs; i++) {
-                cJSON* json_input = cJSON_GetArrayItem(json_inputs, i);
+                cJSON_rsf* json_input = cJSON_rsf_GetArrayItem(json_inputs, i);
                 
                 char* name = strdup("TV");
-                if (cJSON_GetObjectItemCaseSensitive(json_input, TV_INPUT_NAME) != NULL) {
+                if (cJSON_rsf_GetObjectItemCaseSensitive(json_input, TV_INPUT_NAME) != NULL) {
                     free(name);
-                    name = uni_strdup(cJSON_GetObjectItemCaseSensitive(json_input, TV_INPUT_NAME)->valuestring, &unistrings);
-                    if (cJSON_GetObjectItemCaseSensitive(json_input, "0") != NULL) {
+                    name = uni_strdup(cJSON_rsf_GetObjectItemCaseSensitive(json_input, TV_INPUT_NAME)->valuestring, &unistrings);
+                    if (cJSON_rsf_GetObjectItemCaseSensitive(json_input, "0") != NULL) {
                         int int_action = MAX_ACTIONS + i;
                         char action[4];
                         itoa(int_action, action, 10);
-                        cJSON* json_new_input_action = cJSON_CreateObject();
-                        cJSON_AddItemReferenceToObject(json_new_input_action, action, cJSON_GetObjectItemCaseSensitive(json_input, "0"));
+                        cJSON_rsf* json_new_input_action = cJSON_rsf_CreateObject();
+                        cJSON_rsf_AddItemReferenceToObject(json_new_input_action, action, cJSON_rsf_GetObjectItemCaseSensitive(json_input, "0"));
                         register_actions(ch_group, json_new_input_action, int_action);
-                        cJSON_Delete(json_new_input_action);
+                        cJSON_rsf_Delete(json_new_input_action);
                     }
                 }
                 
@@ -11497,20 +11497,20 @@ void normal_mode_init() {
             ch_group->ch[1]->value.string_value = configured_name;
         }
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
         
         const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0);
             
             ch_group->ch[0]->value.int_value = !((uint8_t) set_initial_state(ch_group->serv_index, 0, json_context, ch_group->ch[0], CH_TYPE_INT8, 0));
             if (exec_actions_on_boot) {
@@ -11520,7 +11520,7 @@ void normal_mode_init() {
             }
             
         } else {
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
                 if (exec_actions_on_boot) {
                     diginput(99, ch_group, 1);
                 } else {
@@ -11528,7 +11528,7 @@ void normal_mode_init() {
                 }
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
                 ch_group->ch[0]->value.int_value = 1;
                 if (exec_actions_on_boot) {
                     diginput(99, ch_group, 0);
@@ -11537,11 +11537,11 @@ void normal_mode_init() {
                 }
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1)) {
                 digstate(99, ch_group, 1);
             }
             
-            if (diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0)) {
                 ch_group->ch[0]->value.int_value = 1;
                 digstate(99, ch_group, 0);
             }
@@ -11551,7 +11551,7 @@ void normal_mode_init() {
     }
     
     // *** NEW FAN
-    void new_fan(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+    void new_fan(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         ch_group_t* ch_group = new_ch_group(2, 1, 0, 1);
         ch_group->serv_index = service_numerator;
         int homekit_enabled = acc_homekit_enabled(json_context);
@@ -11564,8 +11564,8 @@ void normal_mode_init() {
         service++;
         
         int max_speed = 100;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, FAN_SPEED_STEPS) != NULL) {
-            max_speed = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, FAN_SPEED_STEPS)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FAN_SPEED_STEPS) != NULL) {
+            max_speed = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, FAN_SPEED_STEPS)->valuefloat;
         }
         
         ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(ON, false, .setter_ex=hkc_fan_setter);
@@ -11607,20 +11607,20 @@ void normal_mode_init() {
         }
         ch_group->ch[1]->value.float_value = saved_speed;
         
-        diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
-        ping_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), diginput, ch_group, 1);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
         
         const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1);
-            diginput_register(cJSON_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1);
+            diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0);
             
             ch_group->ch[0]->value.bool_value = !((uint8_t) set_initial_state(ch_group->serv_index, 0, json_context, ch_group->ch[0], CH_TYPE_BOOL, false));
             if (exec_actions_on_boot) {
@@ -11636,7 +11636,7 @@ void normal_mode_init() {
     }
     
     // *** NEW BATTERY
-    void new_battery(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+    void new_battery(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         ch_group_t* ch_group = new_ch_group(2, 1, 0, 1);
         ch_group->serv_index = service_numerator;
         int homekit_enabled = acc_homekit_enabled(json_context);
@@ -11649,8 +11649,8 @@ void normal_mode_init() {
         service++;
         
         int battery_low = BATTERY_LOW_THRESHOLD_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, BATTERY_LOW_THRESHOLD_SET) != NULL) {
-            battery_low = (uint8_t) cJSON_GetObjectItemCaseSensitive(json_context, BATTERY_LOW_THRESHOLD_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, BATTERY_LOW_THRESHOLD_SET) != NULL) {
+            battery_low = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, BATTERY_LOW_THRESHOLD_SET)->valuefloat;
         }
         
         BATTERY_LOW_THRESHOLD = battery_low;
@@ -11687,7 +11687,7 @@ void normal_mode_init() {
     }
     
     // *** NEW POWER MONITOR
-    void new_power_monitor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
+    void new_power_monitor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         ch_group_t* ch_group = new_ch_group(7, 3, 8, 4);
         ch_group->serv_type = SERV_TYPE_POWER_MONITOR;
         ch_group->serv_index = service_numerator;
@@ -11743,48 +11743,48 @@ void normal_mode_init() {
         ch_group->ch[5]->value.int_value = set_initial_state(ch_group->serv_index, 5, init_last_state_json, ch_group->ch[5], CH_TYPE_INT, 0);
         
         PM_VOLTAGE_FACTOR = PM_VOLTAGE_FACTOR_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, PM_VOLTAGE_FACTOR_SET) != NULL) {
-            PM_VOLTAGE_FACTOR = (float) cJSON_GetObjectItemCaseSensitive(json_context, PM_VOLTAGE_FACTOR_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_VOLTAGE_FACTOR_SET) != NULL) {
+            PM_VOLTAGE_FACTOR = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_VOLTAGE_FACTOR_SET)->valuefloat;
         }
         
         PM_VOLTAGE_OFFSET = PM_VOLTAGE_OFFSET_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, PM_VOLTAGE_OFFSET_SET) != NULL) {
-            PM_VOLTAGE_OFFSET = (float) cJSON_GetObjectItemCaseSensitive(json_context, PM_VOLTAGE_OFFSET_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_VOLTAGE_OFFSET_SET) != NULL) {
+            PM_VOLTAGE_OFFSET = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_VOLTAGE_OFFSET_SET)->valuefloat;
         }
         
         PM_CURRENT_FACTOR = PM_CURRENT_FACTOR_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, PM_CURRENT_FACTOR_SET) != NULL) {
-            PM_CURRENT_FACTOR = (float) cJSON_GetObjectItemCaseSensitive(json_context, PM_CURRENT_FACTOR_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_CURRENT_FACTOR_SET) != NULL) {
+            PM_CURRENT_FACTOR = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_CURRENT_FACTOR_SET)->valuefloat;
         }
         
         PM_CURRENT_OFFSET = PM_CURRENT_OFFSET_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, PM_CURRENT_OFFSET_SET) != NULL) {
-            PM_CURRENT_OFFSET = (float) cJSON_GetObjectItemCaseSensitive(json_context, PM_CURRENT_OFFSET_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_CURRENT_OFFSET_SET) != NULL) {
+            PM_CURRENT_OFFSET = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_CURRENT_OFFSET_SET)->valuefloat;
         }
         
         PM_POWER_FACTOR = PM_POWER_FACTOR_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, PM_POWER_FACTOR_SET) != NULL) {
-            PM_POWER_FACTOR = (float) cJSON_GetObjectItemCaseSensitive(json_context, PM_POWER_FACTOR_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_POWER_FACTOR_SET) != NULL) {
+            PM_POWER_FACTOR = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_POWER_FACTOR_SET)->valuefloat;
         }
         
         PM_POWER_OFFSET = PM_POWER_OFFSET_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, PM_POWER_OFFSET_SET) != NULL) {
-            PM_POWER_OFFSET = (float) cJSON_GetObjectItemCaseSensitive(json_context, PM_POWER_OFFSET_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_POWER_OFFSET_SET) != NULL) {
+            PM_POWER_OFFSET = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_POWER_OFFSET_SET)->valuefloat;
         }
         
         uint8_t pm_sensor_type = PM_SENSOR_TYPE_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, PM_SENSOR_TYPE_SET) != NULL) {
-            pm_sensor_type = cJSON_GetObjectItemCaseSensitive(json_context, PM_SENSOR_TYPE_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_SENSOR_TYPE_SET) != NULL) {
+            pm_sensor_type = cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_SENSOR_TYPE_SET)->valuefloat;
         }
         
         PM_SENSOR_TYPE = pm_sensor_type;
         
         int16_t data[4] = { PM_SENSOR_DATA_DEFAULT, PM_SENSOR_DATA_DEFAULT, PM_SENSOR_DATA_DEFAULT, PM_SENSOR_DATA_DEFAULT_INT_TYPE };
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, PM_SENSOR_DATA_ARRAY_SET) != NULL) {
-            cJSON* gpio_array = cJSON_GetObjectItemCaseSensitive(json_context, PM_SENSOR_DATA_ARRAY_SET);
-            for (int i = 0; i < cJSON_GetArraySize(gpio_array); i++) {
-                data[i] = (int16_t) cJSON_GetArrayItem(gpio_array, i)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_SENSOR_DATA_ARRAY_SET) != NULL) {
+            cJSON_rsf* gpio_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_SENSOR_DATA_ARRAY_SET);
+            for (int i = 0; i < cJSON_rsf_GetArraySize(gpio_array); i++) {
+                data[i] = (int16_t) cJSON_rsf_GetArrayItem(gpio_array, i)->valuefloat;
                 
                 /*
                 if (i < 3 && pm_sensor_type < 2 && data[i] > -1) {
@@ -11838,44 +11838,44 @@ void normal_mode_init() {
     }
     
     // *** NEW FREE MONITOR
-    void new_free_monitor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context, const uint8_t serv_type) {
+    void new_free_monitor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context, const uint8_t serv_type) {
         int fm_sensor_type = FM_SENSOR_TYPE_DEFAULT;
         
         int tg_serv = 0;
         unsigned int tg_ch = 0;
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, FM_TARGET_CH_ARRAY_SET) != NULL) {
-            cJSON* target_array = cJSON_GetObjectItemCaseSensitive(json_context, FM_TARGET_CH_ARRAY_SET);
-            tg_serv = (int16_t) cJSON_GetArrayItem(target_array, 0)->valuefloat;
-            tg_ch = (uint8_t) cJSON_GetArrayItem(target_array, 1)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_TARGET_CH_ARRAY_SET) != NULL) {
+            cJSON_rsf* target_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_TARGET_CH_ARRAY_SET);
+            tg_serv = (int16_t) cJSON_rsf_GetArrayItem(target_array, 0)->valuefloat;
+            tg_ch = (uint8_t) cJSON_rsf_GetArrayItem(target_array, 1)->valuefloat;
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, FM_SENSOR_TYPE_SET) != NULL) {
-            fm_sensor_type = cJSON_GetObjectItemCaseSensitive(json_context, FM_SENSOR_TYPE_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_SENSOR_TYPE_SET) != NULL) {
+            fm_sensor_type = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_SENSOR_TYPE_SET)->valuefloat;
         }
         
         pattern_t* pattern_base = NULL;
         
         if (free_monitor_type_is_pattern(fm_sensor_type)) {
-            cJSON* pattern_array = cJSON_GetObjectItemCaseSensitive(json_context, FM_PATTERN_ARRAY_SET);
-            for (int i = cJSON_GetArraySize(pattern_array) - 1; i >= 0; i--) {
+            cJSON_rsf* pattern_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_PATTERN_ARRAY_SET);
+            for (int i = cJSON_rsf_GetArraySize(pattern_array) - 1; i >= 0; i--) {
                 pattern_t* new_pattern = malloc(sizeof(pattern_t));
                 memset(new_pattern, 0, sizeof(*new_pattern));
                 
-                cJSON* pattern_data = cJSON_GetArrayItem(pattern_array, i);
+                cJSON_rsf* pattern_data = cJSON_rsf_GetArrayItem(pattern_array, i);
                 
-                if (strlen(cJSON_GetArrayItem(pattern_data, 0)->valuestring) > 0) {
+                if (strlen(cJSON_rsf_GetArrayItem(pattern_data, 0)->valuestring) > 0) {
                     if (fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_TEXT ||
                         fm_sensor_type == FM_SENSOR_TYPE_UART_PATTERN_TEXT) {
-                        new_pattern->pattern = (uint8_t*) uni_strdup(cJSON_GetArrayItem(pattern_data, 0)->valuestring, &unistrings);
+                        new_pattern->pattern = (uint8_t*) uni_strdup(cJSON_rsf_GetArrayItem(pattern_data, 0)->valuestring, &unistrings);
                         new_pattern->len = strlen((char*) new_pattern->pattern);
                     } else {
-                        new_pattern->len = process_hexstr(cJSON_GetArrayItem(pattern_data, 0)->valuestring, &new_pattern->pattern, &unistrings);
+                        new_pattern->len = process_hexstr(cJSON_rsf_GetArrayItem(pattern_data, 0)->valuestring, &new_pattern->pattern, &unistrings);
                     }
                 }
                 
-                if (cJSON_GetArraySize(pattern_data) > 1) {
-                    new_pattern->offset = (int16_t) cJSON_GetArrayItem(pattern_data, 1)->valuefloat;
+                if (cJSON_rsf_GetArraySize(pattern_data) > 1) {
+                    new_pattern->offset = (int16_t) cJSON_rsf_GetArrayItem(pattern_data, 1)->valuefloat;
                 }
                 
                 new_pattern->next = pattern_base;
@@ -11884,7 +11884,7 @@ void normal_mode_init() {
         }
         
         int has_limits = 0;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, FM_LIMIT_ARRAY_SET) != NULL) {
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_LIMIT_ARRAY_SET) != NULL) {
             has_limits = 2;
         }
         
@@ -11902,8 +11902,8 @@ void normal_mode_init() {
         
         int maths_operations = 0;
         if (fm_sensor_type == FM_SENSOR_TYPE_MATHS) {
-            cJSON* val_data = cJSON_GetObjectItemCaseSensitive(json_context, FM_READ_COMMAND_DATA_ARRAY);
-            maths_operations = cJSON_GetArraySize(val_data) / 3;
+            cJSON_rsf* val_data = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_READ_COMMAND_DATA_ARRAY);
+            maths_operations = cJSON_rsf_GetArraySize(val_data) / 3;
         }
         
         ch_group_t* ch_group = new_ch_group(1 +
@@ -11933,9 +11933,9 @@ void normal_mode_init() {
         FM_OVERRIDE_VALUE = NO_LAST_WILDCARD_ACTION;
         
         if (has_limits > 0) {
-            cJSON* limits_array = cJSON_GetObjectItemCaseSensitive(json_context, FM_LIMIT_ARRAY_SET);
-            FM_LIMIT_LOWER = cJSON_GetArrayItem(limits_array, 0)->valuefloat;
-            FM_LIMIT_UPPER = cJSON_GetArrayItem(limits_array, 1)->valuefloat;
+            cJSON_rsf* limits_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_LIMIT_ARRAY_SET);
+            FM_LIMIT_LOWER = cJSON_rsf_GetArrayItem(limits_array, 0)->valuefloat;
+            FM_LIMIT_UPPER = cJSON_rsf_GetArrayItem(limits_array, 1)->valuefloat;
             
             FM_SENSOR_TYPE = -fm_sensor_type;   // If there are limits, sensor_type is negative
         } else {
@@ -11950,23 +11950,23 @@ void normal_mode_init() {
         if (fm_sensor_type == FM_SENSOR_TYPE_MATHS) {
             FM_MATHS_OPERATIONS = maths_operations;
             
-            cJSON* val_data = cJSON_GetObjectItemCaseSensitive(json_context, FM_READ_COMMAND_DATA_ARRAY);
+            cJSON_rsf* val_data = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_READ_COMMAND_DATA_ARRAY);
             
             int float_index = FM_MATHS_FLOAT_FIRST + has_limits;
             int int_index = FM_MATHS_FIRST_OPERATION;
             for (int i = 0; i < (maths_operations * 3); i++) {
                 for (int j = 0; j < 2; j++) {
-                    FM_MATHS_INT[int_index] = cJSON_GetArrayItem(val_data, i)->valuefloat;
+                    FM_MATHS_INT[int_index] = cJSON_rsf_GetArrayItem(val_data, i)->valuefloat;
                     int_index++;
                     i++;
                 }
-                //FM_MATHS_INT[int_index] = cJSON_GetArrayItem(val_data, i)->valuefloat;
+                //FM_MATHS_INT[int_index] = cJSON_rsf_GetArrayItem(val_data, i)->valuefloat;
                 //int_index++;
                 //i++;
-                //FM_MATHS_INT[int_index] = cJSON_GetArrayItem(val_data, i)->valuefloat;
+                //FM_MATHS_INT[int_index] = cJSON_rsf_GetArrayItem(val_data, i)->valuefloat;
                 //int_index++;
                 //i++;
-                FM_MATHS_FLOAT[float_index] = cJSON_GetArrayItem(val_data, i)->valuefloat;
+                FM_MATHS_FLOAT[float_index] = cJSON_rsf_GetArrayItem(val_data, i)->valuefloat;
                 float_index++;
             }
         }
@@ -12011,19 +12011,19 @@ void normal_mode_init() {
         }
         
         FM_FACTOR = FM_FACTOR_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, FM_FACTOR_SET) != NULL) {
-            FM_FACTOR = (float) cJSON_GetObjectItemCaseSensitive(json_context, FM_FACTOR_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_FACTOR_SET) != NULL) {
+            FM_FACTOR = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_FACTOR_SET)->valuefloat;
         }
         
         FM_OFFSET = FM_OFFSET_DEFAULT;
-        if (cJSON_GetObjectItemCaseSensitive(json_context, FM_OFFSET_SET) != NULL) {
-            FM_OFFSET = (float) cJSON_GetObjectItemCaseSensitive(json_context, FM_OFFSET_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_OFFSET_SET) != NULL) {
+            FM_OFFSET = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_OFFSET_SET)->valuefloat;
         }
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, FM_BUFFER_LEN_ARRAY_SET) != NULL) {
-            cJSON* buffer_len_array = cJSON_GetObjectItemCaseSensitive(json_context, FM_BUFFER_LEN_ARRAY_SET);
-            FM_BUFFER_LEN_MIN = (uint8_t) cJSON_GetArrayItem(buffer_len_array, 0)->valuefloat;
-            FM_BUFFER_LEN_MAX = (uint8_t) cJSON_GetArrayItem(buffer_len_array, 1)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_BUFFER_LEN_ARRAY_SET) != NULL) {
+            cJSON_rsf* buffer_len_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_BUFFER_LEN_ARRAY_SET);
+            FM_BUFFER_LEN_MIN = (uint8_t) cJSON_rsf_GetArrayItem(buffer_len_array, 0)->valuefloat;
+            FM_BUFFER_LEN_MAX = (uint8_t) cJSON_rsf_GetArrayItem(buffer_len_array, 1)->valuefloat;
         }
         
         if (fm_sensor_type == FM_SENSOR_TYPE_PULSE_FREQ ||
@@ -12031,16 +12031,16 @@ void normal_mode_init() {
             fm_sensor_type == FM_SENSOR_TYPE_ADC || fm_sensor_type == FM_SENSOR_TYPE_ADC_INV ||
 #endif
             fm_sensor_type == FM_SENSOR_TYPE_PULSE_US_TIME) {
-            cJSON* gpio_array = cJSON_GetObjectItemCaseSensitive(json_context, FM_SENSOR_GPIO_ARRAY_SET);
-            unsigned int gpio = (uint8_t) cJSON_GetArrayItem(gpio_array, 0)->valuefloat;
+            cJSON_rsf* gpio_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_SENSOR_GPIO_ARRAY_SET);
+            unsigned int gpio = (uint8_t) cJSON_rsf_GetArrayItem(gpio_array, 0)->valuefloat;
             FM_SENSOR_GPIO = gpio;
-            unsigned int interrupt_type;
+            unsigned int interrupt_type = 0;
             
 #ifdef ESP_PLATFORM
             if (fm_sensor_type == FM_SENSOR_TYPE_PULSE_FREQ ||
                 fm_sensor_type == FM_SENSOR_TYPE_PULSE_US_TIME) {
 #endif
-                interrupt_type = (uint8_t) cJSON_GetArrayItem(gpio_array, 1)->valuefloat;
+                interrupt_type = (uint8_t) cJSON_rsf_GetArrayItem(gpio_array, 1)->valuefloat;
                 //set_used_gpio(gpio);
 #ifdef ESP_PLATFORM
             }
@@ -12059,8 +12059,8 @@ void normal_mode_init() {
                 FM_SENSOR_GPIO_INT_TYPE = interrupt_type;
                 
                 FM_SENSOR_GPIO_TRIGGER = 255;
-                if (cJSON_GetArraySize(gpio_array) > 2) {
-                    const int gpio_trigger = (uint8_t) cJSON_GetArrayItem(gpio_array, 2)->valuefloat;
+                if (cJSON_rsf_GetArraySize(gpio_array) > 2) {
+                    const int gpio_trigger = (uint8_t) cJSON_rsf_GetArrayItem(gpio_array, 2)->valuefloat;
                     FM_SENSOR_GPIO_TRIGGER = (uint8_t) gpio_trigger;
                     
                     const bool inverted = gpio_trigger / 100;
@@ -12073,13 +12073,13 @@ void normal_mode_init() {
             
         } else if (fm_sensor_type == FM_SENSOR_TYPE_I2C ||
                    fm_sensor_type == FM_SENSOR_TYPE_I2C_TRIGGER) {
-            cJSON* i2c_array = cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_DEVICE_DATA_ARRAY_SET);
-            unsigned int i2c_bus = (uint8_t) cJSON_GetArrayItem(i2c_array, 0)->valuefloat;
-            unsigned int i2c_addr = (uint8_t) cJSON_GetArrayItem(i2c_array, 1)->valuefloat;
-            size_t i2c_read_len = cJSON_GetArraySize(i2c_array) - 2;
+            cJSON_rsf* i2c_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_I2C_DEVICE_DATA_ARRAY_SET);
+            unsigned int i2c_bus = (uint8_t) cJSON_rsf_GetArrayItem(i2c_array, 0)->valuefloat;
+            unsigned int i2c_addr = (uint8_t) cJSON_rsf_GetArrayItem(i2c_array, 1)->valuefloat;
+            size_t i2c_read_len = cJSON_rsf_GetArraySize(i2c_array) - 2;
             
             for (unsigned int i = 0; i < i2c_read_len; i++) {
-                FM_I2C_REG[FM_I2C_REG_FIRST + i] = (uint8_t) cJSON_GetArrayItem(i2c_array, i + 2)->valuefloat;
+                FM_I2C_REG[FM_I2C_REG_FIRST + i] = (uint8_t) cJSON_rsf_GetArrayItem(i2c_array, i + 2)->valuefloat;
             }
             
             FM_I2C_BUS = i2c_bus;
@@ -12087,31 +12087,31 @@ void normal_mode_init() {
             FM_I2C_REG_LEN = i2c_read_len;
             
             FM_I2C_VAL_OFFSET = FM_I2C_VAL_OFFSET_DEFAULT;
-            if (cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_VAL_OFFSET_SET) != NULL) {
-                FM_I2C_VAL_OFFSET = cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_VAL_OFFSET_SET)->valuefloat;
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_I2C_VAL_OFFSET_SET) != NULL) {
+                FM_I2C_VAL_OFFSET = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_I2C_VAL_OFFSET_SET)->valuefloat;
             }
             
             // Commands sent at beginning
-            if (cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_START_COMMANDS_ARRAY_SET) != NULL) {
-                cJSON* i2c_inits = cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_START_COMMANDS_ARRAY_SET);
-                for (int i = 0; i < cJSON_GetArraySize(i2c_inits); i++) {
-                    cJSON* i2c_init = cJSON_GetArrayItem(i2c_inits, i);
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_I2C_START_COMMANDS_ARRAY_SET) != NULL) {
+                cJSON_rsf* i2c_inits = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_I2C_START_COMMANDS_ARRAY_SET);
+                for (int i = 0; i < cJSON_rsf_GetArraySize(i2c_inits); i++) {
+                    cJSON_rsf* i2c_init = cJSON_rsf_GetArrayItem(i2c_inits, i);
                     
                     uint8_t reg[32];
                     
-                    const unsigned int reg_size = (uint8_t) cJSON_GetArrayItem(i2c_init, 0)->valuefloat;
+                    const unsigned int reg_size = (uint8_t) cJSON_rsf_GetArrayItem(i2c_init, 0)->valuefloat;
                     if (reg_size > 0) {
                         for (unsigned int j = 0; j < reg_size; j++) {
-                            reg[j] = cJSON_GetArrayItem(i2c_init, j + 1)->valuefloat;
+                            reg[j] = cJSON_rsf_GetArrayItem(i2c_init, j + 1)->valuefloat;
                         }
                     }
                     
                     const unsigned int val_offset = reg_size + 1;
-                    const unsigned int val_size = cJSON_GetArraySize(i2c_init) - val_offset;
+                    const unsigned int val_size = cJSON_rsf_GetArraySize(i2c_init) - val_offset;
                     uint8_t val[val_size];
                     
                     for (unsigned int j = 0; j < val_size; j++) {
-                        val[j] = cJSON_GetArrayItem(i2c_init, j + val_offset)->valuefloat;
+                        val[j] = cJSON_rsf_GetArrayItem(i2c_init, j + val_offset)->valuefloat;
                     }
                     
                     INFO("I2C Init %i: %i", i, adv_i2c_slave_write(i2c_bus, i2c_addr, reg, reg_size, val, val_size));
@@ -12120,33 +12120,33 @@ void normal_mode_init() {
             
             // Trigger
             if (fm_sensor_type == FM_SENSOR_TYPE_I2C_TRIGGER) {
-                cJSON* i2c_trigger_array = cJSON_GetObjectItemCaseSensitive(json_context, FM_I2C_TRIGGER_COMMAND_ARRAY_SET);
-                size_t i2c_trigger_array_len = (uint8_t) cJSON_GetArraySize(i2c_trigger_array);
+                cJSON_rsf* i2c_trigger_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_I2C_TRIGGER_COMMAND_ARRAY_SET);
+                size_t i2c_trigger_array_len = (uint8_t) cJSON_rsf_GetArraySize(i2c_trigger_array);
                 
-                FM_NEW_VALUE = cJSON_GetArrayItem(i2c_trigger_array, 0)->valuefloat * MS_TO_TICKS(1000);
+                FM_NEW_VALUE = cJSON_rsf_GetArrayItem(i2c_trigger_array, 0)->valuefloat * MS_TO_TICKS(1000);
                 
-                size_t trigger_reg_len = (uint8_t) cJSON_GetArrayItem(i2c_trigger_array, 1)->valuefloat;
+                size_t trigger_reg_len = (uint8_t) cJSON_rsf_GetArrayItem(i2c_trigger_array, 1)->valuefloat;
                 for (unsigned int i = 0; i < trigger_reg_len; i++) {
-                    FM_I2C_TRIGGER_REG[FM_I2C_TRIGGER_REG_FIRST + i] = (uint8_t) cJSON_GetArrayItem(i2c_trigger_array, i + 2)->valuefloat;
+                    FM_I2C_TRIGGER_REG[FM_I2C_TRIGGER_REG_FIRST + i] = (uint8_t) cJSON_rsf_GetArrayItem(i2c_trigger_array, i + 2)->valuefloat;
                 }
                 
                 size_t trigger_val_len = i2c_trigger_array_len - trigger_reg_len - 2;
                 for (unsigned int i = 0; i < trigger_val_len; i++) {
-                    FM_I2C_TRIGGER_VAL[FM_I2C_TRIGGER_VAL_FIRST + i] = (uint8_t) cJSON_GetArrayItem(i2c_trigger_array, i + trigger_reg_len + 2)->valuefloat;
+                    FM_I2C_TRIGGER_VAL[FM_I2C_TRIGGER_VAL_FIRST + i] = (uint8_t) cJSON_rsf_GetArrayItem(i2c_trigger_array, i + trigger_reg_len + 2)->valuefloat;
                 }
             }
 #ifdef ESP_PLATFORM
         } else if (is_type_uart) {
-            if (cJSON_GetObjectItemCaseSensitive(json_context, FM_UART_PORT_SET) != NULL) {
-                FM_UART_PORT = cJSON_GetObjectItemCaseSensitive(json_context, FM_UART_PORT_SET)->valuefloat;
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_UART_PORT_SET) != NULL) {
+                FM_UART_PORT = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_UART_PORT_SET)->valuefloat;
             }
 #endif
         }
         
         if (is_val_data > 0) {
-            cJSON* val_data = cJSON_GetObjectItemCaseSensitive(json_context, FM_READ_COMMAND_DATA_ARRAY);
-            FM_VAL_LEN = (uint8_t) cJSON_GetArrayItem(val_data, 0)->valuefloat;
-            FM_VAL_TYPE = (uint8_t) cJSON_GetArrayItem(val_data, 1)->valuefloat;
+            cJSON_rsf* val_data = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_READ_COMMAND_DATA_ARRAY);
+            FM_VAL_LEN = (uint8_t) cJSON_rsf_GetArrayItem(val_data, 0)->valuefloat;
+            FM_VAL_TYPE = (uint8_t) cJSON_rsf_GetArrayItem(val_data, 1)->valuefloat;
         }
         
         if (fm_sensor_type > FM_SENSOR_TYPE_FREE &&
@@ -12161,12 +12161,12 @@ void normal_mode_init() {
     }
     
     // *** NEW DATA HISTORY
-    void new_data_history(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON* json_context) {
-        cJSON* data_array = cJSON_GetObjectItemCaseSensitive(json_context, HIST_DATA_ARRAY_SET);
+    void new_data_history(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
+        cJSON_rsf* data_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, HIST_DATA_ARRAY_SET);
         
-        const unsigned int hist_accessory = get_absolut_index(service_numerator, cJSON_GetArrayItem(data_array, 0)->valuefloat);
-        const unsigned int hist_ch = cJSON_GetArrayItem(data_array, 1)->valuefloat;
-        const size_t hist_size = cJSON_GetArrayItem(data_array, 2)->valuefloat;
+        const unsigned int hist_accessory = get_absolut_index(service_numerator, cJSON_rsf_GetArrayItem(data_array, 0)->valuefloat);
+        const unsigned int hist_ch = cJSON_rsf_GetArrayItem(data_array, 1)->valuefloat;
+        const size_t hist_size = cJSON_rsf_GetArrayItem(data_array, 2)->valuefloat;
         
         INFO("Serv %i, Ch %i, Size %i", hist_accessory, hist_ch, hist_size * HIST_REGISTERS_BY_BLOCK);
         
@@ -12175,8 +12175,8 @@ void normal_mode_init() {
         ch_group->serv_index = service_numerator;
         ch_group->homekit_enabled = true;
         
-        if (cJSON_GetObjectItemCaseSensitive(json_context, HIST_READ_ON_CLOCK_READY_SET) != NULL) {
-            ch_group->child_enabled = (bool) cJSON_GetObjectItemCaseSensitive(json_context, HIST_READ_ON_CLOCK_READY_SET)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, HIST_READ_ON_CLOCK_READY_SET) != NULL) {
+            ch_group->child_enabled = (bool) cJSON_rsf_GetObjectItemCaseSensitive(json_context, HIST_READ_ON_CLOCK_READY_SET)->valuefloat;
         }
         
         if (service == 0) {
@@ -12244,8 +12244,8 @@ void normal_mode_init() {
     do_actions(root_device_ch_group, 0);
     
     // Initial delay
-    if (cJSON_GetObjectItemCaseSensitive(json_config, NEXT_SERV_CREATION_DELAY) != NULL) {
-        vTaskDelay(cJSON_GetObjectItemCaseSensitive(json_config, NEXT_SERV_CREATION_DELAY)->valuefloat * MS_TO_TICKS(1000));
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, NEXT_SERV_CREATION_DELAY) != NULL) {
+        vTaskDelay(cJSON_rsf_GetObjectItemCaseSensitive(json_config, NEXT_SERV_CREATION_DELAY)->valuefloat * MS_TO_TICKS(1000));
     } else {
         vTaskDelay(1);
     }
@@ -12258,7 +12258,7 @@ void normal_mode_init() {
     }
     
     // New HomeKit Service
-    void new_service(const uint16_t acc_count, uint16_t serv_count, const uint16_t total_services, cJSON* json_accessory, const uint8_t serv_type) {
+    void new_service(const uint16_t acc_count, uint16_t serv_count, const uint16_t total_services, cJSON_rsf* json_accessory, const uint8_t serv_type) {
         service_numerator++;
         
         INFO("\n* SERV %"HAA_LONGINT_F" (%i)", service_numerator, serv_type);
@@ -12344,7 +12344,7 @@ void normal_mode_init() {
     for (unsigned int i = 0; i < total_accessories; i++) {
         INFO("\n** ACC %i", i + 1);
         
-        cJSON* json_accessory = cJSON_GetArrayItem(json_accessories, i);
+        cJSON_rsf* json_accessory = cJSON_rsf_GetArrayItem(json_accessories, i);
         int serv_type = get_serv_type(json_accessory);
         
         int service = 0;
@@ -12352,12 +12352,12 @@ void normal_mode_init() {
         new_service(acc_count, service, total_services, json_accessory, serv_type);
         
         if (acc_homekit_enabled(json_accessory) && serv_type != SERV_TYPE_IAIRZONING) {
-            if (cJSON_GetObjectItemCaseSensitive(json_accessory, EXTRA_SERVICES_ARRAY) != NULL) {
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, EXTRA_SERVICES_ARRAY) != NULL) {
                 service += get_service_recount(serv_type, json_accessory);
 
-                cJSON* json_extra_services = cJSON_GetObjectItemCaseSensitive(json_accessory, EXTRA_SERVICES_ARRAY);
-                for (int m = 0; m < cJSON_GetArraySize(json_extra_services); m++) {
-                    cJSON* json_extra_service = cJSON_GetArrayItem(json_extra_services, m);
+                cJSON_rsf* json_extra_services = cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, EXTRA_SERVICES_ARRAY);
+                for (int m = 0; m < cJSON_rsf_GetArraySize(json_extra_services); m++) {
+                    cJSON_rsf* json_extra_service = cJSON_rsf_GetArrayItem(json_extra_services, m);
                     
                     serv_type = get_serv_type(json_extra_service);
                     new_service(acc_count, service, 0, json_extra_service, serv_type);
@@ -12366,8 +12366,8 @@ void normal_mode_init() {
                     main_config.setup_mode_toggle_counter = INT8_MIN;
                     
                     // Extra service creation delay
-                    if (cJSON_GetObjectItemCaseSensitive(json_extra_service, NEXT_SERV_CREATION_DELAY) != NULL) {
-                        vTaskDelay(cJSON_GetObjectItemCaseSensitive(json_extra_service, NEXT_SERV_CREATION_DELAY)->valuefloat * MS_TO_TICKS(1000));
+                    if (cJSON_rsf_GetObjectItemCaseSensitive(json_extra_service, NEXT_SERV_CREATION_DELAY) != NULL) {
+                        vTaskDelay(cJSON_rsf_GetObjectItemCaseSensitive(json_extra_service, NEXT_SERV_CREATION_DELAY)->valuefloat * MS_TO_TICKS(1000));
                     } else {
                         taskYIELD();
                     }
@@ -12380,8 +12380,8 @@ void normal_mode_init() {
         main_config.setup_mode_toggle_counter = INT8_MIN;
         
         // Accessory creation delay
-        if (cJSON_GetObjectItemCaseSensitive(json_accessory, NEXT_SERV_CREATION_DELAY) != NULL) {
-            vTaskDelay(cJSON_GetObjectItemCaseSensitive(json_accessory, NEXT_SERV_CREATION_DELAY)->valuefloat * MS_TO_TICKS(1000));
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, NEXT_SERV_CREATION_DELAY) != NULL) {
+            vTaskDelay(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, NEXT_SERV_CREATION_DELAY)->valuefloat * MS_TO_TICKS(1000));
         } else {
             taskYIELD();
         }
@@ -12393,8 +12393,8 @@ void normal_mode_init() {
     
     // --- HOMEKIT SET CONFIG
     // HomeKit Device Category
-    if (cJSON_GetObjectItemCaseSensitive(json_config, HOMEKIT_DEVICE_CATEGORY_SET) != NULL) {
-        config.category = (uint16_t) cJSON_GetObjectItemCaseSensitive(json_config, HOMEKIT_DEVICE_CATEGORY_SET)->valuefloat;
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, HOMEKIT_DEVICE_CATEGORY_SET) != NULL) {
+        config.category = (uint16_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, HOMEKIT_DEVICE_CATEGORY_SET)->valuefloat;
         
     } else if (bridge_needed) {
         config.category = HOMEKIT_DEVICE_CATEGORY_BRIDGE;
@@ -12482,8 +12482,8 @@ void normal_mode_init() {
         }
     }
     
-    cJSON_Delete(json_haa);
-    cJSON_Delete(init_last_state_json);
+    cJSON_rsf_Delete(json_haa);
+    cJSON_rsf_Delete(init_last_state_json);
     
     unistring_destroy(unistrings);
     
@@ -12772,7 +12772,7 @@ void user_init() {
     
 #elif defined(CONFIG_IDF_TARGET_ESP32S3)
 #define SPI_GPIO_COUNT  (16)
-    
+
 #else
 #define SPI_GPIO_COUNT  (6)
     
