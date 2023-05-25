@@ -898,56 +898,26 @@ void wifi_ping_gw_task() {
 }
 
 void wifi_reconnection_task(void* args) {
-    main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
+    if (main_config.wifi_status > WIFI_STATUS_DISCONNECTED) {
+        sdk_wifi_station_disconnect();
+        sdk_wifi_station_connect();
+        main_config.wifi_status = WIFI_STATUS_CONNECTING;
+        
+        INFO("Wifi connecting");
+    }
+    
     rs_esp_timer_stop_forced(WIFI_WATCHDOG_TIMER);
     homekit_mdns_announce_pause();
     
-    INFO("Recon start");
-    
-    do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 4);
-
     led_blink(3);
     
-    if ((uint32_t) args == 1) {
-        vTaskDelay(MS_TO_TICKS(500));
-        wifi_config_reset();
-    }
+    do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 4);
     
     for (;;) {
-        vTaskDelay(MS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
-        
         const int new_ip = wifi_config_get_ip();
-        if (new_ip >= 0) {
-            main_config.wifi_status = WIFI_STATUS_CONNECTED;
-            main_config.wifi_error_count = 0;
-            main_config.wifi_arp_count = 0;
-            
-#ifdef ESP_PLATFORM
-            uint8_t channel_primary = main_config.wifi_channel;
-            esp_wifi_get_channel(&channel_primary, NULL);
-            main_config.wifi_channel = channel_primary;
-#else
-            main_config.wifi_channel = sdk_wifi_get_channel();
-#endif
-            
-            main_config.wifi_ip = new_ip;
-            
-            save_last_working_phy();
-            
-            random_task_short_delay();
-            
-            homekit_mdns_announce();
-            
-            do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 3);
-            
-            rs_esp_timer_start_forced(WIFI_WATCHDOG_TIMER);
-            
-            INFO("Recon OK");
-            
-            break;
-            
-        } else if (main_config.wifi_status <= WIFI_STATUS_DISCONNECTED) {
-            INFO("Recon...");
+        
+        if (main_config.wifi_status <= WIFI_STATUS_DISCONNECTED) {
+            INFO("Wifi reconnecting");
             
 #ifndef ESP_PLATFORM
             int8_t phy_mode = 4;    // main_config.wifi_status == WIFI_STATUS_LONG_DISCONNECTED
@@ -965,20 +935,45 @@ void wifi_reconnection_task(void* args) {
             wifi_config_connect(1, phy_mode, true);
 #endif
             
+        } else if (new_ip >= 0) {
+            main_config.wifi_status = WIFI_STATUS_CONNECTED;
+            main_config.wifi_error_count = 0;
+            main_config.wifi_arp_count = 0;
+            
+#ifdef ESP_PLATFORM
+            uint8_t channel_primary = main_config.wifi_channel;
+            esp_wifi_get_channel(&channel_primary, NULL);
+            main_config.wifi_channel = channel_primary;
+#else
+            main_config.wifi_channel = sdk_wifi_get_channel();
+#endif
+            
+            main_config.wifi_ip = new_ip;
+            
+            save_last_working_phy();
+            
+            homekit_mdns_announce();
+            
+            do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 3);
+            
+            rs_esp_timer_start_forced(WIFI_WATCHDOG_TIMER);
+            
+            break;
+            
         } else {    // main_config.wifi_status == WIFI_STATUS_CONNECTING
             main_config.wifi_error_count++;
             if (main_config.wifi_error_count > WIFI_DISCONNECTED_LONG_TIME) {
-                ERROR("Discon long");
+                ERROR("Wifi reset");
                 main_config.wifi_error_count = 0;
                 main_config.wifi_status = WIFI_STATUS_LONG_DISCONNECTED;
                 
                 led_blink(3);
                 
-                vTaskDelay(MS_TO_TICKS(600));
-                
                 do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 5);
             }
         }
+        
+        vTaskDelay(MS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
     }
     
     vTaskDelete(NULL);
@@ -1045,6 +1040,7 @@ void wifi_watchdog() {
         uint32_t force_disconnect = 0;
         if (main_config.wifi_error_count > main_config.wifi_ping_max_errors) {
             force_disconnect = 1;
+            main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
         }
         
         main_config.wifi_error_count = 0;
@@ -6986,12 +6982,11 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                     reboot_haa();
                     break;
                     
+                case SYSTEM_ACTION_WIFI_RECONNECTION_2:
+                    main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
+                    
                 case SYSTEM_ACTION_WIFI_RECONNECTION:
                     sdk_wifi_station_disconnect();
-                    break;
-                    
-                case SYSTEM_ACTION_WIFI_RECONNECTION_2:
-                    wifi_config_reset();
                     break;
                     
                 default:    // case SYSTEM_ACTION_REBOOT:
