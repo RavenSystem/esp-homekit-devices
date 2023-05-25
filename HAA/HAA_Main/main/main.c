@@ -1224,6 +1224,7 @@ void hkc_custom_setup_setter(homekit_characteristic_t* ch, const homekit_value_t
                 break;
                 
             case '3':   // WiFi Reconnection
+                main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
                 rs_esp_timer_start_forced(rs_esp_timer_create(1000, false, NULL, wifi_config_reset));
                 break;
                 
