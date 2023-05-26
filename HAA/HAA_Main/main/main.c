@@ -1596,8 +1596,6 @@ void power_monitor_task(void* args) {
         }
         
         if (voltage < 500.f && voltage > -500.f) {
-            do_wildcard_actions(ch_group, 0, voltage);
-            
             if (voltage != ch_group->ch[0]->value.float_value) {
                 const int old_voltage = ch_group->ch[0]->value.float_value * 10;
                 ch_group->ch[0]->value.float_value = voltage;
@@ -1606,13 +1604,13 @@ void power_monitor_task(void* args) {
                     homekit_characteristic_notify_safe(ch_group->ch[0]);
                 }
             }
+            
+            do_wildcard_actions(ch_group, 0, voltage);
         } else {
             ERROR("<%i> PM V", ch_group->serv_index);
         }
         
         if (current < 150.f && current > -150.f) {
-            do_wildcard_actions(ch_group, 1, current);
-            
             if (current != ch_group->ch[1]->value.float_value) {
                 const int old_current = ch_group->ch[1]->value.float_value * 1000;
                 ch_group->ch[1]->value.float_value = current;
@@ -1621,6 +1619,8 @@ void power_monitor_task(void* args) {
                     homekit_characteristic_notify_safe(ch_group->ch[1]);
                 }
             }
+            
+            do_wildcard_actions(ch_group, 1, current);
         } else {
             ERROR("<%i> PM C", ch_group->serv_index);
         }
@@ -1631,8 +1631,6 @@ void power_monitor_task(void* args) {
     PM_LAST_SAVED_CONSUPTION += PM_POLL_PERIOD;
     
     if (power < 50000.f && power > -50000.f) {
-        do_wildcard_actions(ch_group, 2, power);
-        
         if (power != ch_group->ch[2]->value.float_value) {
             const int old_power = ch_group->ch[2]->value.float_value * 10;
             ch_group->ch[2]->value.float_value = power;
@@ -1645,6 +1643,7 @@ void power_monitor_task(void* args) {
         const float consumption = ch_group->ch[3]->value.float_value + ((power * PM_POLL_PERIOD) / 3600000.f);
         INFO("<%i> PM KWh=%1.7g", ch_group->serv_index, consumption);
         
+        do_wildcard_actions(ch_group, 2, power);
         do_wildcard_actions(ch_group, 3, consumption);
         
         if (consumption != ch_group->ch[3]->value.float_value) {
@@ -4241,9 +4240,9 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
             window_cover_stop(ch_group);
         }
         
-        do_wildcard_actions(ch_group, 0, value.int_value);
-        
         save_data_history(ch1);
+        
+        do_wildcard_actions(ch_group, 0, value.int_value);
     }
     
     if (WINDOW_COVER_VIRTUAL_STOP == 2) {
@@ -4699,13 +4698,13 @@ void battery_manager(homekit_characteristic_t* ch, int value, bool is_free_monit
         if (BATTERY_LEVEL_CH_INT != value || is_free_monitor) {
             BATTERY_LEVEL_CH_INT = value;
             
-            do_wildcard_actions(ch_group, 0, value);
-            
             save_data_history(ch);
             
             if (!is_free_monitor) {
                 homekit_characteristic_notify_safe(ch);
             }
+            
+            do_wildcard_actions(ch_group, 0, value);
             
             int status_low_changed = false;
             if (value <= BATTERY_LOW_THRESHOLD &&
@@ -4724,9 +4723,9 @@ void battery_manager(homekit_characteristic_t* ch, int value, bool is_free_monit
                 
                 save_data_history(BATTERY_STATUS_LOW_CH);
                 
-                do_actions(ch_group, BATTERY_STATUS_LOW_CH_INT);
-                
                 homekit_characteristic_notify_safe(BATTERY_STATUS_LOW_CH);
+                
+                do_actions(ch_group, BATTERY_STATUS_LOW_CH_INT);
             }
         }
     }
@@ -5451,8 +5450,6 @@ void free_monitor_task(void* args) {
                     value >= FM_LIMIT_LOWER &&
                     value <= FM_LIMIT_UPPER)) {
                     
-                    do_wildcard_actions(ch_group, 0, value);
-                    
                     const int old_value = ch_group->ch[0]->value.float_value * 1000;
                     ch_group->ch[0]->value.float_value = value;
                     
@@ -5466,6 +5463,8 @@ void free_monitor_task(void* args) {
                         homekit_characteristic_t* ch_target = ch_group->ch[ch_group->chs - 1];
                         set_hkch_value(ch_target, value);
                     }
+                    
+                    do_wildcard_actions(ch_group, 0, value);
                 }
             }
         }
