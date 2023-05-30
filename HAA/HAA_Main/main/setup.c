@@ -60,6 +60,8 @@
 
 #include "header.h"
 
+#include "main.h"
+
 #define SETUP_ANNOUNCER_DESTINATION     "255.255.255.255"
 #define SETUP_ANNOUNCER_PORT            "4567"
 
@@ -261,9 +263,11 @@ static void wifi_smart_connect_task(void* arg) {
     
     INFO("Best %02x%02x%02x%02x%02x%02x", best_bssid[0], best_bssid[1], best_bssid[2], best_bssid[3], best_bssid[4], best_bssid[5]);
     
-    sysparam_set_blob(WIFI_BSSID_SYSPARAM, best_bssid, (size_t) 6);
+    sysparam_set_blob(WIFI_BSSID_SYSPARAM, best_bssid, 6);
     
     sdk_wifi_station_disconnect();
+    
+    set_main_wifi_status_connecting();
     
     char* wifi_ssid = NULL;
     sysparam_get_string(WIFI_SSID_SYSPARAM, &wifi_ssid);
@@ -274,13 +278,7 @@ static void wifi_smart_connect_task(void* arg) {
 #ifdef ESP_PLATFORM
     wifi_config_t sta_config = {
             .sta = {
-                .password = "",
                 .scan_method = WIFI_ALL_CHANNEL_SCAN,
-                .rm_enabled = 1,
-                .btm_enabled = 1 ,
-                .mbo_enabled = 1,
-                .pmf_cfg.capable = 1,
-                .ft_enabled = 1,
                 .bssid_set = 1,
             },
         };
@@ -407,9 +405,8 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
         return;
     }
     
-    uint8_t *wifi_bssid = NULL;
-    size_t len = 6;
-    sysparam_get_blob(WIFI_BSSID_SYSPARAM, &wifi_bssid, &len);
+    uint8_t* wifi_bssid = NULL;
+    sysparam_get_blob(WIFI_BSSID_SYSPARAM, &wifi_bssid, NULL);
     
     free(wifi_ssid);
     
@@ -929,13 +926,13 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                         bssid[i] = (uint8_t) strtol(hex, NULL, 16);
                     }
                     
-                    sysparam_set_blob(WIFI_BSSID_SYSPARAM, bssid, (size_t) 6);
+                    sysparam_set_blob(WIFI_BSSID_SYSPARAM, bssid, 6);
                     
                 } else {
                     sysparam_erase(WIFI_BSSID_SYSPARAM);
                 }
                 
-                if (password_param->value) {
+                if (password_param && password_param->value) {
                     sysparam_set_string(WIFI_PASSWORD_SYSPARAM, password_param->value);
                 } else {
                     sysparam_set_string(WIFI_PASSWORD_SYSPARAM, "");
@@ -1393,8 +1390,7 @@ uint8_t wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool wi
         sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
         
         uint8_t *wifi_bssid = NULL;
-        size_t len = 6;
-        sysparam_get_blob(WIFI_BSSID_SYSPARAM, &wifi_bssid, &len);
+        sysparam_get_blob(WIFI_BSSID_SYSPARAM, &wifi_bssid, NULL);
         
         INFO_NNL("BSSID ");
         if (wifi_bssid) {

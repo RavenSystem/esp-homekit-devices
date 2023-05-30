@@ -645,7 +645,7 @@ void mdns_announce() {
 }
 
 void mdns_announce_pause() {
-    rs_esp_timer_stop_forced(mdns_announce_timer);
+    rs_esp_timer_stop(mdns_announce_timer);
     mdns_status = MDNS_STATUS_WORKING;
 }
 

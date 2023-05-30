@@ -897,8 +897,8 @@ void wifi_ping_gw_task() {
     vTaskDelete(NULL);
 }
 
-void wifi_reconnection_task(void* args) {
-    if (main_config.wifi_status > WIFI_STATUS_DISCONNECTED) {
+void wifi_reconnection_task() {
+    if (main_config.wifi_status == WIFI_STATUS_CONNECTED) {
         sdk_wifi_station_disconnect();
         sdk_wifi_station_connect();
         main_config.wifi_status = WIFI_STATUS_CONNECTING;
@@ -970,6 +970,9 @@ void wifi_reconnection_task(void* args) {
                 led_blink(3);
                 
                 do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 5);
+                
+            } else if ((main_config.wifi_error_count % 30) == 0) {
+                main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
             }
         }
         
@@ -979,10 +982,14 @@ void wifi_reconnection_task(void* args) {
     vTaskDelete(NULL);
 }
 
+void set_main_wifi_status_connecting() {
+    main_config.wifi_status = WIFI_STATUS_CONNECTING;
+}
+    
 void wifi_watchdog() {
     //INFO("Wifi status %i, sleep mode %i", main_config.wifi_status, sdk_wifi_get_sleep_type());
     const int current_ip = wifi_config_get_ip();
-    if (current_ip >= 0 && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
+    if (main_config.wifi_status == WIFI_STATUS_CONNECTED && current_ip >= 0 && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
 #ifdef ESP_PLATFORM
         uint8_t channel_primary = main_config.wifi_channel;
         esp_wifi_get_channel(&channel_primary, NULL);
@@ -993,15 +1000,19 @@ void wifi_watchdog() {
         
         if (main_config.wifi_mode == 3) {
             if (main_config.wifi_roaming_count == 0) {
-                rs_esp_timer_change_period(WIFI_WATCHDOG_TIMER, WIFI_WATCHDOG_POLL_PERIOD_MS);
+                if (rs_esp_timer_change_period(WIFI_WATCHDOG_TIMER, WIFI_WATCHDOG_POLL_PERIOD_MS) != pdPASS) {
+                    return;
+                }
             }
             
-            main_config.wifi_roaming_count++;
-            
             if (main_config.wifi_roaming_count >= WIFI_WATCHDOG_ROAMING_PERIOD) {
-                rs_esp_timer_change_period(WIFI_WATCHDOG_TIMER, 5000);
-                main_config.wifi_roaming_count = 0;
-                wifi_config_smart_connect();
+                if (rs_esp_timer_change_period(WIFI_WATCHDOG_TIMER, 8000) == pdPASS) {
+                    main_config.wifi_roaming_count = 0;
+                    wifi_config_smart_connect();
+                    return;
+                }
+            } else {
+                main_config.wifi_roaming_count++;
             }
         }
         
@@ -1035,17 +1046,16 @@ void wifi_watchdog() {
         }
         
     } else {
-        ERROR("Wifi error");
+        ERROR("Wifi");
         
-        uint32_t force_disconnect = 0;
-        if (main_config.wifi_error_count > main_config.wifi_ping_max_errors) {
-            force_disconnect = 1;
+        if ((main_config.wifi_status == WIFI_STATUS_CONNECTED && main_config.wifi_mode >= 2) ||
+            main_config.wifi_error_count > main_config.wifi_ping_max_errors) {
             main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
         }
         
         main_config.wifi_error_count = 0;
         
-        if (xTaskCreate(wifi_reconnection_task, "RCN", WIFI_RECONNECTION_TASK_SIZE, (void*) force_disconnect, WIFI_RECONNECTION_TASK_PRIORITY, NULL) != pdPASS) {
+        if (xTaskCreate(wifi_reconnection_task, "RCN", WIFI_RECONNECTION_TASK_SIZE, NULL, WIFI_RECONNECTION_TASK_PRIORITY, NULL) != pdPASS) {
             ERROR("New RCN");
             homekit_remove_oldest_client();
         }
