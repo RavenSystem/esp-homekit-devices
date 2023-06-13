@@ -126,10 +126,12 @@ void cJSON_rsf_Delete(cJSON_rsf *item)
 }
 
 /* get the decimal point character of the current locale */
+/*
 static unsigned char get_decimal_point(void)
 {
     return '.';
 }
+*/
 
 typedef struct
 {
@@ -153,7 +155,8 @@ static bool parse_number(cJSON_rsf * const item, parse_buffer * const input_buff
     float number = 0;
     unsigned char *after_end = NULL;
     unsigned char number_c_string[64];
-    unsigned char decimal_point = get_decimal_point();
+    //unsigned char decimal_point = get_decimal_point();
+    unsigned char decimal_point = '.';
     size_t i = 0;
 
     if ((input_buffer == NULL) || (input_buffer->content == NULL))
@@ -314,7 +317,8 @@ static bool print_number(const cJSON_rsf * const item, printbuffer * const outpu
     int length = 0;
     size_t i = 0;
     unsigned char number_buffer[26]; /* temporary buffer to print the number into */
-    unsigned char decimal_point = get_decimal_point();
+    //unsigned char decimal_point = get_decimal_point();
+    unsigned char decimal_point = '.';
     float test;
 
     if (output_buffer == NULL)

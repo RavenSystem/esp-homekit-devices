@@ -1,4 +1,4 @@
-set(wolfssl_VERSION "3.13.0-stable")
+set(wolfssl_VERSION "3.15.3-stable")
 
 file(REAL_PATH "wolfssl-${wolfssl_VERSION}" wolfssl_THIRDPARTY_ROOT)
 
@@ -8,6 +8,7 @@ idf_component_register(
         "${wolfssl_THIRDPARTY_ROOT}/wolfcrypt/src"
     EXCLUDE_SRCS
         "${wolfssl_THIRDPARTY_ROOT}/wolfcrypt/src/aes_asm.s"
+        "${wolfssl_THIRDPARTY_ROOT}/wolfcrypt/src/aes_asm.S"
     INCLUDE_DIRS
         "."
         "include"

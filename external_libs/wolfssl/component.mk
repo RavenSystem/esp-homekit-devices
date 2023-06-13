@@ -1,4 +1,4 @@
-wolfssl_VERSION = 3.13.0-stable
+wolfssl_VERSION = 3.15.3-stable
 
 wolfssl_THIRDPARTY_ROOT = $(wolfssl_ROOT)wolfssl-$(wolfssl_VERSION)
 

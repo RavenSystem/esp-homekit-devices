@@ -933,10 +933,10 @@ void send_tlv_response(client_context_t *context, tlv_values_t *values) {
         return;
     }
     memcpy(response + response_len, payload, payload_size);
-    response_len += payload_size;
-
     free(payload);
-
+    
+    response_len += payload_size;
+    
     client_send(context, (byte*) response, response_len);
 
     free(response);
@@ -1154,7 +1154,6 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             tlv_add_integer_value(response, TLVType_State, 1, 2);
             tlv_add_value(response, TLVType_PublicKey, homekit_server->pairing_context->public_key, homekit_server->pairing_context->public_key_size);
             tlv_add_value(response, TLVType_Salt, salt, salt_size);
-            
             free(salt);
             
             send_tlv_response(context, response);
@@ -1228,14 +1227,13 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             CLIENT_DEBUG(context, "Generating own proof");
             size_t server_proof_size = 0;
             crypto_srp_get_proof(homekit_server->pairing_context->srp, NULL, &server_proof_size);
-
+            
             byte *server_proof = malloc(server_proof_size);
-            r = crypto_srp_get_proof(homekit_server->pairing_context->srp, server_proof, &server_proof_size);
-
+            crypto_srp_get_proof(homekit_server->pairing_context->srp, server_proof, &server_proof_size);
+            
             tlv_values_t *response = tlv_new();
             tlv_add_integer_value(response, TLVType_State, 1, 4);
             tlv_add_value(response, TLVType_Proof, server_proof, server_proof_size);
-
             free(server_proof);
             
             send_tlv_response(context, response);
@@ -1247,12 +1245,12 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
         case 5: {
             CLIENT_INFO(context, "Pairing 3/3");
             DEBUG_HEAP();
-
+            
             int r;
-
+            
             byte shared_secret[HKDF_HASH_SIZE];
             size_t shared_secret_size = sizeof(shared_secret);
-
+            
             CLIENT_DEBUG(context, "Calculating shared secret");
             const char salt1[] = "Pair-Setup-Encrypt-Salt";
             const char info1[] = "Pair-Setup-Encrypt-Info";
@@ -1282,7 +1280,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 tlv_encrypted_data->value, tlv_encrypted_data->size,
                 NULL, &decrypted_data_size
             );
-
+            
             byte *decrypted_data = malloc(decrypted_data_size);
             // TODO: check malloc result
             r = crypto_chacha20poly1305_decrypt(
@@ -1399,10 +1397,12 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 device_info, device_info_size,
                 tlv_device_signature->value, tlv_device_signature->size
             );
+            
+            free(device_info);
+            
             if (r) {
                 CLIENT_ERROR(context, "Generate DeviceX (%d)", r);
                 
-                free(device_info);
                 crypto_ed25519_free(device_key);
                 tlv_free(decrypted_message);
                 
@@ -1410,29 +1410,25 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 break;
             }
             
-            free(device_info);
-            
             char *device_id = strndup((const char *)tlv_device_id->value, tlv_device_id->size);
             
             r = homekit_storage_add_pairing(device_id, device_key, pairing_permissions_admin);
+            
+            crypto_ed25519_free(device_key);
+            tlv_free(decrypted_message);
+            
+            CLIENT_INFO(context, "Adding pairing %s", device_id);
+            
+            free(device_id);
+            
             if (r) {
                 CLIENT_ERROR(context, "Store pairing (%d)", r);
                 
-                free(device_id);
-                crypto_ed25519_free(device_key);
-                tlv_free(decrypted_message);
                 send_tlv_error_response(context, 6, TLVError_Unknown);
                 break;
             }
             
-            HOMEKIT_INFO("Added pairing %s", device_id);
-            
             HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_PAIRING_ADDED);
-            
-            free(device_id);
-
-            crypto_ed25519_free(device_key);
-            tlv_free(decrypted_message);
 
             CLIENT_DEBUG(context, "Exporting accessory public key");
             size_t accessory_public_key_size = 0;
@@ -1493,28 +1489,28 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 accessory_info, accessory_info_size,
                 accessory_signature, &accessory_signature_size
             );
+            
+            free(accessory_info);
+            
             if (r) {
                 CLIENT_ERROR(context, "Generate accessory sign (%d)", r);
-
+                
                 free(accessory_signature);
                 free(accessory_public_key);
-                free(accessory_info);
-
+                
                 send_tlv_error_response(context, 6, TLVError_Unknown);
                 break;
             }
-
-            free(accessory_info);
-
             tlv_values_t *response_message = tlv_new();
             tlv_add_value(response_message, TLVType_Identifier,
                           (byte *)homekit_server->accessory_id, accessory_id_size);
+            
             tlv_add_value(response_message, TLVType_PublicKey,
                           accessory_public_key, accessory_public_key_size);
+            free(accessory_public_key);
+            
             tlv_add_value(response_message, TLVType_Signature,
                           accessory_signature, accessory_signature_size);
-
-            free(accessory_public_key);
             free(accessory_signature);
 
             size_t response_data_size = 0;
@@ -1566,11 +1562,10 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             tlv_add_integer_value(response, TLVType_State, 1, 6);
             tlv_add_value(response, TLVType_EncryptedData,
                           encrypted_response_data, encrypted_response_data_size);
-
             free(encrypted_response_data);
             
             send_tlv_response(context, response);
-
+            
             pairing_context_free(homekit_server->pairing_context);
             homekit_server->pairing_context = NULL;
             
@@ -1726,7 +1721,6 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
                           (const byte *)homekit_server->accessory_id, accessory_id_size);
             tlv_add_value(sub_response, TLVType_Signature,
                           accessory_signature, accessory_signature_size);
-
             free(accessory_signature);
 
             size_t sub_response_data_size = 0;
@@ -1805,11 +1799,10 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
                           my_key_public, my_key_public_size);
             tlv_add_value(response, TLVType_EncryptedData,
                           encrypted_response_data, encrypted_response_data_size);
-
             free(encrypted_response_data);
             
             send_tlv_response(context, response);
-
+            
             if (context->verify_context) {
                 pair_verify_context_free(&context->verify_context);
             }
@@ -1993,7 +1986,7 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             );
 
             pair_verify_context_free(&context->verify_context);
-
+            
             if (r) {
                 CLIENT_ERROR(context, "Derive write enc key (%d)", r);
 
@@ -2560,7 +2553,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     }
 
 #ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
-                    int max_len = (ch->max_len) ? *ch->max_len : 64;
+                    unsigned int max_len = (ch->max_len) ? *ch->max_len : 64;
 #endif //HOMEKIT_DISABLE_MAXLEN_CHECK
                     
                     char *value = j_value->valuestring;
@@ -2590,7 +2583,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     }
 
 #ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
-                    int max_len = (ch->max_len) ? *ch->max_len : 256;
+                    unsigned int max_len = (ch->max_len) ? *ch->max_len : 256;
 #endif //HOMEKIT_DISABLE_MAXLEN_CHECK
                     
                     char *value = j_value->valuestring;
@@ -2647,7 +2640,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     // Default max data len = 2,097,152 but that does not make sense
                     // for this accessory
 #ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
-                    int max_len = (ch->max_data_len) ? *ch->max_data_len : 4096;
+                    unsigned int max_len = (ch->max_data_len) ? *ch->max_data_len : 4096;
 #endif //HOMEKIT_DISABLE_MAXLEN_CHECK
                     
                     char *value = j_value->valuestring;
@@ -3027,11 +3020,12 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
 
                 pairing_free(pairing);
             }
+            
+            free(public_key);
             homekit_storage_pairing_iterator_free(it);
 
-            free(public_key);
-
             send_tlv_response(context, response);
+            
             break;
         }
         default: {

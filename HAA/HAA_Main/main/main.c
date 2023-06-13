@@ -940,6 +940,8 @@ void wifi_reconnection_task() {
             main_config.wifi_error_count = 0;
             main_config.wifi_arp_count = 0;
             
+            vTaskDelay(MS_TO_TICKS(1000));
+            
 #ifdef ESP_PLATFORM
             uint8_t channel_primary = main_config.wifi_channel;
             esp_wifi_get_channel(&channel_primary, NULL);
