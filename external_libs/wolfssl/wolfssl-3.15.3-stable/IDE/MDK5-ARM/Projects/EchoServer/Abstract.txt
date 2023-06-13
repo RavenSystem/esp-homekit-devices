@@ -1,0 +1,12 @@
+wolfSSL example: echo Server
+
+Use Configuration Wizard tab
+main.c for server port or TLS version
+user_settings.h for wolfCrypt or wolfSSL options
+
+For further options, details, see wolfSSL User Manual.
+
+
+Support
+-------
+Please send questions or comments to support@wolfssl.com

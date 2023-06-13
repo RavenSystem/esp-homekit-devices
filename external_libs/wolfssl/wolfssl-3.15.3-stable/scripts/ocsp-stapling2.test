@@ -1,0 +1,55 @@
+#!/bin/sh
+
+# ocsp-stapling.test
+
+trap 'for i in `jobs -p`; do pkill -TERM -P $i; done' EXIT
+
+[ ! -x ./examples/client/client ] && echo -e "\n\nClient doesn't exist" && exit 1
+
+# setup ocsp responders
+./certs/ocsp/ocspd-root-ca-and-intermediate-cas.sh &
+./certs/ocsp/ocspd-intermediate2-ca-issued-certs.sh &
+./certs/ocsp/ocspd-intermediate3-ca-issued-certs.sh &
+sleep 1
+[ $(jobs -r | wc -l) -ne 3 ] && echo -e "\n\nSetup ocsp responder failed, skipping" && exit 0
+
+# client test against our own server - GOOD CERTS
+./examples/server/server -c certs/ocsp/server3-cert.pem -k certs/ocsp/server3-key.pem &
+sleep 1
+./examples/client/client -C -A certs/ocsp/root-ca-cert.pem -W 1
+RESULT=$?
+[ $RESULT -ne 0 ] && echo -e "\n\nClient connection failed" && exit 1
+
+./examples/server/server -c certs/ocsp/server3-cert.pem -k certs/ocsp/server3-key.pem &
+sleep 1
+./examples/client/client -C -A certs/ocsp/root-ca-cert.pem -W 2
+RESULT=$?
+[ $RESULT -ne 0 ] && echo -e "\n\nClient connection failed" && exit 1
+
+# client test against our own server - REVOKED SERVER CERT
+./examples/server/server -c certs/ocsp/server4-cert.pem -k certs/ocsp/server4-key.pem &
+sleep 1
+./examples/client/client -C -A certs/ocsp/root-ca-cert.pem -W 1
+RESULT=$?
+[ $RESULT -ne 1 ] && echo -e "\n\nClient connection suceeded $RESULT" && exit 1
+
+./examples/server/server -c certs/ocsp/server4-cert.pem -k certs/ocsp/server4-key.pem &
+sleep 1
+./examples/client/client -C -A certs/ocsp/root-ca-cert.pem -W 2
+RESULT=$?
+[ $RESULT -ne 1 ] && echo -e "\n\nClient connection suceeded $RESULT" && exit 1
+
+# client test against our own server - REVOKED INTERMEDIATE CERT
+./examples/server/server -c certs/ocsp/server5-cert.pem -k certs/ocsp/server5-key.pem &
+sleep 1
+./examples/client/client -C -A certs/ocsp/root-ca-cert.pem -W 1
+RESULT=$?
+[ $RESULT -ne 0 ] && echo -e "\n\nClient connection failed $RESULT" && exit 1
+
+./examples/server/server -c certs/ocsp/server5-cert.pem -k certs/ocsp/server5-key.pem &
+sleep 1
+./examples/client/client -C -A certs/ocsp/root-ca-cert.pem -W 2
+RESULT=$?
+[ $RESULT -ne 1 ] && echo -e "\n\nClient connection suceeded $RESULT" && exit 1
+
+exit 0
