@@ -416,7 +416,7 @@ void free_heap_watchdog() {
     uint32_t size = xPortGetFreeHeapSize();
     if (size != free_heap) {
         free_heap = size;
-        INFO("* Free Heap = %d", free_heap);
+        INFO("* Free Heap = %"HAA_LONGINT_F, free_heap);
         
         char* space = NULL;
         while (!space && size > 0) {
@@ -425,8 +425,8 @@ void free_heap_watchdog() {
         }
         
         free(space);
-        INFO("* Max chunk = %i", size + 4);
-        INFO("* CPU Speed = %i", sdk_system_get_cpu_freq());
+        INFO("* Max chunk = %"HAA_LONGINT_F, size + 4);
+        INFO("* CPU Speed = %"HAA_LONGINT_F, sdk_system_get_cpu_freq());
         stats_display();
     }
 }
@@ -775,8 +775,8 @@ void reboot_task() {
 
 void reboot_haa() {
     if (xTaskCreate(reboot_task, "REB", REBOOT_TASK_SIZE, NULL, REBOOT_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("New REB");
         homekit_remove_oldest_client();
+        ERROR("New REB");
     }
 }
 
@@ -857,13 +857,13 @@ void ntp_timer_worker(TimerHandle_t xTimer) {
         if (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
             raven_ntp_get_time_t();
         } else if (xTaskCreate(ntp_task, "NTP", NTP_TASK_SIZE, NULL, NTP_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("New NTP");
             homekit_remove_oldest_client();
             raven_ntp_get_time_t();
+            ERROR("New NTP");
         }
     } else {
-        ERROR("HK pair");
         raven_ntp_get_time_t();
+        ERROR("HK pair");
     }
 }
 
@@ -1042,8 +1042,8 @@ void wifi_watchdog() {
         
         if (main_config.wifi_ping_max_errors != 255 && !homekit_is_pairing()) {
             if (xTaskCreate(wifi_ping_gw_task, "GWP", WIFI_PING_GW_TASK_SIZE, NULL, WIFI_PING_GW_TASK_PRIORITY, NULL) != pdPASS) {
-                ERROR("New GWP");
                 homekit_remove_oldest_client();
+                ERROR("New GWP");
             }
         }
         
@@ -1058,8 +1058,8 @@ void wifi_watchdog() {
         main_config.wifi_error_count = 0;
         
         if (xTaskCreate(wifi_reconnection_task, "RCN", WIFI_RECONNECTION_TASK_SIZE, NULL, WIFI_RECONNECTION_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("New RCN");
             homekit_remove_oldest_client();
+            ERROR("New RCN");
         }
     }
 }
@@ -1121,8 +1121,8 @@ void ping_task() {
 void ping_task_timer_worker() {
     if (!homekit_is_pairing()) {
         if (xTaskCreate(ping_task, "PIN", PING_TASK_SIZE, NULL, PING_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("New PIN");
             homekit_remove_oldest_client();
+            ERROR("New PIN");
         }
     } else {
         ERROR("PING HK pair %i", homekit_is_pairing());
@@ -1689,8 +1689,8 @@ void power_monitor_timer_worker(TimerHandle_t xTimer) {
                 if (xTaskCreate(power_monitor_task, "PM", POWER_MONITOR_TASK_SIZE, (void*) ch_group, POWER_MONITOR_TASK_PRIORITY, NULL) == pdPASS) {
                     ch_group->is_working = true;
                 } else {
-                    ERROR("New PM");
                     homekit_remove_oldest_client();
+                    ERROR("New PM");
                 }
             }
         }
@@ -1974,8 +1974,8 @@ void set_zones_task(void* args) {
 void set_zones_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
         if (xTaskCreate(set_zones_task, "iAZ", SET_ZONES_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), SET_ZONES_TASK_PRIORITY, NULL) != pdPASS) {
-            ERROR("New iAZ");
             homekit_remove_oldest_client();
+            ERROR("New iAZ");
             rs_esp_timer_start(xTimer);
         }
     } else {
@@ -2210,8 +2210,8 @@ void process_th_task(void* args) {
 
 void process_th_timer(TimerHandle_t xTimer) {
     if (xTaskCreate(process_th_task, "TH", PROCESS_TH_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_TH_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("New TH");
         homekit_remove_oldest_client();
+        ERROR("New TH");
         rs_esp_timer_start(xTimer);
     }
 }
@@ -2556,8 +2556,8 @@ void process_hum_task(void* args) {
 
 void process_humidif_timer(TimerHandle_t xTimer) {
     if (xTaskCreate(process_hum_task, "HUM", PROCESS_HUMIDIF_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_HUMIDIF_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("New HUM");
         homekit_remove_oldest_client();
+        ERROR("New HUM");
         rs_esp_timer_start(xTimer);
     }
 }
@@ -2935,8 +2935,8 @@ void temperature_timer_worker(TimerHandle_t xTimer) {
             if (xTaskCreate(temperature_task, "TEM", TEMPERATURE_TASK_SIZE, (void*) ch_group, TEMPERATURE_TASK_PRIORITY, NULL) == pdPASS) {
                 ch_group->is_working = true;
             } else {
-                ERROR("New TEM");
                 homekit_remove_oldest_client();
+                ERROR("New TEM");
             }
         }
     } else {
@@ -3114,7 +3114,11 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
     
     // *** HSI TO RGBW FUNCTION ***
 #ifdef LIGHT_DEBUG
+#ifdef ESP_PLATFORM
+    uint64_t run_time = sdk_system_get_time_raw();
+#else
     uint32_t run_time = sdk_system_get_time_raw();
+#endif
 #endif
     
     lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_group->ch[0]);
@@ -3698,8 +3702,9 @@ void lightbulb_task_timer(TimerHandle_t xTimer) {
         ch_group_t* ch_group = (void*) pvTimerGetTimerID(xTimer);
         lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_group->ch[0]);
         lightbulb_group->lightbulb_task_running = false;
-        ERROR("New LB");
+        
         homekit_remove_oldest_client();
+        ERROR("New LB");
         rs_esp_timer_start(xTimer);
     }
 }
@@ -3850,8 +3855,8 @@ void autodimmer_call(homekit_characteristic_t* ch0, const homekit_value_t value)
             rs_esp_timer_stop(LIGHTBULB_AUTODIMMER_TIMER);
             
             if (xTaskCreate(autodimmer_task, "DIM", AUTODIMMER_TASK_SIZE, (void*) ch0, AUTODIMMER_TASK_PRIORITY, NULL) != pdPASS) {
-                ERROR("<%i> New DIM", ch_group->serv_index);
                 homekit_remove_oldest_client();
+                ERROR("New DIM");
             }
         } else {
             rs_esp_timer_start(LIGHTBULB_AUTODIMMER_TIMER);
@@ -4357,8 +4362,8 @@ void process_fan_task(void* args) {
 
 void process_fan_timer(TimerHandle_t xTimer) {
     if (xTaskCreate(process_fan_task, "FAN", PROCESS_FAN_TASK_SIZE, (void*) pvTimerGetTimerID(xTimer), PROCESS_FAN_TASK_PRIORITY, NULL) != pdPASS) {
-        ERROR("New FAN");
         homekit_remove_oldest_client();
+        ERROR("New FAN");
         rs_esp_timer_start(xTimer);
     }
 }
@@ -4475,8 +4480,8 @@ void light_sensor_timer_worker(TimerHandle_t xTimer) {
             if (xTaskCreate(light_sensor_task, "LUX", LIGHT_SENSOR_TASK_SIZE, (void*) ch_group, LIGHT_SENSOR_TASK_PRIORITY, NULL) == pdPASS) {
                 ch_group->is_working = true;
             } else {
-                ERROR("New LUX");
                 homekit_remove_oldest_client();
+                ERROR("New LUX");
             }
         }
     } else {
@@ -4802,6 +4807,24 @@ bool set_hkch_value(homekit_characteristic_t* ch_target, const float value) {
     return has_changed;
 }
 
+void* force_alloc(const size_t len) {
+    unsigned int errors = 0;
+    void* new_char = NULL;
+    
+    while (errors < ACTION_TASK_MAX_ERRORS) {
+        new_char = malloc(len);
+        if (new_char) {
+            break;
+        } else {
+            homekit_remove_oldest_client();
+            errors++;
+            vTaskDelay(MS_TO_TICKS(110));
+        }
+    }
+    
+    return new_char;
+}
+
 // --- FREE MONITOR
 bool find_patterns(pattern_t* pattern_base, uint8_t** bytes, int bytes_len) {
     pattern_t* pattern = pattern_base;
@@ -4867,7 +4890,7 @@ void reset_uart_buffer() {
 
 #ifdef ESP_PLATFORM
 void IRAM_ATTR fm_pulse_interrupt(void* args) {
-    const uint64_t time = esp_timer_get_time();
+    const uint64_t time = sdk_system_get_time_raw();
     const uint8_t gpio = (uint32_t) args;
 #else
 void IRAM fm_pulse_interrupt(const uint8_t gpio) {
@@ -5164,10 +5187,9 @@ void free_monitor_task(void* args) {
                         
                         action_network_t* action_network = ch_group->action_network;
                         
-                        int errors = 0;
-                        
                         while (action_network) {
-                            if (action_network->action == 0) {
+                            if (action_network->action == 0 && !action_network->is_running) {
+                                action_network->is_running = true;
                                 int socket;
                                 int result = -1;
                                 
@@ -5213,26 +5235,18 @@ void free_monitor_task(void* args) {
                                             
                                             action_network->len = 69 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(HAA_FIRMWARE_VERSION) + strlen(action_network->host) +  strlen(action_network->url) + strlen(action_network->header) + content_len_n;
                                             
-                                            req = malloc(action_network->len);
-                                            
+                                            req = (char*) force_alloc(action_network->len);
                                             if (!req) {
-                                                action_network->is_running = false;
-                                                
                                                 if (method_req) {
                                                     free(method_req);
                                                 }
                                                 
                                                 free(method);
                                                 
-                                                homekit_remove_oldest_client();
-                                                errors++;
-                                                
-                                                if (errors < 5) {
-                                                    vTaskDelay(MS_TO_TICKS(200));
-                                                    continue;
-                                                } else {
-                                                    break;
-                                                }
+                                                action_network->is_running = false;
+                                                action_network = action_network->next;
+                                                ERROR("DRAM");
+                                                continue;
                                             }
                                             
                                             snprintf(req, action_network->len, "%s /%s%s%s%s%s%s\r\n",
@@ -5379,6 +5393,8 @@ void free_monitor_task(void* args) {
                                         INFO("<%i> -> %i", ch_group->serv_index, total_recv);
                                     }
                                 }
+                                
+                                action_network->is_running = false;
                             }
                             
                             action_network = action_network->next;
@@ -5959,7 +5975,19 @@ void net_action_task(void* pvParameters) {
                         
                         action_network->len = 61 + strlen(method) + ((method_req != NULL) ? strlen(method_req) : 0) + strlen(HAA_FIRMWARE_VERSION) + strlen(action_network->host) +  strlen(action_network->url) + strlen(action_network->header) + content_len_n;
                         
-                        req = malloc(action_network->len);
+                        req = (char*) force_alloc(action_network->len);
+                        if (!req) {
+                            if (method_req) {
+                                free(method_req);
+                            }
+                            
+                            free(method);
+                            
+                            action_network->is_running = false;
+                            action_network = action_network->next;
+                            ERROR("DRAM");
+                            continue;
+                        }
                         
                         snprintf(req, action_network->len, "%s /%s%s%s%s%s%s\r\n",
                                  method,
@@ -5981,7 +6009,15 @@ void net_action_task(void* pvParameters) {
                         action_network->method_n < 4) {
                         if (action_network->method_n == 3) {
                             action_network->len = content_len_n;
-                            req = malloc(content_len_n + 1);
+                            
+                            req = (char*) force_alloc(content_len_n + 1);
+                            if (!req) {
+                                action_network->is_running = false;
+                                action_network = action_network->next;
+                                ERROR("DRAM");
+                                continue;
+                            }
+                            
                             req[0] = 0;
                         }
                         
@@ -6058,7 +6094,15 @@ void net_action_task(void* pvParameters) {
                     
                     if (action_network->method_n == 13) {
                         size_t content_len_n = search_str_ch_values(&str_ch_value_first, action_network->content);
-                        char* req = malloc(content_len_n + 1);
+                        
+                        char* req = (char*) force_alloc(content_len_n + 1);
+                        if (!req) {
+                            action_network->is_running = false;
+                            action_network = action_network->next;
+                            ERROR("DRAM");
+                            continue;
+                        }
+                        
                         req[0] = 0;
                         write_str_ch_values(&str_ch_value_first, &req, action_network->content);
                         
@@ -6139,8 +6183,6 @@ void net_action_task(void* pvParameters) {
 void irrf_tx_task(void* pvParameters) {
     action_task_t* action_task = pvParameters;
     action_irrf_tx_t* action_irrf_tx = action_task->ch_group->action_irrf_tx;
-    
-    int errors = 0;
     
     while (action_irrf_tx) {
         if (action_irrf_tx->action == action_task->action) {
@@ -6229,17 +6271,10 @@ void irrf_tx_task(void* pvParameters) {
                         break;
                 }
                 
-                ir_code = malloc(sizeof(uint16_t) * ir_code_len);
+                ir_code = (uint16_t*) force_alloc(sizeof(uint16_t) * ir_code_len);
                 if (!ir_code) {
-                    homekit_remove_oldest_client();
-                    errors++;
-                    
-                    if (errors < ACTION_TASK_MAX_ERRORS) {
-                        vTaskDelay(MS_TO_TICKS(110));
-                        continue;
-                    } else {
-                        break;
-                    }
+                    ERROR("DRAM");
+                    continue;
                 }
                 
                 INFO("<%i> IR Len %i, Prot %s", action_task->ch_group->serv_index, ir_code_len, prot);
@@ -6423,7 +6458,11 @@ void irrf_tx_task(void* pvParameters) {
                 const size_t json_ir_code_len = strlen(action_irrf_tx->raw_code);
                 ir_code_len = json_ir_code_len >> 1;
                 
-                ir_code = malloc(sizeof(uint16_t) * ir_code_len);
+                ir_code = (uint16_t*) force_alloc(sizeof(uint16_t) * ir_code_len);
+                if (!ir_code) {
+                    ERROR("DRAM");
+                    continue;
+                }
                 
                 INFO("<%i> IR packet (%i)", action_task->ch_group->serv_index, ir_code_len);
 
@@ -6451,7 +6490,11 @@ void irrf_tx_task(void* pvParameters) {
             }
             
             // IR TRANSMITTER
+#ifdef ESP_PLATFORM
+            uint64_t start;
+#else
             uint32_t start;
+#endif
             int ir_true, ir_false, ir_gpio;
             if (freq > 1) {
                 ir_true = !main_config.ir_tx_inv;
@@ -6922,8 +6965,8 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                     if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) == pdPASS) {
                                         ch_group->is_working = true;
                                     } else {
-                                        ERROR("New FM");
                                         homekit_remove_oldest_client();
+                                        ERROR("New FM");
                                     }
                                 }
                             }
@@ -12564,7 +12607,7 @@ void irrf_capture_task(void* args) {
     
     int read, last = true;
     unsigned int i, c = 0;
-    uint16_t* buffer = malloc(2048 * sizeof(uint16_t));
+    uint16_t* buffer = malloc(sizeof(uint16_t) * IRRF_CAPTURE_BUFFER_SIZE);
 #ifdef ESP_PLATFORM
     uint64_t now, new_time, current_time = sdk_system_get_time_raw();
 #else
@@ -12587,11 +12630,7 @@ void irrf_capture_task(void* args) {
             if (c > 0) {
                 INFO("Packets %i", c - 1);
                 for (i = 1; i < c; i++) {
-#ifdef ESP_PLATFORM
-                    INFO_NNL("%s%5li ",
-#else
-                    INFO_NNL("%s%5d ",
-#endif
+                    INFO_NNL("%s%5"HAA_LONGINT_F" ",
                            i & 1 ? "+" : "-",
                            (uint32_t) (buffer[i] * 1.02f));
                     

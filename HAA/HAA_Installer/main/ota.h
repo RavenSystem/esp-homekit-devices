@@ -41,10 +41,10 @@
 #define REQUESTHEAD             "GET /"
 #define REQUESTTAIL             " HTTP/1.1\r\nHost: "
 #define CRLFCRLF                "\r\n\r\n"
-#define RECV_BUF_LEN            (1371)
+#define RECV_BUF_LEN            (1390)
 #define HEADER_BUFFER_LEN       (8000)
 #define HOST_LEN                (128)
-#define LOCATION_LEN            (1197)
+#define LOCATION_LEN            (1198)
 #define RANGE                   "\r\nRange: bytes="
 
 #define MAX_302_JUMPS           (10)

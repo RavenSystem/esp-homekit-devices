@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.5.0"
+#define HAA_FIRMWARE_VERSION                "12.6.0"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -752,10 +752,12 @@
 #define CUSTOM_HAA_COMMAND                  "zc"
 #define HAA_SETUP_ACCESSORY_SET             "s"
 
+#define IRRF_CAPTURE_BUFFER_SIZE            (2048)
+
 #define ACTION_TASK_TYPE_UART               (0)
 #define ACTION_TASK_TYPE_NETWORK            (1)
 #define ACTION_TASK_TYPE_IRRF               (2)
-#define ACTION_TASK_MAX_ERRORS              (10)
+#define ACTION_TASK_MAX_ERRORS              (6)
 
 #define SAVE_STATES_TIMER                   ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE)->timer
 #define WIFI_WATCHDOG_TIMER                 ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE)->timer2

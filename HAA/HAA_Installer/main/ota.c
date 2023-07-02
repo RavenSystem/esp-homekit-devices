@@ -557,7 +557,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
         while (collected < length && connection_tries < MAX_DOWNLOAD_FILE_TRIES) {
             last_collected = collected;
             
-            snprintf(recv_buf, RECV_BUF_LEN, REQUESTHEAD"%s"REQUESTTAIL"%s"RANGE"%d-%d%s", last_location, last_host, collected, collected + 4095, CRLFCRLF);
+            snprintf(recv_buf, RECV_BUF_LEN - 1, REQUESTHEAD"%s"REQUESTTAIL"%s"RANGE"%d-%d%s", last_location, last_host, collected, collected + 4095, CRLFCRLF);
             
             const int send_bytes = strlen(recv_buf);
             
