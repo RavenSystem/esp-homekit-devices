@@ -178,7 +178,7 @@ static void client_send_redirect(client_t *client, int code, const char *redirec
     client_send(client, buffer, len);
 }
 
-bool wifi_config_got_ip() {
+static bool wifi_config_got_ip() {
 #ifdef ESP_PLATFORM
     return got_ip;
 #else
@@ -1149,7 +1149,7 @@ static void wifi_config_softap_start() {
     ip4_addr_t first_client_ip;
     first_client_ip.addr = ap_ip.ip.addr + htonl(1);
     
-    dhcpserver_start(&first_client_ip, 4);
+    dhcpserver_start(&first_client_ip, DHCP_SERVER_MAX_LEASES);
 #endif
     
     context->wifi_networks_semaph = xSemaphoreCreateBinary();

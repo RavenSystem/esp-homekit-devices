@@ -358,7 +358,7 @@ const char http_header2[] = "\r\nUser-Agent: HAA/"HAA_FIRMWARE_VERSION"\r\nConne
 const char http_header_len[] = "Content-length: ";
 
 int new_net_con(char* host, uint16_t port_n, bool is_udp, uint8_t* payload, size_t payload_len, int* s, uint8_t rcvtimeout_s, int rcvtimeout_us) {
-    struct addrinfo* res;
+    struct addrinfo* res = NULL;
     struct addrinfo hints;
     int result;
     char port[8];
@@ -374,7 +374,9 @@ int new_net_con(char* host, uint16_t port_n, bool is_udp, uint8_t* payload, size
     }
     
     if (getaddrinfo(host, port, &hints, &res) != 0) {
-        free(res);
+        if (res) {
+            free(res);
+        }
         return -3;
     }
     
@@ -736,7 +738,8 @@ int ping_host(char* host) {
         .ai_family = AF_UNSPEC,
         .ai_socktype = SOCK_RAW
     };
-    struct addrinfo* res;
+    
+    struct addrinfo* res = NULL;
     
     int err = getaddrinfo(host, NULL, &hints, &res);
     

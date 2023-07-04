@@ -609,6 +609,10 @@ static void setup_announcer_task() {
     };
     
     while (getaddrinfo(SETUP_ANNOUNCER_DESTINATION, SETUP_ANNOUNCER_PORT, &hints, &context->res) != 0) {
+        if (context->res) {
+            free(context->res);
+            context->res = NULL;
+        }
         vTaskDelay(MS_TO_TICKS(200));
     }
 
@@ -1192,7 +1196,7 @@ static void wifi_config_softap_start() {
     ip4_addr_t first_client_ip;
     first_client_ip.addr = ap_ip.ip.addr + htonl(1);
     
-    dhcpserver_start(&first_client_ip, 4);
+    dhcpserver_start(&first_client_ip, DHCP_SERVER_MAX_LEASES);
 #endif
     
     context->wifi_networks_semaph = xSemaphoreCreateBinary();

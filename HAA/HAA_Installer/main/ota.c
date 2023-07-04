@@ -220,10 +220,13 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
         .ai_family = AF_UNSPEC,
         .ai_socktype = SOCK_STREAM,
     };
-    struct addrinfo* res;
-
+    
+    struct addrinfo* res = NULL;
+    
     void print_error() {
-        freeaddrinfo(res);
+        if (res) {
+            freeaddrinfo(res);
+        }
         INFO("!");
     }
     
@@ -460,9 +463,13 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
                 }
             case -2:
                 lwip_close(socket);
-            case -3:
+            //case -3:
             default:
             ;
+        }
+        
+        if (ota_conn_result < 0) {
+            vTaskDelay(5000 / portTICK_PERIOD_MS);
         }
     }
     
@@ -531,12 +538,12 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
                     }
                 case -2:
                     lwip_close(socket);
-                case -3:
+                //case -3:
                 default:
                 ;
             }
             
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
+            vTaskDelay(5000 / portTICK_PERIOD_MS);
         }
         
         if (result >= 0) {
@@ -763,7 +770,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
             }
         case -2:
             lwip_close(socket);
-        case -3:
+        //case -3:
         default:
         ;
     }
