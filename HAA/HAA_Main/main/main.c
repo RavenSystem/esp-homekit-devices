@@ -435,7 +435,7 @@ void free_heap_watchdog() {
 #endif  // HAA_DEBUG
 
 static void _random_task_delay(const uint16_t ticks) {
-    vTaskDelay( ( hwrand() % ticks ) + MS_TO_TICKS(200) );
+    vTaskDelay( ( hwrand() % ticks ) + MS_TO_TICKS(2000) );
 }
 
 void random_task_short_delay() {
@@ -901,20 +901,25 @@ void wifi_ping_gw_task() {
 }
 
 void wifi_reconnection_task() {
+    rs_esp_timer_stop_forced(WIFI_WATCHDOG_TIMER);
+    
+    homekit_mdns_announce_pause();
+    
     if (main_config.wifi_status == WIFI_STATUS_CONNECTED) {
         sdk_wifi_station_disconnect();
-        sdk_wifi_station_connect();
+        
         main_config.wifi_status = WIFI_STATUS_CONNECTING;
         
         INFO("Wifi connecting");
+        
+        sdk_wifi_station_connect();
     }
     
-    rs_esp_timer_stop_forced(WIFI_WATCHDOG_TIMER);
-    homekit_mdns_announce_pause();
-    
-    led_blink(3);
+    led_blink(6);
     
     do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 4);
+    
+    vTaskDelay(MS_TO_TICKS(500));
     
     for (;;) {
         const int new_ip = wifi_config_get_ip();
@@ -939,11 +944,11 @@ void wifi_reconnection_task() {
 #endif
             
         } else if (new_ip >= 0) {
+            vTaskDelay(MS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
+            
             main_config.wifi_status = WIFI_STATUS_CONNECTED;
             main_config.wifi_error_count = 0;
             main_config.wifi_arp_count = 0;
-            
-            vTaskDelay(MS_TO_TICKS(1000));
             
 #ifdef ESP_PLATFORM
             uint8_t channel_primary = main_config.wifi_channel;
@@ -990,7 +995,7 @@ void wifi_reconnection_task() {
 void set_main_wifi_status_connecting() {
     main_config.wifi_status = WIFI_STATUS_CONNECTING;
 }
-    
+
 void wifi_watchdog() {
     //INFO("Wifi status %i, sleep mode %i", main_config.wifi_status, sdk_wifi_get_sleep_type());
     const int current_ip = wifi_config_get_ip();
@@ -1026,19 +1031,22 @@ void wifi_watchdog() {
             INFO("Wifi new Ch %i", current_channel);
             homekit_mdns_announce();
             do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 6);
+            
+            main_config.wifi_arp_count = 0;
         }
         
         if (main_config.wifi_ip != current_ip) {
             main_config.wifi_ip = current_ip;
             homekit_mdns_announce();
             do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 7);
+            
+            main_config.wifi_arp_count = 0;
         }
         
         if (main_config.wifi_arp_count_max > 0) {
             main_config.wifi_arp_count++;
             if (main_config.wifi_arp_count >= main_config.wifi_arp_count_max) {
                 main_config.wifi_arp_count = 0;
-                
                 wifi_resend_arp();
             }
         }
@@ -7263,6 +7271,8 @@ homekit_characteristic_t haa_custom_setup_option = HOMEKIT_CHARACTERISTIC_(CUSTO
 homekit_server_config_t config;
 
 void run_homekit_server() {
+    random_task_short_delay();
+    
 #ifdef ESP_PLATFORM
     uint8_t channel_primary = 0;
     esp_wifi_get_channel(&channel_primary, NULL);
@@ -7277,7 +7287,6 @@ void run_homekit_server() {
     show_freeheap();
     
     if (main_config.enable_homekit_server) {
-        random_task_short_delay();
         homekit_server_init(&config);
         show_freeheap();
     }
@@ -8981,11 +8990,6 @@ void normal_mode_init() {
     }
 #endif
     
-    // ARP Gratuitous period
-    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_WATCHDOG_ARP_PERIOD_SET) != NULL) {
-        main_config.wifi_arp_count_max = ((uint32_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_WATCHDOG_ARP_PERIOD_SET)->valuefloat) / (WIFI_WATCHDOG_POLL_PERIOD_MS / 1000.0f);
-    }
-    
     // Allowed Setup Mode Time
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME) != NULL) {
         main_config.setup_mode_time = (uint16_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME)->valuefloat;
@@ -9025,6 +9029,12 @@ void normal_mode_init() {
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_PING_ERRORS) != NULL) {
         main_config.wifi_ping_max_errors = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_PING_ERRORS)->valuefloat;
         main_config.wifi_ping_max_errors++;
+        main_config.wifi_arp_count_max = 0;
+    }
+    
+    // ARP Gratuitous period
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_WATCHDOG_ARP_PERIOD_SET) != NULL) {
+        main_config.wifi_arp_count_max = ((uint32_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_WATCHDOG_ARP_PERIOD_SET)->valuefloat) / (WIFI_WATCHDOG_POLL_PERIOD_MS / 1000.0f);
     }
     
     // Common serial prefix

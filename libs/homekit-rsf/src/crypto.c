@@ -63,8 +63,12 @@ int wc_SrpSetKeyH(Srp *srp, byte *secret, word32 size) {
     srp->keySz = WC_SHA512_DIGEST_SIZE;
 
     r = wc_InitSha512(&hash.data.sha512);
-    if (!r) r = wc_Sha512Update(&hash.data.sha512, secret, size);
-    if (!r) r = wc_Sha512Final(&hash.data.sha512, srp->key);
+    if (!r) {
+        r = wc_Sha512Update(&hash.data.sha512, secret, size);
+    }
+    if (!r) {
+        r = wc_Sha512Final(&hash.data.sha512, srp->key);
+    }
 
     // clean up hash data from stack for security
     memset(&hash, 0, sizeof(hash));
@@ -80,6 +84,7 @@ Srp *crypto_srp_new() {
     int r = wc_SrpInit(srp, SRP_TYPE_SHA512, SRP_CLIENT_SIDE);
     if (r) {
         DEBUG("Failed to initialize SRP (code %d)", r);
+        free(srp);
         return NULL;
     }
     srp->keyGenFunc_cb = wc_SrpSetKeyH;
@@ -185,28 +190,16 @@ int crypto_srp_compute_key(
     const byte *client_public_key, size_t client_public_key_size,
     const byte *server_public_key, size_t server_public_key_size
 ) {
-    int r = wc_SrpComputeKey(
+    return wc_SrpComputeKey(
         srp,
         (byte *)client_public_key, client_public_key_size,
         (byte *)server_public_key, server_public_key_size
     );
-    if (r) {
-        DEBUG("Failed to generate SRP shared secret key (code %d)", r);
-        return r;
-    }
-
-    return 0;
 }
 
 
 int crypto_srp_verify(Srp *srp, const byte *proof, size_t proof_size) {
-    int r = wc_SrpVerifyPeersProof(srp, (byte *)proof, proof_size);
-    if (r) {
-        DEBUG("Failed to verify client SRP proof (code %d)", r);
-        return r;
-    }
-
-    return 0;
+    return wc_SrpVerifyPeersProof(srp, (byte *)proof, proof_size);
 }
 
 
@@ -243,7 +236,7 @@ int crypto_hkdf(
 
     *output_size = 32;
 
-    int r = wc_HKDF(
+    return wc_HKDF(
         SHA512,
         key, key_size,
         salt, salt_size,
@@ -251,8 +244,6 @@ int crypto_hkdf(
 
         output, *output_size
     );
-
-    return r;
 }
 
 
@@ -292,13 +283,11 @@ int crypto_chacha20poly1305_decrypt(
 
     *decrypted_size = len;
 
-    int r = wc_ChaCha20Poly1305_Decrypt(
+    return wc_ChaCha20Poly1305_Decrypt(
         key, nonce, aad, aad_size,
         message, len, &message[len],
         decrypted
     );
-
-    return r;
 }
 
 int crypto_chacha20poly1305_encrypt(
@@ -317,13 +306,11 @@ int crypto_chacha20poly1305_encrypt(
 
     *encrypted_size = len;
 
-    int r = wc_ChaCha20Poly1305_Encrypt(
+    return wc_ChaCha20Poly1305_Encrypt(
         key, nonce, aad, aad_size,
         message, message_size,
         encrypted, encrypted+message_size
     );
-
-    return r;
 }
 
 
@@ -338,8 +325,9 @@ ed25519_key *crypto_ed25519_new() {
 }
 
 void crypto_ed25519_free(ed25519_key *key) {
-    if (key)
+    if (key) {
         free(key);
+    }
 }
 
 ed25519_key *crypto_ed25519_generate() {

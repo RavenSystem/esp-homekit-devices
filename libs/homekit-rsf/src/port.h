@@ -22,7 +22,6 @@ void homekit_random_fill(uint8_t *data, size_t size);
 #else
 
 #include <spiflash.h>
-#define ESP_OK                              (0)
 #define SERVER_TASK_STACK_PAIR              (1680)
 #define SERVER_TASK_STACK_NORMAL            (1280)
 

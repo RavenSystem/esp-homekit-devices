@@ -2984,6 +2984,7 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
             tlv_add_integer_value(response, TLVType_State, 1, 2);
 
             send_tlv_response(context, response);
+            
             break;
         }
         case TLVMethod_ListPairings: {

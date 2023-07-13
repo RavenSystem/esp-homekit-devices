@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.6.1"
+#define HAA_FIRMWARE_VERSION                "12.6.2"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -769,8 +769,8 @@
 #define WIFI_SLEEP_MODE_SET                 "d"
 #define WIFI_BANDWIDTH_40_SET               "dt"
 
-#define WIFI_RECONNECTION_POLL_PERIOD_MS    (1000)
-#define WIFI_DISCONNECTED_LONG_TIME         (254)    // * WIFI_RECONNECTION_POLL_PERIOD_MS
+#define WIFI_RECONNECTION_POLL_PERIOD_MS    (1500)
+#define WIFI_DISCONNECTED_LONG_TIME         (169)    // * WIFI_RECONNECTION_POLL_PERIOD_MS
 
 #define WIFI_WATCHDOG_POLL_PERIOD_MS        (1500)
 #define WIFI_WATCHDOG_ARP_PERIOD_SET        "e"

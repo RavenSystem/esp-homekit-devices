@@ -93,6 +93,7 @@ int adv_pwm_get_duty(const uint8_t gpio) {
 
 #ifdef ESP_PLATFORM
 static void IRAM_ATTR zero_crossing_interrupt(void* args) {
+    gptimer_stop(adv_pwm_config->gptimer);
 #else
 static void IRAM zero_crossing_interrupt(const uint8_t gpio) {
 #endif
@@ -106,6 +107,7 @@ static void IRAM zero_crossing_interrupt(const uint8_t gpio) {
     };
     gptimer_set_alarm_action(adv_pwm_config->gptimer, &alarm_config);
     gptimer_set_raw_count(adv_pwm_config->gptimer, 0);
+    gptimer_start(adv_pwm_config->gptimer);
 #else
     timer_set_load(FRC1, 1);
 #endif
@@ -113,6 +115,7 @@ static void IRAM zero_crossing_interrupt(const uint8_t gpio) {
 
 #ifdef ESP_PLATFORM
 static bool IRAM_ATTR adv_pwm_worker(gptimer_handle_t gptimer, const gptimer_alarm_event_data_t *edata, void *args) {
+    gptimer_stop(gptimer);
 #else
 static void IRAM adv_pwm_worker() {
 #endif
@@ -168,7 +171,7 @@ static void IRAM adv_pwm_worker() {
         adv_pwm_config->current_duty = next_duty;
     }
     
-    if (!next_load) {
+    if (next_load == 0) {
         next_load = 1;
     }
     
@@ -177,7 +180,8 @@ static void IRAM adv_pwm_worker() {
         .alarm_count = next_load,
     };
     gptimer_set_alarm_action(gptimer, &alarm_config);
-    gptimer_set_raw_count(adv_pwm_config->gptimer, 0);
+    gptimer_set_raw_count(gptimer, 0);
+    gptimer_start(gptimer);
     
     return 0;
 #else
@@ -187,8 +191,6 @@ static void IRAM adv_pwm_worker() {
 
 void adv_pwm_start() {
     if (!adv_pwm_config->is_running) {
-        adv_pwm_config->is_running = true;
-        
 #ifdef ESP_PLATFORM
         gptimer_alarm_config_t alarm_config = {
             .alarm_count = 1,
@@ -202,6 +204,8 @@ void adv_pwm_start() {
         timer_set_interrupts(FRC1, true);
         timer_set_run(FRC1, true);
 #endif
+        
+        adv_pwm_config->is_running = true;
     }
 }
 
