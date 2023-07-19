@@ -1,0 +1,23 @@
+# vim:ft=automake
+# All paths should be given relative to the root
+#
+
+EXTRA_DIST += \
+            certs/test-pathlen/server-0-1-ca.pem \
+            certs/test-pathlen/server-0-1-cert.pem \
+            certs/test-pathlen/server-0-1-chain.pem \
+            certs/test-pathlen/server-0-ca.pem \
+            certs/test-pathlen/server-0-cert.pem \
+            certs/test-pathlen/server-0-chain.pem \
+            certs/test-pathlen/server-1-0-ca.pem \
+            certs/test-pathlen/server-1-0-cert.pem \
+            certs/test-pathlen/server-1-0-chain.pem \
+            certs/test-pathlen/server-1-ca.pem \
+            certs/test-pathlen/server-1-cert.pem \
+            certs/test-pathlen/server-1-chain.pem \
+            certs/test-pathlen/server-127-ca.pem \
+            certs/test-pathlen/server-127-cert.pem \
+            certs/test-pathlen/server-127-chain.pem \
+            certs/test-pathlen/server-128-ca.pem \
+            certs/test-pathlen/server-128-cert.pem \
+            certs/test-pathlen/server-128-chain.pem

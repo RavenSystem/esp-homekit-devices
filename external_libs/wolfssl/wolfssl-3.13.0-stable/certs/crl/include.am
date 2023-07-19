@@ -1,0 +1,15 @@
+# vim:ft=automake
+# All paths should be given relative to the root
+#
+
+EXTRA_DIST += \
+	     certs/crl/crl.pem \
+	     certs/crl/cliCrl.pem \
+	     certs/crl/eccSrvCRL.pem \
+	     certs/crl/eccCliCRL.pem \
+	     certs/crl/crl2.pem \
+	     certs/crl/caEccCrl.pem \
+	     certs/crl/caEcc384Crl.pem
+
+EXTRA_DIST += \
+	     certs/crl/crl.revoked

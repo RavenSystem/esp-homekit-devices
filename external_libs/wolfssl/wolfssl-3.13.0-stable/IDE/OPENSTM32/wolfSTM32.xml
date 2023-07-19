@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<targetDefinitions xmlns="http://openstm32.org/stm32TargetDefinitions" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://openstm32.org/stm32TargetDefinitions stm32TargetDefinitions.xsd">
+  <board id="wolfstm32">
+    <name>wolfSTM32</name>
+    <mcuId>stm32f437iihx</mcuId>
+    <dbgIF>JTAG</dbgIF>
+    <dbgDEV>ST-LinkV2-1</dbgDEV>
+  </board>
+</targetDefinitions>
