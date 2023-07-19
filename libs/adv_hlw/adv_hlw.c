@@ -44,7 +44,7 @@ typedef struct _adv_hlw_unit {
     int8_t gpio_sel;
     uint8_t current_mode: 1;
     uint8_t mode: 1;
-    uint8_t interrupt_type: 3;
+    //uint8_t interrupt_type: 3;
     
 #ifdef ESP_PLATFORM
     uint64_t last_cf;
@@ -156,6 +156,8 @@ static void IRAM adv_hlw_cf1_callback(void* args) {
 #else
 static void IRAM adv_hlw_cf1_callback(const uint8_t gpio) {
     const uint32_t now = sdk_system_get_time_raw();
+    
+    //gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
 #endif
     
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
@@ -184,10 +186,12 @@ static void IRAM adv_hlw_cf1_callback(const uint8_t gpio) {
         
         adv_hlw_unit->first_cf1 = now;
     }
-
+    
     adv_hlw_unit->last_cf1 = now;
     
     //printf("ADV_HLW_CF: gpio: %i, period_cf_v: %i _c: %i\n", gpio, adv_hlw_unit->period_cf1_v, adv_hlw_unit->period_cf1_c);
+    
+    //gpio_set_interrupt(gpio, adv_hlw_unit->interrupt_type, adv_hlw_cf1_callback);
 }
 
 #ifdef ESP_PLATFORM
@@ -197,6 +201,8 @@ static void IRAM adv_hlw_cf_callback(void* args) {
 #else
 static void IRAM adv_hlw_cf_callback(const uint8_t gpio) {
     const uint32_t now = sdk_system_get_time_raw();
+    
+    //gpio_set_interrupt(gpio, GPIO_INTTYPE_NONE, NULL);
 #endif
     
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
@@ -205,6 +211,8 @@ static void IRAM adv_hlw_cf_callback(const uint8_t gpio) {
     adv_hlw_unit->last_cf = now;
     
     //printf("ADV_HLW_CF: gpio: %i, period_cf: %i\n", gpio, adv_hlw_unit->period_cf);
+    
+    //gpio_set_interrupt(gpio, adv_hlw_unit->interrupt_type, adv_hlw_cf_callback);
 }
 
 int adv_hlw_unit_create(const int8_t gpio_cf, const int8_t gpio_cf1, const int8_t gpio_sel, const unsigned int current_mode, const unsigned int interrupt_type) {
@@ -227,7 +235,7 @@ int adv_hlw_unit_create(const int8_t gpio_cf, const int8_t gpio_cf1, const int8_
                 
                 adv_hlw_unit->current_mode = current_mode;
                 adv_hlw_unit->mode = current_mode;
-                adv_hlw_unit->interrupt_type = interrupt_type;
+                //adv_hlw_unit->interrupt_type = interrupt_type;
                 
                 adv_hlw_unit->next = adv_hlw_units;
                 adv_hlw_units = adv_hlw_unit;

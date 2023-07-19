@@ -80,6 +80,7 @@ void init_task() {
     
 #else
     
+    gpio_disable(1);
     iomux_set_pullup_flags(5, 0);
     iomux_set_function(5, IOMUX_GPIO1_FUNC_UART0_TXD);
     uart_set_baud(0, 115200);
@@ -350,7 +351,9 @@ void ota_task(void *arg) {
 
 void user_init() {
 // GPIO Init
+    
 #ifdef ESP_PLATFORM
+    
 /*
 #if defined(CONFIG_IDF_TARGET_ESP32)
 #define FIRST_SPI_GPIO  (6)
@@ -399,16 +402,13 @@ void user_init() {
     
 #else // ESP-OPEN-RTOS
     
-    for (unsigned int i = 0; i < (MAX_GPIOS - 1); i++) {
+    for (unsigned int i = 0; i < MAX_GPIOS; i++) {
         if (i == 6) {
             i += 6;
         }
         
-        //gpio_enable(i, GPIO_INPUT);
-        gpio_disable(i);
+        gpio_enable(i, GPIO_INPUT);
     }
-    
-    gpio_enable(16, GPIO_INPUT);    // GPIO 16 can not be disable
     
 #endif
     

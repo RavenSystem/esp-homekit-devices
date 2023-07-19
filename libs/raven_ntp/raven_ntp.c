@@ -1,7 +1,7 @@
 /*
  * RavenSystem NTP
  *
- * Copyright 2021-2022 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2021-2023 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -54,11 +54,11 @@ static void raven_ntp_init() {
     }
 }
 
-time_t raven_ntp_get_time_t() {
+time_t raven_ntp_get_time() {
     raven_ntp_init();
+    
 #ifdef ESP_PLATFORM
-    const uint64_t now = sdk_system_get_time_raw();
-    const uint64_t diff = (now - raven_ntp_config->last_system_time) / 1000000;
+    const uint64_t diff = (sdk_system_get_time_raw() - raven_ntp_config->last_system_time) / 1000000;
 #else
     const uint32_t now = sdk_system_get_time_raw();
     const uint32_t diff = (now - raven_ntp_config->last_system_time) / 1000000;
@@ -76,7 +76,7 @@ time_t raven_ntp_get_time_t() {
 
 void raven_ntp_get_log_time(char* buffer, const size_t buffer_size) {
     struct tm* timeinfo;
-    time_t utc_time = raven_ntp_get_time_t();
+    time_t utc_time = raven_ntp_get_time();
     timeinfo = localtime(&utc_time);
     
     char month[4];
@@ -144,7 +144,7 @@ void raven_ntp_get_log_time(char* buffer, const size_t buffer_size) {
  -5: NTP DNS error
  */
 int raven_ntp_update(char* ntp_server) {
-    raven_ntp_get_time_t();
+    raven_ntp_get_time();
     
     int ntp_result = -5;
     

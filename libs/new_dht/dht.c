@@ -210,7 +210,7 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
     gpio_reset_pin(pin);
     gpio_set_direction(pin, GPIO_MODE_DISABLE);
 #else
-    gpio_disable(pin);
+    gpio_enable(pin, GPIO_INPUT);
 #endif
     
     vTaskDelay(pdMS_TO_TICKS(50));

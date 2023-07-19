@@ -55,7 +55,7 @@ static void setup_pin(uint8_t pin, bool open_drain)
     gpio_set_pull_mode(pin, GPIO_PULLUP_ONLY);
     gpio_sleep_set_pull_mode(pin, GPIO_PULLUP_ONLY);
 #else
-    gpio_disable(pin);
+    //gpio_disable(pin);
     gpio_enable(pin, open_drain ? GPIO_OUT_OPEN_DRAIN : GPIO_OUTPUT);
     gpio_set_pullup(pin, true, true);
 #endif

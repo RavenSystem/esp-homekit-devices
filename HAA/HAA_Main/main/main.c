@@ -667,7 +667,7 @@ void save_data_history(homekit_characteristic_t* ch_target) {
         return;
     }
     
-    time_t time = raven_ntp_get_time_t();
+    time_t time = raven_ntp_get_time();
     
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
@@ -858,14 +858,14 @@ void ntp_task() {
 void ntp_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
         if (main_config.wifi_status != WIFI_STATUS_CONNECTED) {
-            raven_ntp_get_time_t();
+            raven_ntp_get_time();
         } else if (xTaskCreate(ntp_task, "NTP", NTP_TASK_SIZE, NULL, NTP_TASK_PRIORITY, NULL) != pdPASS) {
             homekit_remove_oldest_client();
-            raven_ntp_get_time_t();
+            raven_ntp_get_time();
             ERROR("New NTP");
         }
     } else {
-        raven_ntp_get_time_t();
+        raven_ntp_get_time();
         ERROR("HK pair");
     }
 }
@@ -1277,7 +1277,7 @@ void pm_custom_consumption_reset(ch_group_t* ch_group) {
     led_blink(1);
     INFO("<%i> -> KWh Reset", ch_group->serv_index);
     
-    time_t time = raven_ntp_get_time_t();
+    time_t time = raven_ntp_get_time();
     
     ch_group->ch[4]->value.float_value = ch_group->ch[3]->value.float_value;
     ch_group->ch[3]->value.float_value = 0;
@@ -5071,7 +5071,7 @@ void free_monitor_task(void* args) {
                             }
                             
                             struct tm* timeinfo;
-                            time_t time = raven_ntp_get_time_t();
+                            time_t time = raven_ntp_get_time();
                             timeinfo = localtime(&time);
                             
                             switch (read_service) {
@@ -7178,13 +7178,14 @@ void timetable_actions_timer_worker(TimerHandle_t xTimer) {
     }
     
     struct tm* timeinfo;
-    time_t time = raven_ntp_get_time_t();
+    time_t time = raven_ntp_get_time();
     timeinfo = localtime(&time);
     
     if (!main_config.timetable_ready) {
         if (timeinfo->tm_sec == 0) {
-            rs_esp_timer_change_period(xTimer, 60000);
-            main_config.timetable_ready = true;
+            if (rs_esp_timer_change_period(xTimer, 60000) == pdPASS) {
+                main_config.timetable_ready = true;
+            }
         } else {
             return;
         }
@@ -7202,7 +7203,6 @@ void timetable_actions_timer_worker(TimerHandle_t xTimer) {
                 (timetable_action->min  == ALL_MINS  || timetable_action->min  == timeinfo->tm_min ) &&
                 (timetable_action->wday == ALL_WDAYS || timetable_action->wday == timeinfo->tm_wday)
                 ) {
-                    
                     do_actions(ch_group, timetable_action->action);
                 }
             
@@ -7210,10 +7210,10 @@ void timetable_actions_timer_worker(TimerHandle_t xTimer) {
         }
     }
     
-    if (timeinfo->tm_hour == 23 &&
+    if (timeinfo->tm_hour == 03 &&
         timeinfo->tm_min  == 59 &&
-        timeinfo->tm_sec  != 0) {
-        rs_esp_timer_change_period(xTimer, 1000);
+        timeinfo->tm_sec  != 00 &&
+        rs_esp_timer_change_period(xTimer, 1000) == pdPASS) {
         main_config.timetable_ready = false;
     }
 }
@@ -7344,7 +7344,7 @@ void reset_uart() {
     uart_set_pin(0, 1, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 #else
     //set_used_gpio(1);
-    //gpio_disable(1);
+    gpio_disable(1);
     iomux_set_pullup_flags(5, 0);
     iomux_set_function(5, IOMUX_GPIO1_FUNC_UART0_TXD);
     uart_set_baud(0, 115200);
@@ -8301,13 +8301,13 @@ void normal_mode_init() {
                 switch (uart_config) {
                     case 1:
                         //set_used_gpio(2);
-                        //gpio_disable(2);
+                        gpio_disable(2);
                         gpio_set_iomux_function(2, IOMUX_GPIO2_FUNC_UART1_TXD);
                         break;
                         
                     case 2:
                         //set_used_gpio(15);
-                        //gpio_disable(15);
+                        gpio_disable(15);
                         sdk_system_uart_swap();
                         is_uart_swap = true;
                         uart_config = 0;
@@ -12581,7 +12581,7 @@ void normal_mode_init() {
     }
     
     int8_t wifi_mode = 0;
-    sysparam_get_int8(WIFI_MODE_SYSPARAM, &wifi_mode);
+    sysparam_get_int8(WIFI_STA_MODE_SYSPARAM, &wifi_mode);
     if (wifi_mode == 4) {
         wifi_mode = 1;
     }
@@ -12716,7 +12716,7 @@ void init_task() {
     int8_t haa_setup = 1;
     
     char *wifi_ssid = NULL;
-    sysparam_get_string(WIFI_SSID_SYSPARAM, &wifi_ssid);
+    sysparam_get_string(WIFI_STA_SSID_SYSPARAM, &wifi_ssid);
     
     // DEBUG
     //sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 2);    // Force to enter always in setup mode. Only for tests. Keep commented for releases
@@ -12811,7 +12811,9 @@ void init_task() {
 
 void user_init() {
 // GPIO Init
+    
 #ifdef ESP_PLATFORM
+    
 /*
 #if defined(CONFIG_IDF_TARGET_ESP32)
 #define FIRST_SPI_GPIO  (6)
@@ -12858,16 +12860,13 @@ void user_init() {
     
 #else // ESP-OPEN-RTOS
     
-    for (unsigned int i = 0; i < (MAX_GPIOS - 1); i++) {
+    for (unsigned int i = 0; i < MAX_GPIOS; i++) {
         if (i == 6) {
             i += 6;
         }
         
-        //gpio_enable(i, GPIO_INPUT);
-        gpio_disable(i);
+        gpio_enable(i, GPIO_INPUT);
     }
-    
-    gpio_enable(16, GPIO_INPUT);    // GPIO 16 can not be disable
     
 #endif
     

@@ -119,7 +119,8 @@ void led_destroy(const int gpio) {
         
         if (led) {
             if (led->gpio != 0) {
-                gpio_disable(led->gpio);
+                //gpio_disable(led->gpio);
+                gpio_enable(led->gpio, GPIO_INPUT);
             }
         }
     }

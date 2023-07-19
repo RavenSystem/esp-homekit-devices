@@ -1,4 +1,4 @@
-set(wolfssl_VERSION "3.15.3-stable")
+set(wolfssl_VERSION "3.13.0-stable")
 
 file(REAL_PATH "wolfssl-${wolfssl_VERSION}" wolfssl_THIRDPARTY_ROOT)
 

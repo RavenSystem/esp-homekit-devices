@@ -872,7 +872,7 @@ int ota_verify_sign(int start_sector, int filesize, uint8_t* signature) {
     int verify = 0;
     int ret = wc_ecc_verify_hash(signature, SIGNSIZE, hash, HASHSIZE, &verify, &public_key);
     
-    INFO(">>> Result %s (%i)", verify == 1 ? "OK" : "ERROR", ret);
+    INFO(">>> Result %s", verify == 1 ? "OK" : "ERROR");
 
     return verify - 1;
 }

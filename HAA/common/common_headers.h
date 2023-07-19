@@ -36,10 +36,12 @@
 #define PORT_SECURE_SYSPARAM                "ota_sec"
 #define HAAMAIN_VERSION_SYSPARAM            "ota_version"
 #define INSTALLER_VERSION_SYSPARAM          "ota_repo"
-#define WIFI_SSID_SYSPARAM                  "wifi_ssid"
-#define WIFI_PASSWORD_SYSPARAM              "wifi_password"
-#define WIFI_MODE_SYSPARAM                  "wifi_mode"
-#define WIFI_BSSID_SYSPARAM                 "wifi_bssid"
+#define WIFI_STA_SSID_SYSPARAM              "wifi_ssid"
+#define WIFI_STA_PASSWORD_SYSPARAM          "wifi_password"
+#define WIFI_STA_MODE_SYSPARAM              "wifi_mode"
+#define WIFI_STA_BSSID_SYSPARAM             "wifi_bssid"
+#define WIFI_AP_ENABLE_SYSPARAM             "wifi_ap"
+#define WIFI_AP_PASSWORD_SYSPARAM           "wifi_ap_pass"
 
 #ifndef ESP_PLATFORM
 #define WIFI_LAST_WORKING_PHY_SYSPARAM      "wifi_phy"
