@@ -652,7 +652,7 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send(client, http_prologue, sizeof(http_prologue) - 1);
     client_send_chunk(client, html_settings_header);
     
-    char *text = NULL;
+    char* text = NULL;
     sysparam_get_string(INSTALLER_VERSION_SYSPARAM, &text);
     if (text) {
         client_send_chunk(client, text);
@@ -663,8 +663,8 @@ static void wifi_config_server_on_settings(client_t *client) {
     }
     client_send_chunk(client, html_settings_installer_version);
     
-    sysparam_status_t status = sysparam_get_string(HAA_SCRIPT_SYSPARAM, &text);
-    if (status == SYSPARAM_OK) {
+    sysparam_get_string(HAA_SCRIPT_SYSPARAM, &text);
+    if (text) {
         client_send_chunk(client, text);
         free(text);
         text = NULL;
@@ -702,7 +702,7 @@ static void wifi_config_server_on_settings(client_t *client) {
     
     client_send_chunk(client, html_settings_reset_homekit_id);
     
-    int8_value = 0;
+    int8_value = 1;
     sysparam_get_int8(WIFI_AP_ENABLE_SYSPARAM, &int8_value);
     if (int8_value == 1) {
         client_send_chunk(client, "checked");
@@ -736,6 +736,28 @@ static void wifi_config_server_on_settings(client_t *client) {
         client_send_chunk(client, "selected");
     }
     client_send_chunk(client, html_wifi_mode_4);
+    
+    sysparam_get_string(WIFI_STA_SSID_SYSPARAM, &text);
+    if (text) {
+        client_send_chunk(client, text);
+        free(text);
+        text = NULL;
+        
+        uint8_t *wifi_bssid = NULL;
+        sysparam_get_blob(WIFI_STA_BSSID_SYSPARAM, &wifi_bssid, NULL);
+        if (wifi_bssid) {
+            text = malloc(16);
+            snprintf(text, 16, " (%02x%02x%02x%02x%02x%02x)", wifi_bssid[0], wifi_bssid[1], wifi_bssid[2], wifi_bssid[3], wifi_bssid[4], wifi_bssid[5]);
+            free(wifi_bssid);
+            
+            client_send_chunk(client, text);
+            free(text);
+        }
+        
+    } else {
+        client_send_chunk(client, "NONE");
+    }
+    client_send_chunk(client, html_settings_current_wifi);
     
     // Wifi Networks
     char buffer[150];
@@ -973,9 +995,15 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             
             if (wifimode_param && wifimode_param->value) {
                 int8_t current_wifi_mode = 0;
-                int8_t new_wifi_mode = strtol(wifimode_param->value, NULL, 10);
                 sysparam_get_int8(WIFI_STA_MODE_SYSPARAM, &current_wifi_mode);
-                sysparam_set_int8(WIFI_STA_MODE_SYSPARAM, new_wifi_mode);
+                
+                int8_t new_wifi_mode = strtol(wifimode_param->value, NULL, 10);
+                
+                if (current_wifi_mode != new_wifi_mode) {
+                    sysparam_set_int8(WIFI_STA_MODE_SYSPARAM, new_wifi_mode);
+                    sysparam_set_int8(WIFI_AP_ENABLE_SYSPARAM, 1);
+                    sysparam_erase(WIFI_AP_PASSWORD_SYSPARAM);
+                }
             }
             
 #ifndef ESP_PLATFORM
@@ -1195,6 +1223,7 @@ static void wifi_config_softap_start(const int8_t wifi_ap_enable) {
             strncpy((char*) softap_config.ap.password,
                     wifi_ap_password, sizeof(softap_config.ap.password) - 1
                     );
+            free(wifi_ap_password);
         }
         
         INFO("Wifi AP %s Ch%i", softap_config.ap.ssid, softap_config.ap.channel);
@@ -1227,6 +1256,7 @@ static void wifi_config_softap_start(const int8_t wifi_ap_enable) {
             strncpy((char*) softap_config.password,
                     wifi_ap_password, sizeof(softap_config.password) - 1
                     );
+            free(wifi_ap_password);
         }
         
         INFO("Wifi AP %s Ch%i", softap_config.ssid, softap_config.channel);
@@ -1319,7 +1349,7 @@ static void wifi_config_sta_connect_timeout_task() {
                 wifi_config_context_free(context);
                 
             } else {
-                int8_t wifi_ap_enable = 0;
+                int8_t wifi_ap_enable = 1;
                 sysparam_get_int8(WIFI_AP_ENABLE_SYSPARAM, &wifi_ap_enable);
                 
                 if (wifi_ap_enable) {
@@ -1564,7 +1594,7 @@ static void wifi_config_station_connect() {
                 context->param += 100;
             }
             
-            int8_t wifi_ap_enable = 0;
+            int8_t wifi_ap_enable = 1;
             sysparam_get_int8(WIFI_AP_ENABLE_SYSPARAM, &wifi_ap_enable);
             
             wifi_config_softap_start(wifi_ap_enable);

@@ -587,15 +587,16 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send_chunk(client, html_settings_header);
     
     sysparam_status_t status;
-    char *text = NULL;
+    char* text = NULL;
     
 #ifdef HAABOOT
     client_send_chunk(client, html_settings_script_start);
     
-    status = sysparam_get_string(HAA_SCRIPT_SYSPARAM, &text);
-    if (status == SYSPARAM_OK) {
+    sysparam_get_string(HAA_SCRIPT_SYSPARAM, &text);
+    if (text) {
         client_send_chunk(client, text);
         free(text);
+        text = NULL;
     }
     client_send_chunk(client, html_settings_middle);
 #endif
@@ -673,6 +674,29 @@ static void wifi_config_server_on_settings(client_t *client) {
     
     client_send_chunk(client, html_settings_flash_mode);
     
+    sysparam_get_string(WIFI_STA_SSID_SYSPARAM, &text);
+    if (text) {
+        client_send_chunk(client, text);
+        free(text);
+        text = NULL;
+        
+        uint8_t* wifi_bssid = NULL;
+        sysparam_get_blob(WIFI_STA_BSSID_SYSPARAM, &wifi_bssid, NULL);
+        if (wifi_bssid) {
+            text = malloc(16);
+            snprintf(text, 16, " (%02x%02x%02x%02x%02x%02x)", wifi_bssid[0], wifi_bssid[1], wifi_bssid[2], wifi_bssid[3], wifi_bssid[4], wifi_bssid[5]);
+            free(wifi_bssid);
+            
+            client_send_chunk(client, text);
+            free(text);
+            text = NULL;
+        }
+        
+    } else {
+        client_send_chunk(client, "NONE");
+    }
+    client_send_chunk(client, html_settings_current_wifi);
+    
     // Wifi Networks
     char buffer[150];
     char bssid[13];
@@ -696,8 +720,8 @@ static void wifi_config_server_on_settings(client_t *client) {
     client_send_chunk(client, html_settings_wifi);
     
     // Custom repo server
-    status = sysparam_get_string(CUSTOM_REPO_SYSPARAM, &text);
-    if (status == SYSPARAM_OK) {
+    sysparam_get_string(CUSTOM_REPO_SYSPARAM, &text);
+    if (text) {
         client_send_chunk(client, text);
         free(text);
     }
@@ -907,9 +931,15 @@ static void wifi_config_server_on_settings_update_task(void* args) {
 #ifdef HAABOOT
             if (wifimode_param && wifimode_param->value) {
                 int8_t current_wifi_mode = 0;
-                int8_t new_wifi_mode = strtol(wifimode_param->value, NULL, 10);
                 sysparam_get_int8(WIFI_STA_MODE_SYSPARAM, &current_wifi_mode);
-                sysparam_set_int8(WIFI_STA_MODE_SYSPARAM, new_wifi_mode);
+                
+                int8_t new_wifi_mode = strtol(wifimode_param->value, NULL, 10);
+                
+                if (current_wifi_mode != new_wifi_mode) {
+                    sysparam_set_int8(WIFI_STA_MODE_SYSPARAM, new_wifi_mode);
+                    sysparam_set_int8(WIFI_AP_ENABLE_SYSPARAM, 1);
+                    sysparam_erase(WIFI_AP_PASSWORD_SYSPARAM);
+                }
             }
 #endif
             

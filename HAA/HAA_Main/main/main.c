@@ -8777,7 +8777,7 @@ void normal_mode_init() {
                         ledc_timer_config_t ledc_timer = {
                             .speed_mode       = LEDC_LOW_SPEED_MODE,
                             .timer_num        = IO_GPIO_PWMH_TIMER,
-                            .duty_resolution  = LEDC_TIMER_13_BIT,
+                            .duty_resolution  = LEDC_TIMER_10_BIT,
                             .freq_hz          = pwmh_freq,
                             .clk_cfg          = LEDC_AUTO_CLK,
                         };

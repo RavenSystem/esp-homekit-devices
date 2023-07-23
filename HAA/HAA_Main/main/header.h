@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.7.0"
+#define HAA_FIRMWARE_VERSION                "12.7.1"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -103,7 +103,7 @@
 #define PWMS_FREQ                           "q"
 #define PWMH_FREQ_ARRAY                     "y"
 #define PWMH_FREQ_DEFAULT                   (5000)
-#define PWMH_BITS_DIVISOR                   (3)
+#define PWMH_BITS_DIVISOR                   (6)
 #define PWM_ZEROCROSSING_ARRAY_SET          "zc"
 #define ENABLE_HOMEKIT                      "h"
 #define HOMEKIT_SERVER_MAX_CLIENTS          "h"
