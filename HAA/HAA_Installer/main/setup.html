@@ -46,8 +46,8 @@ input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
 <option value="2">DIO</option>
 <option value="3">DOUT</option>
 </select></label></div>
-<input type="submit" id="join" value="Save"/><br><br>
-<input type="button" id="refresh" value="⟲ Search WiFi" onClick="window.location.reload(true)"/>
+<input type="submit" id="join" value="Save"><br><br>
+<input type="button" id="refresh" value="⟲ Search WiFi" onClick="window.location.reload(true)">
 Current: <!-- part HTML_SETTINGS_CURRENT_WIFI --><br>
 <div class="nonetworks" style="display:none;">
 None found
@@ -60,21 +60,21 @@ None found
 </ul>
 <div class="field required ssid" style="display:none;">
 <label for="ssid">SSID</label>
-<input type="text" id="ssid" name="sid" maxlength="63"/>
+<input type="text" id="ssid" name="sid" maxlength="63">
 </div>
 <div class="field required pass" style="display:none;">
 <label for="pass">Password</label>
-<input type="password" id="pass" name="psw" maxlength="63"/>
+<input type="password" id="pass" name="psw" maxlength="63">
 </div>
 <div class="field bssid" style="display:none;">
 <label for="bssid">BSSID</label>
-<input type="text" id="bssid" name="bid" maxlength="12"/>
+<input type="text" id="bssid" name="bid" maxlength="12">
 </div>
 <div class="field">
 <label>Update Server</label>
-<input type="text" name="ser" value="<!-- part HTML_SETTINGS_REPOSERVER -->" />
+<input type="text" name="ser" value="<!-- part HTML_SETTINGS_REPOSERVER -->">
 <label>Port</label>
-<input type="text" name="prt" maxlength="5" value="<!-- part HTML_SETTINGS_REPOPORT -->" />
+<input type="text" name="prt" maxlength="5" value="<!-- part HTML_SETTINGS_REPOPORT -->">
 <input type="checkbox" name="ssl" value="y" <!-- part HTML_SETTINGS_REPOSSL -->> HTTPS<br>
 </div>
 </form>
@@ -114,7 +114,6 @@ hide(bssid_block);
 hide(pass_block);
 disable(pass_field);
 pass_field.value="";
-show(bssid_block);
 enable(join_button);
 }
 }

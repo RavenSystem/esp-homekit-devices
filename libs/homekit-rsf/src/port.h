@@ -30,8 +30,8 @@ void homekit_random_fill(uint8_t *data, size_t size);
 
 #define SERVER_TASK_PRIORITY                (tskIDLE_PRIORITY + 2)
 
-void homekit_port_mdns_announce();
-void homekit_port_mdns_announce_pause();
+void homekit_port_mdns_announce_start();
+void homekit_port_mdns_announce_stop();
 
 void homekit_mdns_init();
 void homekit_mdns_buffer_set(const uint16_t size);

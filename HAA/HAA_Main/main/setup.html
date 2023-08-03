@@ -39,7 +39,7 @@ input[type=submit][disabled]{color:#aaaaaa;background-color:#eeeeee !important;}
 <input type="checkbox" name="ins" value="y"> Installer Setup<br>
 <input type="checkbox" name="ota" value="y"> Firmware Update<br>
 <input type="checkbox" name="wap" value="y" <!-- part HTML_SETTINGS_WIFI_AP -->> WiFi AP<br>
-WiFi AP Password<input type="password" name="app" maxlength="63"/><br>
+WiFi AP Password<input type="password" name="app" maxlength="63"><br>
 <label> WiFi Mode <select name="wm">
 <option value="0" <!-- part HTML_WIFI_MODE_0 -->>Normal</option>
 <option value="1" <!-- part HTML_WIFI_MODE_1 -->>Force BSSID</option>
@@ -94,8 +94,8 @@ WiFi AP Password<input type="password" name="app" maxlength="63"/><br>
 <option value="48">48</option>
 @@@#endif
 </select></label></div>
-<input type="submit" id="join" value="Save"/><br><br>
-<input type="button" id="refresh" value="⟲ Search WiFi" onClick="window.location.reload(true)"/>
+<input type="submit" id="join" value="Save"><br><br>
+<input type="button" id="refresh" value="⟲ Search WiFi" onClick="window.location.reload(true)">
 Current: <!-- part HTML_SETTINGS_CURRENT_WIFI --><br>
 <div class="nonetworks" style="display:none;">
 None found
@@ -108,15 +108,15 @@ None found
 </ul>
 <div class="field required ssid" style="display:none;">
 <label for="ssid">SSID</label>
-<input type="text" id="ssid" name="sid" maxlength="63"/>
+<input type="text" id="ssid" name="sid" maxlength="63">
 </div>
 <div class="field required pass" style="display:none;">
 <label for="pass">Password</label>
-<input type="password" id="pass" name="psw" maxlength="63"/>
+<input type="password" id="pass" name="psw" maxlength="63">
 </div>
 <div class="field bssid" style="display:none;">
 <label for="bssid">BSSID</label>
-<input type="text" id="bssid" name="bid" maxlength="12"/>
+<input type="text" id="bssid" name="bid" maxlength="12">
 </div></form>
 <center>© 2018-2023 Jos&eacute; A. Jim&eacute;nez Campos</center>
 <h2>If you have paid for this firmware or for a device with it installed, you have been scammed. You must report the fraud to the authorities and claim the amount paid. <a href="https://raw.githubusercontent.com/RavenSystem/esp-homekit-devices/master/LICENSE">LICENSE</a></h2>
@@ -154,7 +154,6 @@ hide(bssid_block);
 hide(pass_block);
 disable(pass_field);
 pass_field.value="";
-show(bssid_block);
 enable(join_button);
 }
 }

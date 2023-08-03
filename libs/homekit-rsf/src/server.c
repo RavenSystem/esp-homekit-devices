@@ -3770,12 +3770,12 @@ int homekit_pairing_count() {
     return homekit_storage_pairing_count();
 }
 
-void homekit_mdns_announce() {
-    homekit_port_mdns_announce();
+void homekit_mdns_announce_stop() {
+    homekit_port_mdns_announce_stop();
 }
 
-void homekit_mdns_announce_pause() {
-    homekit_port_mdns_announce_pause();
+void homekit_mdns_announce_start() {
+    homekit_port_mdns_announce_start();
 }
 
 bool homekit_is_paired() {

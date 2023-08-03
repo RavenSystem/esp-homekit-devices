@@ -50,7 +50,7 @@ extern "C" {
 #endif
 
 #ifndef ADV_I2C_SEMAPHORE_TIMEOUT_MS
-#define ADV_I2C_SEMAPHORE_TIMEOUT_MS                (2000)
+#define ADV_I2C_SEMAPHORE_TIMEOUT_MS                (1000)
 #endif
 
 #define ADV_I2C_SEMAPHORE_TIMEOUT                   (ADV_I2C_SEMAPHORE_TIMEOUT_MS / portTICK_PERIOD_MS)

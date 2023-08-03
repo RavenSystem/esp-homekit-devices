@@ -64,8 +64,8 @@ void homekit_server_reset();
 void homekit_remove_extra_pairing(const int last_keep);
 int homekit_pairing_count();
 
-void homekit_mdns_announce();
-void homekit_mdns_announce_pause();
+void homekit_mdns_announce_start();
+void homekit_mdns_announce_stop();
 
 int homekit_get_accessory_id(char *buffer, size_t size);
 bool homekit_is_pairing();

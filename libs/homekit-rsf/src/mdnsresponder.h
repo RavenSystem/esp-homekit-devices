@@ -37,8 +37,8 @@ typedef enum {
 // Clear all records
 void mdns_clear();
 
-void mdns_announce();
-void mdns_announce_pause();
+void mdns_announce_start();
+void mdns_announce_stop();
 
 void mdns_add_facility( const char* instanceName,   // Short user-friendly instance name, should NOT include serial number/MAC/etc
                         const char* serviceName,    // Must be registered, _name, (see RFC6335 5.1 & 5.2)

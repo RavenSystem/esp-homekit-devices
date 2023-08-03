@@ -490,7 +490,7 @@ void mdns_buffer_deinit() {
 }
 
 void mdns_clear() {
-    rs_esp_timer_stop_forced(mdns_announce_timer);
+    mdns_announce_stop();
     
     if (!xSemaphoreTake(gDictMutex, portMAX_DELAY))
         return;
@@ -612,7 +612,7 @@ void mdns_add_AAAA(const char* rKey, u32_t ttl, const ip6_addr_t *addr)
 }
 #endif
 
-void mdns_announce() {
+static void mdns_announce() {
     if (mdns_status == MDNS_STATUS_WORKING) {
         mdns_status = MDNS_STATUS_PROBING_1;
         rs_esp_timer_change_period(mdns_announce_timer, MDNS_TTL_SAFE_MARGIN * MDNS_TTL_MULTIPLIER_MS);
@@ -644,9 +644,14 @@ void mdns_announce() {
 #endif
 }
 
-void mdns_announce_pause() {
-    rs_esp_timer_stop(mdns_announce_timer);
+void mdns_announce_stop() {
+    rs_esp_timer_stop_forced(mdns_announce_timer);
+}
+
+void mdns_announce_start() {
+    rs_esp_timer_change_period_forced(mdns_announce_timer, MDNS_TTL_SAFE_MARGIN * MDNS_TTL_MULTIPLIER_MS);
     mdns_status = MDNS_STATUS_WORKING;
+    mdns_announce();
 }
 
 void mdns_add_facility_work(const char* instanceName,   // Friendly name, need not be unique
@@ -711,7 +716,7 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
 
     mdns_announce_timer = rs_esp_timer_create((MDNS_TTL_SAFE_MARGIN * MDNS_TTL_MULTIPLIER_MS), true, NULL, mdns_announce);
     
-    mdns_announce();
+    mdns_announce_start();
 }
 
 void mdns_add_facility(const char* instanceName,   // Friendly name, need not be unique

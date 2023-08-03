@@ -395,25 +395,25 @@ uint8_t i2c_read(uint8_t bus, bool ack)
 
 int private_adv_i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t len, TickType_t xTicksToWait)
 {
-    xSemaphoreTake(i2c_bus[bus].lock, xTicksToWait);
-    
-    i2c_start(bus);
-    if (!i2c_write(bus, slave_addr << 1))
-        goto error;
-    if (data != NULL) {
-        for (unsigned int i = 0; i < data_len; i++) {
-            if (!i2c_write(bus, data[i]))
+    if (xSemaphoreTake(i2c_bus[bus].lock, xTicksToWait) == pdTRUE) {
+        i2c_start(bus);
+        if (!i2c_write(bus, slave_addr << 1))
+            goto error;
+        if (data != NULL) {
+            for (unsigned int i = 0; i < data_len; i++) {
+                if (!i2c_write(bus, data[i]))
+                    goto error;
+            }
+        }
+        while (len--) {
+            if (!i2c_write(bus, *buf++))
                 goto error;
         }
-    }
-    while (len--) {
-        if (!i2c_write(bus, *buf++))
+        if (!i2c_stop(bus))
             goto error;
+        
+        xSemaphoreGive(i2c_bus[bus].lock);
     }
-    if (!i2c_stop(bus))
-        goto error;
-    
-    xSemaphoreGive(i2c_bus[bus].lock);
     
     return 0;
 
@@ -426,29 +426,29 @@ error:
 
 int private_adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t len, TickType_t xTicksToWait)
 {
-    xSemaphoreTake(i2c_bus[bus].lock, xTicksToWait);
-    
-    if (data != NULL) {
-        i2c_start(bus);
-        if (!i2c_write(bus, slave_addr << 1))
-            goto error;
-        for (unsigned int i = 0; i < data_len; i++) {
-            if (!i2c_write(bus, data[i]))
+    if (xSemaphoreTake(i2c_bus[bus].lock, xTicksToWait) == pdTRUE) {
+        if (data != NULL) {
+            i2c_start(bus);
+            if (!i2c_write(bus, slave_addr << 1))
                 goto error;
+            for (unsigned int i = 0; i < data_len; i++) {
+                if (!i2c_write(bus, data[i]))
+                    goto error;
+            }
         }
+        i2c_start(bus);
+        if (!i2c_write(bus, slave_addr << 1 | 1)) // Slave address + read
+            goto error;
+        while(len) {
+            *buf = i2c_read(bus, len == 1);
+            buf++;
+            len--;
+        }
+        if (!i2c_stop(bus))
+            goto error;
+        
+        xSemaphoreGive(i2c_bus[bus].lock);
     }
-    i2c_start(bus);
-    if (!i2c_write(bus, slave_addr << 1 | 1)) // Slave address + read
-        goto error;
-    while(len) {
-        *buf = i2c_read(bus, len == 1);
-        buf++;
-        len--;
-    }
-    if (!i2c_stop(bus))
-        goto error;
-    
-    xSemaphoreGive(i2c_bus[bus].lock);
     
     return 0;
 

@@ -10,6 +10,6 @@
 
 #include "../../common/common_headers.h"
 
-#define INSTALLER_VERSION           "7.5.1"
+#define INSTALLER_VERSION           "7.5.2"
 
 #endif  // __HAA_OTA_HEADER_H__

@@ -903,7 +903,7 @@ void wifi_ping_gw_task() {
 void wifi_reconnection_task() {
     rs_esp_timer_stop_forced(WIFI_WATCHDOG_TIMER);
     
-    homekit_mdns_announce_pause();
+    homekit_mdns_announce_stop();
     
     if (main_config.wifi_status == WIFI_STATUS_CONNECTED) {
         sdk_wifi_station_disconnect();
@@ -916,8 +916,6 @@ void wifi_reconnection_task() {
     }
     
     led_blink(6);
-    
-    do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 4);
     
     vTaskDelay(MS_TO_TICKS(500));
     
@@ -962,7 +960,7 @@ void wifi_reconnection_task() {
             
             save_last_working_phy();
             
-            homekit_mdns_announce();
+            homekit_mdns_announce_start();
             
             do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 3);
             
@@ -999,6 +997,8 @@ void set_main_wifi_status_connecting() {
 void wifi_watchdog() {
     //INFO("Wifi status %i, sleep mode %i", main_config.wifi_status, sdk_wifi_get_sleep_type());
     const int current_ip = wifi_config_get_ip();
+    int wifi_error = false;
+    
     if (main_config.wifi_status == WIFI_STATUS_CONNECTED && current_ip >= 0 && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
 #ifdef ESP_PLATFORM
         uint8_t channel_primary = main_config.wifi_channel;
@@ -1027,20 +1027,15 @@ void wifi_watchdog() {
         }
         
         if (main_config.wifi_channel != current_channel) {
-            main_config.wifi_channel = current_channel;
-            INFO("Wifi new Ch %i", current_channel);
-            homekit_mdns_announce();
+            wifi_error = true;
+            main_config.wifi_status = WIFI_STATUS_CONNECTING;
             do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 6);
-            
-            main_config.wifi_arp_count = 0;
         }
         
         if (main_config.wifi_ip != current_ip) {
-            main_config.wifi_ip = current_ip;
-            homekit_mdns_announce();
+            wifi_error = true;
+            main_config.wifi_status = WIFI_STATUS_CONNECTING;
             do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 7);
-            
-            main_config.wifi_arp_count = 0;
         }
         
         if (main_config.wifi_arp_count_max > 0) {
@@ -1059,12 +1054,18 @@ void wifi_watchdog() {
         }
         
     } else {
-        ERROR("Wifi");
+        wifi_error = true;
         
         if ((main_config.wifi_status == WIFI_STATUS_CONNECTED && main_config.wifi_mode >= 2) ||
             main_config.wifi_error_count > main_config.wifi_ping_max_errors) {
             main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
         }
+        
+        do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 4);
+    }
+    
+    if (wifi_error) {
+        ERROR("Wifi");
         
         main_config.wifi_error_count = 0;
         
@@ -1534,6 +1535,7 @@ float byte_array_to_num(uint8_t* data, const uint8_t array_size, const uint8_t t
 // --- POWER MONITOR
 void power_monitor_task(void* args) {
     ch_group_t* ch_group = args;
+    ch_group->is_working = true;
     
     float voltage = 0;
     float current = 0;
@@ -1697,9 +1699,7 @@ void power_monitor_timer_worker(TimerHandle_t xTimer) {
         ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
         if (ch_group->main_enabled) {
             if (!ch_group->is_working) {
-                if (xTaskCreate(power_monitor_task, "PM", POWER_MONITOR_TASK_SIZE, (void*) ch_group, POWER_MONITOR_TASK_PRIORITY, NULL) == pdPASS) {
-                    ch_group->is_working = true;
-                } else {
+                if (xTaskCreate(power_monitor_task, "PM", POWER_MONITOR_TASK_SIZE, (void*) ch_group, POWER_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
                     homekit_remove_oldest_client();
                     ERROR("New PM");
                 }
@@ -2729,6 +2729,7 @@ void temperature_task(void* args) {
     }
     
     ch_group_t* ch_group = args;
+    ch_group->is_working = true;
     
     float temperature_value = 0.0;
     float humidity_value = 0.0;
@@ -2943,9 +2944,7 @@ void temperature_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
         ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
         if (!ch_group->is_working) {
-            if (xTaskCreate(temperature_task, "TEM", TEMPERATURE_TASK_SIZE, (void*) ch_group, TEMPERATURE_TASK_PRIORITY, NULL) == pdPASS) {
-                ch_group->is_working = true;
-            } else {
+            if (xTaskCreate(temperature_task, "TEM", TEMPERATURE_TASK_SIZE, (void*) ch_group, TEMPERATURE_TASK_PRIORITY, NULL) != pdPASS) {
                 homekit_remove_oldest_client();
                 ERROR("New TEM");
             }
@@ -3476,22 +3475,24 @@ void rgbw_set_timer_worker() {
     while (lightbulb_group) {
         if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL) {
             lightbulb_group->has_changed = false;
+            
             for (int i = 0; i < LIGHTBULB_CHANNELS; i++) {
+                int pwm_needs_update = false;
+                
                 if (private_abs(lightbulb_group->target[i] - lightbulb_group->current[i]) > private_abs(LIGHTBULB_STEP_VALUE[i])) {
                     all_channels_ready = false;
                     lightbulb_group->current[i] += LIGHTBULB_STEP_VALUE[i];
                     lightbulb_group->has_changed = true;
+                    pwm_needs_update = true;
                     
-                    if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM) {
-                        haa_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i]);
-                    }
                 } else if (lightbulb_group->current[i] != lightbulb_group->target[i]) {
                     lightbulb_group->current[i] = lightbulb_group->target[i];
                     lightbulb_group->has_changed = true;
-                    
-                    if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM) {
-                        haa_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i]);
-                    }
+                    pwm_needs_update = true;
+                }
+                
+                if (pwm_needs_update && LIGHTBULB_TYPE <= LIGHTBULB_TYPE_PWM_CWWW) {
+                    haa_pwm_set_duty(lightbulb_group->gpio[i], lightbulb_group->current[i]);
                 }
             }
             
@@ -4429,6 +4430,7 @@ void hkc_fan_status_setter(homekit_characteristic_t* ch0, const homekit_value_t 
 // --- LIGHT SENSOR
 void light_sensor_task(void* args) {
     ch_group_t* ch_group = (ch_group_t*) args;
+    ch_group->is_working = true;
     
     float luxes = 0.0001f;
     
@@ -4488,9 +4490,7 @@ void light_sensor_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
         ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
         if (!ch_group->is_working) {
-            if (xTaskCreate(light_sensor_task, "LUX", LIGHT_SENSOR_TASK_SIZE, (void*) ch_group, LIGHT_SENSOR_TASK_PRIORITY, NULL) == pdPASS) {
-                ch_group->is_working = true;
-            } else {
+            if (xTaskCreate(light_sensor_task, "LUX", LIGHT_SENSOR_TASK_SIZE, (void*) ch_group, LIGHT_SENSOR_TASK_PRIORITY, NULL) != pdPASS) {
                 homekit_remove_oldest_client();
                 ERROR("New LUX");
             }
@@ -4971,6 +4971,7 @@ void free_monitor_task(void* args) {
     
     if (args) {
         ch_group = args;
+        ch_group->is_working = true;
     } else {
         uart_receiver_data_t* uart_receiver_data = main_config.uart_receiver_data;
         while (uart_receiver_data) {
@@ -5432,6 +5433,8 @@ void free_monitor_task(void* args) {
                     if (adv_i2c_slave_read(FM_I2C_BUS, (uint8_t) FM_I2C_ADDR, (uint8_t*) &FM_I2C_REG[FM_I2C_REG_FIRST], FM_I2C_REG_LEN, i2c_value, i2c_value_len) == 0) {
                         value = byte_array_to_num(&i2c_value[FM_I2C_VAL_OFFSET], FM_VAL_LEN, FM_VAL_TYPE);
                         get_value = true;
+                    } else {
+                        ERROR("<%i> I2C", ch_group->serv_index);
                     }
                 }
             } else if (fm_sensor_type >= FM_SENSOR_TYPE_UART) {
@@ -5529,9 +5532,7 @@ void free_monitor_timer_worker(TimerHandle_t xTimer) {
         ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
         if (ch_group->main_enabled) {
             if (!ch_group->is_working) {
-                if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) == pdPASS) {
-                    ch_group->is_working = true;
-                } else {
+                if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
                     ERROR("New FM");
                     homekit_remove_oldest_client();
                 }
@@ -5623,7 +5624,7 @@ void recv_uart_timer_worker(TimerHandle_t xTimer) {
     }
     
     if (uart_has_data & !main_config.uart_recv_is_working) {
-        if (xTaskCreate(recv_uart_task, "RUA", RECV_UART_TASK_SIZE, NULL, RECV_UART_TASK_PRIORITY, NULL) == pdTRUE) {
+        if (xTaskCreate(recv_uart_task, "RUA", RECV_UART_TASK_SIZE, NULL, RECV_UART_TASK_PRIORITY, NULL) == pdPASS) {
             main_config.uart_recv_is_working = true;
         }
     }
@@ -6973,9 +6974,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             if (ch_group->main_enabled) {
                                 if (!ch_group->is_working) {
                                     FM_OVERRIDE_VALUE = action_serv_manager->value;
-                                    if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) == pdPASS) {
-                                        ch_group->is_working = true;
-                                    } else {
+                                    if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
                                         homekit_remove_oldest_client();
                                         ERROR("New FM");
                                     }
@@ -8836,8 +8835,8 @@ void normal_mode_init() {
                     adc_oneshot_io_to_channel(gpio, NULL, &adc_channel);
                     
                     adc_oneshot_chan_cfg_t config = {
-                        .bitwidth = ADC_BITWIDTH_12,    // Max supported width: 12 bits (0 - 4095)
                         .atten = IO_GPIO_ADC_ATTENUATION,
+                        .bitwidth = ADC_BITWIDTH_12,    // Max supported width: 12 bits (0 - 4095)
                     };
                     gpio_ret = adc_oneshot_config_channel(main_config.adc_dac_data->adc_oneshot_handle, adc_channel, &config);
                     

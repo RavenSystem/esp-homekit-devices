@@ -309,6 +309,8 @@ static void adv_logger_init_task(void* args) {
         vTaskDelay(pdMS_TO_TICKS(200));
     }
     
+    free(args);     // destination and port
+    
     while ((adv_logger_data->socket = lwip_socket(adv_logger_data->res->ai_family, adv_logger_data->res->ai_socktype, 0)) < 0) {
         vTaskDelay(pdMS_TO_TICKS(200));
     }
@@ -323,15 +325,13 @@ static void adv_logger_init_task(void* args) {
     
     strcat(adv_logger_data->udplogstring, "\r\nAdvanced ESP Logger (c) 2022-2023 José A. Jiménez Campos\r\n\r\n");
     adv_logger_data->udplogstring_len = strlen(adv_logger_data->udplogstring);
-
+    
     if (adv_logger_data->is_buffered) {
         xTaskCreate(adv_logger_buffered_task, "LOG", ADV_LOGGER_BUFFERED_TASK_SIZE, NULL, ADV_LOGGER_BUFFERED_TASK_PRIORITY, &adv_logger_data->xHandle);
     }
     
     adv_logger_data->is_new_line = true;
     adv_logger_data->ready_to_send = true;
-    
-    free(args);
     
     vTaskDelete(NULL);
 }

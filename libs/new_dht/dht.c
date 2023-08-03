@@ -191,31 +191,32 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
     uint8_t data[DHT_DATA_BITS / 8] = { 0 };
     bool result = false;
     
-    xSemaphoreTake(dht_lock, pdMS_TO_TICKS(DHT_TIMEOUT_MS));
-    
+    if (xSemaphoreTake(dht_lock, pdMS_TO_TICKS(DHT_TIMEOUT_MS)) == pdTRUE) {
+        
 #ifdef ESP_PLATFORM
-    gpio_set_direction(pin, GPIO_MODE_OUTPUT_OD);
-    gpio_set_pull_mode(pin, false);
-    gpio_sleep_set_pull_mode(pin, false);
+        gpio_set_direction(pin, GPIO_MODE_OUTPUT_OD);
+        gpio_set_pull_mode(pin, false);
+        gpio_sleep_set_pull_mode(pin, false);
 #else
-    gpio_enable(pin, GPIO_OUT_OPEN_DRAIN);
-    gpio_set_pullup(pin, false, false);
+        gpio_enable(pin, GPIO_OUT_OPEN_DRAIN);
+        gpio_set_pullup(pin, false, false);
 #endif
-    
-    PORT_ENTER_CRITICAL();
-    result = dht_fetch_data(sensor_type, pin, bits);
-    PORT_EXIT_CRITICAL();
-
+        
+        PORT_ENTER_CRITICAL();
+        result = dht_fetch_data(sensor_type, pin, bits);
+        PORT_EXIT_CRITICAL();
+        
 #ifdef ESP_PLATFORM
-    gpio_reset_pin(pin);
-    gpio_set_direction(pin, GPIO_MODE_DISABLE);
+        gpio_reset_pin(pin);
+        gpio_set_direction(pin, GPIO_MODE_DISABLE);
 #else
-    gpio_enable(pin, GPIO_INPUT);
+        gpio_enable(pin, GPIO_INPUT);
 #endif
-    
-    vTaskDelay(pdMS_TO_TICKS(50));
-    
-    xSemaphoreGive(dht_lock);
+        
+        vTaskDelay(pdMS_TO_TICKS(50));
+        
+        xSemaphoreGive(dht_lock);
+    }
     
     if (!result) {
         return false;

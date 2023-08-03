@@ -114,10 +114,10 @@ void homekit_mdns_configure_finalize(const uint16_t mdns_ttl, const uint16_t mdn
 #endif
 }
 
-void homekit_port_mdns_announce() {
-    mdns_announce();
+void homekit_port_mdns_announce_start() {
+    mdns_announce_start();
 }
 
-void homekit_port_mdns_announce_pause() {
-    mdns_announce_pause();
+void homekit_port_mdns_announce_stop() {
+    mdns_announce_stop();
 }

@@ -13,11 +13,7 @@
 
 #include "adv_i2c.h"
 
-static SemaphoreHandle_t adv_i2c_bus_lock[I2C_MAX_BUS];
-
 int adv_i2c_init_hz(uint8_t bus, uint8_t scl_pin, uint8_t sda_pin, uint32_t freq, bool scl_pin_pullup, bool sda_pin_pullup) {
-    adv_i2c_bus_lock[bus] = xSemaphoreCreateMutex();
-    
     gpio_reset_pin(scl_pin);
     gpio_reset_pin(sda_pin);
     
@@ -31,31 +27,16 @@ int adv_i2c_init_hz(uint8_t bus, uint8_t scl_pin, uint8_t sda_pin, uint32_t freq
         .clk_flags = 0,
     };
     
-    esp_err_t res;
+    esp_err_t res = i2c_param_config(bus, &i2c_config);
     
-#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 1, 0)
-    // See https://github.com/espressif/esp-idf/issues/10163
-    if ((res = i2c_driver_install(bus, i2c_config.mode, 0, 0, 0)) != ESP_OK) {
-        return res;
+    if (res == ESP_OK) {
+        res = i2c_driver_install(bus, i2c_config.mode, 0, 0, ESP_INTR_FLAG_IRAM);
     }
-    if ((res = i2c_param_config(bus, &i2c_config)) != ESP_OK) {
-        return res;
-    }
-#else
-    if ((res = i2c_param_config(bus, &i2c_config)) != ESP_OK) {
-        return res;
-    }
-    if ((res = i2c_driver_install(bus, i2c_config.mode, 0, 0, 0)) != ESP_OK) {
-        return res;
-    }
-#endif
     
-    return ESP_OK;
+    return res;
 }
 
 static int private_adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t len, TickType_t xTicksToWait) {
-    xSemaphoreTake(adv_i2c_bus_lock[bus], xTicksToWait);
-
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     
     if (data && data_len) {
@@ -68,18 +49,15 @@ static int private_adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uin
     i2c_master_write_byte(cmd, (slave_addr << 1) | 1, true);
     i2c_master_read(cmd, buf, len, I2C_MASTER_LAST_NACK);
     i2c_master_stop(cmd);
-
-    esp_err_t res = i2c_master_cmd_begin(bus, cmd, xTicksToWait >> 1);
-
+    
+    esp_err_t res = i2c_master_cmd_begin(bus, cmd, xTicksToWait);
+    
     i2c_cmd_link_delete(cmd);
-
-    xSemaphoreGive(adv_i2c_bus_lock[bus]);
+    
     return res;
 }
 
 static int private_adv_i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t len, TickType_t xTicksToWait) {
-    xSemaphoreTake(adv_i2c_bus_lock[bus], xTicksToWait);
-    
     i2c_cmd_handle_t cmd = i2c_cmd_link_create();
     i2c_master_start(cmd);
     i2c_master_write_byte(cmd, slave_addr << 1, true);
@@ -91,11 +69,10 @@ static int private_adv_i2c_slave_write(uint8_t bus, uint8_t slave_addr, const ui
     i2c_master_write(cmd, (void*) buf, len, true);
     i2c_master_stop(cmd);
     
-    esp_err_t res = i2c_master_cmd_begin(bus, cmd, xTicksToWait >> 1);
+    esp_err_t res = i2c_master_cmd_begin(bus, cmd, xTicksToWait);
     
     i2c_cmd_link_delete(cmd);
-    
-    xSemaphoreGive(adv_i2c_bus_lock[bus]);
+        
     return res;
 }
 
