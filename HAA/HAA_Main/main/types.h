@@ -408,6 +408,10 @@ typedef struct _main_config {
     pwmh_channel_t* pwmh_channels;
 #endif
     
+#ifdef ESP_HAS_INTERNAL_TEMP_SENSOR
+    temperature_sensor_handle_t temperature_sensor_handle;
+#endif
+    
     char name_value[11];
 } main_config_t;
 

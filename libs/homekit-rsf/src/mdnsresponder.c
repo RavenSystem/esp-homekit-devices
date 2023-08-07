@@ -167,6 +167,7 @@ static uint32_t mdns_ttl_period = 4500;
 #define MDNS_STATUS_PROBING_2       (1)
 #define MDNS_STATUS_PROBE_OK        (2)
 #define MDNS_STATUS_WORKING         (3)
+
 static u8_t mdns_status = MDNS_STATUS_WORKING;
 
 //---------------------- Debug/logging utilities -------------------------
@@ -614,20 +615,25 @@ void mdns_add_AAAA(const char* rKey, u32_t ttl, const ip6_addr_t *addr)
 
 static void mdns_announce() {
     if (mdns_status == MDNS_STATUS_WORKING) {
-        mdns_status = MDNS_STATUS_PROBING_1;
-        rs_esp_timer_change_period(mdns_announce_timer, MDNS_TTL_SAFE_MARGIN * MDNS_TTL_MULTIPLIER_MS);
         HOMEKIT_MDNS_PRINTF("mDNS prob 1\n");
+        if (rs_esp_timer_change_period(mdns_announce_timer, MDNS_TTL_SAFE_MARGIN * MDNS_TTL_MULTIPLIER_MS) == pdPASS) {
+            mdns_status = MDNS_STATUS_PROBING_1;
+        }
+        
     } else if (mdns_status == MDNS_STATUS_PROBING_2) {
-        mdns_status = MDNS_STATUS_PROBE_OK;
         HOMEKIT_MDNS_PRINTF("mDNS prob 2\n");
+        mdns_status = MDNS_STATUS_PROBE_OK;
+        
     } else if (mdns_status == MDNS_STATUS_PROBE_OK) {
-        mdns_status = MDNS_STATUS_WORKING;
-        rs_esp_timer_change_period(mdns_announce_timer, (mdns_ttl_period - MDNS_TTL_SAFE_MARGIN) * MDNS_TTL_MULTIPLIER_MS);
 #ifdef ESP_PLATFORM
         HOMEKIT_MDNS_PRINTF("mDNS TTL %li/%lis\n", mdns_ttl, mdns_ttl_period);
 #else
         HOMEKIT_MDNS_PRINTF("mDNS TTL %i/%is\n", mdns_ttl, mdns_ttl_period);
 #endif
+        
+        if (rs_esp_timer_change_period(mdns_announce_timer, (mdns_ttl_period - MDNS_TTL_SAFE_MARGIN) * MDNS_TTL_MULTIPLIER_MS) == pdPASS) {
+            mdns_status = MDNS_STATUS_WORKING;
+        }
     }
     
 #ifdef ESP_PLATFORM

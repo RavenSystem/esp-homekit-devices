@@ -15,6 +15,7 @@
 #include "driver/uart.h"
 #include "esp_wifi.h"
 #include "esp_timer.h"
+#include "esp_attr.h"
 
 #define sdk_system_get_time_raw()           esp_timer_get_time()
 
@@ -44,12 +45,13 @@
 #include "adv_logger.h"
 
 #define HEADER_LEN                          (23)
-#define UDP_LOG_LEN                         (1472)
+#define UDP_LOG_LEN                         (1400)
 
 // Task Stack Size
 #ifdef ESP_PLATFORM
 #define ADV_LOGGER_INIT_TASK_SIZE           (2048)
 #define ADV_LOGGER_BUFFERED_TASK_SIZE       (2048)
+#define ADV_LOGGER_VSNPRINTF_BUFFER_SIZE    (1024)
 #else
 #define ADV_LOGGER_INIT_TASK_SIZE           (configMINIMAL_STACK_SIZE)  // 256
 #define ADV_LOGGER_BUFFERED_TASK_SIZE       (configMINIMAL_STACK_SIZE)  // 256
@@ -66,6 +68,7 @@ typedef struct _adv_logger_data {
     
 #ifdef ESP_PLATFORM
     char* ip_address;
+    SemaphoreHandle_t log_sender_semaphore;
 #endif
     
     uint16_t udplogstring_len: 11;
@@ -78,7 +81,6 @@ typedef struct _adv_logger_data {
     bool is_buffered: 1;
     
     TaskHandle_t xHandle;
-    SemaphoreHandle_t log_sender_semaphore;
     
     char* udplogstring;
     char* header;
@@ -94,14 +96,10 @@ static _WriteFunction* adv_logger_original_write_function = NULL;
 #endif
 #endif
 
-#ifndef ESP_PLATFORM
-static ssize_t adv_logger_none(struct _reent* r, int fd, const void* ptr, size_t len) {
-    return len;
-}
-#endif
-
 static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_t len) {
-    if (xSemaphoreTake(adv_logger_data->log_sender_semaphore, 1) == pdTRUE) {
+#ifdef ESP_PLATFORM
+    if (xSemaphoreTake(adv_logger_data->log_sender_semaphore, 0) == pdTRUE) {
+#endif
         int is_adv_logger_data = false;
         if (adv_logger_data->ready_to_send) {
             if (adv_logger_data->is_buffered) {
@@ -232,33 +230,35 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
             adv_logger_data->udplogstring_len = 0;
         }
         
+#ifdef ESP_PLATFORM
         xSemaphoreGive(adv_logger_data->log_sender_semaphore);
+#endif
         
         return len;
+        
+#ifdef ESP_PLATFORM
     }
     
     return 0;
+#endif
 }
 
 static void adv_logger_buffered_task() {
-    int i = 0;
+    unsigned int i = 0;
     
     for (;;) {
         i++;
         
-        if (((i == 8 && adv_logger_data->udplogstring_len > 0) || adv_logger_data->udplogstring_len > (UDP_LOG_LEN >> 1)) && xSemaphoreTake(adv_logger_data->log_sender_semaphore, 0) == pdTRUE) {
+        if ((i == 8 && adv_logger_data->udplogstring_len > 0) || adv_logger_data->udplogstring_len > (UDP_LOG_LEN / 2)) {
             
             adv_logger_data->ready_to_send = false;
             lwip_sendto(adv_logger_data->socket, adv_logger_data->udplogstring, adv_logger_data->udplogstring_len, 0, adv_logger_data->res->ai_addr, adv_logger_data->res->ai_addrlen);
             adv_logger_data->udplogstring_len = 0;
             adv_logger_data->ready_to_send = true;
             
-            xSemaphoreGive(adv_logger_data->log_sender_semaphore);
-            
             i = 0;
-        }
-        
-        if (i == 8) {
+            
+        } else if (i == 8) {
             i = 0;
         }
         
@@ -345,22 +345,28 @@ void adv_logger_set_ip_address(char* ip_address) {
     }
 }
 
-int adv_logger_printf(const char* format, ...) {
+int IRAM_ATTR adv_logger_printf(const char* format, ...) {
     if (adv_logger_data) {
-        va_list va;
-        va_start(va, format);
-        char* buffer = malloc(2048);
-        vsnprintf(buffer, 2048 - 1, format, va);
-        va_end(va);
-        
-        int res = adv_logger_write(NULL, 0, (void*) buffer, strlen(buffer));
-        
-        free(buffer);
-        
-        return res;
+        char* buffer = malloc(ADV_LOGGER_VSNPRINTF_BUFFER_SIZE);
+        if (buffer) {
+            va_list va;
+            va_start(va, format);
+            vsnprintf(buffer, ADV_LOGGER_VSNPRINTF_BUFFER_SIZE - 1, format, va);
+            va_end(va);
+            
+            int res = adv_logger_write(NULL, 0, (void*) buffer, strlen(buffer));
+            
+            free(buffer);
+            
+            return res;
+        }
     }
     
     return 0;
+}
+#else
+static ssize_t IRAM adv_logger_none(struct _reent* r, int fd, const void* ptr, size_t len) {
+    return len;
 }
 #endif
 
@@ -411,7 +417,10 @@ void adv_logger_init(const uint8_t log_type, char* dest_addr, const bool with_he
         
         adv_logger_data->log_type = (log_type % 4) - 1;
         adv_logger_data->with_header = with_header;
+        
+#ifdef ESP_PLATFORM
         adv_logger_data->log_sender_semaphore = xSemaphoreCreateMutex();
+#endif
         
         if (log_type >= ADV_LOGGER_UDP) {
             if (log_type >= ADV_LOGGER_UDP_BUFFERED) {

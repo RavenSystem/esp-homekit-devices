@@ -9,13 +9,32 @@
 #define __HAA_COMMON_HEADER_H__
 
 #ifdef ESP_PLATFORM
-    #define TASK_SIZE_FACTOR                (5)
-    #define MAX_SETUP_BODY_LEN              (70000)
-    #define MAX_GPIOS                       (GPIO_NUM_MAX)
+
+#define TASK_SIZE_FACTOR                    (5)
+#define MAX_SETUP_BODY_LEN                  (70000)
+#define MAX_GPIOS                           (GPIO_NUM_MAX)
+
+#define SDK_UART_BUFFER_SIZE                (256)   // Should be grater than UART_FIFO_LEN
+#include "adv_logger.h"
+
+#define INFO_NNL(message, ...)              adv_logger_printf(message, ##__VA_ARGS__)
+
+#if defined(CONFIG_IDF_TARGET_ESP32C2) \
+    || defined(CONFIG_IDF_TARGET_ESP32C3) \
+    || defined(CONFIG_IDF_TARGET_ESP32C6) \
+    || defined(CONFIG_IDF_TARGET_ESP32S2) \
+    || defined(CONFIG_IDF_TARGET_ESP32S3)
+#define ESP_HAS_INTERNAL_TEMP_SENSOR        (1)
+#endif
+
 #else   // ESP-OPEN-RTOS
-    #define TASK_SIZE_FACTOR                (1)
-    #define MAX_SETUP_BODY_LEN              (16500)
-    #define MAX_GPIOS                       (17)
+
+#define TASK_SIZE_FACTOR                    (1)
+#define MAX_SETUP_BODY_LEN                  (16500)
+#define MAX_GPIOS                           (17)
+
+#define INFO_NNL(message, ...)              printf(message, ##__VA_ARGS__)
+
 #endif
 
 #ifdef HAA_SINGLE_CORE
@@ -61,19 +80,6 @@
 #define BEST_RSSI_MARGIN                    (1)
 
 #define HIGH_HOMEKIT_CH_NUMBER              (6)
-
-#ifdef ESP_PLATFORM
-
-#define SDK_UART_BUFFER_SIZE                (256)   // Should be grater than UART_FIFO_LEN
-#include "adv_logger.h"
-
-#define INFO_NNL(message, ...)              adv_logger_printf(message, ##__VA_ARGS__)
-
-#else
-
-#define INFO_NNL(message, ...)              printf(message, ##__VA_ARGS__)
-
-#endif
 
 #define DEBUG(message, ...)                 printf("%s: " message "\n", __func__, ##__VA_ARGS__)
 #define INFO(message, ...)                  INFO_NNL(message "\n", ##__VA_ARGS__)

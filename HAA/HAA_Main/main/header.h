@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.7.2"
+#define HAA_FIRMWARE_VERSION                "12.7.3"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -800,10 +800,15 @@
 #define HAA_MIN(x, y)                       (((x) < (y)) ? (x) : (y))
 #define HAA_MAX(x, y)                       (((x) > (y)) ? (x) : (y))
 
+#define HAA_ADC_RESOLUTION_ESP32            (4096)
+#define HAA_ADC_RESOLUTION_ESP8266          (1024)
+
+#define HAA_ADC_FACTOR                      (HAA_ADC_RESOLUTION_ESP32 / HAA_ADC_RESOLUTION_ESP8266)
+
 #ifdef ESP_PLATFORM
-#define HAA_ADC_MAX_VALUE                   (4096)
+#define HAA_ADC_MAX_VALUE                   ((HAA_ADC_RESOLUTION_ESP32 - 1) / HAA_ADC_FACTOR)
 #else
-#define HAA_ADC_MAX_VALUE                   (1024)
+#define HAA_ADC_MAX_VALUE                   (HAA_ADC_RESOLUTION_ESP8266 - 1)
 #endif
 
 #define KELVIN_TO_CELSIUS(x)                ((x) - 273.15)

@@ -17,6 +17,7 @@
 #include "driver/uart.h"
 #include "esp_wifi.h"
 #include "esp_timer.h"
+#include "esp_attr.h"
 
 #define sdk_system_get_time_raw()           esp_timer_get_time()
 
@@ -42,12 +43,13 @@
 #include <lwip/dns.h>
 
 #define HEADER_LEN                          (23)
-#define UDP_LOG_LEN                         (1472)
+#define UDP_LOG_LEN                         (1400)
 
 // Task Stack Size
 #ifdef ESP_PLATFORM
 #define ADV_LOGGER_INIT_TASK_SIZE           (2048)
 #define ADV_LOGGER_BUFFERED_TASK_SIZE       (2048)
+#define ADV_LOGGER_VSNPRINTF_BUFFER_SIZE    (2048)
 #else
 #define ADV_LOGGER_INIT_TASK_SIZE           (configMINIMAL_STACK_SIZE)  // 256
 #define ADV_LOGGER_BUFFERED_TASK_SIZE       (configMINIMAL_STACK_SIZE)  // 256
@@ -68,6 +70,7 @@ typedef struct _adv_logger_data {
     
 #ifdef ESP_PLATFORM
     char* ip_address;
+    SemaphoreHandle_t log_sender_semaphore;
 #endif
 
     int8_t log_type: 4;
@@ -78,7 +81,6 @@ typedef struct _adv_logger_data {
     bool close_buffered_task: 1;
     
     TaskHandle_t xHandle;
-    SemaphoreHandle_t log_sender_semaphore;
     
     struct addrinfo* res;
 } adv_logger_data_t;
@@ -86,7 +88,9 @@ typedef struct _adv_logger_data {
 static adv_logger_data_t* adv_logger_data = NULL;
 
 static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_t len) {
-    if (xSemaphoreTake(adv_logger_data->log_sender_semaphore, 1) == pdTRUE) {
+#ifdef ESP_PLATFORM
+    if (xSemaphoreTake(adv_logger_data->log_sender_semaphore, 0) == pdTRUE) {
+#endif
         int is_adv_logger_data = false;
         if (adv_logger_data->ready_to_send) {
             is_adv_logger_data = true;
@@ -141,44 +145,51 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
             }
         }
         
+#ifdef ESP_PLATFORM
         xSemaphoreGive(adv_logger_data->log_sender_semaphore);
+#endif
         
         return len;
+        
+#ifdef ESP_PLATFORM
     }
     
     return 0;
+#endif
 }
 
 static void adv_logger_buffered_task() {
-    int i = 0;
+    unsigned int i = 0;
     
     for (;;) {
         i++;
         
-        if (((i == 8 && adv_logger_data->udplogstring_len > 0) || adv_logger_data->udplogstring_len > (UDP_LOG_LEN >> 1)) && xSemaphoreTake(adv_logger_data->log_sender_semaphore, 0) == pdTRUE) {
-            
+        if ((i == 8 && adv_logger_data->udplogstring_len > 0) || adv_logger_data->udplogstring_len > (UDP_LOG_LEN / 2)) {
             adv_logger_data->ready_to_send = false;
             lwip_sendto(adv_logger_data->socket, adv_logger_data->udplogstring, adv_logger_data->udplogstring_len, 0, adv_logger_data->res->ai_addr, adv_logger_data->res->ai_addrlen);
             adv_logger_data->udplogstring_len = 0;
             adv_logger_data->ready_to_send = true;
             
-            xSemaphoreGive(adv_logger_data->log_sender_semaphore);
-            
             i = 0;
-        }
-
-        if (i == 8) {
+            
+        } else if (i == 8) {
             i = 0;
         }
         
         vTaskDelay(pdMS_TO_TICKS(10));
         
-        if (adv_logger_data->close_buffered_task && xSemaphoreTake(adv_logger_data->log_sender_semaphore, pdMS_TO_TICKS(100)) == pdTRUE) {
+        if (adv_logger_data->close_buffered_task
+#ifdef ESP_PLATFORM
+        && xSemaphoreTake(adv_logger_data->log_sender_semaphore, pdMS_TO_TICKS(100)) == pdTRUE
+#endif
+        ) {
             
             free(adv_logger_data->udplogstring);
             adv_logger_data->udplogstring = NULL;
             
+#ifdef ESP_PLATFORM
             xSemaphoreGive(adv_logger_data->log_sender_semaphore);
+#endif
             
             vTaskDelete(NULL);
         }
@@ -240,19 +251,21 @@ void adv_logger_set_ip_address(char* ip_address) {
     adv_logger_data->ip_address = ip_address;
 }
 
-int adv_logger_printf(const char* format, ...) {
+int IRAM_ATTR adv_logger_printf(const char* format, ...) {
     if (adv_logger_data) {
-        va_list va;
-        va_start(va, format);
-        char* buffer = malloc(2048);
-        vsnprintf(buffer, 2048 - 1, format, va);
-        va_end(va);
-        
-        int res = adv_logger_write(NULL, 0, (void*) buffer, strlen(buffer));
-        
-        free(buffer);
-        
-        return res;
+        char* buffer = malloc(ADV_LOGGER_VSNPRINTF_BUFFER_SIZE);
+        if (buffer) {
+            va_list va;
+            va_start(va, format);
+            vsnprintf(buffer, ADV_LOGGER_VSNPRINTF_BUFFER_SIZE - 1, format, va);
+            va_end(va);
+            
+            int res = adv_logger_write(NULL, 0, (void*) buffer, strlen(buffer));
+            
+            free(buffer);
+            
+            return res;
+        }
     }
     
     return 0;
@@ -267,7 +280,9 @@ void adv_logger_init() {
     adv_logger_data = malloc(sizeof(adv_logger_data_t));
     memset(adv_logger_data, 0, sizeof(*adv_logger_data));
     
+#ifdef ESP_PLATFORM
     adv_logger_data->log_sender_semaphore = xSemaphoreCreateMutex();
+#endif
     
     adv_logger_data->socket = -1;
     adv_logger_data->header = malloc(HEADER_LEN);

@@ -5,6 +5,8 @@
  *
  */
 
+#include "header.h"
+
 #ifdef ESP_PLATFORM
 
 #include "freertos/FreeRTOS.h"
@@ -33,6 +35,10 @@
 #define HAA_EXIT_CRITICAL_TASK()            taskEXIT_CRITICAL(&mux)
 
 #define HAA_LONGINT_F                       "li"
+
+#ifdef ESP_HAS_INTERNAL_TEMP_SENSOR
+#include "driver/temperature_sensor.h"
+#endif
 
 #ifndef CONFIG_IDF_TARGET_ESP32C2
 #include "driver/rmt_tx.h"
@@ -91,13 +97,16 @@
 #include "ir_code.h"
 
 #include "extra_characteristics.h"
-#include "header.h"
 #include "types.h"
 
 main_config_t main_config = {
 #ifdef ESP_PLATFORM
     .adc_dac_data = NULL,
     .pwmh_channels = NULL,
+#endif
+    
+#ifdef ESP_HAS_INTERNAL_TEMP_SENSOR
+    .temperature_sensor_handle = NULL,
 #endif
     
     .wifi_arp_count = 0,
@@ -156,6 +165,22 @@ static unsigned int IRAM private_abs(int number) {
 static void show_freeheap() {
     INFO("Free Heap %"HAA_LONGINT_F, xPortGetFreeHeapSize());
 }
+
+// ESP-IDF ADC
+#ifdef ESP_PLATFORM
+int haa_adc_oneshot_read_by_gpio(int gpio) {
+    int adc_int;
+    adc_channel_t adc_channel;
+    adc_unit_t adc_unit;    // Needed to make adc_oneshot_io_to_channel() happy
+    if (adc_oneshot_io_to_channel(gpio, &adc_unit, &adc_channel) == ESP_OK) {
+        if (adc_oneshot_read(main_config.adc_dac_data->adc_oneshot_handle, adc_channel, &adc_int) == ESP_OK) {
+            return adc_int;
+        }
+    }
+    
+    return -1;
+}
+#endif
 
 // PWM Part
 #ifdef ESP_PLATFORM
@@ -2763,6 +2788,7 @@ void temperature_task(void* args) {
                         }
                         
                         get_temp = dht_read_float_data(current_sensor_type, sensor_gpio, &humidity_value, &temperature_value);
+                        
                     } else if (sensor_type == 3) {
                         const unsigned int sensor_index = TH_SENSOR_INDEX;
                         ds18b20_addr_t ds18b20_addrs[sensor_index];
@@ -2780,26 +2806,27 @@ void temperature_task(void* args) {
                             }
                         }
                         
-                    } else {
-#ifdef ESP_PLATFORM
-                        int adc_int = -1;
-                        adc_channel_t adc_channel;
-                        adc_oneshot_io_to_channel(sensor_gpio, NULL, &adc_channel);
-                        adc_oneshot_read(main_config.adc_dac_data->adc_oneshot_handle, adc_channel, &adc_int);
-#else
-                        float adc = sdk_system_adc_read();
+#ifdef ESP_HAS_INTERNAL_TEMP_SENSOR
+                    } else if (sensor_type == 100) {
+                        if (temperature_sensor_get_celsius(main_config.temperature_sensor_handle, &temperature_value) == ESP_OK) {
+                            get_temp = true;
+                        }
 #endif
                         
+                    } else {
 #ifdef ESP_PLATFORM
+                        int adc_int = haa_adc_oneshot_read_by_gpio(sensor_gpio);
                         if (adc_int >= 0) {
-                            float adc = adc_int;
+                            const float adc = ((float) adc_int) / HAA_ADC_FACTOR;
+#else
+                            const float adc = sdk_system_adc_read();
 #endif
                             if (sensor_type == 5) {
                                 // https://github.com/arendst/Tasmota/blob/7177c7d8e003bb420d8cae39f544c2b8a9af09fe/tasmota/xsns_02_analog.ino#L201
-                                temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 + taylor_log(((32000 * adc) / ((HAA_ADC_MAX_VALUE * 3.3) - adc)) / 10000))) - 15;
+                                temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 + taylor_log(((32000 * adc) / ((HAA_ADC_RESOLUTION_ESP8266 * 3.3) - adc)) / 10000))) - 15;
                                 
                             } else if (sensor_type == 6) {
-                                temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 - taylor_log(((32000 * adc) / ((HAA_ADC_MAX_VALUE * 3.3) - adc)) / 10000))) + 15;
+                                temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 - taylor_log(((32000 * adc) / ((HAA_ADC_RESOLUTION_ESP8266 * 3.3) - adc)) / 10000))) + 15;
                                 
                             } else if (sensor_type == 7) {
                                 temperature_value = HAA_ADC_MAX_VALUE - adc;
@@ -2815,7 +2842,7 @@ void temperature_task(void* args) {
                             }
                             
                             if (sensor_type >= 9) {
-                                humidity_value *= 100.00000000f / HAA_ADC_MAX_VALUE;
+                                humidity_value *= 0.09775171066f;  // (100 / 1023)
                             }
                             
                             if (TH_SENSOR_HUM_OFFSET != 0.000000f && sensor_type < 9) {
@@ -4438,20 +4465,16 @@ void light_sensor_task(void* args) {
     if (light_sersor_type < 2) {
         // https://www.allaboutcircuits.com/projects/design-a-luxmeter-using-a-light-dependent-resistor/
 #ifdef ESP_PLATFORM
-        int adc = 0;
-        adc_channel_t adc_channel;
-        adc_oneshot_io_to_channel(LIGHT_SENSOR_GPIO, NULL, &adc_channel);
-        adc_oneshot_read(main_config.adc_dac_data->adc_oneshot_handle, adc_channel, &adc);
-        const float adc_raw_read = adc;
+        const float adc_raw_read = (((float) haa_adc_oneshot_read_by_gpio(LIGHT_SENSOR_GPIO)) / HAA_ADC_FACTOR) + 0.01;
 #else
-        const float adc_raw_read = sdk_system_adc_read();
+        const float adc_raw_read = ((float) sdk_system_adc_read()) + 0.01;
 #endif
         
         float ldr_resistor;
         if (light_sersor_type == 0) {
-            ldr_resistor = LIGHT_SENSOR_RESISTOR * (((HAA_ADC_MAX_VALUE - 0.9) - adc_raw_read) / adc_raw_read);
+            ldr_resistor = LIGHT_SENSOR_RESISTOR * (((HAA_ADC_MAX_VALUE + 0.01) - adc_raw_read) / adc_raw_read);
         } else {
-            ldr_resistor = (LIGHT_SENSOR_RESISTOR  * adc_raw_read) / ((HAA_ADC_MAX_VALUE - 0.9) - adc_raw_read);
+            ldr_resistor = (LIGHT_SENSOR_RESISTOR  * adc_raw_read) / ((HAA_ADC_MAX_VALUE + 0.01) - adc_raw_read);
         }
         
         luxes = 1 / fast_precise_pow(ldr_resistor, LIGHT_SENSOR_POW);
@@ -5178,20 +5201,19 @@ void free_monitor_task(void* args) {
                 } else if (fm_sensor_type == FM_SENSOR_TYPE_ADC ||
                          fm_sensor_type == FM_SENSOR_TYPE_ADC_INV) {
 #ifdef ESP_PLATFORM
-                    int adc = -1;
-                    adc_channel_t adc_channel;
-                    adc_oneshot_io_to_channel(FM_SENSOR_GPIO, NULL, &adc_channel);
-                    adc_oneshot_read(main_config.adc_dac_data->adc_oneshot_handle, adc_channel, &adc);
-                    value = adc;
+                    int adc_int = haa_adc_oneshot_read_by_gpio(FM_SENSOR_GPIO);
+                    if (adc_int >= 0) {
+                        value = ((float) adc_int) / HAA_ADC_FACTOR;
 #else
-                    value = sdk_system_adc_read();
+                        value = sdk_system_adc_read();
 #endif
-                    if (value >= 0) {
                         if (fm_sensor_type == FM_SENSOR_TYPE_ADC_INV) {
-                            value = (HAA_ADC_MAX_VALUE - 1) - value;
+                            value = HAA_ADC_MAX_VALUE - value;
                         }
                         get_value = true;
+#ifdef ESP_PLATFORM
                     }
+#endif
                     
                 } else if (fm_sensor_type >= FM_SENSOR_TYPE_NETWORK &&
                            fm_sensor_type <= FM_SENSOR_TYPE_NETWORK_PATTERN_HEX) {
@@ -8168,7 +8190,17 @@ void normal_mode_init() {
     
     uint8_t th_sensor_type(cJSON_rsf* json_accessory) {
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_TYPE) != NULL) {
-            return (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_TYPE)->valuefloat;
+            const uint8_t sensor_type = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_TYPE)->valuefloat;
+            
+#ifdef ESP_HAS_INTERNAL_TEMP_SENSOR
+            if (sensor_type == 100 && main_config.temperature_sensor_handle == NULL) {
+                temperature_sensor_config_t temp_sensor_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
+                temperature_sensor_install(&temp_sensor_config, &main_config.temperature_sensor_handle);
+                temperature_sensor_enable(main_config.temperature_sensor_handle);
+            }
+#endif
+            
+            return sensor_type;
         }
         return 2;
     }
@@ -8633,7 +8665,7 @@ void normal_mode_init() {
                 }
                 
 #ifdef ESP_PLATFORM
-                int gpio_ret = -99;
+                int gpio_ret = -9999;
 #endif
                 
                 if (gpio < 100) {
@@ -8832,13 +8864,14 @@ void normal_mode_init() {
                     }
                     
                     adc_channel_t adc_channel;
-                    adc_oneshot_io_to_channel(gpio, NULL, &adc_channel);
-                    
-                    adc_oneshot_chan_cfg_t config = {
-                        .atten = IO_GPIO_ADC_ATTENUATION,
-                        .bitwidth = ADC_BITWIDTH_12,    // Max supported width: 12 bits (0 - 4095)
-                    };
-                    gpio_ret = adc_oneshot_config_channel(main_config.adc_dac_data->adc_oneshot_handle, adc_channel, &config);
+                    adc_unit_t adc_unit;    // Needed to make adc_oneshot_io_to_channel() happy
+                    if (adc_oneshot_io_to_channel(gpio, &adc_unit, &adc_channel) == ESP_OK) {
+                        adc_oneshot_chan_cfg_t config = {
+                            .atten = IO_GPIO_ADC_ATTENUATION,
+                            .bitwidth = ADC_BITWIDTH_12,    // Max supported width: 13 bits (0 - 8191), but used 12 bits
+                        };
+                        gpio_ret = adc_oneshot_config_channel(main_config.adc_dac_data->adc_oneshot_handle, adc_channel, &config);
+                    }
                     
                     INFO("GPIO %i: M 10 (0x%x), a %i", gpio, gpio_ret, IO_GPIO_ADC_ATTENUATION);
 #endif
