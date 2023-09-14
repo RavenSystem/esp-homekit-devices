@@ -126,9 +126,9 @@ static inline bool dht_fetch_data(dht_sensor_type_t sensor_type, uint8_t pin, bo
 #ifdef ESP_PLATFORM
     gpio_set_direction(pin, GPIO_MODE_OUTPUT_OD);
 #endif
-    gpio_write(pin, 0);
+    gpio_write(pin, false);
     sdk_os_delay_us(sensor_type == DHT_TYPE_SI7021 ? 500 : 20000);
-    gpio_write(pin, 1);
+    gpio_write(pin, true);
     
     // Step through Phase 'B', 200us
     if (!dht_await_pin_state(pin, sensor_type == DHT_TYPE_SI7021 ? 200 : 40, false, NULL)) {
@@ -149,7 +149,7 @@ static inline bool dht_fetch_data(dht_sensor_type_t sensor_type, uint8_t pin, bo
     }
 
     // Read in each of the 40 bits of data...
-    for (int i = 0; i < DHT_DATA_BITS; i++) {
+    for (unsigned int i = 0; i < DHT_DATA_BITS; i++) {
         if (!dht_await_pin_state(pin, 65, true, &low_duration)) {
             debug("LOW bit timeout\n");
             return false;
@@ -202,6 +202,10 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
         gpio_set_pullup(pin, false, false);
 #endif
         
+        gpio_write(pin, true);
+        
+        vTaskDelay(1);
+        
         PORT_ENTER_CRITICAL();
         result = dht_fetch_data(sensor_type, pin, bits);
         PORT_EXIT_CRITICAL();
@@ -213,7 +217,7 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
         gpio_enable(pin, GPIO_INPUT);
 #endif
         
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(20));
         
         xSemaphoreGive(dht_lock);
     }
@@ -222,7 +226,7 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
         return false;
     }
 
-    for (int i = 0; i < DHT_DATA_BITS; i++) {
+    for (unsigned int i = 0; i < DHT_DATA_BITS; i++) {
         // Read each bit into 'result' byte array...
         data[i / 8] <<= 1;
         data[i / 8] |= bits[i];

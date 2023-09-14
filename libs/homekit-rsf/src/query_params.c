@@ -6,9 +6,9 @@
 query_param_t *query_params_parse(const char *s) {
     query_param_t *params = NULL;
 
-    int i = 0;
+    unsigned int i = 0;
     while (1) {
-        int pos = i;
+        unsigned int pos = i;
         while (s[i] && s[i] != '=' && s[i] != '&' && s[i] != '#') i++;
         if (i == pos) {
             i++;

@@ -76,7 +76,7 @@ uint8_t ds18b20_read_all(uint8_t pin, ds_sensor_t *result) {
 
         uint8_t get[10];
 
-        for (int k=0;k<9;k++){
+        for (unsigned int k = 0; k < 9; k++){
             get[k]=onewire_read(pin);
         }
 
@@ -123,8 +123,8 @@ float ds18b20_read_single(uint8_t pin) {
 
     uint8_t get[10];
 
-    for (int k=0;k<9;k++){
-        get[k]=onewire_read(pin);
+    for (unsigned int k = 0; k < 9; k++){
+        get[k] = onewire_read(pin);
     }
 
     //debug("\n ScratchPAD DATA = %X %X %X %X %X %X %X %X %X\n",get[8],get[7],get[6],get[5],get[4],get[3],get[2],get[1],get[0]);
@@ -228,9 +228,9 @@ float ds18b20_measure_and_read(int pin, ds18b20_addr_t addr) {
     return ds18b20_read_temperature(pin, addr);
 }
 
-bool ds18b20_measure_and_read_multi(int pin, ds18b20_addr_t *addr_list, int addr_count, float *result_list) {
+bool ds18b20_measure_and_read_multi(int pin, ds18b20_addr_t *addr_list, unsigned int addr_count, float *result_list) {
     if (!ds18b20_measure(pin, DS18B20_ANY, true)) {
-        for (int i=0; i < addr_count; i++) {
+        for (unsigned int i = 0; i < addr_count; i++) {
             result_list[i] = NAN;
         }
         return false;
@@ -238,10 +238,10 @@ bool ds18b20_measure_and_read_multi(int pin, ds18b20_addr_t *addr_list, int addr
     return ds18b20_read_temp_multi(pin, addr_list, addr_count, result_list);
 }
 
-int ds18b20_scan_devices(int pin, ds18b20_addr_t *addr_list, int addr_count) {
+unsigned int ds18b20_scan_devices(int pin, ds18b20_addr_t *addr_list, unsigned int addr_count) {
     onewire_search_t search;
     onewire_addr_t addr;
-    int found = 0;
+    unsigned int found = 0;
 
     onewire_search_start(&search);
     while ((addr = onewire_search_next(&search, pin)) != ONEWIRE_NONE) {
@@ -256,10 +256,10 @@ int ds18b20_scan_devices(int pin, ds18b20_addr_t *addr_list, int addr_count) {
     return found;
 }
 
-bool ds18b20_read_temp_multi(int pin, ds18b20_addr_t *addr_list, int addr_count, float *result_list) {
+bool ds18b20_read_temp_multi(int pin, ds18b20_addr_t *addr_list, unsigned int addr_count, float *result_list) {
     bool result = true;
 
-    for (int i = 0; i < addr_count; i++) {
+    for (unsigned int i = 0; i < addr_count; i++) {
         result_list[i] = ds18b20_read_temperature(pin, addr_list[i]);
         if (isnan(result_list[i])) {
             result = false;

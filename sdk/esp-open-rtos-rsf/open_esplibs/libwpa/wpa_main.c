@@ -67,6 +67,11 @@ void sdk_dhcp_bind_check(void *parg) {
             netif_info->connect_status = STATION_CONNECTING;
         }
     }
+    
+    ETSTimer *timer = &netif_info->timer;
+    if (xTimerDelete(timer->timer_handle, 0)) {
+        timer->timer_handle = NULL;
+    }
 }
 
 void sdk_eagle_auth_done() {

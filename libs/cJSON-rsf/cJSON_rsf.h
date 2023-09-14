@@ -99,7 +99,7 @@ bool cJSON_rsf_PrintPreallocated(cJSON_rsf *item, char *buffer, const int length
 void cJSON_rsf_Delete(cJSON_rsf *c);
 
 /* Returns the number of items in an array (or object). */
-int cJSON_rsf_GetArraySize(const cJSON_rsf *array);
+size_t cJSON_rsf_GetArraySize(const cJSON_rsf *array);
 /* Retrieve item number "index" from array "array". Returns NULL if unsuccessful. */
 cJSON_rsf* cJSON_rsf_GetArrayItem(const cJSON_rsf *array, int index);
 /* Get item "string" from object. Case insensitive. */

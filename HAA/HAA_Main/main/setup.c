@@ -109,7 +109,7 @@ typedef struct {
     char* ssid_prefix;
     char* custom_hostname;
     int32_t param;
-    size_t max_body_size;
+    uint32_t max_body_size;
     void (*on_wifi_ready)();
     
     struct addrinfo* res;
@@ -140,7 +140,7 @@ typedef struct _client {
     http_parser parser;
     uint8_t endpoint;
     uint8_t* body;
-    size_t body_length;
+    uint32_t body_length;
 } client_t;
 
 static void wifi_config_station_connect();
@@ -180,14 +180,14 @@ static void client_free(client_t* client) {
     client = NULL;
 }
 
-static void client_send(client_t *client, const char *payload, size_t payload_size) {
+static void client_send(client_t *client, const char *payload, unsigned int payload_size) {
     lwip_write(client->fd, payload, payload_size);
 }
 
 static void client_send_chunk(client_t *client, const char *payload) {
-    size_t len = strlen(payload);
+    unsigned int len = strlen(payload);
     char buffer[10];
-    size_t buffer_len = snprintf(buffer, sizeof(buffer), "%x\r\n", len);
+    unsigned int buffer_len = snprintf(buffer, sizeof(buffer), "%x\r\n", len);
     client_send(client, buffer, buffer_len);
     client_send(client, payload, len);
     client_send(client, "\r\n", 2);
@@ -196,7 +196,7 @@ static void client_send_chunk(client_t *client, const char *payload) {
 static void client_send_redirect(client_t *client, int code, const char *redirect_url) {
     INFO("Redirect %s", redirect_url);
     char buffer[128];
-    size_t len = snprintf(buffer, sizeof(buffer), "HTTP/1.1 %d \r\nLocation: %s\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", code, redirect_url);
+    unsigned int len = snprintf(buffer, sizeof(buffer), "HTTP/1.1 %d \r\nLocation: %s\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", code, redirect_url);
     client_send(client, buffer, len);
 }
 
@@ -340,7 +340,7 @@ static void wifi_scan_sc_done() {
     
     int8_t best_rssi = INT8_MIN;
     uint8_t* best_bssid = malloc(6);
-    int found = false;
+    unsigned int found = false;
     
     uint16_t ap_count = 0;
     esp_wifi_scan_get_ap_num(&ap_count);
@@ -348,7 +348,7 @@ static void wifi_scan_sc_done() {
     wifi_ap_record_t* ap_records = (wifi_ap_record_t*) malloc(ap_count * sizeof(wifi_ap_record_t));
     esp_wifi_scan_get_ap_records(&ap_count, ap_records);
     
-    for (int i = 0; i < ap_count; i++) {
+    for (unsigned int i = 0; i < ap_count; i++) {
         if (strcmp(wifi_ssid, (char*) ap_records[i].ssid) == 0) {
             INFO("RSSI %i, Ch %i - %02x%02x%02x%02x%02x%02x", ap_records[i].rssi, ap_records[i].primary, ap_records[i].bssid[0], ap_records[i].bssid[1], ap_records[i].bssid[2], ap_records[i].bssid[3], ap_records[i].bssid[4], ap_records[i].bssid[5]);
             
@@ -385,7 +385,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
 
     int8_t best_rssi = INT8_MIN;
     uint8_t* best_bssid = malloc(6);
-    int found = false;
+    unsigned int found = false;
     while (bss) {
         if (strcmp(wifi_ssid, (char*) bss->ssid) == 0) {
             INFO("RSSI %i, Ch %i - %02x%02x%02x%02x%02x%02x", bss->rssi, bss->channel, bss->bssid[0], bss->bssid[1], bss->bssid[2], bss->bssid[3], bss->bssid[4], bss->bssid[5]);
@@ -509,7 +509,7 @@ static void wifi_scan_done_cb() {
     wifi_ap_record_t* ap_records = (wifi_ap_record_t*) malloc(ap_count * sizeof(wifi_ap_record_t));
     esp_wifi_scan_get_ap_records(&ap_count, ap_records);
 
-    for (int i = 0; i < ap_count; i++) {
+    for (unsigned int i = 0; i < ap_count; i++) {
         //INFO("%s (%i) Ch %i - %02x%02x%02x%02x%02x%02x", ap_records[i].bssid, ap_records[i].rssi, ap_records[i].primary, ap_records[i].bssid[0], ap_records[i].bssid[1], ap_records[i].bssid[2], ap_records[i].bssid[3], ap_records[i].bssid[4], ap_records[i].bssid[5]);
 
         wifi_network_info_t* net = context->wifi_networks;
@@ -588,6 +588,7 @@ static void wifi_scan_task(void *arg) {
 #ifdef ESP_PLATFORM
     if (wifi_config_get_ip() < 0) {
         sdk_wifi_station_disconnect();
+        vTaskDelay(1);
     }
     
     if (esp_wifi_scan_start(NULL, true) == ESP_OK) {
@@ -875,7 +876,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             
             char saved_state_id[8];
             for (int serv = 1; serv <= hk_total_serv; serv++) {
-                for (int ch = 0; ch <= HIGH_HOMEKIT_CH_NUMBER; ch++) {
+                for (unsigned int ch = 0; ch <= HIGH_HOMEKIT_CH_NUMBER; ch++) {
                     uint32_t int_saved_state_id = (serv * 100) + ch;
                     itoa(int_saved_state_id, saved_state_id, 10);
                     sysparam_erase(saved_state_id);
@@ -963,7 +964,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                     char hex[3];
                     hex[2] = 0;
                     
-                    for (int i = 0; i < 6; i++) {
+                    for (unsigned int i = 0; i < 6; i++) {
                         hex[0] = bssid_param->value[(i * 2)];
                         hex[1] = bssid_param->value[(i * 2) + 1];
                         bssid[i] = (uint8_t) strtol(hex, NULL, 16);
@@ -1019,7 +1020,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     sdk_system_restart();
 }
 
-static int wifi_config_server_on_url(http_parser *parser, const char *data, size_t length) {
+static int wifi_config_server_on_url(http_parser *parser, const char *data, unsigned int length) {
     client_t *client = (client_t*) parser->data;
 
     client->endpoint = ENDPOINT_UNKNOWN;
@@ -1044,11 +1045,11 @@ static int wifi_config_server_on_url(http_parser *parser, const char *data, size
     return 0;
 }
 
-static int wifi_config_server_on_body(http_parser *parser, const char *data, size_t length) {
+static int wifi_config_server_on_body(http_parser *parser, const char *data, unsigned int length) {
     client_t *client = parser->data;
     
     //client->body = realloc(client->body, client->body_length + length + 1);
-    if ( (client->body_length + length) < context->max_body_size ) {
+    if ((client->body_length + length) < context->max_body_size) {
         memcpy(client->body + client->body_length, data, length);
         client->body_length += length;
         client->body[client->body_length] = 0;
@@ -1334,7 +1335,7 @@ static void wifi_config_sta_connect_timeout_task() {
     }
 #endif
     
-    const int is_station_mode = (sdk_wifi_get_opmode() == STATION_MODE);
+    const unsigned int is_station_mode = (sdk_wifi_get_opmode() == STATION_MODE);
     
     for (;;) {
         vTaskDelay(MS_TO_TICKS(1000));
@@ -1454,6 +1455,7 @@ uint8_t wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool wi
         }
         
         sdk_wifi_station_disconnect();
+        vTaskDelay(1);
         
         char *wifi_password = NULL;
         sysparam_get_string(WIFI_STA_PASSWORD_SYSPARAM, &wifi_password);

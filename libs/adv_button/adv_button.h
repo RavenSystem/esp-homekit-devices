@@ -1,7 +1,7 @@
 /*
  * Advanced Button Manager
  *
- * Copyright 2019-2022 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2023 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -30,6 +30,7 @@
 typedef void (*button_callback_fn)(uint16_t gpio, void *args, uint8_t param);
 
 void adv_button_init(const uint16_t new_delay_ms, const bool continuos_mode);
+void adv_button_create_shift_register(const uint8_t index, const uint8_t mode, const uint8_t mcp_bus, const uint8_t len);
 int adv_button_create(const uint16_t gpio, const bool inverted, const uint8_t mode, const uint8_t mcp_bus, const uint8_t max_eval);
 //int adv_button_destroy(const int gpio);
 void adv_button_set_disable_time();

@@ -85,8 +85,8 @@ int adv_i2c_init_hz(uint8_t bus, uint8_t scl_pin, uint8_t sda_pin, uint32_t freq
  * @param len Number of byte of buf to read
  * @return Non-Zero if error occured
  */
-int adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t len);
-int adv_i2c_slave_read_no_wait(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t len);
+int adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t buf_len);
+int adv_i2c_slave_read_no_wait(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t buf_len);
 
 /**
  * Write 'len' bytes from 'buf' to slave at 'data' register adress .
@@ -98,8 +98,8 @@ int adv_i2c_slave_read_no_wait(uint8_t bus, uint8_t slave_addr, const uint8_t *d
  * @param len Number of byte of buf to send
  * @return Non-Zero if error occured
  */
-int adv_i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t len);
-int adv_i2c_slave_write_no_wait(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t len);
+int adv_i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t buf_len);
+int adv_i2c_slave_write_no_wait(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t buf_len);
 
 #ifndef ESP_PLATFORM
 

@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdint.h>
 #include <string.h>
 #include <homekit/types.h>
 
@@ -285,14 +286,14 @@ homekit_service_t* homekit_service_clone(homekit_service_t* service) {
     size_t size = align_size(sizeof(homekit_service_t) + type_len);
 
     if (service->linked) {
-        int i = 0;
+        unsigned int i = 0;
         while (service->linked[i])
             i++;
 
         size += sizeof(homekit_service_t*) * (i + 1);
     }
     if (service->characteristics) {
-        int i = 0;
+        unsigned int i = 0;
         while (service->characteristics[i])
             i++;
 
@@ -313,7 +314,7 @@ homekit_service_t* homekit_service_clone(homekit_service_t* service) {
 
     if (service->linked) {
         clone->linked = (homekit_service_t**) p;
-        int i = 0;
+        unsigned int i = 0;
         while (service->linked[i]) {
             clone->linked[i] = service->linked[i];
             i++;
@@ -324,7 +325,7 @@ homekit_service_t* homekit_service_clone(homekit_service_t* service) {
 
     if (service->characteristics) {
         clone->characteristics = (homekit_characteristic_t**) p;
-        int i = 0;
+        unsigned int i = 0;
         while (service->characteristics[i]) {
             clone->characteristics[i] = service->characteristics[i];
             i++;
@@ -339,7 +340,7 @@ homekit_service_t* homekit_service_clone(homekit_service_t* service) {
 homekit_accessory_t* homekit_accessory_clone(homekit_accessory_t* ac) {
     size_t size = sizeof(homekit_accessory_t);
     if (ac->services) {
-        for (int i=0; ac->services[i]; i++) {
+        for (unsigned int i = 0; ac->services[i]; i++) {
             size += sizeof(homekit_service_t*);
         }
         size += sizeof(homekit_service_t*);
@@ -353,7 +354,7 @@ homekit_accessory_t* homekit_accessory_clone(homekit_accessory_t* ac) {
     
     if (ac->services) {
         clone->services = (homekit_service_t**) p;
-        int i = 0;
+        unsigned int i = 0;
         while (ac->services[i]) {
             clone->services[i] = ac->services[i];
             i++;
@@ -367,7 +368,7 @@ homekit_accessory_t* homekit_accessory_clone(homekit_accessory_t* ac) {
 }
 
 void homekit_accessories_init(homekit_accessory_t **accessories) {
-    int aid = 1;
+    unsigned int aid = 1;
     for (homekit_accessory_t **accessory_it = accessories; *accessory_it; accessory_it++) {
         homekit_accessory_t *accessory = *accessory_it;
         if (accessory->id) {
@@ -377,7 +378,7 @@ void homekit_accessories_init(homekit_accessory_t **accessories) {
             accessory->id = aid++;
         }
 
-        int iid = 1;
+        unsigned int iid = 1;
         for (homekit_service_t **service_it = accessory->services; *service_it; service_it++) {
             homekit_service_t *service = *service_it;
             service->accessory = accessory;

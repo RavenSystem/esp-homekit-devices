@@ -5,7 +5,7 @@
 
 
 char *url_unescape(const char *buffer, size_t size) {
-    int len = 0;
+    size_t len = 0;
 
     int ishex(int c) {
         c = toupper(c);
@@ -58,9 +58,9 @@ char *url_unescape(const char *buffer, size_t size) {
 form_param_t *form_params_parse(const char *s) {
     form_param_t *params = NULL;
 
-    int i = 0;
+    size_t i = 0;
     for (;;) {
-        int pos = i;
+        size_t pos = i;
         while (s[i] && s[i] != '=' && s[i] != '&') i++;
         if (i == pos) {
             i++;

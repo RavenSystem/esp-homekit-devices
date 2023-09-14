@@ -150,7 +150,7 @@ void homekit_value_free(homekit_value_t *value);
 
 
 typedef struct {
-    int count;
+    unsigned int count;
     uint8_t* values;
 } homekit_valid_values_t;
 
@@ -161,7 +161,7 @@ typedef struct {
 } homekit_valid_values_range_t;
 
 typedef struct {
-    int count;
+    unsigned int count;
     homekit_valid_values_range_t *ranges;
 } homekit_valid_values_ranges_t;
 #endif //HOMEKIT_DISABLE_VALUE_RANGES

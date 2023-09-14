@@ -16,7 +16,7 @@ struct timer_list_st {
 };
 
 static struct timer_list_st *timer_list;
-static uint8_t armed_timer_count;
+//static uint8_t armed_timer_count;
 
 void sdk_os_timer_setfn(ETSTimer *ptimer, ETSTimerFunc *pfunction, void *parg) {
     struct timer_list_st *entry = 0;
@@ -30,10 +30,13 @@ void sdk_os_timer_setfn(ETSTimer *ptimer, ETSTimerFunc *pfunction, void *parg) {
                     return;
                 }
                 if (ptimer->timer_handle) {
+                    /*
                     if (!xTimerDelete(ptimer->timer_handle, 50)) {
                         printf("! Timer Delete\n");
                     }
-                    armed_timer_count--;
+                    */
+                    xTimerDelete(ptimer->timer_handle, 0);
+                    //armed_timer_count--;
                 }
                 ptimer->timer_func = pfunction;
                 ptimer->timer_arg = parg;
@@ -70,8 +73,8 @@ void sdk_os_timer_arm(ETSTimer *ptimer, uint32_t milliseconds, bool repeat_flag)
     if (!ptimer->timer_handle) {
         ptimer->timer_repeat = repeat_flag;
         ptimer->timer_ms = milliseconds;
-        ptimer->timer_handle = xTimerCreate(0, milliseconds/10, repeat_flag, ptimer, timer_tramp);
-        armed_timer_count++;
+        ptimer->timer_handle = xTimerCreate(0, milliseconds / 10, repeat_flag, ptimer, timer_tramp);
+        //armed_timer_count++;
         if (!ptimer->timer_handle) {
             //FIXME: should print an error? (original code doesn't)
             return;
@@ -88,18 +91,24 @@ void sdk_os_timer_arm(ETSTimer *ptimer, uint32_t milliseconds, bool repeat_flag)
     }
     if (ptimer->timer_ms != milliseconds) {
         ptimer->timer_ms = milliseconds;
-        xTimerChangePeriod(ptimer->timer_handle, milliseconds/10, 10);
+        xTimerChangePeriod(ptimer->timer_handle, milliseconds / 10, 0); // Was 10
     }
+    /*
     if (!xTimerStart(ptimer->timer_handle, 50)) {
         printf("! Timer Start\n");
     }
+    */
+    xTimerStart(ptimer->timer_handle, 0);
 }
 
 void sdk_os_timer_disarm(ETSTimer *ptimer) {
     if (ptimer->timer_handle) {
+        /*
         if (!xTimerStop(ptimer->timer_handle, 50)) {
             printf("! Timer Stop\n");
         }
+        */
+        xTimerStop(ptimer->timer_handle, 0);
     }
 }
 

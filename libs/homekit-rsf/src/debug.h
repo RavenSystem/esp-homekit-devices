@@ -31,7 +31,7 @@ typedef unsigned char byte;
 
 #endif
 
-char *binary_to_string(const byte *data, size_t size);
-void print_binary(const char *prompt, const byte *data, size_t size);
+char *binary_to_string(const byte *data, unsigned int size);
+void print_binary(const char *prompt, const byte *data, unsigned int size);
 
 #endif // __DEBUG_H__

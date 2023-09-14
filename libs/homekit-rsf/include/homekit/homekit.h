@@ -61,7 +61,7 @@ void homekit_remove_oldest_client();
 // Reset HomeKit accessory server, removing all pairings
 void homekit_server_reset();
 
-void homekit_remove_extra_pairing(const int last_keep);
+void homekit_remove_extra_pairing(const unsigned int last_keep);
 int homekit_pairing_count();
 
 void homekit_mdns_announce_start();

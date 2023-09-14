@@ -102,7 +102,7 @@ void set_partitions() {
     }
 }
 
-esp_partition_t* get_partition(const int sector) {
+esp_partition_t* get_partition(const unsigned int sector) {
     if (sector == BOOT0SECTOR) {
         return partition_boot0;
     }
@@ -116,10 +116,10 @@ esp_partition_t* get_partition(const int sector) {
 #endif
 
 static char *strstr_lc(char *full_string, const char *search) {
-    const size_t search_len = strlen(search);
-    for (size_t i = 0; i <= strlen(full_string) - search_len; i++) {
+    const unsigned int search_len = strlen(search);
+    for (unsigned int i = 0; i <= strlen(full_string) - search_len; i++) {
         if (tolower((unsigned char) full_string[i]) == tolower((unsigned char) search[0])) {
-            for (size_t j = 0; j < search_len; j++) {
+            for (unsigned int j = 0; j < search_len; j++) {
                 if (tolower((unsigned char) full_string[i + j]) != tolower((unsigned char) search[j])) {
                     break;
                 }
@@ -314,7 +314,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
     WOLFSSL* ssl;
     int socket;
     
-    size_t buffer_len = 0;
+    uint32_t buffer_len = 0;
     char* buffer = NULL;
     char* recv_buf = NULL;
     char* location = NULL;
@@ -351,7 +351,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
                                             CRLFCRLF);
         
         if (ota_conn_result == 0) {
-            const int send_bytes = strlen(recv_buf);
+            const unsigned int send_bytes = strlen(recv_buf);
             
             if (is_ssl) {
                 ret = wolfSSL_write(ssl, recv_buf, send_bytes);
@@ -364,7 +364,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
                 INFO("OK");
                 
                 //wolfSSL_shutdown(ssl); //by shutting down the connection before even reading, we reduce the payload to the minimum
-                int all_ok = false;
+                unsigned int all_ok = false;
                 
                 do {
                     memset(recv_buf, 0, RECV_BUF_LEN);
@@ -509,7 +509,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
         return -5;      // Needs to be either a sector or a signature/version file
     }
     
-    int connection_tries = 0;
+    unsigned int connection_tries = 0;
     while ((ota_conn_result = ota_get_final_location(repo, file, port, is_ssl)) <= 0 && connection_tries < 3) {
         connection_tries++;
         ERROR("Tries %i", connection_tries);
@@ -524,7 +524,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
     INFO("*** FINAL %s:%i/%s\n", last_host, port, last_location);
     
     int new_connection() {
-        int tries = 0;
+        unsigned int tries = 0;
         int result;
         while ((result = ota_connect(last_host, port, &socket, &ssl, is_ssl)) < 0 && tries < 3) {
             tries++;
@@ -566,7 +566,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
             
             snprintf(recv_buf, RECV_BUF_LEN - 1, REQUESTHEAD"%s"REQUESTTAIL"%s"RANGE"%d-%d%s", last_location, last_host, collected, collected + 4095, CRLFCRLF);
             
-            const int send_bytes = strlen(recv_buf);
+            const unsigned int send_bytes = strlen(recv_buf);
             
             if (is_ssl) {
                 ret = wolfSSL_write(ssl, recv_buf, send_bytes);
@@ -870,7 +870,7 @@ int ota_verify_sign(int start_sector, int filesize, uint8_t* signature) {
     wc_Sha384Final(&sha, hash);
     
     int verify = 0;
-    int ret = wc_ecc_verify_hash(signature, SIGNSIZE, hash, HASHSIZE, &verify, &public_key);
+    wc_ecc_verify_hash(signature, SIGNSIZE, hash, HASHSIZE, &verify, &public_key);
     
     INFO(">>> Result %s", verify == 1 ? "OK" : "ERROR");
 

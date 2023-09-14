@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -171,7 +172,7 @@ typedef struct {
     int32_t listen_fd;
     int32_t max_fd;
     
-    size_t data_available: 16;
+    unsigned int data_available: 16;
     uint8_t client_count: 6;
     bool paired: 1;
     bool is_pairing: 1;
@@ -192,7 +193,7 @@ struct _client_context_t {
     query_param_t *endpoint_params;
     
     char *body;
-    size_t body_length: 16;
+    unsigned int body_length: 16;
     byte permissions;
     uint8_t endpoint: 4;
     bool encrypted: 1;
@@ -400,7 +401,7 @@ void pairing_context_free(pairing_context_t *context) {
 }
 
 static int IRAM homekit_low_dram() {
-    const uint32_t free_heap = xPortGetFreeHeapSize();
+    const uint_fast32_t free_heap = xPortGetFreeHeapSize();
     if (free_heap < HOMEKIT_MIN_FREEHEAP) {
         HOMEKIT_ERROR("DRAM Free HEAP %"HK_LONGINT_F, free_heap);
         return true;
@@ -535,7 +536,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
         if (ch->valid_values.count) {
             json_string(json, "valid-values"); json_array_start(json);
 
-            for (int i=0; i<ch->valid_values.count; i++) {
+            for (unsigned int i = 0; i < ch->valid_values.count; i++) {
                 json_integer(json, ch->valid_values.values[i]);
             }
 
@@ -546,7 +547,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
         if (ch->valid_values_ranges.count) {
             json_string(json, "valid-values-range"); json_array_start(json);
 
-            for (int i=0; i<ch->valid_values_ranges.count; i++) {
+            for (unsigned int i = 0; i < ch->valid_values_ranges.count; i++) {
                 json_array_start(json);
 
                 json_integer(json, ch->valid_values_ranges.ranges[i].start);
@@ -732,7 +733,7 @@ int client_send_encrypted(client_context_t *context, byte *payload, size_t size)
         
         payload_offset += chunk_size;
         
-        const uint32_t free_heap = xPortGetFreeHeapSize();
+        const uint_fast32_t free_heap = xPortGetFreeHeapSize();
         
         r = write(context->socket, homekit_server->encrypted, available + 2);
         
@@ -778,7 +779,7 @@ int client_decrypt(client_context_t *context, byte *payload, size_t payload_size
         }
 
         byte i = 4;
-        int x = context->count_writes++;
+        size_t x = context->count_writes++;
         while (x) {
             nonce[i++] = x % 256;
             x /= 256;
@@ -820,7 +821,7 @@ int client_send(client_context_t *context, byte *data, size_t data_size) {
     if (context->encrypted) {
         r = client_send_encrypted(context, data, data_size);
     } else {
-        const uint32_t free_heap = xPortGetFreeHeapSize();
+        const uint_fast32_t free_heap = xPortGetFreeHeapSize();
         
         r = write(context->socket, data, data_size);
         
@@ -1180,7 +1181,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             }
 
 #ifndef ESP_PLATFORM
-            int low_mdns_buffer = false;
+            unsigned int low_mdns_buffer = false;
             if (xPortGetFreeHeapSize() < 25000) {
                 homekit_mdns_buffer_set(500);
                 low_mdns_buffer = true;
@@ -2156,7 +2157,7 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
     if (bool_endpoint_param("ev"))
         format |= characteristic_format_events;
 
-    int success = true;
+    unsigned int success = true;
 
     char *id = strdup(id_param->value);
     char *ch_id;
@@ -2333,7 +2334,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 
             switch (ch->format) {
                 case HOMEKIT_FORMAT_BOOL: {
-                    int value = false;
+                    unsigned int value = false;
                     if (j_value->type == cJSON_rsf_True) {
                         value = true;
                     } else if (j_value->type == cJSON_rsf_False) {
@@ -2453,8 +2454,8 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 
                     
                     if (ch->valid_values.count) {
-                        int matches = false;
-                        for (int i = 0; i < ch->valid_values.count; i++) {
+                        unsigned int matches = false;
+                        for (unsigned int i = 0; i < ch->valid_values.count; i++) {
                             if (value == ch->valid_values.values[i]) {
                                 matches = true;
                                 break;
@@ -2469,8 +2470,8 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     
 #ifndef HOMEKIT_DISABLE_VALUE_RANGES
                     if (ch->valid_values_ranges.count) {
-                        int matches = false;
-                        for (int i = 0; i < ch->valid_values_ranges.count; i++) {
+                        unsigned int matches = false;
+                        for (unsigned int i = 0; i < ch->valid_values_ranges.count; i++) {
                             if (value >= ch->valid_values_ranges.ranges[i].start &&
                                     value <= ch->valid_values_ranges.ranges[i].end) {
                                 matches = true;
@@ -2587,7 +2588,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 #endif //HOMEKIT_DISABLE_MAXLEN_CHECK
                     
                     char *value = j_value->valuestring;
-                    size_t value_len = strlen(value);
+                    unsigned int value_len = strlen(value);
                     
 #ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
                     if (value_len > max_len) {
@@ -2644,7 +2645,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
 #endif //HOMEKIT_DISABLE_MAXLEN_CHECK
                     
                     char *value = j_value->valuestring;
-                    size_t value_len = strlen(value);
+                    unsigned int value_len = strlen(value);
                     
 #ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
                     if (value_len > max_len) {
@@ -2700,8 +2701,8 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
     }
 
     HAPStatus *statuses = malloc(sizeof(HAPStatus) * cJSON_rsf_GetArraySize(characteristics));
-    int has_errors = false;
-    for (int i = 0; i < cJSON_rsf_GetArraySize(characteristics); i++) {
+    unsigned int has_errors = false;
+    for (unsigned int i = 0; i < cJSON_rsf_GetArraySize(characteristics); i++) {
         cJSON_rsf *j_ch = cJSON_rsf_GetArrayItem(characteristics, i);
 
 #ifdef HOMEKIT_DEBUG
@@ -2733,7 +2734,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
         json_object_start(json1);
         json_string(json1, "characteristics"); json_array_start(json1);
 
-        for (int i = 0; i < cJSON_rsf_GetArraySize(characteristics); i++) {
+        for (unsigned int i = 0; i < cJSON_rsf_GetArraySize(characteristics); i++) {
             cJSON_rsf *j_ch = cJSON_rsf_GetArrayItem(characteristics, i);
 
             json_object_start(json1);
@@ -2931,7 +2932,7 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
             pairing_t *pairing = homekit_storage_find_pairing(device_identifier);
 
             if (pairing) {
-                int is_admin = pairing->permissions & pairing_permissions_admin;
+                unsigned int is_admin = pairing->permissions & pairing_permissions_admin;
                 pairing_free(pairing);
 
                 r = homekit_storage_remove_pairing(device_identifier);
@@ -2999,7 +3000,7 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
             tlv_values_t *response = tlv_new();
             tlv_add_integer_value(response, TLVType_State, 1, 2);
 
-            int first = true;
+            unsigned int first = true;
 
             pairing_iterator_t *it = homekit_storage_pairing_iterator();
             pairing_t *pairing = NULL;
@@ -3320,7 +3321,7 @@ static inline void IRAM homekit_server_accept_client() {
     
     client_context_t* new_context = client_context_new();
     
-    const uint32_t free_heap = xPortGetFreeHeapSize();
+    const uint_fast32_t free_heap = xPortGetFreeHeapSize();
     
     if (homekit_server->client_count >= homekit_server->config->max_clients || !new_context) {
         homekit_remove_oldest_client();
@@ -3745,7 +3746,7 @@ void homekit_server_init(homekit_server_config_t *config) {
         homekit_server->paired = true;
     }
     
-    int server_task_stack = SERVER_TASK_STACK_PAIR;
+    unsigned int server_task_stack = SERVER_TASK_STACK_PAIR;
 
 #ifndef ESP_PLATFORM
     if (homekit_server->paired) {
@@ -3762,7 +3763,7 @@ void homekit_server_reset() {
     homekit_storage_reset();
 }
 
-void homekit_remove_extra_pairing(const int last_keep) {
+void homekit_remove_extra_pairing(const unsigned int last_keep) {
     homekit_storage_remove_extra_pairing(last_keep);
 }
 

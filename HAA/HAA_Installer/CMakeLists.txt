@@ -57,6 +57,12 @@ if(HAA_SINGLE_CORE)
     )
 endif()
 
+if(HAA_XTAL26)
+    list(APPEND EXTRA_COMPILE_OPTIONS
+        -DHAA_XTAL26
+    )
+endif()
+
 if(HAABOOT)
     list(APPEND EXTRA_COMPILE_OPTIONS
         -DHAABOOT

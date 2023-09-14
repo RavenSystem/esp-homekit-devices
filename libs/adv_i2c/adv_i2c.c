@@ -27,6 +27,7 @@
 #include <esp8266.h>
 #include <espressif/esp_system.h>
 #include <semphr.h>
+#include <stdint.h>
 
 //#define I2C_DEBUG true
 
@@ -106,9 +107,9 @@ int adv_i2c_init_hz(uint8_t bus, uint8_t scl_pin, uint8_t sda_pin, uint32_t freq
     }
 
 #if I2C_USE_GPIO16 == 1
-    const int I2C_MAX_PIN = 16;
+    const unsigned int I2C_MAX_PIN = 16;
 #else
-    const int I2C_MAX_PIN = 15;
+    const unsigned int I2C_MAX_PIN = 15;
 #endif
 
     if (scl_pin > I2C_MAX_PIN || sda_pin > I2C_MAX_PIN)
@@ -376,7 +377,7 @@ static bool i2c_read_bit(uint8_t bus)
 
 bool i2c_write(uint8_t bus, uint8_t byte)
 {
-    for (int bit = 0; bit < 8; bit++) {
+    for (unsigned int bit = 0; bit < 8; bit++) {
         i2c_write_bit(bus, (byte & 0x80) != 0);
         byte <<= 1;
     }
@@ -386,7 +387,7 @@ bool i2c_write(uint8_t bus, uint8_t byte)
 uint8_t i2c_read(uint8_t bus, bool ack)
 {
     uint8_t byte = 0;
-    for (int bit = 0; bit < 8; bit++) {
+    for (unsigned int bit = 0; bit < 8; bit++) {
         byte = ((byte << 1)) | (i2c_read_bit(bus));
     }
     i2c_write_bit(bus, ack);
@@ -400,7 +401,7 @@ int private_adv_i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *
         if (!i2c_write(bus, slave_addr << 1))
             goto error;
         if (data != NULL) {
-            for (unsigned int i = 0; i < data_len; i++) {
+            for (size_t i = 0; i < data_len; i++) {
                 if (!i2c_write(bus, data[i]))
                     goto error;
             }
@@ -439,7 +440,7 @@ int private_adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *d
         i2c_start(bus);
         if (!i2c_write(bus, slave_addr << 1 | 1)) // Slave address + read
             goto error;
-        while(len) {
+        while (len) {
             *buf = i2c_read(bus, len == 1);
             buf++;
             len--;
@@ -459,18 +460,18 @@ error:
     return -EIO;
 }
 
-int adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t len) {
-    return private_adv_i2c_slave_read(bus, slave_addr, data, data_len, buf, len, ADV_I2C_SEMAPHORE_TIMEOUT);
+int adv_i2c_slave_read(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t buf_len) {
+    return private_adv_i2c_slave_read(bus, slave_addr, data, data_len, buf, buf_len, ADV_I2C_SEMAPHORE_TIMEOUT);
 }
 
-int adv_i2c_slave_read_no_wait(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t len) {
-    return private_adv_i2c_slave_read(bus, slave_addr, data, data_len, buf, len, 0);
+int adv_i2c_slave_read_no_wait(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, uint8_t *buf, size_t buf_len) {
+    return private_adv_i2c_slave_read(bus, slave_addr, data, data_len, buf, buf_len, 0);
 }
 
-int adv_i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t len) {
-    return private_adv_i2c_slave_write(bus, slave_addr, data, data_len, buf, len, ADV_I2C_SEMAPHORE_TIMEOUT);
+int adv_i2c_slave_write(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t buf_len) {
+    return private_adv_i2c_slave_write(bus, slave_addr, data, data_len, buf, buf_len, ADV_I2C_SEMAPHORE_TIMEOUT);
 }
 
-int adv_i2c_slave_write_no_wait(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t len) {
-    return private_adv_i2c_slave_write(bus, slave_addr, data, data_len, buf, len, 0);
+int adv_i2c_slave_write_no_wait(uint8_t bus, uint8_t slave_addr, const uint8_t *data, const size_t data_len, const uint8_t *buf, size_t buf_len) {
+    return private_adv_i2c_slave_write(bus, slave_addr, data, data_len, buf, buf_len, 0);
 }

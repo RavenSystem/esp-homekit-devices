@@ -109,7 +109,8 @@ void init_task() {
         ota_reboot(0);
     }
 #else
-    if (running_partition->subtype != ESP_PARTITION_SUBTYPE_APP_OTA_1 && running_partition->subtype != ESP_PARTITION_SUBTYPE_APP_FACTORY) {
+    if (running_partition->subtype != ESP_PARTITION_SUBTYPE_APP_OTA_1 &&
+        running_partition->subtype != ESP_PARTITION_SUBTYPE_APP_FACTORY) {
         ota_reboot(1);
     }
 #endif // HAABOOT
@@ -168,6 +169,20 @@ void ota_task(void *arg) {
     
     INFO(" installed");
 #endif  // HAABOOT
+    
+/*
+#ifdef ESP_PLATFORM
+    // Show ESP-IDF Partitions
+    esp_partition_iterator_t it = esp_partition_find(ESP_PARTITION_TYPE_ANY, ESP_PARTITION_SUBTYPE_ANY, NULL);
+    
+    for (; it != NULL; it = esp_partition_next(it)) {
+        const esp_partition_t *part = esp_partition_get(it);
+        INFO("Partition '%s' at 0x%02X, Size 0x%02X, Type 0x%02X, Sub 0x%02X", part->label, part->address, part->size, part->type, part->subtype);
+    }
+    
+    esp_partition_iterator_release(it);
+#endif
+*/
     
     ota_init(user_repo, is_ssl);
     

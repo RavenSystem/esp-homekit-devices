@@ -101,7 +101,7 @@ int tlv_get_integer_value(const tlv_values_t *values, byte type, int def) {
         return def;
 
     int x = 0;
-    for (int i=t->size-1; i>=0; i--) {
+    for (int i = t->size - 1; i >= 0; i--) {
         x = (x << 8) + t->value[i];
     }
     return x;

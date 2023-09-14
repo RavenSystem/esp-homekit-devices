@@ -18,7 +18,7 @@
 #define OTAREPO                 "github.com/RavenSystem/haa/releases/latest/download"
 
 #ifdef ESP_PLATFORM
-#define HAA_FINAL_NAME          "_"HAA_CHIP_NAME""HAA_SINGLE_CORE_SUFIX
+#define HAA_FINAL_NAME          "_"HAA_CHIP_NAME""HAA_SINGLE_CORE_SUFIX""HAA_XTAL26_SUFIX
 #else
 #define HAA_FINAL_NAME          ""
 #endif

@@ -40,6 +40,11 @@
 #include "driver/temperature_sensor.h"
 #endif
 
+#if defined(ESP_HAS_GPIO_GLITCH_FILTER) \
+    || defined(ESP_HAS_GPIO_FLEX_FILTER)
+#include "driver/gpio_filter.h"
+#endif
+
 #ifndef CONFIG_IDF_TARGET_ESP32C2
 #include "driver/rmt_tx.h"
 #include "driver/rmt_encoder.h"
@@ -152,6 +157,8 @@ main_config_t main_config = {
     
     .uart_receiver_data = NULL,
     .uart_recv_is_working = false,
+    
+    .mcp23017s = NULL,
 };
 
 #ifdef ESP_PLATFORM
@@ -273,7 +280,7 @@ void set_unused_gpios() {
 
 #ifndef ESP_PLATFORM
 
-    for (int i = 0; i < MAX_GPIOS; i++) {
+    for (unsigned int i = 0; i < MAX_GPIOS; i++) {
         if (i == 6) {
             i += 6;
         }
@@ -298,39 +305,80 @@ mcp23017_t* mcp_find_by_index(const int index) {
     return mcp23017;
 }
 
+void mcp_clean_inputs_only() {
+    mcp23017_t* mcp23017_current = main_config.mcp23017s;
+    mcp23017_t* mcp23017_remove = NULL;
+    while (mcp23017_current && mcp23017_current->next) {
+        if (!mcp23017_current->next->outs) {
+            mcp23017_remove = mcp23017_current->next;
+            mcp23017_current->next = mcp23017_current->next->next;
+        }
+        
+        mcp23017_current = mcp23017_current->next;
+        
+        if (mcp23017_remove) {
+            free(mcp23017_remove);
+            mcp23017_remove = NULL;
+        }
+    }
+    
+    if (main_config.mcp23017s && !main_config.mcp23017s->outs) {
+        mcp23017_remove = main_config.mcp23017s;
+        main_config.mcp23017s = main_config.mcp23017s->next;
+        free(mcp23017_remove);
+    }
+}
+
 void extended_gpio_write(const int extended_gpio, bool value) {
     if (extended_gpio < 100) {
         gpio_write(extended_gpio, value);
         
-    } else {    // MCP23017
+    } else {    // MCP23017 or Shift Register
         const unsigned int gpio_type = extended_gpio / 100;
         mcp23017_t* mcp23017 = mcp_find_by_index(gpio_type);
         
         if (mcp23017) {
             unsigned int gpio = extended_gpio % 100;
-            uint8_t mcp_outs = mcp23017->a_outs;
-            uint8_t mcp_reg = 0x14;
-            if (gpio > 7) {
-                gpio -= 8;
-                mcp_outs = mcp23017->b_outs;
-                mcp_reg = 0x15;
-            }
-            
+            unsigned int out_group = gpio >> 3;
             const uint8_t bit = 1 << gpio;
             
             if (value) {
-                mcp_outs |= bit;
-            } else if ((mcp_outs & bit) != 0) {
-                mcp_outs ^= bit;
+                mcp23017->outs[out_group] |= bit;
+            } else if ((mcp23017->outs[out_group] & bit) != 0) {
+                mcp23017->outs[out_group] ^= bit;
             }
             
-            if (mcp_reg == 0x14) {
-                mcp23017->a_outs = mcp_outs;
-            } else {
-                mcp23017->b_outs = mcp_outs;
+            if (mcp23017->bus < 100) { // MCP23017
+                uint8_t mcp_reg = 0x14;
+                if (gpio > 7) {
+                    mcp_reg = 0x15;
+                }
+                
+                adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &mcp_reg, 1, &mcp23017->outs[out_group], 1);
+                
+            } else {    // Shift Register
+                const uint8_t clock_gpio = mcp23017->bus - 100;
+                
+                unsigned int bit_shift = 0;
+                out_group = 0;
+                for (unsigned int i = 0; i < mcp23017->len; i++) {
+                    gpio_write(mcp23017->addr, (bool) (mcp23017->outs[out_group] & (1 << bit_shift)));
+                    
+                    gpio_write(clock_gpio, true);
+                    gpio_write(clock_gpio, false);
+                    
+                    bit_shift++;
+                    if (bit_shift == 8) {
+                        bit_shift = 0;
+                        out_group++;
+                    }
+                }
+                
+                if (mcp23017->latch_gpio >= 0) {
+                    gpio_write(mcp23017->latch_gpio, true);
+                    gpio_write(mcp23017->latch_gpio, false);
+                }
             }
-            
-            adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &mcp_reg, 1, &mcp_outs, 1);
         }
     }
 }
@@ -382,7 +430,7 @@ const char http_header1[] = " HTTP/1.1\r\nHost: ";
 const char http_header2[] = "\r\nUser-Agent: HAA/"HAA_FIRMWARE_VERSION"\r\nConnection: close\r\n";
 const char http_header_len[] = "Content-length: ";
 
-int new_net_con(char* host, uint16_t port_n, bool is_udp, uint8_t* payload, size_t payload_len, int* s, uint8_t rcvtimeout_s, int rcvtimeout_us) {
+int new_net_con(char* host, uint16_t port_n, bool is_udp, uint8_t* payload, unsigned int payload_len, int* s, uint8_t rcvtimeout_s, int rcvtimeout_us) {
     struct addrinfo* res = NULL;
     struct addrinfo hints;
     int result;
@@ -438,9 +486,9 @@ void do_actions(ch_group_t* ch_group, uint8_t action);
 void do_wildcard_actions(ch_group_t* ch_group, uint8_t index, const float action_value);
 
 #ifdef HAA_DEBUG
-uint32_t free_heap = 0;
+uint_fast32_t free_heap = 0;
 void free_heap_watchdog() {
-    uint32_t size = xPortGetFreeHeapSize();
+    uint_fast32_t size = xPortGetFreeHeapSize();
     if (size != free_heap) {
         free_heap = size;
         INFO("* Free Heap = %"HAA_LONGINT_F, free_heap);
@@ -453,7 +501,9 @@ void free_heap_watchdog() {
         
         free(space);
         INFO("* Max chunk = %"HAA_LONGINT_F, size + 4);
+#ifndef ESP_PLATFORM
         INFO("* CPU Speed = %"HAA_LONGINT_F, sdk_system_get_cpu_freq());
+#endif
         stats_display();
     }
 }
@@ -490,14 +540,14 @@ uint16_t get_absolut_index(const uint16_t base, const int16_t rel_index) {
 }
 
 int process_hexstr(const char* string, uint8_t** output_hex_string, unistring_t** unistrings) {
-    const int len = strlen(string) >> 1;
+    const unsigned int len = strlen(string) >> 1;
     uint8_t* hex_string = malloc(len);
     //memset(hex_string, 0, len);
     
     char buffer[3];
     buffer[2] = 0;
     
-    for (int i = 0; i < len; i++) {
+    for (unsigned int i = 0; i < len; i++) {
         buffer[0] = string[i << 1];
         buffer[1] = string[(i << 1) + 1];
                            
@@ -523,20 +573,20 @@ ch_group_t* new_ch_group(const uint8_t chs, const uint8_t nums_i, const uint8_t 
     memset(ch_group, 0, sizeof(*ch_group));
     
     if (chs > 0) {
-        const size_t size = chs * sizeof(homekit_characteristic_t*);
+        const unsigned int size = chs * sizeof(homekit_characteristic_t*);
         ch_group->chs = chs;
         ch_group->ch = (homekit_characteristic_t**) malloc(size);
         memset(ch_group->ch, 0, size);
     }
     
     if (nums_i > 0) {
-        const size_t size = nums_i * sizeof(int8_t);
+        const unsigned int size = nums_i * sizeof(int8_t);
         ch_group->num_i = (int8_t*) malloc(size);
         memset(ch_group->num_i, 0, size);
     }
     
     if (nums_f > 0) {
-        const size_t size = nums_f * sizeof(float);
+        const unsigned int size = nums_f * sizeof(float);
         ch_group->num_f = (float*) malloc(size);
         memset(ch_group->num_f, 0, size);
     }
@@ -544,7 +594,7 @@ ch_group_t* new_ch_group(const uint8_t chs, const uint8_t nums_i, const uint8_t 
     if (last_wildcard_actions > 0) {
         ch_group->last_wildcard_action = (float*) malloc(last_wildcard_actions * sizeof(float));
         
-        for (int i = 0; i < last_wildcard_actions; i++) {
+        for (unsigned int i = 0; i < last_wildcard_actions; i++) {
             ch_group->last_wildcard_action[i] = NO_LAST_WILDCARD_ACTION;
         }
     }
@@ -561,7 +611,7 @@ ch_group_t* new_ch_group(const uint8_t chs, const uint8_t nums_i, const uint8_t 
 ch_group_t* ch_group_find(homekit_characteristic_t* ch) {
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
-        for (int i = 0; i < ch_group->chs; i++) {
+        for (unsigned int i = 0; i < ch_group->chs; i++) {
             if (ch_group->ch[i] == ch &&
                 ch_group->serv_type != SERV_TYPE_DATA_HISTORY &&
                 (ch_group->serv_type != SERV_TYPE_FREE_MONITOR ||
@@ -935,6 +985,8 @@ void wifi_reconnection_task() {
         
         main_config.wifi_status = WIFI_STATUS_CONNECTING;
         
+        vTaskDelay(1);
+        
         INFO("Wifi connecting");
         
         sdk_wifi_station_connect();
@@ -1022,7 +1074,7 @@ void set_main_wifi_status_connecting() {
 void wifi_watchdog() {
     //INFO("Wifi status %i, sleep mode %i", main_config.wifi_status, sdk_wifi_get_sleep_type());
     const int current_ip = wifi_config_get_ip();
-    int wifi_error = false;
+    unsigned int wifi_error = false;
     
     if (main_config.wifi_status == WIFI_STATUS_CONNECTED && current_ip >= 0 && main_config.wifi_error_count <= main_config.wifi_ping_max_errors) {
 #ifdef ESP_PLATFORM
@@ -1537,7 +1589,7 @@ float byte_array_to_num(uint8_t* data, const uint8_t array_size, const uint8_t t
             value = (value << 8) | data[i];
         }
     } else {    // Big endian
-        for (int i = 0; i < array_size; i++) {
+        for (unsigned int i = 0; i < array_size; i++) {
             value = (value << 8) | data[i];
         }
     }
@@ -1546,7 +1598,7 @@ float byte_array_to_num(uint8_t* data, const uint8_t array_size, const uint8_t t
         uint32_t sign_mask = (1 << ((array_size * 8) - 1));
         
         if (value & sign_mask) {
-            for (int i = array_size; i < 4; i++) {
+            for (unsigned int i = array_size; i < 4; i++) {
                 value |= (0xFF << (8 * i));
             }
         }
@@ -1560,13 +1612,12 @@ float byte_array_to_num(uint8_t* data, const uint8_t array_size, const uint8_t t
 // --- POWER MONITOR
 void power_monitor_task(void* args) {
     ch_group_t* ch_group = args;
-    ch_group->is_working = true;
     
     float voltage = 0;
     float current = 0;
     float power = 0;
     
-    int get_data = true;
+    unsigned int get_data = true;
     
     const uint8_t pm_sensor_type = PM_SENSOR_TYPE;
     if (pm_sensor_type <= 1) {
@@ -1724,10 +1775,14 @@ void power_monitor_timer_worker(TimerHandle_t xTimer) {
         ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
         if (ch_group->main_enabled) {
             if (!ch_group->is_working) {
+                ch_group->is_working = true;
                 if (xTaskCreate(power_monitor_task, "PM", POWER_MONITOR_TASK_SIZE, (void*) ch_group, POWER_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
+                    ch_group->is_working = false;
                     homekit_remove_oldest_client();
                     ERROR("New PM");
                 }
+            } else {
+                ERROR("<%i> Overlaps", ch_group->serv_index);
             }
         }
     } else {
@@ -1942,7 +1997,7 @@ void set_zones_task(void* args) {
             }
         }
         
-        for (int i = 0; i < 2; i++) {
+        for (unsigned int i = 0; i < 2; i++) {
             ch_group = main_config.ch_groups;
             while (ch_group) {
                 if (ch_group->serv_type == SERV_TYPE_THERMOSTAT && iairzoning_group->serv_index == (uint8_t) TH_IAIRZONING_CONTROLLER) {
@@ -2028,7 +2083,7 @@ void process_th_task(void* args) {
     INFO("<%i> TH Process", ch_group->serv_index);
     
     const int th_current_action = THERMOSTAT_CURRENT_ACTION;
-    int mode_has_changed = false;
+    unsigned int mode_has_changed = false;
     
     void heating(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
         INFO("<%i> Heating", ch_group->serv_index);
@@ -2176,7 +2231,7 @@ void process_th_task(void* args) {
         } else {    // THERMOSTAT_TARGET_MODE_AUTO
             const float mid_target = (TH_HEATER_TARGET_TEMP_FLOAT + TH_COOLER_TARGET_TEMP_FLOAT) / 2.000f;
             
-            int is_heater = false;
+            unsigned int is_heater = false;
             if (TH_MODE_INT == THERMOSTAT_MODE_OFF) {
                 if (SENSOR_TEMPERATURE_FLOAT < mid_target) {
                     is_heater = true;
@@ -2224,7 +2279,7 @@ void process_th_task(void* args) {
             do_wildcard_actions(ch_group, 3, TH_COOLER_TARGET_TEMP_FLOAT);
         }
     } else {
-        for (int i = 2; i <= 3; i++) {
+        for (unsigned int i = 2; i <= 3; i++) {
             ch_group->last_wildcard_action[i] = NO_LAST_WILDCARD_ACTION;
         }
     }
@@ -2574,7 +2629,7 @@ void process_hum_task(void* args) {
             do_wildcard_actions(ch_group, 3, HM_DEHUM_TARGET_FLOAT);
         }
     } else {
-        for (int i = 2; i <= 3; i++) {
+        for (unsigned int i = 2; i <= 3; i++) {
             ch_group->last_wildcard_action[i] = NO_LAST_WILDCARD_ACTION;
         }
     }
@@ -2754,11 +2809,10 @@ void temperature_task(void* args) {
     }
     
     ch_group_t* ch_group = args;
-    ch_group->is_working = true;
     
     float temperature_value = 0.0;
     float humidity_value = 0.0;
-    int get_temp = false;
+    unsigned int get_temp = false;
     unsigned int iairzoning = 0;
     
     if (ch_group->serv_type == SERV_TYPE_IAIRZONING) {
@@ -2971,10 +3025,14 @@ void temperature_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
         ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
         if (!ch_group->is_working) {
+            ch_group->is_working = true;
             if (xTaskCreate(temperature_task, "TEM", TEMPERATURE_TASK_SIZE, (void*) ch_group, TEMPERATURE_TASK_PRIORITY, NULL) != pdPASS) {
+                ch_group->is_working = false;
                 homekit_remove_oldest_client();
                 ERROR("New TEM");
             }
+        } else {
+            ERROR("<%i> Overlaps", ch_group->serv_index);
         }
     } else {
         ERROR("HK pair");
@@ -2997,7 +3055,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
     // Helper function to sum arrays
     inline float array_sum(float arr[]) {
         float sum = arr[0];
-        for (int i = 1; i < 4; i++) {
+        for (unsigned int i = 1; i < 4; i++) {
             sum = sum + arr[i];
         }
         
@@ -3005,9 +3063,9 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
     }
 
     // Helper function to find max of an array
-    float array_max(float arr[], const int num_elements) {
+    float array_max(float arr[], const unsigned int num_elements) {
         float max = arr[0];
-        for (int i = 1; i < num_elements; i++) {
+        for (unsigned int i = 1; i < num_elements; i++) {
             if (arr[i] > max) {
                 max = arr[i];
             }
@@ -3019,7 +3077,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
     // Helper function to find min of an array
     inline float array_min(float arr[]) {
         float min = arr[0];
-        for (int i = 1; i < 3; i++) {
+        for (unsigned int i = 1; i < 3; i++) {
             if (arr[i] < min) {
                 min = arr[i];
             }
@@ -3031,7 +3089,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
     // Helper function to perform dot product
     inline float array_dot(float arr1[], float arr2[]) {
         float sum = arr1[0] * arr2[0];
-        for (int i = 1; i < 5; i++) {
+        for (unsigned int i = 1; i < 5; i++) {
             sum += arr1[i] * arr2[i];
         }
         
@@ -3039,21 +3097,21 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
     }
 
     // Helper function to multiply array by a constant
-    void array_multiply(float arr[], const float scalar, const int num_elements) {
-        for (int i = 0; i < num_elements; i++) {
+    void array_multiply(float arr[], const float scalar, const unsigned int num_elements) {
+        for (unsigned int i = 0; i < num_elements; i++) {
             arr[i] *= scalar;
         }
     }
 
     // Helper function to asign array componenets
-    void array_equals(float arr[], float vals[], const int num_elements) {
-        for (int i = 0; i < num_elements; i++) {
+    void array_equals(float arr[], float vals[], const unsigned int num_elements) {
+        for (unsigned int i = 0; i < num_elements; i++) {
             arr[i] = vals[i];
         }
     }
 
     // Helper function to rescale array so that max is 1
-    void array_rescale(float arr[], const int num_elements) {
+    void array_rescale(float arr[], const unsigned int num_elements) {
         const float amax = array_max(arr, num_elements);
         if (amax != 0) {
             array_multiply(arr, 1.0f / amax, num_elements);
@@ -3070,7 +3128,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
         L[2] = 1 - (L[0] + L[1]);
         // Deal with numerical imprecision; may want to switch to doubles but let's try this instread
         // Snaps to 0 and 1 when close. Kinda makes sense to di this anyway considering that the PWM is finite
-        for (int i = 0; i < 3; i++) {
+        for (unsigned int i = 0; i < 3; i++) {
             if (fabsf(L[i]) < 1E-4) {
                 L[i] = 0;
             } else if (fabsf(L[i]-1) < 1E-4) {
@@ -3102,10 +3160,10 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
 
     // Multiply 3x3 square matrices together
     inline void matrix_matrix_multiply(float mat1[3][3], float mat2[3][3], float res[3][3]) {
-        for (int i = 0; i < 3; i++) {
-            for (int j = 0; j < 3; j++) {
+        for (unsigned int i = 0; i < 3; i++) {
+            for (unsigned int j = 0; j < 3; j++) {
                 res[i][j] = 0;
-                for (int k = 0; k < 3; k++)
+                for (unsigned int k = 0; k < 3; k++)
                     res[i][j] += mat1[i][k] * mat2[k][j];
             }
         }
@@ -3144,9 +3202,8 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
 
     // helper dunction to do p = a + b
     void array_subtract(float p[2], float a[2], float b[2]) {
-        for (int i = 0; i < 2; i++) {
-            p[i] = a[i] - b[i];
-        }
+        p[0] = a[0] - b[0];
+        p[1] = a[1] - b[1];
     }
     
     // *** HSI TO RGBW FUNCTION ***
@@ -3219,7 +3276,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
     
     // (2) convert to XYZ then to xy(ignore Y). Also now apply gamma correction.
     float gc[3];
-    for (int i = 0; i < 3; i++) {
+    for (unsigned int i = 0; i < 3; i++) {
         gc[i] = (wheel_rgb[i] > 0.04045f) ? fast_precise_pow((wheel_rgb[i] + 0.055f) / (1.0f + 0.055f), 2.4f) : (wheel_rgb[i] / 12.92f);
     }
     
@@ -3258,7 +3315,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
         float* LED_RGB[3] = { R, G, B };
         L_DEBUG("LED RGB: { {%g, %g}, {%g, %g}, {%g, %g} }", LED_RGB[0][0], LED_RGB[0][1], LED_RGB[1][0], LED_RGB[1][1], LED_RGB[2][0], LED_RGB[2][1]);
 
-        for (int i = 0; i < 3; i++) {
+        for (unsigned int i = 0; i < 3; i++) {
             int j = ((i + 1) % 3);
             int k = ((i + 2) % 3); //had to adapt a bit for 0-based indexing
             float pp[2];
@@ -3377,14 +3434,14 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
         // RGBW assumes W is in CW position
         float coeffs1[4];
         getWeights(coeffs1, p, R, G, B, CW);
-        for (int i = 0; i < 4; i++) {
+        for (unsigned int i = 0; i < 4; i++) {
             coeffs[i] += coeffs1[i];
         }
         // If WW, then compute RGBW again with WW, add to the main coeff list. Can easlily add support for any LEDs inside the gamut. The only thing I am worried about is that the RGB is always pulling float-duty with two vertexes instead of so
         if (LIGHTBULB_CHANNELS == 5) {
             float coeffs2[4];
             getWeights(coeffs2, p, R, G, B, WW);
-            for (int i = 0; i < 3; i++) {
+            for (unsigned int i = 0; i < 3; i++) {
                 coeffs[i] += coeffs2[i];
             }
             coeffs[4] += coeffs2[3];
@@ -3393,7 +3450,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
         L_DEBUG("Coeffs before flux: %g, %g, %g, %g, %g",coeffs[0],coeffs[1],coeffs[2],coeffs[3],coeffs[4]);
         
         // (3.a.0) Correct for differences in intrinsic flux; needed before extraRGB step because we must balance RGB to whites first to see what headroom is left
-        for (int i = 0; i < 5; i++) {
+        for (unsigned int i = 0; i < 5; i++) {
             if (lightbulb_group->flux[i] != 0) {
                 coeffs[i] /= lightbulb_group->flux[i];
             } else {
@@ -3414,7 +3471,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
         // Adjust the extra RGB according to relative flux; need to rescale those fluxes to >=1 in order to only shrink components, not go over calculated allotment
         float rflux[3] =  { lightbulb_group->flux[0], lightbulb_group->flux[1], lightbulb_group->flux[2] };
         array_multiply(rflux, 1.0f / array_min(rflux), 3); // assumes nonzero fluxes
-        for (int i = 0; i < 3; i++) {
+        for (unsigned int i = 0; i < 3; i++) {
             if (rflux[i] != 0) {
                 extraRGB[i] /= rflux[i];
             } else {
@@ -3445,7 +3502,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
         coeffs[2] += extraRGB[2];
     
     } else { // (3.b.1) Outside of gamut; easiest thing to do is to clamp the barycentric coordinates and renormalize... this might explain some bluish purples?
-        for (int i = 0; i < 3; i++) {
+        for (unsigned int i = 0; i < 3; i++) {
             if (targetRGB[i] < 0) {
                 targetRGB[i] = 0;
             }
@@ -3473,7 +3530,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
     }
 
     // (6) Assign the target colors to lightbulb group struct, now in fraction of PWM_SCALE. This min function is just a final check, it should not ever go over PWM_SCALE.
-    for (int n = 0; n < 5; n++) {
+    for (unsigned int n = 0; n < 5; n++) {
         lightbulb_group->target[n]  = HAA_MIN(floorf(coeffs[n] * brightness), PWM_SCALE);
     }
 
@@ -3495,7 +3552,7 @@ void white2hsi(uint16_t t, ch_group_t* ch_group) {
 }
 */
 void rgbw_set_timer_worker() {
-    int all_channels_ready = true;
+    unsigned int all_channels_ready = true;
     
     lightbulb_group_t* lightbulb_group = main_config.lightbulb_groups;
     
@@ -3503,8 +3560,8 @@ void rgbw_set_timer_worker() {
         if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL) {
             lightbulb_group->has_changed = false;
             
-            for (int i = 0; i < LIGHTBULB_CHANNELS; i++) {
-                int pwm_needs_update = false;
+            for (unsigned int i = 0; i < LIGHTBULB_CHANNELS; i++) {
+                unsigned int pwm_needs_update = false;
                 
                 if (private_abs(lightbulb_group->target[i] - lightbulb_group->current[i]) > private_abs(LIGHTBULB_STEP_VALUE[i])) {
                     all_channels_ready = false;
@@ -3539,7 +3596,7 @@ void rgbw_set_timer_worker() {
         uint8_t* colors = malloc(addressled->max_range);
         if (colors) {
             memset(colors, 0, addressled->max_range);
-            bool has_changed = false;
+            unsigned int has_changed = false;
             
             lightbulb_group = main_config.lightbulb_groups;
             while (lightbulb_group) {
@@ -3548,8 +3605,8 @@ void rgbw_set_timer_worker() {
                         has_changed = true;
                     }
                     
-                    for (int p = LIGHTBULB_RANGE_START; p < LIGHTBULB_RANGE_END; p = p + LIGHTBULB_CHANNELS) {
-                        for (int i = 0; i < LIGHTBULB_CHANNELS; i++) {
+                    for (unsigned int p = LIGHTBULB_RANGE_START; p < LIGHTBULB_RANGE_END; p = p + LIGHTBULB_CHANNELS) {
+                        for (unsigned int i = 0; i < LIGHTBULB_CHANNELS; i++) {
                             uint8_t color = lightbulb_group->current[addressled->map[i]] >> 8;
                             memcpy(colors + p + i, &color, 1);
                         }
@@ -3656,7 +3713,7 @@ void lightbulb_no_task(ch_group_t* ch_group) {
         // Turn OFF
         lightbulb_group->autodimmer = 0;
         
-        for (int i = 0; i < 5; i++) {
+        for (unsigned int i = 0; i < 5; i++) {
             lightbulb_group->target[i] = 0;
         }
         
@@ -3680,16 +3737,16 @@ void lightbulb_no_task(ch_group_t* ch_group) {
         ) {
         if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL) {
             int max_diff = private_abs(lightbulb_group->current[0] - lightbulb_group->target[0]);
-            for (int i = 1; i < LIGHTBULB_CHANNELS; i++) {
+            for (unsigned int i = 1; i < LIGHTBULB_CHANNELS; i++) {
                 const int diff = private_abs(lightbulb_group->current[i] - lightbulb_group->target[i]);
                 if (diff > max_diff) {
                     max_diff = diff;
                 }
             }
             
-            const int steps = (max_diff / lightbulb_group->step) + 1;
+            const unsigned int steps = (max_diff / lightbulb_group->step) + 1;
             
-            for (int i = 0; i < LIGHTBULB_CHANNELS; i++) {
+            for (unsigned int i = 0; i < LIGHTBULB_CHANNELS; i++) {
                 if (lightbulb_group->target[i] == lightbulb_group->current[i]) {
                     LIGHTBULB_STEP_VALUE[i] = 0;
                 } else {
@@ -4242,7 +4299,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
             if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_OPENING) {
                 if (WINDOW_COVER_VIRTUAL_STOP == 1 && value.int_value == 0) {
                     window_cover_stop(ch_group);
-                    vTaskDelay(5);
+                    //vTaskDelay(5);
                 } else {
                     do_actions(ch_group, WINDOW_COVER_CLOSING_FROM_MOVING);
                     
@@ -4270,7 +4327,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
             if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_CLOSING) {
                 if (WINDOW_COVER_VIRTUAL_STOP == 1 && value.int_value == 100) {
                     window_cover_stop(ch_group);
-                    vTaskDelay(5);
+                    //vTaskDelay(5);
                 } else {
                     do_actions(ch_group, WINDOW_COVER_OPENING_FROM_MOVING);
                     
@@ -4412,7 +4469,7 @@ void hkc_fan_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     if (ch_group->main_enabled) {
         INFO("<%i> -> FAN", ch_group->serv_index);
         
-        const int old_on_value = ch_group->ch[0]->value.bool_value;
+        const unsigned int old_on_value = ch_group->ch[0]->value.bool_value;
         
         ch->value = value;
         
@@ -4457,7 +4514,6 @@ void hkc_fan_status_setter(homekit_characteristic_t* ch0, const homekit_value_t 
 // --- LIGHT SENSOR
 void light_sensor_task(void* args) {
     ch_group_t* ch_group = (ch_group_t*) args;
-    ch_group->is_working = true;
     
     float luxes = 0.0001f;
     
@@ -4513,10 +4569,14 @@ void light_sensor_timer_worker(TimerHandle_t xTimer) {
     if (!homekit_is_pairing()) {
         ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
         if (!ch_group->is_working) {
+            ch_group->is_working = true;
             if (xTaskCreate(light_sensor_task, "LUX", LIGHT_SENSOR_TASK_SIZE, (void*) ch_group, LIGHT_SENSOR_TASK_PRIORITY, NULL) != pdPASS) {
+                ch_group->is_working = false;
                 homekit_remove_oldest_client();
                 ERROR("New LUX");
             }
+        } else {
+            ERROR("<%i> Overlaps", ch_group->serv_index);
         }
     } else {
         ERROR("HK pair");
@@ -4783,7 +4843,7 @@ void battery_manager(homekit_characteristic_t* ch, int value, bool is_free_monit
 }
 
 bool set_hkch_value(homekit_characteristic_t* ch_target, const float value) {
-    int has_changed = false;
+    unsigned int has_changed = false;
     
     switch (ch_target->value.format) {
         case HOMEKIT_FORMAT_BOOL:
@@ -4841,7 +4901,7 @@ bool set_hkch_value(homekit_characteristic_t* ch_target, const float value) {
     return has_changed;
 }
 
-void* force_alloc(const size_t len) {
+void* force_alloc(const unsigned int len) {
     unsigned int errors = 0;
     void* new_char = NULL;
     
@@ -4860,7 +4920,7 @@ void* force_alloc(const size_t len) {
 }
 
 // --- FREE MONITOR
-bool find_patterns(pattern_t* pattern_base, uint8_t** bytes, int bytes_len) {
+bool find_patterns(pattern_t* pattern_base, uint8_t** bytes, unsigned int bytes_len) {
     pattern_t* pattern = pattern_base;
     
     uint8_t* bytes_found = *bytes;
@@ -4870,13 +4930,13 @@ bool find_patterns(pattern_t* pattern_base, uint8_t** bytes, int bytes_len) {
     }
     
     while (pattern) {
-        int is_found = false;
+        unsigned int is_found = false;
         if (pattern->len > 0) {
             if (pattern->len > bytes_len) {
                 return false;
             }
             
-            for (int pos = 0; pos <= (bytes_len - pattern->len); pos++) {
+            for (unsigned int pos = 0; pos <= (bytes_len - pattern->len); pos++) {
                 if ((*bytes_found == *pattern->pattern) && memcmp(bytes_found, pattern->pattern, pattern->len) == 0) {
                     is_found = true;
                     bytes_found += pattern->len;
@@ -4994,7 +5054,6 @@ void free_monitor_task(void* args) {
     
     if (args) {
         ch_group = args;
-        ch_group->is_working = true;
     } else {
         uart_receiver_data_t* uart_receiver_data = main_config.uart_receiver_data;
         while (uart_receiver_data) {
@@ -5016,9 +5075,9 @@ void free_monitor_task(void* args) {
         if (ch_group->serv_type == SERV_TYPE_FREE_MONITOR ||
             ch_group->serv_type == SERV_TYPE_FREE_MONITOR_ACCUMULATVE) {
             float value = 0;
-            int get_value = false;
+            unsigned int get_value = false;
             
-            const int fm_sensor_type = private_abs(FM_SENSOR_TYPE);
+            const unsigned int fm_sensor_type = private_abs(FM_SENSOR_TYPE);
             
             if (args) {
                 if (fm_sensor_type == FM_SENSOR_TYPE_FREE || FM_OVERRIDE_VALUE != NO_LAST_WILDCARD_ACTION) {
@@ -5041,7 +5100,7 @@ void free_monitor_task(void* args) {
                     
                     
                     if (((uint8_t) FM_SENSOR_GPIO_TRIGGER) < 255) {
-                        const bool inverted = ((uint8_t) FM_SENSOR_GPIO_TRIGGER) / 100;
+                        const unsigned int inverted = ((uint8_t) FM_SENSOR_GPIO_TRIGGER) / 100;
                         const unsigned int gpio_final = ((uint8_t) FM_SENSOR_GPIO_TRIGGER) % 100;
                         
                         HAA_ENTER_CRITICAL_TASK();
@@ -5066,10 +5125,10 @@ void free_monitor_task(void* args) {
                     FM_OVERRIDE_VALUE = NO_LAST_WILDCARD_ACTION;
                     
                 } else if (fm_sensor_type == FM_SENSOR_TYPE_MATHS) {
-                    int float_index = FM_MATHS_FLOAT_FIRST + (FM_SENSOR_TYPE < 0 ? 2 : 0);
-                    int int_index = FM_MATHS_FIRST_OPERATION;
+                    unsigned int float_index = FM_MATHS_FLOAT_FIRST + (FM_SENSOR_TYPE < 0 ? 2 : 0);
+                    unsigned int int_index = FM_MATHS_FIRST_OPERATION;
                     for (int i = 0; i < FM_MATHS_OPERATIONS; i++) {
-                        const int operation = FM_MATHS_INT[int_index];
+                        const unsigned int operation = FM_MATHS_INT[int_index];
                         int_index++;
                         const int read_service = FM_MATHS_INT[int_index];
                         
@@ -5089,7 +5148,7 @@ void free_monitor_task(void* args) {
                             read_value = get_hkch_value(ch_group_find_by_serv(read_service)->ch[(uint8_t) FM_MATHS_FLOAT[float_index]]);
                             
                         } else {
-                            if (!main_config.clock_ready && read_service <=FM_MATHS_GET_TIME_IS_SAVING) {
+                            if (!main_config.clock_ready && read_service <= FM_MATHS_GET_TIME_IS_SAVING) {
                                 get_value = false;
                                 break;
                             }
@@ -5135,8 +5194,20 @@ void free_monitor_task(void* args) {
                                     read_value = timeinfo->tm_isdst;
                                     break;
                                     
-                                default:    // case FM_MATHS_GEN_RANDOM_NUMBER:
+                                case FM_MATHS_GEN_RANDOM_NUMBER:
                                     read_value = hwrand() % (((uint32_t) FM_MATHS_FLOAT[float_index]) + 1);
+                                    break;
+#ifdef ESP_PLATFORM
+                                case FM_MATHS_GET_WIFI_RSSI:
+                                    int wifi_rssi = 0;
+                                    if (esp_wifi_sta_get_rssi(&wifi_rssi) != ESP_OK) {
+                                        get_value = false;
+                                    }
+                                    read_value = wifi_rssi;
+                                    break;
+#endif
+                                default:    // case FM_MATHS_GET_UPTIME:
+                                    read_value = xTaskGetTickCount() / (1000 / portTICK_PERIOD_MS);
                                     break;
                             }
                         }
@@ -5244,7 +5315,7 @@ void free_monitor_task(void* args) {
                                             req = action_network->content;
                                             
                                         } else if (action_network->method_n != 4) { // HTTP
-                                            size_t content_len_n = 0;
+                                            unsigned int content_len_n = 0;
                                             
                                             char* method = strdup("GET");
                                             char* method_req = NULL;
@@ -5347,7 +5418,7 @@ void free_monitor_task(void* args) {
                                         }
                                     }
                                     
-                                    size_t total_recv = 0;
+                                    unsigned int total_recv = 0;
                                     uint8_t* str = NULL;
                                     if (result > 0) {
                                         // Read response
@@ -5438,27 +5509,33 @@ void free_monitor_task(void* args) {
                 } else if (fm_sensor_type == FM_SENSOR_TYPE_I2C ||
                            fm_sensor_type == FM_SENSOR_TYPE_I2C_TRIGGER) {
                     if (fm_sensor_type == FM_SENSOR_TYPE_I2C_TRIGGER) {
-                        adv_i2c_slave_write(FM_I2C_BUS, (uint8_t) FM_I2C_ADDR,
+                        const int i2c_res = adv_i2c_slave_write(FM_I2C_BUS, (uint8_t) FM_I2C_ADDR,
                                         (uint8_t*) &FM_I2C_TRIGGER_REG[FM_I2C_TRIGGER_REG_FIRST],
                                         FM_I2C_TRIGGER_REG_LEN,
                                         (uint8_t*) &FM_I2C_TRIGGER_VAL[FM_I2C_TRIGGER_VAL_FIRST],
                                         FM_I2C_TRIGGER_VAL_LEN);
+                        
+                        if (i2c_res != 0) {
+                            ERROR("<%i> I2C Tr %i", ch_group->serv_index, i2c_res);
+                        }
                         
                         if (FM_NEW_VALUE > 0) {
                             vTaskDelay(FM_NEW_VALUE);
                         }
                     }
                     
-                    size_t i2c_value_len = FM_VAL_LEN + FM_I2C_VAL_OFFSET;
+                    unsigned int i2c_value_len = FM_VAL_LEN + FM_I2C_VAL_OFFSET;
                     uint8_t i2c_value[i2c_value_len];
                     
-                    if (adv_i2c_slave_read(FM_I2C_BUS, (uint8_t) FM_I2C_ADDR, (uint8_t*) &FM_I2C_REG[FM_I2C_REG_FIRST], FM_I2C_REG_LEN, i2c_value, i2c_value_len) == 0) {
+                    const int i2c_res = adv_i2c_slave_read(FM_I2C_BUS, (uint8_t) FM_I2C_ADDR, (uint8_t*) &FM_I2C_REG[FM_I2C_REG_FIRST], FM_I2C_REG_LEN, i2c_value, i2c_value_len);
+                    if (i2c_res == 0) {
                         value = byte_array_to_num(&i2c_value[FM_I2C_VAL_OFFSET], FM_VAL_LEN, FM_VAL_TYPE);
                         get_value = true;
                     } else {
-                        ERROR("<%i> I2C", ch_group->serv_index);
+                        ERROR("<%i> I2C %i", ch_group->serv_index, i2c_res);
                     }
                 }
+                
             } else if (fm_sensor_type >= FM_SENSOR_TYPE_UART) {
                 uart_receiver_data_t* uart_receiver_data = main_config.uart_receiver_data;
                 while (uart_receiver_data && uart_receiver_data->uart_port != FM_UART_PORT) {
@@ -5469,7 +5546,7 @@ void free_monitor_task(void* args) {
                     (uart_receiver_data->uart_buffer_len >= (uint8_t) FM_BUFFER_LEN_MIN &&
                      uart_receiver_data->uart_buffer_len <= (uint8_t) FM_BUFFER_LEN_MAX))) {
                     uint8_t* found = uart_receiver_data->uart_buffer;
-                    int is_pattern_found = false;
+                    unsigned int is_pattern_found = false;
                     if (fm_sensor_type == FM_SENSOR_TYPE_UART_PATTERN_HEX) {
                         is_pattern_found = find_patterns(FM_PATTERN_CH_READ, &found, uart_receiver_data->uart_buffer_len);
                         
@@ -5554,10 +5631,37 @@ void free_monitor_timer_worker(TimerHandle_t xTimer) {
         ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
         if (ch_group->main_enabled) {
             if (!ch_group->is_working) {
-                if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
-                    ERROR("New FM");
-                    homekit_remove_oldest_client();
+                ch_group_t* ch_group_b = NULL;
+                const unsigned int fm_sensor_type = private_abs(FM_SENSOR_TYPE);
+                
+                if (fm_sensor_type == FM_SENSOR_TYPE_I2C || fm_sensor_type == FM_SENSOR_TYPE_I2C_TRIGGER) {
+                    ch_group_b = main_config.ch_groups;
+                    while (ch_group_b) {
+                        if ((ch_group_b->serv_type == SERV_TYPE_FREE_MONITOR ||
+                             ch_group_b->serv_type == SERV_TYPE_FREE_MONITOR_ACCUMULATVE) &&
+                            private_abs(FM_SENSOR_TYPE_B) == FM_SENSOR_TYPE_I2C_TRIGGER &&
+                            FM_I2C_BUS_B == FM_I2C_BUS &&
+                            FM_I2C_ADDR_B == FM_I2C_ADDR &&
+                            ch_group_b->is_working) {
+                            break;
+                        }
+                        
+                        ch_group_b = ch_group_b->next;
+                    }
                 }
+                
+                if (!ch_group_b) {
+                    ch_group->is_working = true;
+                    if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
+                        ch_group->is_working = false;
+                        homekit_remove_oldest_client();
+                        ERROR("New FM");
+                    }
+                } else {
+                    ERROR("<%i> Overlaps %i", ch_group->serv_index, ch_group_b->serv_index);
+                }
+            } else {
+                ERROR("<%i> Overlaps", ch_group->serv_index);
             }
         }
     } else {
@@ -5566,7 +5670,7 @@ void free_monitor_timer_worker(TimerHandle_t xTimer) {
 }
 
 void recv_uart_task() {
-    int call_free_monitor = false;
+    unsigned int call_free_monitor = false;
     
     uart_receiver_data_t* uart_receiver_data = main_config.uart_receiver_data;
     while (uart_receiver_data) {
@@ -5578,7 +5682,7 @@ void recv_uart_task() {
             uart_flush(uart_receiver_data->uart_port);
 #else
             int ch;
-            int count = 0;
+            unsigned int count = 0;
             
             for (;;) {
                 if ((ch = uart_getc_nowait(0)) >= 0) {
@@ -5624,10 +5728,10 @@ void recv_uart_task() {
 }
 
 void recv_uart_timer_worker(TimerHandle_t xTimer) {
-    int uart_has_data = false;
+    unsigned int uart_has_data = false;
     uart_receiver_data_t* uart_receiver_data = main_config.uart_receiver_data;
     while (uart_receiver_data) {
-        size_t len = 0;
+        unsigned int len = 0;
         
 #ifdef ESP_PLATFORM
         uart_get_buffered_data_len(uart_receiver_data->uart_port, &len);
@@ -5657,48 +5761,60 @@ void window_cover_diginput(const uint16_t gpio, void* args, const uint8_t type) 
     ch_group_t* ch_group = args;
     
     INFO("<%i> WC DigI GPIO %i", ch_group->serv_index, gpio);
-
+    
     if (ch_group->child_enabled) {
         switch (type) {
             case WINDOW_COVER_CLOSING:
                 if (WINDOW_COVER_VIRTUAL_STOP > 0) {
                     WINDOW_COVER_VIRTUAL_STOP = 2;
                 }
-                hkc_window_cover_setter(ch_group->ch[1], HOMEKIT_UINT8(0));
+                hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, HOMEKIT_UINT8(0));
                 break;
                 
             case WINDOW_COVER_OPENING:
                 if (WINDOW_COVER_VIRTUAL_STOP > 0) {
                     WINDOW_COVER_VIRTUAL_STOP = 2;
                 }
-                hkc_window_cover_setter(ch_group->ch[1], HOMEKIT_UINT8(100));
+                hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, HOMEKIT_UINT8(100));
                 break;
                 
             case (WINDOW_COVER_CLOSING + 3):
                 if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_CLOSING) {
-                    hkc_window_cover_setter(ch_group->ch[1], WINDOW_COVER_CH_CURRENT_POSITION->value);
+                    hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
                 } else {
                     if (WINDOW_COVER_VIRTUAL_STOP > 0) {
                         WINDOW_COVER_VIRTUAL_STOP = 2;
                     }
-                    hkc_window_cover_setter(ch_group->ch[1], HOMEKIT_UINT8(0));
+                    hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, HOMEKIT_UINT8(0));
                 }
                 break;
                 
             case (WINDOW_COVER_OPENING + 3):
                 if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_OPENING) {
-                    hkc_window_cover_setter(ch_group->ch[1], WINDOW_COVER_CH_CURRENT_POSITION->value);
+                    hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
                 } else {
                     if (WINDOW_COVER_VIRTUAL_STOP > 0) {
                         WINDOW_COVER_VIRTUAL_STOP = 2;
                     }
-                    hkc_window_cover_setter(ch_group->ch[1], HOMEKIT_UINT8(100));
+                    hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, HOMEKIT_UINT8(100));
+                }
+                break;
+                
+            case WINDOW_COVER_SINGLE_INPUT:
+                if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
+                    if (WINDOW_COVER_CH_CURRENT_POSITION->value.int_value == 0) {
+                        hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, HOMEKIT_UINT8(100));
+                    } else {
+                        hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, HOMEKIT_UINT8(0));
+                    }
+                } else {
+                    hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
                 }
                 break;
                 
             default:    // case WINDOW_COVER_STOP:
                 if ((int8_t) WINDOW_COVER_STOP_ENABLE == 1) {
-                    hkc_window_cover_setter(ch_group->ch[1], WINDOW_COVER_CH_CURRENT_POSITION->value);
+                    hkc_window_cover_setter(WINDOW_COVER_CH_TARGET_POSITION, WINDOW_COVER_CH_CURRENT_POSITION->value);
                 } else {
                     INFO("<%i> WC DigI Stop ignored", ch_group->serv_index);
                 }
@@ -5859,13 +5975,15 @@ void hkc_autooff_setter_task(TimerHandle_t xTimer) {
 
 // --- Network Action task
 void net_action_task(void* pvParameters) {
-    action_task_t* action_task = pvParameters;
+    action_task_t* action_task = (action_task_t*) pvTimerGetTimerID(pvParameters);
+    rs_esp_timer_delete_forced(pvParameters);
+    
     action_network_t* action_network = action_task->ch_group->action_network;
     
     int socket;
     
-    size_t search_str_ch_values(str_ch_value_t** str_ch_value_ini, char* content) {
-        size_t len = strlen(content);
+    unsigned int search_str_ch_values(str_ch_value_t** str_ch_value_ini, char* content) {
+        unsigned int len = strlen(content);
         
         char* content_search = content;
         str_ch_value_t* str_ch_value_last = NULL;
@@ -5982,7 +6100,7 @@ void net_action_task(void* pvParameters) {
                 str_ch_value_t* str_ch_value_first = NULL;
                 
                 if (action_network->method_n < 10) {
-                    size_t content_len_n = 0;
+                    unsigned int content_len_n = 0;
                     
                     char* req = NULL;
                     
@@ -6084,7 +6202,7 @@ void net_action_task(void* pvParameters) {
                         if (action_network->wait_response > 0) {
                             INFO("<%i> Response:", action_task->ch_group->serv_index);
                             int read_byte;
-                            size_t total_recv = 0;
+                            unsigned int total_recv = 0;
                             uint8_t* recv_buffer = malloc(65);
                             do {
                                 memset(recv_buffer, 0, 65);
@@ -6127,7 +6245,7 @@ void net_action_task(void* pvParameters) {
                     int result = -1;
                     
                     if (action_network->method_n == 13) {
-                        size_t content_len_n = search_str_ch_values(&str_ch_value_first, action_network->content);
+                        unsigned int content_len_n = search_str_ch_values(&str_ch_value_first, action_network->content);
                         
                         char* req = (char*) force_alloc(content_len_n + 1);
                         if (!req) {
@@ -6159,12 +6277,12 @@ void net_action_task(void* pvParameters) {
                         free(req);
                         
                     } else {
-                        int max_attemps = 1;
+                        unsigned int max_attemps = 1;
                         if (wol) {
                             max_attemps = 5;
                         }
                         
-                        for (int attemp = 0; attemp < max_attemps; attemp++) {
+                        for (unsigned int attemp = 0; attemp < max_attemps; attemp++) {
                             result = new_net_con(action_network->host,
                                                  action_network->port_n,
                                                  true,
@@ -6215,15 +6333,17 @@ void net_action_task(void* pvParameters) {
 
 // --- IR/RF Send task
 void irrf_tx_task(void* pvParameters) {
-    action_task_t* action_task = pvParameters;
+    action_task_t* action_task = (action_task_t*) pvTimerGetTimerID(pvParameters);
+    rs_esp_timer_delete_forced(pvParameters);
+    
     action_irrf_tx_t* action_irrf_tx = action_task->ch_group->action_irrf_tx;
     
     while (action_irrf_tx) {
         if (action_irrf_tx->action == action_task->action) {
             uint16_t* ir_code = NULL;
-            size_t ir_code_len = 0;
+            unsigned int ir_code_len = 0;
             
-            int freq = main_config.ir_tx_freq;
+            unsigned int freq = main_config.ir_tx_freq;
             if (action_irrf_tx->freq > 1) {
                 freq = action_irrf_tx->freq;
             }
@@ -6241,8 +6361,8 @@ void irrf_tx_task(void* pvParameters) {
                 }
                 
                 // Decoding protocol based IR code length
-                const size_t ir_action_protocol_len = strlen(prot);
-                const size_t json_ir_code_len = strlen(action_irrf_tx->prot_code);
+                const unsigned int ir_action_protocol_len = strlen(prot);
+                const unsigned int json_ir_code_len = strlen(action_irrf_tx->prot_code);
                 ir_code_len = 3;
                 
                 INFO_NNL("<%i> IR Protocol bits: ", action_task->ch_group->serv_index);
@@ -6489,7 +6609,7 @@ void irrf_tx_task(void* pvParameters) {
                 INFO_NNL("\n");
                 
             } else {    // IRRF_ACTION_RAW_CODE
-                const size_t json_ir_code_len = strlen(action_irrf_tx->raw_code);
+                const unsigned int json_ir_code_len = strlen(action_irrf_tx->raw_code);
                 ir_code_len = json_ir_code_len >> 1;
                 
                 ir_code = (uint16_t*) force_alloc(sizeof(uint16_t) * ir_code_len);
@@ -6529,7 +6649,7 @@ void irrf_tx_task(void* pvParameters) {
 #else
             uint32_t start;
 #endif
-            int ir_true, ir_false, ir_gpio;
+            unsigned int ir_true, ir_false, ir_gpio;
             if (freq > 1) {
                 ir_true = !main_config.ir_tx_inv;
                 ir_false = main_config.ir_tx_inv;
@@ -6540,7 +6660,7 @@ void irrf_tx_task(void* pvParameters) {
                 ir_gpio = main_config.rf_tx_gpio;
             }
 
-            for (int r = 0; r < action_irrf_tx->repeats; r++) {
+            for (unsigned int r = 0; r < action_irrf_tx->repeats; r++) {
                 
                 HAA_ENTER_CRITICAL_TASK();
                 
@@ -6589,13 +6709,15 @@ void irrf_tx_task(void* pvParameters) {
 
 // --- UART action task
 void uart_action_task(void* pvParameters) {
-    action_task_t* action_task = pvParameters;
+    action_task_t* action_task = (action_task_t*) pvTimerGetTimerID(pvParameters);
+    rs_esp_timer_delete_forced(pvParameters);
+    
     action_uart_t* action_uart = action_task->ch_group->action_uart;
 
     while (action_uart) {
         if (action_uart->action == action_task->action) {
             INFO_NNL("<%i> UART%i -> ", action_task->ch_group->serv_index, action_uart->uart);
-            for (int i = 0; i < action_uart->len; i++) {
+            for (unsigned int i = 0; i < action_uart->len; i++) {
                 INFO_NNL("%02x", action_uart->command[i]);
                 INFO_NNL("%02x", action_uart->command[i]);
             }
@@ -6606,7 +6728,7 @@ void uart_action_task(void* pvParameters) {
 #else
             HAA_ENTER_CRITICAL_TASK();
             
-            for (int i = 0; i < action_uart->len; i++) {
+            for (unsigned int i = 0; i < action_uart->len; i++) {
                 uart_putc(action_uart->uart, action_uart->command[i]);
             }
             
@@ -6638,25 +6760,23 @@ void autoswitch_timer(TimerHandle_t xTimer) {
 void action_task_timer(TimerHandle_t xTimer) {
     action_task_t* action_task = (action_task_t*) pvTimerGetTimerID(xTimer);
     
-    if ((action_task->type == ACTION_TASK_TYPE_UART &&
-         xTaskCreate(uart_action_task, "UA", UART_ACTION_TASK_SIZE, action_task, UART_ACTION_TASK_PRIORITY, NULL) != pdPASS) ||
+    if (!action_task->done &&
+        ((action_task->type == ACTION_TASK_TYPE_UART &&
+         xTaskCreate(uart_action_task, "UA", UART_ACTION_TASK_SIZE, xTimer, UART_ACTION_TASK_PRIORITY, NULL) != pdPASS) ||
         (action_task->type == ACTION_TASK_TYPE_IRRF &&
-            xTaskCreate(irrf_tx_task, "IR", IRRF_TX_TASK_SIZE, action_task, IRRF_TX_TASK_PRIORITY, NULL) != pdPASS) ||
+            xTaskCreate(irrf_tx_task, "IR", IRRF_TX_TASK_SIZE, xTimer, IRRF_TX_TASK_PRIORITY, NULL) != pdPASS) ||
         (action_task->type == ACTION_TASK_TYPE_NETWORK &&
-            xTaskCreate(net_action_task, "NET", NETWORK_ACTION_TASK_SIZE, action_task, NETWORK_ACTION_TASK_PRIORITY, NULL) != pdPASS)) {
+            xTaskCreate(net_action_task, "NET", NETWORK_ACTION_TASK_SIZE, xTimer, NETWORK_ACTION_TASK_PRIORITY, NULL) != pdPASS))) {
         action_task->errors++;
         homekit_remove_oldest_client();
         
         ERROR("<%i> AT %i", action_task->ch_group->serv_index, action_task->type);
         
-        if (action_task->errors < ACTION_TASK_MAX_ERRORS) {
-            rs_esp_timer_change_period(xTimer, 110);
-        } else {
+        if (action_task->errors > ACTION_TASK_MAX_ERRORS && rs_esp_timer_delete(xTimer) == pdPASS) {
             free(action_task);
-            rs_esp_timer_delete(xTimer);
         }
     } else {
-        rs_esp_timer_delete(xTimer);
+        action_task->done = true;
     }
 }
 
@@ -6713,7 +6833,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                 } else if (value_int == -20002) {
                     ch_group->child_enabled = !ch_group->child_enabled;
                 } else {
-                    bool alarm_recurrent = false;
+                    unsigned int alarm_recurrent = false;
                     
                     switch (ch_group->serv_type) {
                         case SERV_TYPE_BUTTON:
@@ -6885,7 +7005,10 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             break;
                             
                         case SERV_TYPE_WINDOW_COVER:
-                            if (value_int < 0) {
+                            if (value_int == -3) {
+                                window_cover_diginput(99, ch_group, WINDOW_COVER_SINGLE_INPUT);
+                                
+                            } else if (value_int < 0) {
                                 window_cover_obstruction(99, ch_group, value_int + 2);
                                 
                             } else if (value_int == 101) {
@@ -6995,11 +7118,15 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                         case SERV_TYPE_FREE_MONITOR_ACCUMULATVE:
                             if (ch_group->main_enabled) {
                                 if (!ch_group->is_working) {
+                                    ch_group->is_working = true;
                                     FM_OVERRIDE_VALUE = action_serv_manager->value;
                                     if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
+                                        ch_group->is_working = false;
                                         homekit_remove_oldest_client();
                                         ERROR("New FM");
                                     }
+                                } else {
+                                    ERROR("<%i> Overlaps", ch_group->serv_index);
                                 }
                             }
                             break;
@@ -7130,37 +7257,36 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         action_set_ch = action_set_ch->next;
     }
     
-    int timer_delay = 0;
-    // UART actions
-    if (ch_group->action_uart) {
+    unsigned int timer_delay = 0;
+    
+    void create_action_task(const uint8_t action, const uint8_t type, ch_group_t* ch_group) {
         action_task_t* action_task = new_action_task();
         action_task->action = action;
-        action_task->type = ACTION_TASK_TYPE_UART;
+        action_task->type = type;
         action_task->ch_group = ch_group;
         
-        rs_esp_timer_start(rs_esp_timer_create(portTICK_PERIOD_MS, false, action_task, action_task_timer));
-        timer_delay += portTICK_PERIOD_MS;
+        timer_delay += portTICK_PERIOD_MS * 2;
+        
+        TimerHandle_t xTimer = rs_esp_timer_create(timer_delay, true, action_task, action_task_timer);
+        if (rs_esp_timer_start(xTimer) != pdPASS) {
+            free(action_task);
+            rs_esp_timer_delete(xTimer);
+        }
+    }
+    
+    // UART actions
+    if (ch_group->action_uart) {
+        create_action_task(action, ACTION_TASK_TYPE_UART, ch_group);
     }
     
     // Network actions
     if (ch_group->action_network && main_config.wifi_status == WIFI_STATUS_CONNECTED) {
-        action_task_t* action_task = new_action_task();
-        action_task->action = action;
-        action_task->type = ACTION_TASK_TYPE_NETWORK;
-        action_task->ch_group = ch_group;
-        
-        rs_esp_timer_start(rs_esp_timer_create(portTICK_PERIOD_MS + timer_delay, false, action_task, action_task_timer));
-        timer_delay += portTICK_PERIOD_MS;
+        create_action_task(action, ACTION_TASK_TYPE_NETWORK, ch_group);
     }
     
     // IRRF TX actions
     if (ch_group->action_irrf_tx) {
-        action_task_t* action_task = new_action_task();
-        action_task->action = action;
-        action_task->type = ACTION_TASK_TYPE_IRRF;
-        action_task->ch_group = ch_group;
-        
-        rs_esp_timer_start(rs_esp_timer_create(portTICK_PERIOD_MS + timer_delay, false, action_task, action_task_timer));
+        create_action_task(action, ACTION_TASK_TYPE_IRRF, ch_group);
     }
 }
 
@@ -7312,15 +7438,19 @@ void run_homekit_server() {
         show_freeheap();
     }
     
-    rs_esp_timer_start_forced(rs_esp_timer_create(NTP_POLL_PERIOD_MS, true, NULL, ntp_timer_worker));
-    
-    if (main_config.timetable_actions) {
-        rs_esp_timer_start_forced(rs_esp_timer_create(1000, true, NULL, timetable_actions_timer_worker));
+    if (main_config.ntp_host && strcmp(main_config.ntp_host, NTP_DISABLE_STRING) == 0) {
+        free(main_config.ntp_host);
+    } else {
+        rs_esp_timer_start_forced(rs_esp_timer_create(NTP_POLL_PERIOD_MS, true, NULL, ntp_timer_worker));
+        
+        if (main_config.timetable_actions) {
+            rs_esp_timer_start_forced(rs_esp_timer_create(1000, true, NULL, timetable_actions_timer_worker));
+        }
+        
+        vTaskDelay(MS_TO_TICKS(500));
+        
+        ntp_timer_worker(NULL);
     }
-    
-    vTaskDelay(MS_TO_TICKS(500));
-    
-    ntp_timer_worker(NULL);
     
     if (homekit_pairing_count() == 0) {
         sysparam_erase(HOMEKIT_PAIRING_COUNT_SYSPARAM);
@@ -7405,15 +7535,15 @@ void normal_mode_init() {
     
     // Binary Inputs GPIO Setup function
     bool diginput_register(cJSON_rsf* json_buttons, void* callback, ch_group_t* ch_group, const uint8_t param) {
-        int active = false;
+        unsigned int active = false;
         
-        for (int j = 0; j < cJSON_rsf_GetArraySize(json_buttons); j++) {
+        for (unsigned int j = 0; j < cJSON_rsf_GetArraySize(json_buttons); j++) {
             int button_data[2] = { 0, 1 };
             
             cJSON_rsf* json_button = cJSON_rsf_GetArrayItem(json_buttons, j);
             
             if (cJSON_rsf_GetObjectItemCaseSensitive(json_button, PIN_GPIO) == NULL) {
-                for (int k = 0; k < cJSON_rsf_GetArraySize(json_button); k++) {
+                for (unsigned int k = 0; k < cJSON_rsf_GetArraySize(json_button); k++) {
                     button_data[k] = (uint16_t) cJSON_rsf_GetArrayItem(json_button, k)->valuefloat;
                 }
             } else {    // OLD WAY
@@ -7438,7 +7568,7 @@ void normal_mode_init() {
     
     // Ping Setup function
     void ping_register(cJSON_rsf* json_pings, void* callback, ch_group_t* ch_group, const uint8_t param) {
-        for (int j = 0; j < cJSON_rsf_GetArraySize(json_pings); j++) {
+        for (unsigned int j = 0; j < cJSON_rsf_GetArraySize(json_pings); j++) {
             ping_input_t* ping_input = ping_input_find_by_host(cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetArrayItem(json_pings, j), PING_HOST)->valuestring);
             
             if (!ping_input) {
@@ -7451,7 +7581,7 @@ void normal_mode_init() {
                 main_config.ping_inputs = ping_input;
             }
             
-            int response_type = true;
+            unsigned int response_type = true;
             if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetArrayItem(json_pings, j), PING_RESPONSE_TYPE) != NULL) {
                 response_type = (bool) cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetArrayItem(json_pings, j), PING_RESPONSE_TYPE)->valuefloat;
             }
@@ -7604,7 +7734,7 @@ void normal_mode_init() {
         }
         
         if (fixed_action < MAX_ACTIONS) {
-            for (int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+            for (unsigned int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
                 register_action(json_context, int_action);
             }
         } else {
@@ -7630,7 +7760,7 @@ void normal_mode_init() {
                         cJSON_rsf* json_relay = cJSON_rsf_GetArrayItem(json_relays, i);
                         
                         if (cJSON_rsf_GetObjectItemCaseSensitive(json_relay, PIN_GPIO) == NULL) {
-                            for (int k = 0; k < cJSON_rsf_GetArraySize(json_relay); k++) {
+                            for (unsigned int k = 0; k < cJSON_rsf_GetArraySize(json_relay); k++) {
                                 if (k == 2) {
                                     binary_output_data[2] = cJSON_rsf_GetArrayItem(json_relay, k)->valuefloat * 1000;
                                 } else {
@@ -7667,7 +7797,7 @@ void normal_mode_init() {
         }
         
         if (fixed_action < MAX_ACTIONS) {
-            for (int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+            for (unsigned int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
                 register_action(json_context, int_action);
             }
         } else {
@@ -7699,7 +7829,7 @@ void normal_mode_init() {
                         last_action = action_serv_manager;
                         
                         cJSON_rsf* json_acc_manager = cJSON_rsf_GetArrayItem(json_acc_managers, i);
-                        for (int j = 0; j < cJSON_rsf_GetArraySize(json_acc_manager); j++) {
+                        for (unsigned int j = 0; j < cJSON_rsf_GetArraySize(json_acc_manager); j++) {
                             const float value = (float) cJSON_rsf_GetArrayItem(json_acc_manager, j)->valuefloat;
                             
                             switch (j) {
@@ -7720,7 +7850,7 @@ void normal_mode_init() {
         }
         
         if (fixed_action < MAX_ACTIONS) {
-            for (int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+            for (unsigned int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
                 register_action(json_context, int_action);
             }
         } else {
@@ -7751,8 +7881,8 @@ void normal_mode_init() {
                         last_action = action_set_ch;
                         
                         cJSON_rsf* json_set_ch = cJSON_rsf_GetArrayItem(json_set_chs, i);
-                        for (int j = 0; j < 4; j++) {
-                            const int value = (uint8_t) cJSON_rsf_GetArrayItem(json_set_ch, j)->valuefloat;
+                        for (unsigned int j = 0; j < 4; j++) {
+                            const int value = (int16_t) cJSON_rsf_GetArrayItem(json_set_ch, j)->valuefloat;
                             
                             switch (j) {
                                 case 0:
@@ -7780,7 +7910,7 @@ void normal_mode_init() {
         }
         
         if (fixed_action < MAX_ACTIONS) {
-            for (int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+            for (unsigned int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
                 register_action(json_context, int_action);
             }
         } else {
@@ -7818,7 +7948,7 @@ void normal_mode_init() {
         }
         
         if (fixed_action < MAX_ACTIONS) {
-            for (int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+            for (unsigned int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
                 register_action(json_context, int_action);
             }
         } else {
@@ -7904,7 +8034,7 @@ void normal_mode_init() {
         }
         
         if (fixed_action < MAX_ACTIONS) {
-            for (int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+            for (unsigned int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
                 register_action(json_context, int_action);
             }
         } else {
@@ -7973,7 +8103,7 @@ void normal_mode_init() {
         }
         
         if (fixed_action < MAX_ACTIONS) {
-            for (int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+            for (unsigned int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
                 register_action(json_context, int_action);
             }
         } else {
@@ -8005,13 +8135,13 @@ void normal_mode_init() {
                             action_uart->pause = MS_TO_TICKS(cJSON_rsf_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_PAUSE)->valuefloat);
                         }
                         
-                        int uart = 0;
+                        unsigned int uart = 0;
                         if (cJSON_rsf_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_UART) != NULL) {
                             uart = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_action_uart, UART_ACTION_UART)->valuefloat;
                         }
                         
                         action_uart->uart = uart % 10;
-                        int is_text = uart / 10;
+                        unsigned int is_text = uart / 10;
                         
                         if (cJSON_rsf_GetObjectItemCaseSensitive(json_action_uart, VALUE) != NULL) {
                             if (is_text) {
@@ -8032,7 +8162,7 @@ void normal_mode_init() {
         }
         
         if (fixed_action < MAX_ACTIONS) {
-            for (int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+            for (unsigned int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
                 register_action(json_context, int_action);
             }
         } else {
@@ -8061,7 +8191,7 @@ void normal_mode_init() {
                         last_action = action_pwm;
                         
                         cJSON_rsf* json_action_pwm = cJSON_rsf_GetArrayItem(json_action_pwms, i);
-                        for (int j = 0; j < cJSON_rsf_GetArraySize(json_action_pwm); j++) {
+                        for (unsigned int j = 0; j < cJSON_rsf_GetArraySize(json_action_pwm); j++) {
                             const int value = cJSON_rsf_GetArrayItem(json_action_pwm, j)->valuefloat;
                             
                             switch (j) {
@@ -8090,7 +8220,7 @@ void normal_mode_init() {
         }
         
         if (fixed_action < MAX_ACTIONS) {
-            for (int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
+            for (unsigned int int_action = 0; int_action < MAX_ACTIONS; int_action++) {
                 register_action(json_context, int_action);
             }
         } else {
@@ -8113,10 +8243,10 @@ void normal_mode_init() {
     }
     
     void register_wildcard_actions(ch_group_t* ch_group, cJSON_rsf* json_accessory) {
-        int global_index = MAX_ACTIONS;     // First wirldcard action must have a higher index than highest possible normal action
+        unsigned int global_index = MAX_ACTIONS;     // First wirldcard action must have a higher index than highest possible normal action
         wildcard_action_t* last_action = ch_group->wildcard_action;
         
-        for (int int_index = 0; int_index < MAX_WILDCARD_ACTIONS; int_index++) {
+        for (unsigned int int_index = 0; int_index < MAX_WILDCARD_ACTIONS; int_index++) {
             char number[4];
             itoa(int_index, number, 10);
             
@@ -8124,7 +8254,7 @@ void normal_mode_init() {
             snprintf(index, 5, "%s%s", WILDCARD_ACTIONS_ARRAY_HEADER, number);
             
             cJSON_rsf* json_wilcard_actions = cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, index);
-            for (int i = 0; i < cJSON_rsf_GetArraySize(json_wilcard_actions); i++) {
+            for (unsigned int i = 0; i < cJSON_rsf_GetArraySize(json_wilcard_actions); i++) {
                 wildcard_action_t* wildcard_action = malloc(sizeof(wildcard_action_t));
                 memset(wildcard_action, 0, sizeof(*wildcard_action));
                 
@@ -8283,18 +8413,18 @@ void normal_mode_init() {
     
     // UART configuration
 #ifndef ESP_PLATFORM
-    int is_uart_swap = false;
+    unsigned int is_uart_swap = false;
 #endif
     
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, UART_CONFIG_ARRAY) != NULL) {
         cJSON_rsf* json_uarts = cJSON_rsf_GetObjectItemCaseSensitive(json_config, UART_CONFIG_ARRAY);
-        for (int i = 0; i < cJSON_rsf_GetArraySize(json_uarts); i++) {
+        for (unsigned int i = 0; i < cJSON_rsf_GetArraySize(json_uarts); i++) {
             cJSON_rsf* json_uart = cJSON_rsf_GetArrayItem(json_uarts, i);
             
             if (cJSON_rsf_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_ENABLE) != NULL) {
-                int uart_config = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_ENABLE)->valuefloat;
+                unsigned int uart_config = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_uart, UART_CONFIG_ENABLE)->valuefloat;
                 
-                int uart_with_receiver = false;
+                unsigned int uart_with_receiver = false;
                 if (uart_config >= 10) {
                     uart_with_receiver = true;
                     uart_config -= 10;
@@ -8498,7 +8628,7 @@ void normal_mode_init() {
     // I2C Bus
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, I2C_CONFIG_ARRAY) != NULL) {
         cJSON_rsf* json_i2cs = cJSON_rsf_GetObjectItemCaseSensitive(json_config, I2C_CONFIG_ARRAY);
-        for (int i = 0; i < cJSON_rsf_GetArraySize(json_i2cs); i++) {
+        for (unsigned int i = 0; i < cJSON_rsf_GetArraySize(json_i2cs); i++) {
             cJSON_rsf* json_i2c = cJSON_rsf_GetArrayItem(json_i2cs, i);
             
             unsigned int i2c_scl_gpio = (uint8_t) cJSON_rsf_GetArrayItem(json_i2c, 0)->valuefloat;
@@ -8512,7 +8642,7 @@ void normal_mode_init() {
             unsigned int i2c_scl_gpio_pullup = false;
             unsigned int i2c_sda_gpio_pullup = false;
             
-            const size_t json_i2c_array_size = cJSON_rsf_GetArraySize(json_i2c);
+            const unsigned int json_i2c_array_size = cJSON_rsf_GetArraySize(json_i2c);
             
             if (json_i2c_array_size > 3) {
                 i2c_scl_gpio_pullup = (bool) cJSON_rsf_GetArrayItem(json_i2c, 3)->valuefloat;
@@ -8528,117 +8658,12 @@ void normal_mode_init() {
         }
     }
     
-    // MCP23017 Interfaces
-    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, MCP23017_ARRAY) != NULL) {
-        cJSON_rsf* json_mcp23017s = cJSON_rsf_GetObjectItemCaseSensitive(json_config, MCP23017_ARRAY);
-        for (int i = 0; i < cJSON_rsf_GetArraySize(json_mcp23017s); i++) {
-            cJSON_rsf* json_mcp23017 = cJSON_rsf_GetArrayItem(json_mcp23017s, i);
-            
-            mcp23017_t* mcp23017 = malloc(sizeof(mcp23017_t));
-            memset(mcp23017, 0, sizeof(*mcp23017));
-
-            mcp23017->next = main_config.mcp23017s;
-            main_config.mcp23017s = mcp23017;
-            
-            mcp23017->index = i + 1;
-
-            mcp23017->bus = (uint8_t) cJSON_rsf_GetArrayItem(json_mcp23017, 0)->valuefloat;
-            mcp23017->addr = (uint8_t) cJSON_rsf_GetArrayItem(json_mcp23017, 1)->valuefloat;
-            
-            INFO("MCP %i: b %i, a %i", mcp23017->index, mcp23017->bus, mcp23017->addr);
-            
-            const uint8_t byte_zeros = 0x00;
-            const uint8_t byte_ones = 0xFF;
-            
-            // Full reset
-            uint8_t mcp_reg;
-            for (mcp_reg = 0x00; mcp_reg < 0x02; mcp_reg++) {
-                adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &mcp_reg, 1, &byte_ones, 1);
-            }
-            for (mcp_reg = 0x02; mcp_reg < 0x16; mcp_reg++) {
-                adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &mcp_reg, 1, &byte_zeros, 1);
-            }
-            
-            for (int channel = 0; channel < 2; channel++) {
-                unsigned int mcp_mode = 258;   // Default set to INPUT and not pullup
-                if (channel == 0) {
-                    if (cJSON_rsf_GetArrayItem(json_mcp23017, 2) != NULL) {
-                        mcp_mode = (uint16_t) cJSON_rsf_GetArrayItem(json_mcp23017, 2)->valuefloat;
-                    }
-                    
-                    INFO("MCP %i ChA: %i", mcp23017->index, mcp_mode);
-                    
-                } else {
-                    if (cJSON_rsf_GetArrayItem(json_mcp23017, 3) != NULL) {
-                        mcp_mode = (uint16_t) cJSON_rsf_GetArrayItem(json_mcp23017, 3)->valuefloat;
-                    }
-                    
-                    INFO("MCP %i ChB: %i", mcp23017->index, mcp_mode);
-                }
-                
-                uint8_t reg = channel;
-                if (mcp_mode > 255) {   // Mode INPUT
-                    switch (mcp_mode) {
-                        case 256:
-                            // Pull-up HIGH
-                            reg += 0x0C;
-                            adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_ones, 1);
-                            // Polarity NORMAL
-                            //reg = channel + 0x02;
-                            //adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_zeros, 1);
-                            break;
-                            
-                        case 257:
-                            // Pull-up HIGH
-                            reg += 0x0C;
-                            adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_ones, 1);
-                            // Polarity INVERTED
-                            reg = channel + 0x02;
-                            adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_ones, 1);
-                            break;
-                            
-                        case 259:
-                            // Pull-up LOW
-                            //reg += 0x0C;
-                            //adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_zeros, 1);
-                            // Polarity INVERTED
-                            reg = channel + 0x02;
-                            adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_ones, 1);
-                            break;
-                            
-                        default:    // 258
-                            // Pull-up LOW
-                            //reg += 0x0C;
-                            //adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_zeros, 1);
-                            // Polarity NORMAL
-                            //reg = channel + 0x02;
-                            //adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_zeros, 1);
-                            break;
-                    }
-                    
-                } else {    // Mode OUTPUT
-                    reg += 0x14;
-                    uint8_t mcp_channel = channel;
-                    adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &mcp_channel, 1, &byte_zeros, 1);
-                    
-                    if (channel == 0) {
-                        mcp23017->a_outs = mcp_mode;
-                        adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &mcp23017->a_outs, 1);
-                    } else {
-                        mcp23017->b_outs = mcp_mode;
-                        adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &mcp23017->b_outs, 1);
-                    }
-                }
-            }
-        }
-    }
-    
     // Buttons Main Config
     unsigned int adv_button_filter_value = 0;
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER) != NULL) {
         adv_button_filter_value = (uint16_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER)->valuefloat;
     }
-    int adv_button_continuous_mode = false;
+    unsigned int adv_button_continuous_mode = false;
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, BUTTON_CONTINUOS_MODE) != NULL) {
         adv_button_continuous_mode = (bool) cJSON_rsf_GetObjectItemCaseSensitive(json_config, BUTTON_CONTINUOS_MODE)->valuefloat;
     }
@@ -8646,21 +8671,204 @@ void normal_mode_init() {
         adv_button_init(adv_button_filter_value, adv_button_continuous_mode);
     }
     
+    // MCP23017 and Shift Register Interfaces
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, MCP23017_ARRAY) != NULL) {
+        cJSON_rsf* json_mcp23017s = cJSON_rsf_GetObjectItemCaseSensitive(json_config, MCP23017_ARRAY);
+        for (unsigned int i = 0; i < cJSON_rsf_GetArraySize(json_mcp23017s); i++) {
+            cJSON_rsf* json_mcp23017 = cJSON_rsf_GetArrayItem(json_mcp23017s, i);
+            
+            mcp23017_t* mcp23017 = malloc(sizeof(mcp23017_t));
+            memset(mcp23017, 0, sizeof(*mcp23017));
+            
+            mcp23017->next = main_config.mcp23017s;
+            main_config.mcp23017s = mcp23017;
+            
+            mcp23017->index = i + 1;
+            
+            mcp23017->bus = (uint8_t) cJSON_rsf_GetArrayItem(json_mcp23017, 0)->valuefloat;
+            mcp23017->addr = (uint8_t) cJSON_rsf_GetArrayItem(json_mcp23017, 1)->valuefloat;
+            
+            if (mcp23017->bus < 100) {  // MCP23017
+                INFO("MCP %i: b %i, a %i", mcp23017->index, mcp23017->bus, mcp23017->addr);
+                
+                const uint8_t byte_zeros = 0x00;
+                const uint8_t byte_ones = 0xFF;
+                
+                // Full reset
+                uint8_t mcp_reg;
+                for (mcp_reg = 0x00; mcp_reg < 0x02; mcp_reg++) {
+                    adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &mcp_reg, 1, &byte_ones, 1);
+                }
+                for (mcp_reg = 0x02; mcp_reg < 0x16; mcp_reg++) {
+                    adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &mcp_reg, 1, &byte_zeros, 1);
+                }
+                
+                for (unsigned int channel = 0; channel < 2; channel++) {
+                    unsigned int mcp_mode = 258;   // Default set to INPUT and not pullup
+                    if (channel == 0) {
+                        if (cJSON_rsf_GetArrayItem(json_mcp23017, 2) != NULL) {
+                            mcp_mode = (uint16_t) cJSON_rsf_GetArrayItem(json_mcp23017, 2)->valuefloat;
+                        }
+                        
+                        INFO("MCP %i ChA: %i", mcp23017->index, mcp_mode);
+                        
+                    } else {
+                        if (cJSON_rsf_GetArrayItem(json_mcp23017, 3) != NULL) {
+                            mcp_mode = (uint16_t) cJSON_rsf_GetArrayItem(json_mcp23017, 3)->valuefloat;
+                        }
+                        
+                        INFO("MCP %i ChB: %i", mcp23017->index, mcp_mode);
+                    }
+                    
+                    uint8_t reg = channel;
+                    if (mcp_mode > 255) {   // Mode INPUT
+                        switch (mcp_mode) {
+                            case 256:
+                                // Pull-up HIGH
+                                reg += 0x0C;
+                                adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_ones, 1);
+                                // Polarity NORMAL
+                                //reg = channel + 0x02;
+                                //adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_zeros, 1);
+                                break;
+                                
+                            case 257:
+                                // Pull-up HIGH
+                                reg += 0x0C;
+                                adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_ones, 1);
+                                // Polarity INVERTED
+                                reg = channel + 0x02;
+                                adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_ones, 1);
+                                break;
+                                
+                            case 259:
+                                // Pull-up LOW
+                                //reg += 0x0C;
+                                //adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_zeros, 1);
+                                // Polarity INVERTED
+                                reg = channel + 0x02;
+                                adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_ones, 1);
+                                break;
+                                
+                            default:    // 258
+                                // Pull-up LOW
+                                //reg += 0x0C;
+                                //adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_zeros, 1);
+                                // Polarity NORMAL
+                                //reg = channel + 0x02;
+                                //adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &byte_zeros, 1);
+                                break;
+                        }
+                        
+                    } else {    // Mode OUTPUT
+                        if (mcp23017->outs == NULL) {
+                            mcp23017->outs = malloc(sizeof(uint8_t) * 2);
+                            memset(mcp23017->outs, 0, sizeof(*mcp23017->outs));
+                            
+                            mcp23017->len = 16;
+                        }
+                        
+                        reg += 0x14;
+                        uint8_t mcp_channel = channel;
+                        adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &mcp_channel, 1, &byte_zeros, 1);
+                        
+                        uint8_t outs = mcp_mode;
+                        adv_i2c_slave_write(mcp23017->bus, mcp23017->addr, &reg, 1, &outs, 1);
+                        
+                        if (channel == 0) {
+                            mcp23017->outs[0] |= mcp_mode;
+                        } else {    // channel == 1
+                            mcp23017->outs[1] |= mcp_mode;
+                        }
+                    }
+                }
+                
+            } else {    // Shift Register
+                const int latch_gpio = (int8_t) cJSON_rsf_GetArrayItem(json_mcp23017, 2)->valuefloat;
+                mcp23017->len = (uint8_t) cJSON_rsf_GetArrayItem(json_mcp23017, 3)->valuefloat;
+                
+                const unsigned int clock_gpio = mcp23017->bus - 100;
+                
+#ifdef ESP_PLATFORM
+                gpio_reset_pin(clock_gpio);
+                gpio_set_direction(clock_gpio, GPIO_MODE_OUTPUT);
+                gpio_sleep_set_direction(clock_gpio, GPIO_MODE_OUTPUT);
+#else
+                gpio_enable(clock_gpio, GPIO_OUTPUT);
+#endif
+                gpio_write(clock_gpio, false);
+                
+                if (latch_gpio >= -1) {    // Shift Register OUTPUT
+#ifdef ESP_PLATFORM
+                    gpio_reset_pin(mcp23017->addr);
+                    gpio_set_direction(mcp23017->addr, GPIO_MODE_OUTPUT);
+                    gpio_sleep_set_direction(mcp23017->addr, GPIO_MODE_OUTPUT);
+#else
+                    gpio_enable(mcp23017->addr, GPIO_OUTPUT);
+#endif
+                    gpio_write(mcp23017->addr, false);
+                    
+                    if (latch_gpio >= 0) {
+#ifdef ESP_PLATFORM
+                        gpio_reset_pin(latch_gpio);
+                        gpio_set_direction(latch_gpio, GPIO_MODE_OUTPUT);
+                        gpio_sleep_set_direction(latch_gpio, GPIO_MODE_OUTPUT);
+#else
+                        gpio_enable(latch_gpio, GPIO_OUTPUT);
+#endif
+                        gpio_write(latch_gpio, false);
+                    }
+                    
+                    mcp23017->latch_gpio = latch_gpio;
+                    
+                    unsigned int out_groups = (mcp23017->len >> 3) + 1;
+                    
+                    mcp23017->outs = malloc(sizeof(uint8_t) * out_groups);
+                    memset(mcp23017->outs, 0, sizeof(*mcp23017->outs));
+                    
+                    for (unsigned int out_group = 0; out_group < cJSON_rsf_GetArraySize(json_mcp23017) - 4; out_group++) {
+                        mcp23017->outs[out_group] = (uint8_t) cJSON_rsf_GetArrayItem(json_mcp23017, out_group + 4)->valuefloat;
+                    }
+                    
+                    extended_gpio_write(mcp23017->index * 100, (bool) (mcp23017->outs[0] & 1));
+                    
+                    INFO("SR Out %i: [ %i, %i, %i ], l %i", mcp23017->index, clock_gpio, mcp23017->addr, latch_gpio, mcp23017->len);
+                    
+                } else {    // Shift Register INPUT
+#ifdef ESP_PLATFORM
+                    gpio_reset_pin(mcp23017->addr);
+                    gpio_set_pull_mode(mcp23017->addr, GPIO_FLOATING);
+                    gpio_sleep_set_pull_mode(mcp23017->addr, GPIO_FLOATING);
+                    gpio_set_direction(mcp23017->addr, GPIO_MODE_INPUT);
+                    gpio_sleep_set_direction(mcp23017->addr, GPIO_MODE_INPUT);
+#else
+                    gpio_set_pullup(mcp23017->addr, false, false);
+                    gpio_enable(mcp23017->addr, GPIO_INPUT);
+#endif
+                    
+                    adv_button_create_shift_register(mcp23017->index, mcp23017->addr, mcp23017->bus, mcp23017->len);
+                    
+                    INFO("SR In %i: [ %i, %i ], l %i", mcp23017->index, clock_gpio, mcp23017->addr, mcp23017->len);
+                }
+            }
+        }
+    }
+    
     // GPIO Hardware Setup
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, IO_CONFIG_ARRAY) != NULL) {
         cJSON_rsf* json_io_configs = cJSON_rsf_GetObjectItemCaseSensitive(json_config, IO_CONFIG_ARRAY);
         
-        int use_software_pwm = false;
+        unsigned int use_software_pwm = false;
         
-        for (int i = 0; i < cJSON_rsf_GetArraySize(json_io_configs); i++) {
+        for (unsigned int i = 0; i < cJSON_rsf_GetArraySize(json_io_configs); i++) {
             int io_value[5] = { 0, 0, 0, 0, 0 };
             
             cJSON_rsf* json_io_config = cJSON_rsf_GetArrayItem(json_io_configs, i);
             cJSON_rsf* json_io_config_gpios = cJSON_rsf_GetArrayItem(json_io_config, 0);
-            for (int gpio_index = 0; gpio_index < cJSON_rsf_GetArraySize(json_io_config_gpios); gpio_index++) {
+            for (unsigned int gpio_index = 0; gpio_index < cJSON_rsf_GetArraySize(json_io_config_gpios); gpio_index++) {
                 const unsigned int gpio = cJSON_rsf_GetArrayItem(json_io_config_gpios, gpio_index)->valuefloat;
                 
-                for (int j = 1; j < cJSON_rsf_GetArraySize(json_io_config); j++) {
+                for (unsigned int j = 1; j < cJSON_rsf_GetArraySize(json_io_config); j++) {
                     io_value[j - 1] = cJSON_rsf_GetArrayItem(json_io_config, j)->valuefloat;
                 }
                 
@@ -8671,11 +8879,17 @@ void normal_mode_init() {
                 if (gpio < 100) {
 #ifdef ESP_PLATFORM
                     gpio_reset_pin(gpio);
+                    
+                    const int pull_up_down = IO_GPIO_PULL_UP_DOWN % 10;
+                    const int glitch_filter = IO_GPIO_PULL_UP_DOWN / 10;
+                    
+                    if (pull_up_down >= 0) {
+#else
+                    if (IO_GPIO_PULL_UP_DOWN >= 0) {
 #endif
                     
-                    if (IO_GPIO_PULL_UP_DOWN >= 0) {
 #ifdef ESP_PLATFORM
-                        int esp_idf_pull = GPIO_FLOATING;
+                        unsigned int esp_idf_pull = GPIO_FLOATING;
                         switch (IO_GPIO_PULL_UP_DOWN) {
                             case 1:
                                 esp_idf_pull = GPIO_PULLUP_ONLY;
@@ -8694,6 +8908,19 @@ void normal_mode_init() {
                         gpio_set_pullup(gpio, IO_GPIO_PULL_UP_DOWN, IO_GPIO_PULL_UP_DOWN);
 #endif
                     }
+                    
+#ifdef ESP_HAS_GPIO_GLITCH_FILTER
+                    if (glitch_filter != 0) {
+                        gpio_glitch_filter_handle_t gpio_glitch_filter_handle;
+                        gpio_pin_glitch_filter_config_t gpio_pin_glitch_filter_config = {
+                            .clk_src = GLITCH_FILTER_CLK_SRC_DEFAULT,
+                            .gpio_num = gpio,
+                        };
+                        
+                        gpio_new_pin_glitch_filter(&gpio_pin_glitch_filter_config, &gpio_glitch_filter_handle);
+                        gpio_glitch_filter_enable(gpio_glitch_filter_handle);
+                    }
+#endif
                 }
                 
                 if (IO_GPIO_MODE <= 5) {
@@ -8719,7 +8946,7 @@ void normal_mode_init() {
 #endif
                     
                 } else if (IO_GPIO_MODE == 6) {
-                    const int inverted = (bool) (IO_GPIO_BUTTON_MODE & 0b01);
+                    const unsigned int inverted = (bool) (IO_GPIO_BUTTON_MODE & 0b01);
                     
                     if (gpio < 100) {
 #ifdef ESP_PLATFORM
@@ -8728,7 +8955,7 @@ void normal_mode_init() {
                         gpio_enable(gpio, GPIO_INPUT);
 #endif
                         
-                        const int pulse_mode = (bool) (IO_GPIO_BUTTON_MODE & 0b10);
+                        const unsigned int pulse_mode = (bool) (IO_GPIO_BUTTON_MODE & 0b10);
                         
 #ifdef ESP_PLATFORM
                         gpio_ret = adv_button_create(gpio, inverted, pulse_mode, 0, IO_GPIO_BUTTON_FILTER);
@@ -8775,8 +9002,8 @@ void normal_mode_init() {
 #endif
                     }
                     
-                    const int inverted = (bool) (IO_GPIO_PWM_MODE & 0b0001);
-                    const int leading = (bool) (IO_GPIO_PWM_MODE & 0b0010);
+                    const unsigned int inverted = (bool) (IO_GPIO_PWM_MODE & 0b0001);
+                    const unsigned int leading = (bool) (IO_GPIO_PWM_MODE & 0b0010);
                     
                     adv_pwm_new_channel(gpio, inverted, leading, IO_GPIO_PWM_DITHERING, IO_GPIO_OUTPUT_INIT_VALUE);
                     
@@ -8823,8 +9050,8 @@ void normal_mode_init() {
                         channel = main_config.pwmh_channels->channel + 1;
                     }
                     
-                    const int inverted = (bool) (IO_GPIO_PWM_MODE & 0b0001);
-                    const int leading = (bool) (IO_GPIO_PWM_MODE & 0b0010);
+                    const unsigned int inverted = (bool) (IO_GPIO_PWM_MODE & 0b0001);
+                    const unsigned int leading = (bool) (IO_GPIO_PWM_MODE & 0b0010);
                     
                     new_pwmh_channel->gpio = gpio;
                     new_pwmh_channel->channel = channel;
@@ -8880,10 +9107,37 @@ void normal_mode_init() {
             }
         }
         
+        mcp_clean_inputs_only();
+        
         if (use_software_pwm) {
             adv_pwm_start();
         }
     }
+    
+    // Flex Filter
+#ifdef ESP_HAS_GPIO_FLEX_FILTER
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, FLEX_FILTER_ARRAY) != NULL) {
+        cJSON_rsf* json_flex_filters = cJSON_rsf_GetObjectItemCaseSensitive(json_config, FLEX_FILTER_ARRAY);
+        for (unsigned int i = 0; i < cJSON_rsf_GetArraySize(json_flex_filters); i++) {
+            cJSON_rsf* json_flex_filter = cJSON_rsf_GetArrayItem(json_flex_filters, i);
+            
+            uint32_t flex_value[3];
+            for (unsigned int j = 0; j < 3; j++) {
+                flex_value[j] = (uint32_t) cJSON_rsf_GetArrayItem(json_flex_filter, j)->valuefloat;
+            }
+            
+            gpio_glitch_filter_handle_t gpio_glitch_filter_handle;
+            gpio_flex_glitch_filter_config_t gpio_flex_glitch_filter_config = {
+                .clk_src = GLITCH_FILTER_CLK_SRC_DEFAULT,
+                .gpio_num = flex_value[0],
+                .window_thres_ns = flex_value[1],
+                .window_width_ns = flex_value[2],
+            };
+            gpio_new_flex_glitch_filter(&gpio_flex_glitch_filter_config, &gpio_glitch_filter_handle);
+            gpio_glitch_filter_enable(gpio_glitch_filter_handle);
+        }
+    }
+#endif
     
     // Custom Hostname
     char* custom_hostname = name.value.string_value;
@@ -8905,7 +9159,7 @@ void normal_mode_init() {
     // Timetable Actions
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, TIMETABLE_ACTION_ARRAY) != NULL) {
         cJSON_rsf* json_timetable_actions = cJSON_rsf_GetObjectItemCaseSensitive(json_config, TIMETABLE_ACTION_ARRAY);
-        for (int i = 0; i < cJSON_rsf_GetArraySize(json_timetable_actions); i++) {
+        for (unsigned int i = 0; i < cJSON_rsf_GetArraySize(json_timetable_actions); i++) {
             timetable_action_t* timetable_action = malloc(sizeof(timetable_action_t));
             memset(timetable_action, 0, sizeof(*timetable_action));
             timetable_action->mon  = ALL_MONS;
@@ -8918,7 +9172,7 @@ void normal_mode_init() {
             main_config.timetable_actions = timetable_action;
             
             cJSON_rsf* json_timetable_action = cJSON_rsf_GetArrayItem(json_timetable_actions, i);
-            for (int j = 0; j < cJSON_rsf_GetArraySize(json_timetable_action); j++) {
+            for (unsigned int j = 0; j < cJSON_rsf_GetArraySize(json_timetable_action); j++) {
                 const int value = (int8_t) cJSON_rsf_GetArrayItem(json_timetable_action, j)->valuefloat;
                 
                 if (value >= 0) {
@@ -8958,7 +9212,7 @@ void normal_mode_init() {
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, STATUS_LED_GPIO) != NULL) {
         const unsigned int led_gpio = (uint16_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, STATUS_LED_GPIO)->valuefloat;
         
-        int led_inverted = true;
+        unsigned int led_inverted = true;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, INVERTED) != NULL) {
             led_inverted = (bool) cJSON_rsf_GetObjectItemCaseSensitive(json_config, INVERTED)->valuefloat;
         }
@@ -8975,12 +9229,9 @@ void normal_mode_init() {
         }
         
         // IR TX LED Inverted
-        int inverted_value = 0;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO_INVERTED) != NULL) {
-            inverted_value = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO_INVERTED)->valuefloat;
+            main_config.ir_tx_inv = (bool) cJSON_rsf_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO_INVERTED)->valuefloat;
         }
-        
-        main_config.ir_tx_inv = inverted_value;
         
         main_config.ir_tx_gpio = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, IR_ACTION_TX_GPIO)->valuefloat;
         //set_used_gpio(main_config.ir_tx_gpio);
@@ -8991,12 +9242,9 @@ void normal_mode_init() {
     // RF TX GPIO
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO) != NULL) {
         // RF TX Inverted
-        int inverted_value = 0;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO_INVERTED) != NULL) {
-            inverted_value = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO_INVERTED)->valuefloat;
+            main_config.rf_tx_inv = (bool) cJSON_rsf_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO_INVERTED)->valuefloat;
         }
-        
-        main_config.rf_tx_inv = inverted_value;
         
         main_config.rf_tx_gpio = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, RF_ACTION_TX_GPIO)->valuefloat;
         //set_used_gpio(main_config.rf_tx_gpio);
@@ -9011,12 +9259,12 @@ void normal_mode_init() {
     
 #ifdef ESP_PLATFORM
     // Wifi Sleep Mode
-    int wifi_sleep_mode = 1;
+    unsigned int wifi_sleep_mode = 1;
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_SLEEP_MODE_SET) != NULL) {
         wifi_sleep_mode = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_SLEEP_MODE_SET)->valuefloat;
     }
     
-    int wifi_bandwidth_40 = false;
+    unsigned int wifi_bandwidth_40 = false;
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_BANDWIDTH_40_SET) != NULL) {
         wifi_bandwidth_40 = (bool) cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_BANDWIDTH_40_SET)->valuefloat;
     }
@@ -9119,7 +9367,7 @@ void normal_mode_init() {
             case SERV_TYPE_TV:
                 service_recount = 2;
                 cJSON_rsf* json_inputs = cJSON_rsf_GetObjectItemCaseSensitive(json_context, TV_INPUTS_ARRAY);
-                uint8_t inputs = cJSON_rsf_GetArraySize(json_inputs);
+                unsigned int inputs = cJSON_rsf_GetArraySize(json_inputs);
                 
                 if (inputs == 0) {
                     inputs = 1;
@@ -9140,7 +9388,7 @@ void normal_mode_init() {
         
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, EXTRA_SERVICES_ARRAY) != NULL) {
             cJSON_rsf* json_extra_services = cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, EXTRA_SERVICES_ARRAY);
-            for (int i = 0; i < cJSON_rsf_GetArraySize(json_extra_services); i++) {
+            for (unsigned int i = 0; i < cJSON_rsf_GetArraySize(json_extra_services); i++) {
                 cJSON_rsf* json_extra_service = cJSON_rsf_GetArrayItem(json_extra_services, i);
                 total_services += get_service_recount(get_serv_type(json_extra_service), json_extra_service);
             }
@@ -9150,7 +9398,7 @@ void normal_mode_init() {
     }
     
     unsigned int hk_total_ac = 1;
-    int bridge_needed = false;
+    unsigned int bridge_needed = false;
     
     for (unsigned int i = 0; i < total_accessories; i++) {
         cJSON_rsf* json_accessory = cJSON_rsf_GetArrayItem(json_accessories, i);
@@ -9198,7 +9446,7 @@ void normal_mode_init() {
         }
         
         unsigned int serial_str_len = SERIAL_STRING_LEN;
-        int use_config_number = false;
+        unsigned int use_config_number = false;
         if (serial_prefix) {
             serial_str_len += strlen(serial_prefix) + 1;
             
@@ -9283,7 +9531,7 @@ void normal_mode_init() {
     }
     
     bool get_exec_actions_on_boot(cJSON_rsf* json_context) {
-        int exec_actions_on_boot = true;
+        unsigned int exec_actions_on_boot = true;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, EXEC_ACTIONS_ON_BOOT) != NULL) {
             exec_actions_on_boot = (bool) cJSON_rsf_GetObjectItemCaseSensitive(json_context, EXEC_ACTIONS_ON_BOOT)->valuefloat;
         }
@@ -9308,7 +9556,7 @@ void normal_mode_init() {
     
     // Helpers to use common code
     void register_bool_inputs(cJSON_rsf* json_context, ch_group_t* ch_group, const bool exec_actions_on_boot) {
-        int initial_state = 2;
+        unsigned int initial_state = 2;
         
         if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
             initial_state = 1;
@@ -9357,7 +9605,7 @@ void normal_mode_init() {
         
         ch_group_t* ch_group = new_ch_group(ch_calloc - 1, 0, 0, 0);
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (service == 0) {
@@ -9418,7 +9666,7 @@ void normal_mode_init() {
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
         
-        const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
+        const unsigned int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
             diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
@@ -9451,7 +9699,7 @@ void normal_mode_init() {
     void new_button_event(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context, const uint8_t serv_type) {
         ch_group_t* ch_group = new_ch_group(1 + (serv_type == SERV_TYPE_DOORBELL), 0, 0, 0);
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
 
         if (service == 0) {
@@ -9513,7 +9761,7 @@ void normal_mode_init() {
     void new_lock(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         ch_group_t* ch_group = new_ch_group(2, 0, 0, 0);
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (service == 0) {
@@ -9557,7 +9805,7 @@ void normal_mode_init() {
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
         
-        const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
+        const unsigned int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
             diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
@@ -9572,7 +9820,7 @@ void normal_mode_init() {
                 hkc_lock_status_setter(ch_group->ch[1], HOMEKIT_UINT8(!ch_group->ch[1]->value.int_value));
             }
         } else {
-            int initial_state = 2;
+            unsigned int initial_state = 2;
             
             if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), diginput, ch_group, 0)) {
                 initial_state = 0;
@@ -9615,7 +9863,7 @@ void normal_mode_init() {
         ch_group_t* ch_group = new_ch_group(1, 0, 0, 0);
         ch_group->serv_type = SERV_TYPE_CONTACT_SENSOR;
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (service == 0) {
@@ -9713,9 +9961,9 @@ void normal_mode_init() {
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), binary_sensor, ch_group, 2);
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), binary_sensor, ch_group, 3);
         
-        const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
+        const unsigned int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
-        int initial_state = 4;
+        unsigned int initial_state = 4;
         
         if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), binary_sensor, ch_group, 0)) {
             if (serv_type == SERV_TYPE_MOTION_SENSOR) {
@@ -9764,7 +10012,7 @@ void normal_mode_init() {
     
     // *** NEW AIR QUALITY
     void new_air_quality(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
-        size_t extra_data_size = 0;
+        unsigned int extra_data_size = 0;
         cJSON_rsf* json_extra_data = NULL;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, AQ_EXTRA_DATA_ARRAY_SET) != NULL) {
             json_extra_data = cJSON_rsf_GetObjectItemCaseSensitive(json_context, AQ_EXTRA_DATA_ARRAY_SET);
@@ -9774,7 +10022,7 @@ void normal_mode_init() {
         ch_group_t* ch_group = new_ch_group(1 + extra_data_size, 0, 0, 0);
         ch_group->serv_type = SERV_TYPE_AIR_QUALITY;
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (service == 0) {
@@ -9858,7 +10106,7 @@ void normal_mode_init() {
         ch_group_t* ch_group = new_ch_group(calloc_count - 2, 0, 0, 0);
         ch_group->serv_type = SERV_TYPE_WATER_VALVE;
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (service == 0) {
@@ -9930,7 +10178,7 @@ void normal_mode_init() {
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
         
-        const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
+        const unsigned int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
             diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
@@ -9946,7 +10194,7 @@ void normal_mode_init() {
             }
             
         } else {
-            int initial_state = 2;
+            unsigned int initial_state = 2;
             
             if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1)) {
                 initial_state = 1;
@@ -9989,7 +10237,7 @@ void normal_mode_init() {
         ch_group_t* ch_group = new_ch_group(7, 8, 5, 4);
         ch_group->serv_type = SERV_TYPE_THERMOSTAT;
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         THERMOSTAT_CURRENT_ACTION = -1;
         TH_IAIRZONING_GATE_CURRENT_STATE = -1;
@@ -10199,7 +10447,7 @@ void normal_mode_init() {
             }
         }
         
-        const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
+        const unsigned int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
             diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), th_input, ch_group, 1);
@@ -10213,7 +10461,7 @@ void normal_mode_init() {
                 ch_group->ch[2]->value.int_value = !ch_group->ch[2]->value.int_value;
             }
         } else {
-            int initial_state = 2;
+            unsigned int initial_state = 2;
             
             if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), th_input, ch_group, 1)) {
                 initial_state = 1;
@@ -10266,7 +10514,7 @@ void normal_mode_init() {
         ch_group_t* ch_group = new_ch_group(1, 4, 2, 1);
         ch_group->serv_type = SERV_TYPE_TEMP_SENSOR;
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (service == 0) {
@@ -10315,7 +10563,7 @@ void normal_mode_init() {
         ch_group_t* ch_group = new_ch_group(2, 4, 2, 2);
         ch_group->serv_type = SERV_TYPE_HUM_SENSOR;
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (service == 0) {
@@ -10364,7 +10612,7 @@ void normal_mode_init() {
         ch_group_t* ch_group = new_ch_group(2, 4, 2, 2);
         ch_group->serv_type = SERV_TYPE_TH_SENSOR;
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (service == 0) {
@@ -10432,7 +10680,7 @@ void normal_mode_init() {
         ch_group_t* ch_group = new_ch_group(7, 6, 4, 4);
         ch_group->serv_type = SERV_TYPE_HUMIDIFIER;
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         HUMIDIF_CURRENT_ACTION = -1;
         
@@ -10483,7 +10731,7 @@ void normal_mode_init() {
         
         
         if (ch_group->homekit_enabled) {
-            int calloc_count = 6;
+            unsigned int calloc_count = 6;
             if (hm_type >= HUMIDIF_TYPE_HUMDEHUM) {
                 calloc_count += 1;
             }
@@ -10621,7 +10869,7 @@ void normal_mode_init() {
             }
         }
         
-        const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
+        const unsigned int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
             diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), humidif_input, ch_group, 1);
@@ -10635,7 +10883,7 @@ void normal_mode_init() {
                 ch_group->ch[2]->value.int_value = !ch_group->ch[2]->value.int_value;
             }
         } else {
-            int initial_state = 2;
+            unsigned int initial_state = 2;
             
             if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), humidif_input, ch_group, 1)) {
                 initial_state = 1;
@@ -10662,7 +10910,7 @@ void normal_mode_init() {
         ch_group_t* ch_group = new_ch_group(4, 0, 2, 1);
         ch_group->serv_type = SERV_TYPE_LIGHTBULB;
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (service == 0) {
@@ -10751,7 +10999,7 @@ void normal_mode_init() {
         
         if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM || LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM_CWWW) {
             LIGHTBULB_CHANNELS = cJSON_rsf_GetArraySize(gpio_array);
-            for (int i = 0; i < LIGHTBULB_CHANNELS; i++) {
+            for (unsigned int i = 0; i < LIGHTBULB_CHANNELS; i++) {
                 lightbulb_group->gpio[i] = (uint8_t) cJSON_rsf_GetArrayItem(gpio_array, i)->valuefloat;
             }
             
@@ -10789,8 +11037,7 @@ void normal_mode_init() {
             
             cJSON_rsf* color_map = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_COLOR_MAP_SET);
             if (color_map) {
-                const unsigned int size = cJSON_rsf_GetArraySize(color_map);
-                for (unsigned int i = 0; i < size; i++) {
+                for (unsigned int i = 0; i < cJSON_rsf_GetArraySize(color_map); i++) {
                     addressled->map[i] = cJSON_rsf_GetArrayItem(color_map, i)->valuefloat;
                 }
             }
@@ -10800,12 +11047,12 @@ void normal_mode_init() {
         
         INFO("Channels %i Type %i", LIGHTBULB_CHANNELS, LIGHTBULB_TYPE);
         
-        int is_custom_initial = false;
+        unsigned int is_custom_initial = false;
         uint16_t custom_initial[3];
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_INITITAL_STATE_ARRAY_SET) != NULL) {
             is_custom_initial = true;
             cJSON_rsf* init_values_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_INITITAL_STATE_ARRAY_SET);
-            for (int i = 0; i < cJSON_rsf_GetArraySize(init_values_array); i++) {
+            for (unsigned int i = 0; i < cJSON_rsf_GetArraySize(init_values_array); i++) {
                 custom_initial[i] = (uint16_t) cJSON_rsf_GetArrayItem(init_values_array, i)->valuefloat;
             }
         }
@@ -10821,7 +11068,7 @@ void normal_mode_init() {
             
             if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FLUX_ARRAY_SET) != NULL) {
                 cJSON_rsf* flux_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_FLUX_ARRAY_SET);
-                for (int i = 0; i < LIGHTBULB_CHANNELS; i++) {
+                for (unsigned int i = 0; i < LIGHTBULB_CHANNELS; i++) {
                     lightbulb_group->flux[i] = (float) cJSON_rsf_GetArrayItem(flux_array, i)->valuefloat;
                 }
             }
@@ -10830,7 +11077,7 @@ void normal_mode_init() {
             
             if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_RGB_ARRAY_SET) != NULL) {
                 cJSON_rsf* rgb_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_RGB_ARRAY_SET);
-                for (int i = 0; i < 6; i++) {
+                for (unsigned int i = 0; i < 6; i++) {
                     lightbulb_group->rgb[i >> 1][i % 2] = (float) cJSON_rsf_GetArrayItem(rgb_array, i)->valuefloat;
                 }
             }
@@ -10839,7 +11086,7 @@ void normal_mode_init() {
             
             if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CMY_ARRAY_SET) != NULL) {
                 cJSON_rsf* cmy_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_CMY_ARRAY_SET);
-                for (int i = 0; i < 6; i++) {
+                for (unsigned int i = 0; i < 6; i++) {
                     lightbulb_group->cmy[i >> 1][i % 2] = (float) cJSON_rsf_GetArrayItem(cmy_array, i)->valuefloat;
                 }
             }
@@ -10911,7 +11158,7 @@ void normal_mode_init() {
             //service_iid += 3;
         }
         
-        int calloc_count = 3;
+        unsigned int calloc_count = 3;
 
         if (LIGHTBULB_CHANNELS >= 3) {
             // Channels 3+
@@ -11022,7 +11269,7 @@ void normal_mode_init() {
         ch_group_t* ch_group = new_ch_group(3, 6, 3, 0);
         ch_group->serv_type = SERV_TYPE_GARAGE_DOOR;
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (service == 0) {
@@ -11108,7 +11355,7 @@ void normal_mode_init() {
             GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN;
         }
         
-        int initial_sensor = 2;
+        unsigned int initial_sensor = 2;
         
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5) != NULL) {
             GARAGE_DOOR_HAS_F5 = 1;
@@ -11167,7 +11414,7 @@ void normal_mode_init() {
         ch_group_t* ch_group = new_ch_group(4, 4, 5, 1);
         ch_group->serv_type = SERV_TYPE_WINDOW_COVER;
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (service == 0) {
@@ -11176,7 +11423,7 @@ void normal_mode_init() {
         
         service++;
         
-        int cover_type = WINDOW_COVER_TYPE_DEFAULT;
+        unsigned int cover_type = WINDOW_COVER_TYPE_DEFAULT;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TYPE_SET) != NULL) {
             cover_type = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TYPE_SET)->valuefloat;
         }
@@ -11260,6 +11507,7 @@ void normal_mode_init() {
         diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_2), window_cover_diginput, ch_group, WINDOW_COVER_STOP);
         diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), window_cover_diginput, ch_group, WINDOW_COVER_CLOSING + 3);
         diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), window_cover_diginput, ch_group, WINDOW_COVER_OPENING + 3);
+        diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_7), window_cover_diginput, ch_group, WINDOW_COVER_SINGLE_INPUT);
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, PINGS_ARRAY), diginput, ch_group, 2);
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), window_cover_diginput, ch_group, WINDOW_COVER_CLOSING);
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_1), window_cover_diginput, ch_group, WINDOW_COVER_OPENING);
@@ -11268,12 +11516,13 @@ void normal_mode_init() {
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_4), window_cover_diginput, ch_group, WINDOW_COVER_OPENING + 3);
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_5), window_cover_obstruction, ch_group, 0);
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_6), window_cover_obstruction, ch_group, 1);
+        ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_7), window_cover_diginput, ch_group, WINDOW_COVER_SINGLE_INPUT);
         
         if (get_exec_actions_on_boot(json_context)) {
             window_cover_stop(ch_group);
         }
         
-        int initial_sensor = 2;
+        unsigned int initial_sensor = 2;
         
         if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), window_cover_obstruction, ch_group, 0)) {
             initial_sensor = 0;
@@ -11294,7 +11543,7 @@ void normal_mode_init() {
         ch_group_t* ch_group = new_ch_group(1, 3, 4, 1);
         ch_group->serv_type = SERV_TYPE_LIGHT_SENSOR;
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (service == 0) {
@@ -11328,9 +11577,9 @@ void normal_mode_init() {
             //service_iid += 2;
         }
         
-        int light_sensor_type = LIGHT_SENSOR_TYPE_DEFAULT;
+        unsigned int light_sensor_type = LIGHT_SENSOR_TYPE_DEFAULT;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_TYPE_SET) != NULL) {
-            light_sensor_type = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_TYPE_SET)->valuefloat;
+            light_sensor_type = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_TYPE_SET)->valuefloat;
         }
         
         LIGHT_SENSOR_TYPE = light_sensor_type;
@@ -11379,7 +11628,7 @@ void normal_mode_init() {
         ch_group_t* ch_group = new_ch_group(2, 0, 0, 0);
         ch_group->serv_type = SERV_TYPE_SECURITY_SYSTEM;
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (service == 0) {
@@ -11388,7 +11637,7 @@ void normal_mode_init() {
         
         service++;
         
-        uint8_t valid_values_len = 4;
+        unsigned int valid_values_len = 4;
         
         cJSON_rsf* modes_array = NULL;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, SEC_SYSTEM_MODES_ARRAY_SET) != NULL) {
@@ -11400,12 +11649,12 @@ void normal_mode_init() {
         uint8_t* target_valid_values = (uint8_t*) malloc(valid_values_len);
         
         if (valid_values_len < 4) {
-            for (int i = 0; i < valid_values_len; i++) {
+            for (unsigned int i = 0; i < valid_values_len; i++) {
                 current_valid_values[i] = (uint8_t) cJSON_rsf_GetArrayItem(modes_array, i)->valuefloat;
                 target_valid_values[i] = current_valid_values[i];
             }
         } else {
-            for (int i = 0; i < 4; i++) {
+            for (unsigned int i = 0; i < 4; i++) {
                 current_valid_values[i] = i;
                 target_valid_values[i] = i;
             }
@@ -11443,7 +11692,7 @@ void normal_mode_init() {
         
         SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = set_initial_state(ch_group->serv_index, 1, json_context, SEC_SYSTEM_CH_TARGET_STATE, CH_TYPE_INT8, target_valid_values[valid_values_len - 1]);
         
-        const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
+        const unsigned int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (exec_actions_on_boot) {
             if (SEC_SYSTEM_CH_CURRENT_STATE->value.int_value == target_valid_values[valid_values_len - 1]) {
@@ -11464,7 +11713,7 @@ void normal_mode_init() {
     // *** NEW TV
     void new_tv(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         cJSON_rsf* json_inputs = cJSON_rsf_GetObjectItemCaseSensitive(json_context, TV_INPUTS_ARRAY);
-        uint8_t inputs = cJSON_rsf_GetArraySize(json_inputs);
+        unsigned int inputs = cJSON_rsf_GetArraySize(json_inputs);
         
         if (inputs == 0) {
             inputs = 1;
@@ -11473,7 +11722,7 @@ void normal_mode_init() {
         ch_group_t* ch_group = new_ch_group(7, 0, 0, 0);
         ch_group->serv_type = SERV_TYPE_TV;
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (service == 0) {
@@ -11549,7 +11798,7 @@ void normal_mode_init() {
             
             accessories[accessory]->services[service]->linked = calloc(inputs + 1, sizeof(homekit_service_t*));
             
-            for (int i = 0; i < inputs; i++) {
+            for (unsigned int i = 0; i < inputs; i++) {
                 cJSON_rsf* json_input = cJSON_rsf_GetArrayItem(json_inputs, i);
                 
                 char* name = strdup("TV");
@@ -11557,7 +11806,7 @@ void normal_mode_init() {
                     free(name);
                     name = uni_strdup(cJSON_rsf_GetObjectItemCaseSensitive(json_input, TV_INPUT_NAME)->valuestring, &unistrings);
                     if (cJSON_rsf_GetObjectItemCaseSensitive(json_input, "0") != NULL) {
-                        int int_action = MAX_ACTIONS + i;
+                        unsigned int int_action = MAX_ACTIONS + i;
                         char action[4];
                         itoa(int_action, action, 10);
                         cJSON_rsf* json_new_input_action = cJSON_rsf_CreateObject();
@@ -11599,7 +11848,7 @@ void normal_mode_init() {
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
         
-        const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
+        const unsigned int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
             diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
@@ -11649,7 +11898,7 @@ void normal_mode_init() {
     void new_fan(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         ch_group_t* ch_group = new_ch_group(2, 1, 0, 1);
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (service == 0) {
@@ -11658,7 +11907,7 @@ void normal_mode_init() {
         
         service++;
         
-        int max_speed = 100;
+        unsigned int max_speed = 100;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FAN_SPEED_STEPS) != NULL) {
             max_speed = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, FAN_SPEED_STEPS)->valuefloat;
         }
@@ -11709,7 +11958,7 @@ void normal_mode_init() {
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), digstate, ch_group, 1);
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), digstate, ch_group, 0);
         
-        const int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
+        const unsigned int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
             diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_1), diginput, ch_group, 1);
@@ -11734,7 +11983,7 @@ void normal_mode_init() {
     void new_battery(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         ch_group_t* ch_group = new_ch_group(2, 1, 0, 1);
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (service == 0) {
@@ -11743,7 +11992,7 @@ void normal_mode_init() {
         
         service++;
         
-        int battery_low = BATTERY_LOW_THRESHOLD_DEFAULT;
+        unsigned int battery_low = BATTERY_LOW_THRESHOLD_DEFAULT;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, BATTERY_LOW_THRESHOLD_SET) != NULL) {
             battery_low = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, BATTERY_LOW_THRESHOLD_SET)->valuefloat;
         }
@@ -11786,7 +12035,7 @@ void normal_mode_init() {
         ch_group_t* ch_group = new_ch_group(7, 3, 8, 4);
         ch_group->serv_type = SERV_TYPE_POWER_MONITOR;
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (service == 0) {
@@ -11878,7 +12127,7 @@ void normal_mode_init() {
         
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_SENSOR_DATA_ARRAY_SET) != NULL) {
             cJSON_rsf* gpio_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_SENSOR_DATA_ARRAY_SET);
-            for (int i = 0; i < cJSON_rsf_GetArraySize(gpio_array); i++) {
+            for (unsigned int i = 0; i < cJSON_rsf_GetArraySize(gpio_array); i++) {
                 data[i] = (int16_t) cJSON_rsf_GetArrayItem(gpio_array, i)->valuefloat;
                 
                 /*
@@ -11934,7 +12183,7 @@ void normal_mode_init() {
     
     // *** NEW FREE MONITOR
     void new_free_monitor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context, const uint8_t serv_type) {
-        int fm_sensor_type = FM_SENSOR_TYPE_DEFAULT;
+        unsigned int fm_sensor_type = FM_SENSOR_TYPE_DEFAULT;
         
         int tg_serv = 0;
         unsigned int tg_ch = 0;
@@ -11946,7 +12195,7 @@ void normal_mode_init() {
         }
         
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_SENSOR_TYPE_SET) != NULL) {
-            fm_sensor_type = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_SENSOR_TYPE_SET)->valuefloat;
+            fm_sensor_type = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_SENSOR_TYPE_SET)->valuefloat;
         }
         
         pattern_t* pattern_base = NULL;
@@ -11978,24 +12227,25 @@ void normal_mode_init() {
             }
         }
         
-        int has_limits = 0;
+        unsigned int has_limits = 0;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_LIMIT_ARRAY_SET) != NULL) {
             has_limits = 2;
         }
         
-        int is_type_uart = false;
+        unsigned int is_type_uart = false;
         if (fm_sensor_type >= FM_SENSOR_TYPE_UART) {
             is_type_uart = true;
         }
         
-        int is_val_data = 0;
+        unsigned int is_val_data = 0;
         if (is_type_uart ||
             fm_sensor_type == FM_SENSOR_TYPE_NETWORK_PATTERN_HEX ||
-            fm_sensor_type == FM_SENSOR_TYPE_I2C) {
+            fm_sensor_type == FM_SENSOR_TYPE_I2C ||
+            fm_sensor_type == FM_SENSOR_TYPE_I2C_TRIGGER) {
             is_val_data = 2;
         }
         
-        int maths_operations = 0;
+        unsigned int maths_operations = 0;
         if (fm_sensor_type == FM_SENSOR_TYPE_MATHS) {
             cJSON_rsf* val_data = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_READ_COMMAND_DATA_ARRAY);
             maths_operations = cJSON_rsf_GetArraySize(val_data) / 3;
@@ -12039,7 +12289,7 @@ void normal_mode_init() {
         
         ch_group->serv_type = serv_type;
         ch_group->serv_index = service_numerator;
-        int homekit_enabled = acc_homekit_enabled(json_context);
+        unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
         
         if (fm_sensor_type == FM_SENSOR_TYPE_MATHS) {
@@ -12047,10 +12297,10 @@ void normal_mode_init() {
             
             cJSON_rsf* val_data = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_READ_COMMAND_DATA_ARRAY);
             
-            int float_index = FM_MATHS_FLOAT_FIRST + has_limits;
-            int int_index = FM_MATHS_FIRST_OPERATION;
-            for (int i = 0; i < (maths_operations * 3); i++) {
-                for (int j = 0; j < 2; j++) {
+            unsigned int float_index = FM_MATHS_FLOAT_FIRST + has_limits;
+            unsigned int int_index = FM_MATHS_FIRST_OPERATION;
+            for (unsigned int i = 0; i < (maths_operations * 3); i++) {
+                for (unsigned int j = 0; j < 2; j++) {
                     FM_MATHS_INT[int_index] = cJSON_rsf_GetArrayItem(val_data, i)->valuefloat;
                     int_index++;
                     i++;
@@ -12155,10 +12405,10 @@ void normal_mode_init() {
                 
                 FM_SENSOR_GPIO_TRIGGER = 255;
                 if (cJSON_rsf_GetArraySize(gpio_array) > 2) {
-                    const int gpio_trigger = (uint8_t) cJSON_rsf_GetArrayItem(gpio_array, 2)->valuefloat;
+                    const unsigned int gpio_trigger = (uint8_t) cJSON_rsf_GetArrayItem(gpio_array, 2)->valuefloat;
                     FM_SENSOR_GPIO_TRIGGER = (uint8_t) gpio_trigger;
                     
-                    const bool inverted = gpio_trigger / 100;
+                    const unsigned int inverted = gpio_trigger / 100;
                     const unsigned int gpio_final = gpio_trigger % 100;
                     
                     gpio_write(gpio_final, !inverted);
@@ -12171,7 +12421,7 @@ void normal_mode_init() {
             cJSON_rsf* i2c_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_I2C_DEVICE_DATA_ARRAY_SET);
             unsigned int i2c_bus = (uint8_t) cJSON_rsf_GetArrayItem(i2c_array, 0)->valuefloat;
             unsigned int i2c_addr = (uint8_t) cJSON_rsf_GetArrayItem(i2c_array, 1)->valuefloat;
-            size_t i2c_read_len = cJSON_rsf_GetArraySize(i2c_array) - 2;
+            unsigned int i2c_read_len = cJSON_rsf_GetArraySize(i2c_array) - 2;
             
             for (unsigned int i = 0; i < i2c_read_len; i++) {
                 FM_I2C_REG[FM_I2C_REG_FIRST + i] = (uint8_t) cJSON_rsf_GetArrayItem(i2c_array, i + 2)->valuefloat;
@@ -12189,7 +12439,7 @@ void normal_mode_init() {
             // Commands sent at beginning
             if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_I2C_START_COMMANDS_ARRAY_SET) != NULL) {
                 cJSON_rsf* i2c_inits = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_I2C_START_COMMANDS_ARRAY_SET);
-                for (int i = 0; i < cJSON_rsf_GetArraySize(i2c_inits); i++) {
+                for (unsigned int i = 0; i < cJSON_rsf_GetArraySize(i2c_inits); i++) {
                     cJSON_rsf* i2c_init = cJSON_rsf_GetArrayItem(i2c_inits, i);
                     
                     uint8_t reg[32];
@@ -12216,19 +12466,22 @@ void normal_mode_init() {
             // Trigger
             if (fm_sensor_type == FM_SENSOR_TYPE_I2C_TRIGGER) {
                 cJSON_rsf* i2c_trigger_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_I2C_TRIGGER_COMMAND_ARRAY_SET);
-                size_t i2c_trigger_array_len = (uint8_t) cJSON_rsf_GetArraySize(i2c_trigger_array);
+                const unsigned int i2c_trigger_array_len = cJSON_rsf_GetArraySize(i2c_trigger_array);
                 
                 FM_NEW_VALUE = cJSON_rsf_GetArrayItem(i2c_trigger_array, 0)->valuefloat * MS_TO_TICKS(1000);
                 
-                size_t trigger_reg_len = (uint8_t) cJSON_rsf_GetArrayItem(i2c_trigger_array, 1)->valuefloat;
+                const unsigned int trigger_reg_len = (uint8_t) cJSON_rsf_GetArrayItem(i2c_trigger_array, 1)->valuefloat;
                 for (unsigned int i = 0; i < trigger_reg_len; i++) {
                     FM_I2C_TRIGGER_REG[FM_I2C_TRIGGER_REG_FIRST + i] = (uint8_t) cJSON_rsf_GetArrayItem(i2c_trigger_array, i + 2)->valuefloat;
                 }
                 
-                size_t trigger_val_len = i2c_trigger_array_len - trigger_reg_len - 2;
+                const unsigned int trigger_val_len = i2c_trigger_array_len - trigger_reg_len - 2;
                 for (unsigned int i = 0; i < trigger_val_len; i++) {
                     FM_I2C_TRIGGER_VAL[FM_I2C_TRIGGER_VAL_FIRST + i] = (uint8_t) cJSON_rsf_GetArrayItem(i2c_trigger_array, i + trigger_reg_len + 2)->valuefloat;
                 }
+                
+                FM_I2C_TRIGGER_REG_LEN = trigger_reg_len;
+                FM_I2C_TRIGGER_VAL_LEN = trigger_val_len;
             }
 #ifdef ESP_PLATFORM
         } else if (is_type_uart) {
@@ -12261,7 +12514,7 @@ void normal_mode_init() {
         
         const unsigned int hist_accessory = get_absolut_index(service_numerator, cJSON_rsf_GetArrayItem(data_array, 0)->valuefloat);
         const unsigned int hist_ch = cJSON_rsf_GetArrayItem(data_array, 1)->valuefloat;
-        const size_t hist_size = cJSON_rsf_GetArrayItem(data_array, 2)->valuefloat;
+        const unsigned int hist_size = cJSON_rsf_GetArrayItem(data_array, 2)->valuefloat;
         
         INFO("Serv %i, Ch %i, Size %i", hist_accessory, hist_ch, hist_size * HIST_REGISTERS_BY_BLOCK);
         
@@ -12440,10 +12693,10 @@ void normal_mode_init() {
         INFO("\n** ACC %i", i + 1);
         
         cJSON_rsf* json_accessory = cJSON_rsf_GetArrayItem(json_accessories, i);
-        int serv_type = get_serv_type(json_accessory);
+        unsigned int serv_type = get_serv_type(json_accessory);
         
-        int service = 0;
-        int total_services = get_total_services(serv_type, json_accessory);
+        unsigned int service = 0;
+        unsigned int total_services = get_total_services(serv_type, json_accessory);
         new_service(acc_count, service, total_services, json_accessory, serv_type);
         
         if (acc_homekit_enabled(json_accessory) && serv_type != SERV_TYPE_IAIRZONING) {
@@ -12451,7 +12704,7 @@ void normal_mode_init() {
                 service += get_service_recount(serv_type, json_accessory);
 
                 cJSON_rsf* json_extra_services = cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, EXTRA_SERVICES_ARRAY);
-                for (int m = 0; m < cJSON_rsf_GetArraySize(json_extra_services); m++) {
+                for (unsigned int m = 0; m < cJSON_rsf_GetArraySize(json_extra_services); m++) {
                     cJSON_rsf* json_extra_service = cJSON_rsf_GetArrayItem(json_extra_services, m);
                     
                     serv_type = get_serv_type(json_extra_service);
@@ -12495,8 +12748,8 @@ void normal_mode_init() {
         config.category = HOMEKIT_DEVICE_CATEGORY_BRIDGE;
         
     } else {
-        int first_serv_type = 0;
-        for (int i = 1; i <= service_numerator; i++) {
+        unsigned int first_serv_type = 0;
+        for (unsigned int i = 1; i <= (unsigned int) service_numerator; i++) {
             ch_group_t* ch_group = ch_group_find_by_serv(i);
             if (ch_group->homekit_enabled) {
                 first_serv_type = ch_group->serv_type;
@@ -12637,7 +12890,7 @@ void normal_mode_init() {
 }
 
 void irrf_capture_task(void* args) {
-    const int irrf_capture_gpio = ((int) args) - 100;
+    const unsigned int irrf_capture_gpio = ((int) args) - 100;
     INFO("\nGPIO %i\n", irrf_capture_gpio);
     //set_used_gpio(irrf_capture_gpio);
     
@@ -12650,7 +12903,7 @@ void irrf_capture_task(void* args) {
     
     //set_unused_gpios();
     
-    int read, last = true;
+    unsigned int read, last = true;
     unsigned int i, c = 0;
     uint16_t* buffer = malloc(sizeof(uint16_t) * IRRF_CAPTURE_BUFFER_SIZE);
 #ifdef ESP_PLATFORM
@@ -12795,7 +13048,7 @@ void init_task() {
         
         printf_header();
         
-        const int irrf_capture_gpio = (uint8_t) haa_setup;
+        const unsigned int irrf_capture_gpio = (uint8_t) haa_setup;
         xTaskCreate(irrf_capture_task, "CAP", IRRF_CAPTURE_TASK_SIZE, (void*) irrf_capture_gpio, IRRF_CAPTURE_TASK_PRIORITY, NULL);
         
     } else if (haa_setup > 0 || !wifi_ssid) {

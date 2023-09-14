@@ -86,7 +86,7 @@ bool onewire_write(int pin, uint8_t v);
  *
  *  @returns `true` if all bytes written successfully, `false` on error.
  */
-bool onewire_write_bytes(int pin, const uint8_t *buf, size_t count);
+bool onewire_write_bytes(int pin, const uint8_t *buf, unsigned int count);
 
 /** Read a byte from a 1-Wire device.
  *
@@ -104,7 +104,7 @@ int onewire_read(int pin);
  *
  *  @returns `true` on success, `false` on error.
  */
-bool onewire_read_bytes(int pin, uint8_t *buf, size_t count);
+bool onewire_read_bytes(int pin, uint8_t *buf, unsigned int count);
 
 /** Actively drive the bus high to provide extra power for certain operations
  *  of parasitically-powered devices.
@@ -207,7 +207,7 @@ uint8_t onewire_crc8(const uint8_t *data, uint8_t len);
  *
  *  @returns `true` if the CRC matches, `false` otherwise.
  */
-bool onewire_check_crc16(const uint8_t* input, size_t len, const uint8_t* inverted_crc, uint16_t crc_iv);
+bool onewire_check_crc16(const uint8_t* input, unsigned int len, const uint8_t* inverted_crc, uint16_t crc_iv);
 
 /** Compute a Dallas Semiconductor 16 bit CRC.
  *
@@ -225,7 +225,7 @@ bool onewire_check_crc16(const uint8_t* input, size_t len, const uint8_t* invert
  *
  *  @returns the CRC16, as defined by Dallas Semiconductor.
  */
-uint16_t onewire_crc16(const uint8_t* input, size_t len, uint16_t crc_iv);
+uint16_t onewire_crc16(const uint8_t* input, unsigned int len, uint16_t crc_iv);
 
 #ifdef __cplusplus
 }

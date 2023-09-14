@@ -1539,7 +1539,7 @@ static bool print_object(const cJSON_rsf * const item, printbuffer * const outpu
 }
 
 /* Get Array size/item / object item. */
-int cJSON_rsf_GetArraySize(const cJSON_rsf *array)
+size_t cJSON_rsf_GetArraySize(const cJSON_rsf *array)
 {
     cJSON_rsf *child = NULL;
     size_t size = 0;
@@ -1556,10 +1556,10 @@ int cJSON_rsf_GetArraySize(const cJSON_rsf *array)
         size++;
         child = child->next;
     }
-
+    
     /* FIXME: Can overflow here. Cannot be fixed without breaking the API */
 
-    return (int)size;
+    return size;
 }
 
 static cJSON_rsf* get_array_item(const cJSON_rsf *array, size_t index)

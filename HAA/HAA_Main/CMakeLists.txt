@@ -73,6 +73,12 @@ if(HAA_SINGLE_CORE)
     )
 endif()
 
+if(HAA_XTAL26)
+    list(APPEND EXTRA_COMPILE_OPTIONS
+        -DHAA_XTAL26
+    )
+endif()
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(HAA_Main)
 

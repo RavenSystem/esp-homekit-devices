@@ -189,6 +189,7 @@ typedef struct _action_task {
     uint8_t action;
     uint8_t errors;
     uint8_t type;
+    bool done;      // 1 bit
     
     ch_group_t* ch_group;
 } action_task_t;
@@ -294,9 +295,11 @@ typedef struct _mcp23017 {
     uint8_t index;
     uint8_t bus;
     uint8_t addr;
-    uint8_t a_outs;
+    int8_t latch_gpio;
     
-    uint8_t b_outs;
+    uint8_t len;    // 7 bits
+    
+    uint8_t* outs;
     
     struct _mcp23017* next;
 } mcp23017_t;

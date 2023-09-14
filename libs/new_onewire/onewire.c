@@ -34,9 +34,9 @@
 // Waits up to `max_wait` microseconds for the specified pin to go high.
 // Returns true if successful, false if the bus never comes high (likely
 // shorted).
-static inline bool _onewire_wait_for_bus(int pin, int max_wait) {
+static inline bool _onewire_wait_for_bus(int pin, unsigned int max_wait) {
     bool state;
-    for (int i = 0; i < ((max_wait + 4) / 5); i++) {
+    for (unsigned int i = 0; i < ((max_wait + 4) / 5); i++) {
         if (gpio_read(pin)) break;
         sdk_os_delay_us(5);
     }
@@ -142,8 +142,8 @@ bool onewire_write(int pin, uint8_t v) {
     return true;
 }
 
-bool onewire_write_bytes(int pin, const uint8_t *buf, size_t count) {
-    size_t i;
+bool onewire_write_bytes(int pin, const uint8_t *buf, unsigned int count) {
+    unsigned int i;
 
     for (i = 0; i < count; i++) {
         if (!onewire_write(pin, buf[i])) {
@@ -171,8 +171,8 @@ int onewire_read(int pin) {
     return r;
 }
 
-bool onewire_read_bytes(int pin, uint8_t *buf, size_t count) {
-    size_t i;
+bool onewire_read_bytes(int pin, uint8_t *buf, unsigned int count) {
+    unsigned int i;
     int b;
 
     for (i = 0; i < count; i++) {
@@ -184,7 +184,7 @@ bool onewire_read_bytes(int pin, uint8_t *buf, size_t count) {
 }
 
 bool onewire_select(int pin, onewire_addr_t addr) {
-    uint8_t i;
+    unsigned int i;
 
     if (!onewire_write(pin, ONEWIRE_SELECT_ROM)) {
         return false;
@@ -225,7 +225,7 @@ void onewire_search_start(onewire_search_t *search) {
 }
 
 void onewire_search_prefix(onewire_search_t *search, uint8_t family_code) {
-    uint8_t i;
+    unsigned int i;
 
     search->rom_no[0] = family_code;
     for (i = 1; i < 8; i++) {
@@ -453,7 +453,7 @@ uint8_t onewire_crc8(const uint8_t *data, uint8_t len) {
 //                       *not* at a 16-bit integer.
 // @param crc - The crc starting value (optional)
 // @return 1, iff the CRC matches.
-bool onewire_check_crc16(const uint8_t* input, size_t len, const uint8_t* inverted_crc, uint16_t crc_iv) {
+bool onewire_check_crc16(const uint8_t* input, unsigned int len, const uint8_t* inverted_crc, uint16_t crc_iv) {
     uint16_t crc = ~onewire_crc16(input, len, crc_iv);
     return (crc & 0xFF) == inverted_crc[0] && (crc >> 8) == inverted_crc[1];
 }
@@ -470,12 +470,12 @@ bool onewire_check_crc16(const uint8_t* input, size_t len, const uint8_t* invert
 // @param len - How many bytes to use.
 // @param crc - The crc starting value (optional)
 // @return The CRC16, as defined by Dallas Semiconductor.
-uint16_t onewire_crc16(const uint8_t* input, size_t len, uint16_t crc_iv) {
+uint16_t onewire_crc16(const uint8_t* input, unsigned int len, uint16_t crc_iv) {
     uint16_t crc = crc_iv;
     static const uint8_t oddparity[16] =
         { 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1, 1, 0 };
 
-    uint16_t i;
+    unsigned int i;
     for (i = 0; i < len; i++) {
       // Even though we're just copying a byte from the input,
       // we'll be doing 16-bit computation with it.

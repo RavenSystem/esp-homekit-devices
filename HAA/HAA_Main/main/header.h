@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.7.3"
+#define HAA_FIRMWARE_VERSION                "12.8.0"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -85,13 +85,14 @@
 #define INIT_STATE_INV_LAST                 (6)
 #define INIT_STATE_LAST_STR                 "{\"s\":5}"
 
-// JSON
+// MEPLHAA Script
 #define GENERAL_CONFIG                      "c"
 #define MDNS_TTL                            "ttl"
 #define MDNS_TTL_DEFAULT                    (4500)
 #define MDNS_TTL_PERIOD_DEFAULT             (2250)
 #define CUSTOM_HOSTNAME                     "n"
 #define CUSTOM_NTP_HOST                     "ntp"
+#define NTP_DISABLE_STRING                  "0"
 #define TIMEZONE                            "tz"
 #define LOG_OUTPUT                          "o"
 #define LOG_OUTPUT_TARGET                   "ot"
@@ -99,6 +100,7 @@
 #define STATUS_LED_GPIO                     "l"
 #define INVERTED                            "i"
 #define BUTTON_FILTER                       "f"
+#define FLEX_FILTER_ARRAY                   "fl"
 #define BUTTON_CONTINUOS_MODE               "c"
 #define PWMS_FREQ                           "q"
 #define PWMH_FREQ_ARRAY                     "y"
@@ -416,6 +418,7 @@
 #define WINDOW_COVER_STOP_FROM_CLOSING      (5)
 #define WINDOW_COVER_STOP_FROM_OPENING      (6)
 #define WINDOW_COVER_OBSTRUCTION            (7)
+#define WINDOW_COVER_SINGLE_INPUT           (100)
 #define WINDOW_COVER_TYPE_SET               "w"
 #define WINDOW_COVER_TYPE_DEFAULT           (0)
 #define WINDOW_COVER_TIME_OPEN_SET          "o"
@@ -506,6 +509,7 @@
 #define FM_SENSOR_TYPE_UART_PATTERN_TEXT    (25)
 #define FM_SENSOR_TYPE_DEFAULT              FM_SENSOR_TYPE_FREE
 #define FM_SENSOR_TYPE                      ch_group->num_i[0]
+#define FM_SENSOR_TYPE_B                    ch_group_b->num_i[0]
 #define FM_SENSOR_GPIO_ARRAY_SET            "g"
 #define FM_SENSOR_GPIO                      ch_group->num_i[1]
 #define FM_SENSOR_GPIO_INT_TYPE             ch_group->num_i[2]
@@ -544,6 +548,8 @@
 #define FM_MATHS_GET_TIME_YEAR              (-8)
 #define FM_MATHS_GET_TIME_IS_SAVING         (-9)
 #define FM_MATHS_GEN_RANDOM_NUMBER          (-10)
+#define FM_MATHS_GET_UPTIME                 (-11)
+#define FM_MATHS_GET_WIFI_RSSI              (-12)
 #define FM_MATHS_OPERATIONS                 ch_group->num_i[1]
 #define FM_MATHS_FIRST_OPERATION            (2)
 #define FM_MATHS_INT                        ch_group->num_i
@@ -568,7 +574,9 @@
 #define FM_I2C_VAL_OFFSET_SET               "io"
 #define FM_I2C_VAL_OFFSET_DEFAULT           (0)
 #define FM_I2C_BUS                          ch_group->num_i[3]
+#define FM_I2C_BUS_B                        ch_group_b->num_i[3]
 #define FM_I2C_ADDR                         ch_group->num_i[4]
+#define FM_I2C_ADDR_B                       ch_group_b->num_i[4]
 #define FM_I2C_REG_LEN                      ch_group->num_i[5]
 #define FM_I2C_VAL_OFFSET                   ch_group->num_i[6]
 #define FM_I2C_REG_FIRST                    (7)
@@ -749,7 +757,7 @@
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
-#define CUSTOM_HAA_COMMAND                  "zc"
+#define CUSTOM_HAA_COMMAND                  "ic"
 #define HAA_SETUP_ACCESSORY_SET             "s"
 
 #define IRRF_CAPTURE_BUFFER_SIZE            (2048)
@@ -757,7 +765,7 @@
 #define ACTION_TASK_TYPE_UART               (0)
 #define ACTION_TASK_TYPE_NETWORK            (1)
 #define ACTION_TASK_TYPE_IRRF               (2)
-#define ACTION_TASK_MAX_ERRORS              (6)
+#define ACTION_TASK_MAX_ERRORS              (10)
 
 #define SAVE_STATES_TIMER                   ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE)->timer
 #define WIFI_WATCHDOG_TIMER                 ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE)->timer2

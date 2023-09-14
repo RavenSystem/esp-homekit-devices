@@ -19,12 +19,16 @@
 
 #define INFO_NNL(message, ...)              adv_logger_printf(message, ##__VA_ARGS__)
 
-#if defined(CONFIG_IDF_TARGET_ESP32C2) \
-    || defined(CONFIG_IDF_TARGET_ESP32C3) \
-    || defined(CONFIG_IDF_TARGET_ESP32C6) \
-    || defined(CONFIG_IDF_TARGET_ESP32S2) \
-    || defined(CONFIG_IDF_TARGET_ESP32S3)
+#if !defined(CONFIG_IDF_TARGET_ESP32)
 #define ESP_HAS_INTERNAL_TEMP_SENSOR        (1)
+#endif
+
+#if !defined(CONFIG_IDF_TARGET_ESP32)
+#define ESP_HAS_GPIO_GLITCH_FILTER          (1)
+#endif
+
+#if defined(CONFIG_IDF_TARGET_ESP32C6)
+#define ESP_HAS_GPIO_FLEX_FILTER            (1)
 #endif
 
 #else   // ESP-OPEN-RTOS
@@ -38,9 +42,15 @@
 #endif
 
 #ifdef HAA_SINGLE_CORE
-#define HAA_SINGLE_CORE_SUFIX   "_1"
+#define HAA_SINGLE_CORE_SUFIX               "_1"
 #else
-#define HAA_SINGLE_CORE_SUFIX   ""
+#define HAA_SINGLE_CORE_SUFIX               ""
+#endif
+
+#ifdef HAA_XTAL26
+#define HAA_XTAL26_SUFIX                    "_26"
+#else
+#define HAA_XTAL26_SUFIX                    ""
 #endif
 
 // For ESP-OPEN-RTOS only

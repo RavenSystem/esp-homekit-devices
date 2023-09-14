@@ -119,8 +119,8 @@ static bool IRAM_ATTR adv_pwm_worker(gptimer_handle_t gptimer, const gptimer_ala
 #else
 static void IRAM adv_pwm_worker() {
 #endif
-    uint32_t next_load = adv_pwm_config->max_load;
-    uint32_t next_duty = UINT16_MAX;
+    unsigned int next_load = adv_pwm_config->max_load;
+    unsigned int next_duty = UINT16_MAX;
     
     adv_pwm_channel_t* adv_pwm_channel = adv_pwm_config->adv_pwm_channels;
     if (adv_pwm_config->current_duty == 0) {
@@ -262,7 +262,7 @@ static void adv_pwm_init(const unsigned int mode) {
 void adv_pwm_set_freq(const uint16_t freq) {
     adv_pwm_init(1);
     
-    const int pwm_was_running = adv_pwm_config->is_running;
+    const unsigned int pwm_was_running = adv_pwm_config->is_running;
     adv_pwm_stop();
     
 #ifdef ESP_PLATFORM
@@ -295,7 +295,7 @@ void adv_pwm_set_duty(const uint8_t gpio, uint16_t duty) {
             duty = UINT16_MAX - duty;
         }
         
-        uint16_t _dithering = adv_pwm_channel->dithering;
+        unsigned int _dithering = adv_pwm_channel->dithering;
         
         if (_dithering == 0 || duty == 0 || duty == UINT16_MAX) {
             for (int i = 0; i < 8; i++) {
@@ -327,7 +327,7 @@ void adv_pwm_new_channel(const uint8_t gpio, const bool inverted, const bool lea
     adv_pwm_init(0);
     
     if (!adv_pwm_channel_find_by_gpio(gpio)) {
-        int is_running = adv_pwm_config->is_running;
+        const unsigned int is_running = adv_pwm_config->is_running;
         if (is_running) {
             adv_pwm_stop();
         }

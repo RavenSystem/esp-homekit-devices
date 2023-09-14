@@ -23,6 +23,7 @@
 #define IRAM                        IRAM_ATTR
 
 #define gpio_read(gpio)             gpio_get_level(gpio)
+#define gpio_write(gpio, level)     gpio_set_level(gpio, level)
 
 #else
 
@@ -96,12 +97,11 @@ typedef struct _adv_button {
 typedef struct _adv_button_mcp {
     uint8_t index;
     uint8_t addr;
-    uint8_t value_a;
-    uint8_t value_b;
+    uint8_t bus;
+    uint8_t channels;
     
-    uint8_t bus;        // 1 bit
-    uint8_t channels;   // 2 bits
-
+    uint8_t* value;
+    
     struct _adv_button_mcp* next;
 } adv_button_mcp_t;
 
@@ -138,20 +138,57 @@ static adv_button_t* IRAM button_find_by_gpio(const uint16_t gpio) {
 
 static adv_button_mcp_t* mcp_find_by_index(const uint8_t index) {
     if (adv_button_main_config) {
-        adv_button_mcp_t* mcp = adv_button_main_config->mcps;
+        adv_button_mcp_t* adv_button_mcp = adv_button_main_config->mcps;
         
-        while (mcp && mcp->index != index) {
-            mcp = mcp->next;
+        while (adv_button_mcp && adv_button_mcp->index != index) {
+            adv_button_mcp = adv_button_mcp->next;
         }
         
-        return mcp;
+        return adv_button_mcp;
     }
     
     return NULL;
 }
 
+static void adv_button_read_mcp_channels(adv_button_mcp_t* adv_button_mcp) {
+    if (adv_button_mcp->channels != MCP_CHANNEL_B) {
+        const uint8_t reg = 0x12;
+        adv_i2c_slave_read(adv_button_mcp->bus, adv_button_mcp->addr, &reg, 1, &adv_button_mcp->value[0], 1);
+    }
+    
+    if (adv_button_mcp->channels != MCP_CHANNEL_A) {
+        const uint8_t reg = 0x13;
+        adv_i2c_slave_read(adv_button_mcp->bus, adv_button_mcp->addr, &reg, 1, &adv_button_mcp->value[1], 1);
+    }
+}
+
+static void adv_button_read_shift_register(adv_button_mcp_t* adv_button_mcp) {
+    const uint8_t clock_gpio = adv_button_mcp->bus - 100;
+    
+    unsigned int bit_shift = 0;
+    unsigned int out_group = 0;
+    
+    adv_button_mcp->value[0] = 0;
+    
+    for (unsigned int i = 0; i < adv_button_mcp->channels; i++) {
+        adv_button_mcp->value[out_group] |= gpio_read(adv_button_mcp->addr) << bit_shift;
+        
+        gpio_write(clock_gpio, true);
+        
+        bit_shift++;
+        if (bit_shift == 8) {
+            bit_shift = 0;
+            out_group++;
+            
+            adv_button_mcp->value[out_group] = 0;
+        }
+        
+        gpio_write(clock_gpio, false);
+    }
+}
+
 int adv_button_read_by_gpio(const uint16_t gpio) {
-    int result = false;
+    unsigned int result = false;
     
     adv_button_t* button = button_find_by_gpio(gpio);
     if (button) {
@@ -165,13 +202,10 @@ static bool adv_button_read_mcp_gpio(const uint16_t gpio) {
     adv_button_mcp_t* adv_button_mcp = mcp_find_by_index(gpio / 100);
     if (adv_button_mcp) {
         const unsigned int mcp_gpio = gpio % 100;
+        const unsigned int bit_shift = mcp_gpio % 8;
+        const unsigned int out_group = mcp_gpio / 8;
         
-        if (mcp_gpio >= 8) {    // Channel B
-            return (bool) ((1 << (mcp_gpio - 8)) & adv_button_mcp->value_b);
-        }
-        
-        // Channel A
-        return (bool) ((1 << mcp_gpio) & adv_button_mcp->value_a);
+        return (bool) (adv_button_mcp->value[out_group] & (1 << bit_shift));
     }
     
     return false;
@@ -281,24 +315,19 @@ static void IRAM adv_button_interrupt_normal(const uint8_t gpio) {
 #endif
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     if (xTimerStartFromISR(adv_button_main_config->button_evaluate_timer, &xHigherPriorityTaskWoken) == pdPASS) {
-        adv_button_main_config->button_evaluate_sleep_countdown = 0;
-        
         adv_button_t* button = adv_button_main_config->buttons;
         while (button) {
-            if (button->mode == ADV_BUTTON_NORMAL_MODE) {
 #ifdef ESP_PLATFORM
-                gpio_intr_disable(gpio);
+            gpio_intr_disable(gpio);
 #else
-                gpio_set_interrupt(button->gpio, GPIO_INTTYPE_NONE, NULL);
+            gpio_set_interrupt(button->gpio, GPIO_INTTYPE_NONE, NULL);
 #endif
-            }
-            
             button = button->next;
         }
     }
     
 #ifdef ESP_PLATFORM
-    if (xHigherPriorityTaskWoken) {
+    if (xHigherPriorityTaskWoken != pdFALSE) {
         portYIELD_FROM_ISR();
     }
 #endif
@@ -309,45 +338,35 @@ static void button_evaluate_fn() {
         if (adv_button_main_config->button_evaluate_sleep_countdown < adv_button_main_config->button_evaluate_sleep_time) {
             adv_button_main_config->button_evaluate_sleep_countdown++;
             
-        } else if (adv_button_main_config->button_evaluate_sleep_countdown == adv_button_main_config->button_evaluate_sleep_time) {
-            adv_button_main_config->button_evaluate_sleep_countdown++;
-            
+        } else if (rs_esp_timer_stop(adv_button_main_config->button_evaluate_timer) == pdPASS) {
+            adv_button_main_config->button_evaluate_sleep_countdown = 0;
             adv_button_t* button = adv_button_main_config->buttons;
             while (button) {
-                
 #ifdef ESP_PLATFORM
                 gpio_intr_enable(button->gpio);
 #else
                 gpio_set_interrupt(button->gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt_normal);
 #endif
-                
                 button = button->next;
             }
-            
-        } else {
-            rs_esp_timer_stop(adv_button_main_config->button_evaluate_timer);
         }
     }
     
-    adv_button_mcp_t* mcp = adv_button_main_config->mcps;
-    while (mcp) {
-        if (mcp->channels != MCP_CHANNEL_B) {
-            const uint8_t reg = 0x12;
-            adv_i2c_slave_read_no_wait(mcp->bus, mcp->addr, &reg, 1, &mcp->value_a, 1);
+    adv_button_mcp_t* adv_button_mcp = adv_button_main_config->mcps;
+    while (adv_button_mcp) {
+        if (adv_button_mcp->bus < 100) {    // MCP23017
+            adv_button_read_mcp_channels(adv_button_mcp);
+        } else {    // Shift Register
+            adv_button_read_shift_register(adv_button_mcp);
         }
         
-        if (mcp->channels != MCP_CHANNEL_A) {
-            const uint8_t reg = 0x13;
-            adv_i2c_slave_read_no_wait(mcp->bus, mcp->addr, &reg, 1, &mcp->value_b, 1);
-        }
-        
-        mcp = mcp->next;
+        adv_button_mcp = adv_button_mcp->next;
     }
     
     adv_button_t* button = adv_button_main_config->buttons;
     while (button) {
         if (button->mode != ADV_BUTTON_PULSE_MODE) {
-            int read_value;
+            unsigned int read_value;
             
             if (button->mode == ADV_BUTTON_NORMAL_MODE) {
 #ifdef ESP_PLATFORM
@@ -448,6 +467,32 @@ void adv_button_set_disable_time() {
     }
 }
 
+static adv_button_mcp_t* private_adv_button_new_mcp_data(const uint8_t index, const uint8_t mode, const uint8_t mcp_bus, uint8_t len) {
+    adv_button_mcp_t* adv_button_mcp = malloc(sizeof(adv_button_mcp_t));
+    memset(adv_button_mcp, 0, sizeof(*adv_button_mcp));
+    
+    adv_button_mcp->next = adv_button_main_config->mcps;
+    adv_button_main_config->mcps = adv_button_mcp;
+    
+    adv_button_mcp->index = index;
+    adv_button_mcp->addr = mode;
+    adv_button_mcp->bus = mcp_bus;
+    
+    if (len > 0) {
+        adv_button_mcp->channels = len;
+    } else {
+        len = 2;
+    }
+    
+    adv_button_mcp->value = malloc(sizeof(uint8_t) * len);
+    
+    return adv_button_mcp;
+}
+
+void adv_button_create_shift_register(const uint8_t index, const uint8_t mode, const uint8_t mcp_bus, const uint8_t len) {
+    private_adv_button_new_mcp_data(index, mode, mcp_bus, len);
+}
+
 int adv_button_create(const uint16_t gpio, const bool inverted, const uint8_t mode, const uint8_t mcp_bus, const uint8_t max_eval) {
     if (!adv_button_main_config) {
         adv_button_init(0, ADV_BUTTON_CONTINUOS_MODE_OFF);
@@ -525,38 +570,29 @@ int adv_button_create(const uint16_t gpio, const bool inverted, const uint8_t mo
 #endif
             
         } else {    // MCP23017
-            const unsigned int index = gpio / 100;
-            const unsigned int mcp_gpio = gpio % 100;
-            adv_button_mcp_t* mcp = mcp_find_by_index(index);
-            if (!mcp) {
-                mcp = malloc(sizeof(adv_button_mcp_t));
-                memset(mcp, 0, sizeof(*mcp));
-                mcp->next = adv_button_main_config->mcps;
-                adv_button_main_config->mcps = mcp;
-                
-                mcp->index = index;
-                mcp->addr = mode;
-                mcp->bus = mcp_bus;
+            unsigned int index = gpio / 100;
+            unsigned int mcp_gpio = gpio % 100;
+            
+            adv_button_mcp_t* adv_button_mcp = mcp_find_by_index(index);
+            if (!adv_button_mcp) {
+                adv_button_mcp = private_adv_button_new_mcp_data(index, mode, mcp_bus, 0);
                 
                 if (mcp_gpio < 8) {
-                    mcp->channels = MCP_CHANNEL_A;
-                    const uint8_t reg = 0x12;
-                    adv_i2c_slave_read(mcp->bus, mcp->addr, &reg, 1, &mcp->value_a, 1);
+                    adv_button_mcp->channels = MCP_CHANNEL_A;
                 } else {
-                    mcp->channels = MCP_CHANNEL_B;
-                    const uint8_t reg = 0x13;
-                    adv_i2c_slave_read(mcp->bus, mcp->addr, &reg, 1, &mcp->value_b, 1);
+                    adv_button_mcp->channels = MCP_CHANNEL_B;
                 }
-            } else if (mcp->channels != MCP_CHANNEL_BOTH) {
-                if (mcp->channels == MCP_CHANNEL_A && mcp_gpio >= 8) {
-                    mcp->channels = MCP_CHANNEL_BOTH;
-                    const uint8_t reg = 0x13;
-                    adv_i2c_slave_read(mcp->bus, mcp->addr, &reg, 1, &mcp->value_b, 1);
-                } else if (mcp->channels == MCP_CHANNEL_B && mcp_gpio < 8) {
-                    mcp->channels = MCP_CHANNEL_BOTH;
-                    const uint8_t reg = 0x12;
-                    adv_i2c_slave_read(mcp->bus, mcp->addr, &reg, 1, &mcp->value_a, 1);
+                
+                adv_button_read_mcp_channels(adv_button_mcp);
+                
+            } else if (adv_button_mcp->bus < 100) {
+                if ((adv_button_mcp->channels == MCP_CHANNEL_A && mcp_gpio >= 8) || (adv_button_mcp->channels == MCP_CHANNEL_B && mcp_gpio < 8)) {
+                    adv_button_mcp->channels = MCP_CHANNEL_BOTH;
+                    adv_button_read_mcp_channels(adv_button_mcp);
                 }
+                
+            } else {    // Shift Register
+                adv_button_read_shift_register(adv_button_mcp);
             }
             
             button->state = adv_button_read_mcp_gpio(gpio);

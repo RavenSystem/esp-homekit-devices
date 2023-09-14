@@ -181,7 +181,7 @@ typedef struct {
 
 bool homekit_storage_can_add_pairing() {
     pairing_data_t data;
-    for (int i = 0; i < MAX_PAIRINGS; i++) {
+    for (unsigned int i = 0; i < MAX_PAIRINGS; i++) {
         if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
             if (strncmp(data.magic, magic1, sizeof(magic1))) {
                 return true;
@@ -201,8 +201,8 @@ static int compact_data() {
         return -1;
     }
     
-    int next_pairing_idx = 0;
-    for (int i = 0; i < MAX_PAIRINGS; i++) {
+    unsigned int next_pairing_idx = 0;
+    for (unsigned int i = 0; i < MAX_PAIRINGS; i++) {
         pairing_data_t *pairing_data = (pairing_data_t *)&data[PAIRINGS_OFFSET + sizeof(pairing_data_t) * i];
         if (!strncmp(pairing_data->magic, magic1, sizeof(magic1))) {
             if (i != next_pairing_idx) {
@@ -300,7 +300,7 @@ int homekit_storage_add_pairing(const char *device_id, const ed25519_key *device
 
 int homekit_storage_update_pairing(const char *device_id, byte permissions) {
     pairing_data_t data;
-    for (int i = 0; i < MAX_PAIRINGS; i++) {
+    for (unsigned int i = 0; i < MAX_PAIRINGS; i++) {
         if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
             if (strncmp(data.magic, magic1, sizeof(magic1)))
                 continue;
@@ -367,8 +367,8 @@ int homekit_storage_pairing_count() {
     enable_hap_partition();
     
     pairing_data_t data;
-    int count = 0;
-    for (int i = 0; i < MAX_PAIRINGS; i++) {
+    unsigned int count = 0;
+    for (unsigned int i = 0; i < MAX_PAIRINGS; i++) {
         if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
             if (strncmp(data.magic, magic1, sizeof(magic1)))
                 continue;
@@ -380,12 +380,12 @@ int homekit_storage_pairing_count() {
     return count;
 }
 
-int homekit_storage_remove_extra_pairing(const int last_keep) {
+int homekit_storage_remove_extra_pairing(const unsigned int last_keep) {
     enable_hap_partition();
     
     pairing_data_t data;
-    int count = 0;
-    for (int i = 0; i < MAX_PAIRINGS; i++) {
+    unsigned int count = 0;
+    for (unsigned int i = 0; i < MAX_PAIRINGS; i++) {
         if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
             if (strncmp(data.magic, magic1, sizeof(magic1)))
                 continue;
@@ -408,7 +408,7 @@ int homekit_storage_remove_extra_pairing(const int last_keep) {
 
 pairing_t *homekit_storage_find_pairing(const char *device_id) {
     pairing_data_t data;
-    for (int i = 0; i < MAX_PAIRINGS; i++) {
+    for (unsigned int i = 0; i < MAX_PAIRINGS; i++) {
         if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
             if (strncmp(data.magic, magic1, sizeof(magic1)))
                 continue;

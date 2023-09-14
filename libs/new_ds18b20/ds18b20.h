@@ -43,7 +43,7 @@ typedef onewire_addr_t ds18b20_addr_t;
  *  equal to, or more than `addr_count`, depending on how many DS18B20 devices
  *  are attached to the bus.
  */
-int ds18b20_scan_devices(int pin, ds18b20_addr_t *addr_list, int addr_count);
+unsigned int ds18b20_scan_devices(int pin, ds18b20_addr_t *addr_list, unsigned int addr_count);
 
 /** Tell one or more sensors to perform a temperature measurement and
  *  conversion (CONVERT_T) operation.  This operation can take up to 750ms to
@@ -100,7 +100,7 @@ float ds18b20_read_temperature(int pin, ds18b20_addr_t addr);
  *  if one or more had errors (the temperature for erroring devices will be
  *  returned as NaN).
  */
-bool ds18b20_read_temp_multi(int pin, ds18b20_addr_t *addr_list, int addr_count, float *result_list);
+bool ds18b20_read_temp_multi(int pin, ds18b20_addr_t *addr_list, unsigned int addr_count, float *result_list);
 
 /** Perform a ds18b20_measure() followed by ds18b20_read_temperature()
  *
@@ -126,7 +126,7 @@ float ds18b20_measure_and_read(int pin, ds18b20_addr_t addr);
  *  if one or more had errors (the temperature for erroring devices will be
  *  returned as NaN).
  */
-bool ds18b20_measure_and_read_multi(int pin, ds18b20_addr_t *addr_list, int addr_count, float *result_list);
+bool ds18b20_measure_and_read_multi(int pin, ds18b20_addr_t *addr_list, unsigned int addr_count, float *result_list);
 
 /** Read the scratchpad data for a particular DS18B20 device.
  *
