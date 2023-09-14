@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.8.0"
+#define HAA_FIRMWARE_VERSION                "12.8.1"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -34,7 +34,6 @@
 #define IRRF_TX_TASK_SIZE                   (TASK_SIZE_FACTOR * (456))
 #define UART_ACTION_TASK_SIZE               (TASK_SIZE_FACTOR * (384))
 #define NETWORK_ACTION_TASK_SIZE            (TASK_SIZE_FACTOR * (544))
-#define DELAYED_SENSOR_START_TASK_SIZE      GLOBAL_TASK_SIZE
 #define TEMPERATURE_TASK_SIZE               GLOBAL_TASK_SIZE
 #define PROCESS_TH_TASK_SIZE                GLOBAL_TASK_SIZE
 #define PROCESS_HUMIDIF_TASK_SIZE           GLOBAL_TASK_SIZE
@@ -58,7 +57,6 @@
 #define IRRF_TX_TASK_PRIORITY               (tskIDLE_PRIORITY + 1)
 #define UART_ACTION_TASK_PRIORITY           (tskIDLE_PRIORITY + 1)
 #define NETWORK_ACTION_TASK_PRIORITY        (tskIDLE_PRIORITY + 1)
-#define DELAYED_SENSOR_START_TASK_PRIORITY  (tskIDLE_PRIORITY + 1)
 #define TEMPERATURE_TASK_PRIORITY           (tskIDLE_PRIORITY + 1)
 #define PROCESS_TH_TASK_PRIORITY            (tskIDLE_PRIORITY + 1)
 #define PROCESS_HUMIDIF_TASK_PRIORITY       (tskIDLE_PRIORITY + 1)

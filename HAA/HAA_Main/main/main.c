@@ -6327,7 +6327,7 @@ void net_action_task(void* pvParameters) {
         action_network = action_network->next;
     }
 
-    free(pvParameters);
+    free(action_task);
     vTaskDelete(NULL);
 }
 
@@ -6703,7 +6703,7 @@ void irrf_tx_task(void* pvParameters) {
         action_irrf_tx = action_irrf_tx->next;
     }
     
-    free(pvParameters);
+    free(action_task);
     vTaskDelete(NULL);
 }
 
@@ -6743,7 +6743,7 @@ void uart_action_task(void* pvParameters) {
         action_uart = action_uart->next;
     }
     
-    free(pvParameters);
+    free(action_task);
     vTaskDelete(NULL);
 }
 
@@ -6761,12 +6761,14 @@ void action_task_timer(TimerHandle_t xTimer) {
     action_task_t* action_task = (action_task_t*) pvTimerGetTimerID(xTimer);
     
     if (!action_task->done &&
-        ((action_task->type == ACTION_TASK_TYPE_UART &&
-         xTaskCreate(uart_action_task, "UA", UART_ACTION_TASK_SIZE, xTimer, UART_ACTION_TASK_PRIORITY, NULL) != pdPASS) ||
-        (action_task->type == ACTION_TASK_TYPE_IRRF &&
-            xTaskCreate(irrf_tx_task, "IR", IRRF_TX_TASK_SIZE, xTimer, IRRF_TX_TASK_PRIORITY, NULL) != pdPASS) ||
-        (action_task->type == ACTION_TASK_TYPE_NETWORK &&
-            xTaskCreate(net_action_task, "NET", NETWORK_ACTION_TASK_SIZE, xTimer, NETWORK_ACTION_TASK_PRIORITY, NULL) != pdPASS))) {
+        (
+            (action_task->type == ACTION_TASK_TYPE_UART &&
+                xTaskCreate(uart_action_task, "UA", UART_ACTION_TASK_SIZE, xTimer, UART_ACTION_TASK_PRIORITY, NULL) != pdPASS) ||
+            (action_task->type == ACTION_TASK_TYPE_IRRF &&
+                xTaskCreate(irrf_tx_task, "IR", IRRF_TX_TASK_SIZE, xTimer, IRRF_TX_TASK_PRIORITY, NULL) != pdPASS) ||
+            (action_task->type == ACTION_TASK_TYPE_NETWORK &&
+                xTaskCreate(net_action_task, "NET", NETWORK_ACTION_TASK_SIZE, xTimer, NETWORK_ACTION_TASK_PRIORITY, NULL) != pdPASS)
+        )) {
         action_task->errors++;
         homekit_remove_oldest_client();
         
@@ -7372,40 +7374,6 @@ void identify(homekit_characteristic_t* ch, const homekit_value_t value) {
 }
 
 // ---------
-
-void delayed_sensor_task() {
-    ch_group_t* ch_group = main_config.ch_groups;
-    while (ch_group) {
-        if (ch_group->timer &&
-            ch_group->serv_type >= SERV_TYPE_THERMOSTAT &&
-            ch_group->serv_type <= SERV_TYPE_HUMIDIFIER_WITH_TEMP) {
-            vTaskDelay(MS_TO_TICKS(3500));
-            
-            INFO("<%i> Start TH", ch_group->serv_index);
-            
-            temperature_timer_worker(ch_group->timer);
-            rs_esp_timer_start_forced(ch_group->timer);
-        }
-        
-        ch_group = ch_group->next;
-    }
-    
-    ch_group = main_config.ch_groups;
-    while (ch_group) {
-        if (ch_group->serv_type == SERV_TYPE_IAIRZONING) {
-            vTaskDelay(MS_TO_TICKS(9500));
-            
-            INFO("<%i> Start iAZ", ch_group->serv_index);
-            
-            temperature_timer_worker(ch_group->timer);
-            rs_esp_timer_start_forced(ch_group->timer);
-        }
-        
-        ch_group = ch_group->next;
-    }
-    
-    vTaskDelete(NULL);
-}
 
 homekit_characteristic_t name = HOMEKIT_CHARACTERISTIC_(NAME, NULL);
 homekit_characteristic_t manufacturer = HOMEKIT_CHARACTERISTIC_(MANUFACTURER, "José A. Jiménez Campos");
@@ -12835,8 +12803,6 @@ void normal_mode_init() {
     
     unistring_destroy(unistrings);
     
-    xTaskCreate(delayed_sensor_task, "DS", DELAYED_SENSOR_START_TASK_SIZE, NULL, DELAYED_SENSOR_START_TASK_PRIORITY, NULL);
-    
     //set_unused_gpios();
     
     config.accessories = accessories;
@@ -12872,6 +12838,41 @@ void normal_mode_init() {
     }
     main_config.wifi_mode = (uint8_t) wifi_mode;
     
+    // Delayed TH Sensors
+    ch_group_t* th_ch_group = main_config.ch_groups;
+    while (th_ch_group) {
+        if (th_ch_group->serv_type >= SERV_TYPE_THERMOSTAT &&
+            th_ch_group->serv_type <= SERV_TYPE_HUMIDIFIER_WITH_TEMP &&
+            th_ch_group->timer) {
+            
+            INFO("<%i> Start TH", th_ch_group->serv_index);
+            
+            temperature_timer_worker(th_ch_group->timer);
+            rs_esp_timer_start_forced(th_ch_group->timer);
+        }
+        
+        th_ch_group = th_ch_group->next;
+        
+        if (th_ch_group) {
+            vTaskDelay(MS_TO_TICKS(2800));
+        }
+    }
+    
+    // Delayed iAirZoning
+    th_ch_group = main_config.ch_groups;
+    while (th_ch_group) {
+        if (th_ch_group->serv_type == SERV_TYPE_IAIRZONING) {
+            vTaskDelay(MS_TO_TICKS(2800));
+            
+            INFO("<%i> Start iAZ", th_ch_group->serv_index);
+            
+            temperature_timer_worker(th_ch_group->timer);
+            rs_esp_timer_start_forced(th_ch_group->timer);
+        }
+        
+        th_ch_group = th_ch_group->next;
+    }
+        
     random_task_long_delay();
     
     //main_config.wifi_status = WIFI_STATUS_CONNECTING;     // Not needed
