@@ -298,7 +298,7 @@ void adv_pwm_set_duty(const uint8_t gpio, uint16_t duty) {
         unsigned int _dithering = adv_pwm_channel->dithering;
         
         if (_dithering == 0 || duty == 0 || duty == UINT16_MAX) {
-            for (int i = 0; i < 8; i++) {
+            for (unsigned int i = 0; i < 8; i++) {
                 adv_pwm_channel->duty[i] = duty;
             }
         } else {
@@ -316,7 +316,7 @@ void adv_pwm_set_duty(const uint8_t gpio, uint16_t duty) {
             adv_pwm_channel->duty[3] = duty - (_dithering >> 1);
             adv_pwm_channel->duty[4] = duty - _dithering;
             
-            for (int i = 5; i < 8; i++) {
+            for (unsigned int i = 5; i < 8; i++) {
                 adv_pwm_channel->duty[i] = adv_pwm_channel->duty[8 - i];
             }
         }

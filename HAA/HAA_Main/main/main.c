@@ -3744,7 +3744,7 @@ void lightbulb_no_task(ch_group_t* ch_group) {
                 }
             }
             
-            const unsigned int steps = (max_diff / lightbulb_group->step) + 1;
+            const int steps = (max_diff / lightbulb_group->step) + 1;
             
             for (unsigned int i = 0; i < LIGHTBULB_CHANNELS; i++) {
                 if (lightbulb_group->target[i] == lightbulb_group->current[i]) {
@@ -8849,7 +8849,6 @@ void normal_mode_init() {
                     gpio_reset_pin(gpio);
                     
                     const int pull_up_down = IO_GPIO_PULL_UP_DOWN % 10;
-                    const int glitch_filter = IO_GPIO_PULL_UP_DOWN / 10;
                     
                     if (pull_up_down >= 0) {
 #else
@@ -8878,6 +8877,7 @@ void normal_mode_init() {
                     }
                     
 #ifdef ESP_HAS_GPIO_GLITCH_FILTER
+                    const int glitch_filter = IO_GPIO_PULL_UP_DOWN / 10;
                     if (glitch_filter != 0) {
                         gpio_glitch_filter_handle_t gpio_glitch_filter_handle;
                         gpio_pin_glitch_filter_config_t gpio_pin_glitch_filter_config = {
