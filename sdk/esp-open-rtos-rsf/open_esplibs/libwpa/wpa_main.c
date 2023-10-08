@@ -61,16 +61,11 @@ void sdk_dhcp_bind_check(void *parg) {
     struct sdk_g_ic_netif_info *netif_info = sdk_g_ic.v.station_netif_info;
     uint8_t connect_status = netif_info->connect_status;
     uint8_t unknown20a = sdk_g_ic.s._unknown20a;
-
+    
     if (connect_status != STATION_GOT_IP) {
         if (unknown20a == 7 || unknown20a == 8) {
             netif_info->connect_status = STATION_CONNECTING;
         }
-    }
-    
-    ETSTimer *timer = &netif_info->timer;
-    if (xTimerDelete(timer->timer_handle, 0)) {
-        timer->timer_handle = NULL;
     }
 }
 
@@ -109,11 +104,13 @@ void sdk_eagle_auth_done() {
         return;
     }
 
+    /*
     if (ip4_addr_isany_val(sdk_info.sta_ipaddr)) {
-        printf("Expected a static IP address?\n");
+        printf("! Expected a static IP address?\n");
         return;
     }
-
+    */
+    
     LOCK_TCPIP_CORE();
     netif_set_addr(netif, &sdk_info.sta_ipaddr, &sdk_info.sta_netmask, &sdk_info.sta_gw);
     netif_set_up(netif);

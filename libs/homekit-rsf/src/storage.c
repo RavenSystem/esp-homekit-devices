@@ -285,7 +285,7 @@ int homekit_storage_add_pairing(const char *device_id, const ed25519_key *device
         device_key, data.device_public_key, &device_public_key_size
     );
     if (r) {
-        ERROR("Export dev public key (%d)", r);
+        ERROR("Export dev pub key (%d)", r);
         return -1;
     }
     
@@ -311,7 +311,7 @@ int homekit_storage_update_pairing(const char *device_id, byte permissions) {
                 ed25519_key *device_key = crypto_ed25519_new();
                 r = crypto_ed25519_import_public_key(device_key, data.device_public_key, sizeof(data.device_public_key));
                 if (r) {
-                    ERROR("Import dev public key (%d)", r);
+                    ERROR("Import dev pub key (%d)", r);
                     crypto_ed25519_free(device_key);
                     return -2;
                 }
@@ -329,7 +329,7 @@ int homekit_storage_update_pairing(const char *device_id, byte permissions) {
                         return -2;
                     }
                 } else {
-                    INFO("Device Public Key not needing updated");
+                    INFO("Dev pub key not updated");
                 }
                 
                 return 0;
@@ -417,7 +417,7 @@ pairing_t *homekit_storage_find_pairing(const char *device_id) {
                 ed25519_key *device_key = crypto_ed25519_new();
                 int r = crypto_ed25519_import_public_key(device_key, data.device_public_key, sizeof(data.device_public_key));
                 if (r) {
-                    ERROR("Import dev public key (%d)", r);
+                    ERROR("Import dev pub key (%d)", r);
                     return NULL;
                 }
                 
@@ -463,7 +463,7 @@ pairing_t *homekit_storage_next_pairing(pairing_iterator_t *it) {
                 ed25519_key *device_key = crypto_ed25519_new();
                 int r = crypto_ed25519_import_public_key(device_key, data.device_public_key, sizeof(data.device_public_key));
                 if (r) {
-                    ERROR("Import dev public key (%d)", r);
+                    ERROR("Import dev pub key (%d)", r);
                     crypto_ed25519_free(device_key);
                     it->idx++;
                     continue;

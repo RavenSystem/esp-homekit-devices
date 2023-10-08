@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.8.2"
+#define HAA_FIRMWARE_VERSION                "12.9.0"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -189,6 +189,8 @@
 #define VALVE_SYSTEM_TYPE_DEFAULT           (0)
 #define VALVE_MAX_DURATION                  "d"
 #define VALVE_MAX_DURATION_DEFAULT          (3600)
+
+#define BINARY_SENSOR_EXTRA_DATA_SET        "dt"
 
 #define THERMOSTAT_TYPE                     "w"
 #define TH_TYPE                             ch_group->num_i[4]
@@ -494,6 +496,7 @@
 #define FM_SENSOR_TYPE_FREE                 (1)
 #define FM_SENSOR_TYPE_PULSE_FREQ           (2)
 #define FM_SENSOR_TYPE_PULSE_US_TIME        (3)
+#define FM_SENSOR_TYPE_PWM_DUTY             (4)
 #define FM_SENSOR_TYPE_MATHS                (5)
 #define FM_SENSOR_TYPE_ADC                  (10)
 #define FM_SENSOR_TYPE_ADC_INV              (11)
@@ -514,6 +517,13 @@
 #define FM_SENSOR_GPIO_TRIGGER              ch_group->num_i[3]
 #define FM_NEW_VALUE                        ch_group->num_f[2]
 #define FM_OVERRIDE_VALUE                   ch_group->num_f[3]
+#define FM_SENSOR_PWM_DUTY_STATUS           ch_group->num_i[2]
+#define FM_SENSOR_PWM_DUTY_STATUS_START     (0)
+#define FM_SENSOR_PWM_DUTY_STATUS_HIGH      (1)
+#define FM_SENSOR_PWM_DUTY_STATUS_LOW       (2)
+#define FM_SENSOR_PWM_DUTY_STATUS_END       (3)
+#define FM_SENSOR_PWM_DUTY_TIME_HIGH        ch_group->num_f[2]
+#define FM_SENSOR_PWM_DUTY_TIME_LOW         ch_group->num_f[3]
 #define FM_FACTOR_SET                       "ff"
 #define FM_FACTOR_DEFAULT                   (1)
 #define FM_FACTOR                           ch_group->num_f[0]
@@ -548,6 +558,8 @@
 #define FM_MATHS_GEN_RANDOM_NUMBER          (-10)
 #define FM_MATHS_GET_UPTIME                 (-11)
 #define FM_MATHS_GET_WIFI_RSSI              (-12)
+#define FM_MATHS_GET_HK_CLIENT_IPADDR       (-13)
+#define FM_MATHS_GET_HK_CLIENT_COUNT        (-14)
 #define FM_MATHS_OPERATIONS                 ch_group->num_i[1]
 #define FM_MATHS_FIRST_OPERATION            (2)
 #define FM_MATHS_INT                        ch_group->num_i
@@ -755,7 +767,7 @@
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
-#define CUSTOM_HAA_COMMAND                  "ic"
+#define CUSTOM_HAA_COMMAND                  "po"
 #define HAA_SETUP_ACCESSORY_SET             "s"
 
 #define IRRF_CAPTURE_BUFFER_SIZE            (2048)
@@ -783,7 +795,7 @@
 #define WIFI_WATCHDOG_ARP_PERIOD_DEFAULT    (190)   // * WIFI_WATCHDOG_POLL_PERIOD_MS
 #define WIFI_WATCHDOG_ROAMING_PERIOD        (1234)  // * WIFI_WATCHDOG_POLL_PERIOD_MS
 
-#define HAA_RMT_LED_STRIP_BLOCK_SYMBOLS     (256)
+#define HAA_RMT_LED_STRIP_BLOCK_SYMBOLS     (128)   // Bigger than 128 does not work
 #define HAA_RMT_LED_STRIP_RESOLUTION_HZ     (10000000)
 #define HAA_RMT_LED_STRIP_QUEUE_DEPTH       (2)
 

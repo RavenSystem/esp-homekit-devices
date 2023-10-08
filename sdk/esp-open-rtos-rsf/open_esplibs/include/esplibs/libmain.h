@@ -36,8 +36,8 @@ sdk_SpiFlashOpResult sdk_SPIWrite(uint32_t des_addr, uint32_t *src_addr, uint32_
 
 // timers.o
 void sdk_os_timer_setfn(ETSTimer *ptimer, ETSTimerFunc *pfunction, void *parg);
-void sdk_os_timer_arm(ETSTimer *ptimer, uint32_t milliseconds, bool repeat_flag);
-void sdk_os_timer_disarm(ETSTimer *ptimer);
+void IRAM sdk_os_timer_arm(ETSTimer *ptimer, uint32_t milliseconds, bool repeat_flag);
+void IRAM sdk_os_timer_disarm(ETSTimer *ptimer);
 
 // uart.o
 void sdk_uart_div_modify(uint32_t uart_no, uint32_t new_divisor);

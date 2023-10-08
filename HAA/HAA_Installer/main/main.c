@@ -101,7 +101,7 @@ void init_task() {
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     esp_wifi_init(&cfg);
     esp_wifi_set_storage(WIFI_STORAGE_RAM);
-    esp_wifi_set_mode(WIFI_MODE_STA);
+    //esp_wifi_set_mode(WIFI_MODE_APSTA);
     
     const esp_partition_t* running_partition = esp_ota_get_running_partition();
 #ifdef HAABOOT

@@ -84,6 +84,17 @@ void setup_set_esp_netif(esp_netif_t* esp_netif) {
     setup_esp_netif = esp_netif;
     //esp_netif_set_default_netif(esp_netif);
 }
+
+#define haa_sdk_wifi_set_opmode(mode)       esp_wifi_set_mode(mode)
+
+#else
+
+void haa_sdk_wifi_set_opmode(const uint8_t opmode) {
+    LOCK_TCPIP_CORE();
+    sdk_wifi_set_opmode(opmode);
+    UNLOCK_TCPIP_CORE();
+}
+
 #endif
 
 typedef struct _wifi_network_info {
@@ -124,9 +135,6 @@ typedef struct _client {
     uint8_t *body;
     uint32_t body_length;
 } client_t;
-
-
-static void wifi_config_station_connect();
 
 void setup_mode_reset_sysparam() {
     sysparam_create_area(SYSPARAMSECTOR, SYSPARAMSIZE, true);
@@ -424,9 +432,9 @@ static void wifi_config_smart_connect() {
 }
 
 #ifdef ESP_PLATFORM
-static uint8_t wifi_config_connect();
+static void wifi_config_connect();
 #else
-static uint8_t wifi_config_connect(const uint8_t phy);
+static void wifi_config_connect(const uint8_t phy);
 
 static void wifi_config_reset() {
     INFO("Wifi clean");
@@ -1124,9 +1132,7 @@ static void http_task(void *arg) {
 }
 
 static void wifi_config_softap_start() {
-    LOCK_TCPIP_CORE();
-    sdk_wifi_set_opmode(STATIONAP_MODE);
-    UNLOCK_TCPIP_CORE();
+    haa_sdk_wifi_set_opmode(STATIONAP_MODE);
     //sdk_wifi_set_sleep_type(WIFI_SLEEP_NONE);
     
     uint8_t macaddr[6];
@@ -1277,9 +1283,9 @@ static void on_disconnect(void *arg, esp_event_base_t event_base, int32_t event_
     sdk_wifi_station_connect();
 }
 
-static uint8_t wifi_config_connect() {
+static void wifi_config_connect() {
 #else
-static uint8_t wifi_config_connect(const uint8_t phy) {
+static void wifi_config_connect(const uint8_t phy) {
 #endif
     sysparam_set_string(INSTALLER_VERSION_SYSPARAM, INSTALLER_VERSION);
     
@@ -1299,120 +1305,117 @@ static uint8_t wifi_config_connect(const uint8_t phy) {
     esp_wifi_set_ps(WIFI_PS_NONE);
 #endif
     
-    if (wifi_ssid) {
 #ifndef ESP_PLATFORM
-        wifi_config_reset();
+    wifi_config_reset();
 #endif
-        
-        sdk_wifi_station_disconnect();
-        vTaskDelay(1);
+    
+    sdk_wifi_station_disconnect();
+    vTaskDelay(1);
 
-        char* wifi_password = NULL;
-        sysparam_get_string(WIFI_STA_PASSWORD_SYSPARAM, &wifi_password);
-        
+    char* wifi_password = NULL;
+    sysparam_get_string(WIFI_STA_PASSWORD_SYSPARAM, &wifi_password);
+    
 #ifdef ESP_PLATFORM
-        esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &on_got_ip, NULL);
-        esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_disconnect, NULL);
-        
-        strncpy((char*) sta_config.sta.ssid, wifi_ssid, sizeof(sta_config.sta.ssid) - 1);
-        
-        if (wifi_password) {
-           strncpy((char*) sta_config.sta.password, wifi_password, sizeof(sta_config.sta.password) - 1);
-        }
+    esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &on_got_ip, NULL);
+    esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_disconnect, NULL);
+    
+    strncpy((char*) sta_config.sta.ssid, wifi_ssid, sizeof(sta_config.sta.ssid) - 1);
+    
+    if (wifi_password) {
+       strncpy((char*) sta_config.sta.password, wifi_password, sizeof(sta_config.sta.password) - 1);
+    }
 #else
-        struct sdk_station_config sta_config;
-        memset(&sta_config, 0, sizeof(sta_config));
-        
-        strncpy((char*) sta_config.ssid, wifi_ssid, sizeof(sta_config.ssid) - 1);
-        
-        if (wifi_password) {
-           strncpy((char*) sta_config.password, wifi_password, sizeof(sta_config.password) - 1);
-        }
+    struct sdk_station_config sta_config;
+    memset(&sta_config, 0, sizeof(sta_config));
+    
+    strncpy((char*) sta_config.ssid, wifi_ssid, sizeof(sta_config.ssid) - 1);
+    
+    if (wifi_password) {
+       strncpy((char*) sta_config.password, wifi_password, sizeof(sta_config.password) - 1);
+    }
 #endif
-        
-        int8_t wifi_mode = 0;
-        sysparam_get_int8(WIFI_STA_MODE_SYSPARAM, &wifi_mode);
-        
-        uint8_t* wifi_bssid = NULL;
-        sysparam_get_blob(WIFI_STA_BSSID_SYSPARAM, &wifi_bssid, NULL);
-        
-        INFO_NNL("BSSID ");
-        if (wifi_bssid) {
-            INFO("%02x%02x%02x%02x%02x%02x", wifi_bssid[0], wifi_bssid[1], wifi_bssid[2], wifi_bssid[3], wifi_bssid[4], wifi_bssid[5]);
-        } else {
-            INFO("-");
-        }
-        
-        INFO_NNL("Mode ");
-        if (wifi_mode < 2) {
-            if (wifi_mode == 1 && wifi_bssid) {
-#ifdef ESP_PLATFORM
-                sta_config.sta.bssid_set = 1;
-                memcpy(sta_config.sta.bssid, wifi_bssid, 6);
-#else
-                sta_config.bssid_set = 1;
-                memcpy(sta_config.bssid, wifi_bssid, 6);
-#endif
-                INFO("Forced");
-                
-                //INFO("Wifi Mode: Forced BSSID %02x%02x%02x%02x%02x%02x", sta_config.bssid[0], sta_config.bssid[1], sta_config.bssid[2], sta_config.bssid[3], sta_config.bssid[4], sta_config.bssid[5]);
-
-            } else {
-                INFO("Normal");
-            }
-            
-            LOCK_TCPIP_CORE();
-            sdk_wifi_set_opmode(STATION_MODE);
-            UNLOCK_TCPIP_CORE();
-            sdk_wifi_station_set_config(&sta_config);
-            sdk_wifi_station_set_auto_connect(true);
-            
-#ifndef ESP_PLATFORM
-            wifi_config_toggle_phy_mode(phy);
-#endif
-            
-            sdk_wifi_station_connect();
-            
-        } else {
-            INFO("Roaming");
-            sysparam_erase(WIFI_STA_BSSID_SYSPARAM);
-            LOCK_TCPIP_CORE();
-            sdk_wifi_set_opmode(STATION_MODE);
-            UNLOCK_TCPIP_CORE();
-            sdk_wifi_station_set_config(&sta_config);
-            sdk_wifi_station_set_auto_connect(true);
-            
-#ifndef ESP_PLATFORM
-            wifi_config_toggle_phy_mode(phy);
-#endif
-            
-            if (wifi_mode == 4) {
-                xTaskCreate(wifi_scan_sc_task, "SMA", (TASK_SIZE_FACTOR * 384), NULL, (tskIDLE_PRIORITY + 2), NULL);
-            } else {
-                wifi_config_smart_connect();
-            }
-            
-            vTaskDelay(MS_TO_TICKS(5000));
-        }
-        
-        free(wifi_ssid);
-        
-        if (wifi_password) {
-            free(wifi_password);
-        }
-        
-        if (wifi_bssid) {
-            free(wifi_bssid);
-        }
-        
-        return 1;
+    
+    int8_t wifi_mode = 0;
+    sysparam_get_int8(WIFI_STA_MODE_SYSPARAM, &wifi_mode);
+    
+    uint8_t* wifi_bssid = NULL;
+    sysparam_get_blob(WIFI_STA_BSSID_SYSPARAM, &wifi_bssid, NULL);
+    
+    INFO_NNL("BSSID ");
+    if (wifi_bssid) {
+        INFO("%02x%02x%02x%02x%02x%02x", wifi_bssid[0], wifi_bssid[1], wifi_bssid[2], wifi_bssid[3], wifi_bssid[4], wifi_bssid[5]);
+    } else {
+        INFO("-");
     }
     
-    INFO("No Wifi config");
-    return 0;
+    INFO_NNL("Mode ");
+    if (wifi_mode < 2) {
+        if (wifi_mode == 1 && wifi_bssid) {
+#ifdef ESP_PLATFORM
+            sta_config.sta.bssid_set = 1;
+            memcpy(sta_config.sta.bssid, wifi_bssid, 6);
+#else
+            sta_config.bssid_set = 1;
+            memcpy(sta_config.bssid, wifi_bssid, 6);
+#endif
+            INFO("Forced");
+            
+            //INFO("Wifi Mode: Forced BSSID %02x%02x%02x%02x%02x%02x", sta_config.bssid[0], sta_config.bssid[1], sta_config.bssid[2], sta_config.bssid[3], sta_config.bssid[4], sta_config.bssid[5]);
+
+        } else {
+            INFO("Normal");
+        }
+        
+        haa_sdk_wifi_set_opmode(STATION_MODE);
+        sdk_wifi_station_set_config(&sta_config);
+        sdk_wifi_station_set_auto_connect(true);
+        
+#ifndef ESP_PLATFORM
+        wifi_config_toggle_phy_mode(phy);
+#endif
+        
+        sdk_wifi_station_connect();
+        
+    } else {
+        INFO("Roaming");
+        sysparam_erase(WIFI_STA_BSSID_SYSPARAM);
+        haa_sdk_wifi_set_opmode(STATION_MODE);
+        sdk_wifi_station_set_config(&sta_config);
+        sdk_wifi_station_set_auto_connect(true);
+        
+#ifndef ESP_PLATFORM
+        wifi_config_toggle_phy_mode(phy);
+#endif
+        
+        if (wifi_mode == 4) {
+            xTaskCreate(wifi_scan_sc_task, "SMA", (TASK_SIZE_FACTOR * 384), NULL, (tskIDLE_PRIORITY + 2), NULL);
+        } else {
+            wifi_config_smart_connect();
+        }
+        
+        vTaskDelay(MS_TO_TICKS(5000));
+    }
+    
+    free(wifi_ssid);
+    
+    if (wifi_password) {
+        free(wifi_password);
+    }
+    
+    if (wifi_bssid) {
+        free(wifi_bssid);
+    }
 }
 
 static void wifi_config_station_connect() {
+#ifndef ESP_PLATFORM
+    void connect_to_wifi() {
+        int8_t phy_mode = 3;
+        sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
+        wifi_config_connect(phy_mode);
+    }
+#endif
+    
     vTaskDelay(1);
     
     int8_t setup_mode = 3;
@@ -1420,21 +1423,35 @@ static void wifi_config_station_connect() {
     
     INFO("HAA INSTALLER");
     
-#ifdef ESP_PLATFORM
-    if (wifi_config_connect() == 1 && setup_mode == 0) {
-#else
-    int8_t phy_mode = 0;
-    sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
+    char *wifi_ssid = NULL;
+    sysparam_get_string(WIFI_STA_SSID_SYSPARAM, &wifi_ssid);
     
-    if (wifi_config_connect(phy_mode) == 1 && setup_mode == 0) {
-#endif
+    if (wifi_ssid && setup_mode == 0) {
         INFO("* NORMAL");
+        
+#ifdef ESP_PLATFORM
+        wifi_config_connect();
+#else
+        connect_to_wifi();
+#endif
+        
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
         
         xTaskCreate(wifi_config_sta_connect_timeout_task, "STI", (TASK_SIZE_FACTOR * 640), NULL, (tskIDLE_PRIORITY + 1), &context->sta_connect_timeout);
         
     } else {
         INFO("* SETUP");
+        
+        wifi_config_softap_start();
+        
+        if (wifi_ssid) {
+#ifdef ESP_PLATFORM
+            wifi_config_connect();
+#else
+            connect_to_wifi();
+#endif
+        }
+        
         adv_logger_close_buffered_task();
         vTaskDelete(context->ota_task);
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
@@ -1443,9 +1460,11 @@ static void wifi_config_station_connect() {
             context->auto_reboot_timer = rs_esp_timer_create(AUTO_REBOOT_TIMEOUT, false, NULL, auto_reboot_run);
             rs_esp_timer_start_forced(context->auto_reboot_timer);
         }
-        
-        wifi_config_softap_start();
     }
+    
+#ifdef ESP_PLATFORM
+    esp_wifi_start();
+#endif
     
     vTaskDelete(NULL);
 }
