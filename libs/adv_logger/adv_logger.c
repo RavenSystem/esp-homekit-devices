@@ -176,11 +176,11 @@ static void adv_logger_buffered_task() {
             i = 0;
         }
         
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(10 / portTICK_PERIOD_MS);
         
         if (adv_logger_data->close_buffered_task
 #ifdef ESP_PLATFORM
-        && xSemaphoreTake(adv_logger_data->log_sender_semaphore, pdMS_TO_TICKS(100)) == pdTRUE
+        && xSemaphoreTake(adv_logger_data->log_sender_semaphore, 100 / portTICK_PERIOD_MS) == pdTRUE
 #endif
         ) {
             
@@ -201,7 +201,7 @@ static void adv_logger_init_task(void* args) {
     
 #ifdef ESP_PLATFORM
     while (!adv_logger_data->ip_address) {
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(200 / portTICK_PERIOD_MS);
     }
     
     esp_wifi_get_mac(WIFI_IF_STA, macaddr);
@@ -209,7 +209,7 @@ static void adv_logger_init_task(void* args) {
     free(adv_logger_data->ip_address);
 #else
     while (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(200 / portTICK_PERIOD_MS);
     }
     
     struct ip_info info;
@@ -225,11 +225,11 @@ static void adv_logger_init_task(void* args) {
     };
     
     while (getaddrinfo(ADV_LOGGER_ADDRESS, ADV_LOGGER_PORT, &hints, &adv_logger_data->res) != 0) {
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(200 / portTICK_PERIOD_MS);
     }
     
     while ((adv_logger_data->socket = lwip_socket(adv_logger_data->res->ai_family, adv_logger_data->res->ai_socktype, 0)) < 0) {
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(200 / portTICK_PERIOD_MS);
     }
     
     adv_logger_data->udplogstring = malloc(UDP_LOG_LEN);

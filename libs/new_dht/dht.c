@@ -191,7 +191,7 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
     uint8_t data[DHT_DATA_BITS / 8] = { 0 };
     bool result = false;
     
-    if (xSemaphoreTake(dht_lock, pdMS_TO_TICKS(DHT_TIMEOUT_MS)) == pdTRUE) {
+    if (xSemaphoreTake(dht_lock, DHT_TIMEOUT_MS / portTICK_PERIOD_MS) == pdTRUE) {
         
 #ifdef ESP_PLATFORM
         gpio_set_direction(pin, GPIO_MODE_OUTPUT_OD);
@@ -217,7 +217,7 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
         gpio_enable(pin, GPIO_INPUT);
 #endif
         
-        vTaskDelay(pdMS_TO_TICKS(20));
+        vTaskDelay(20 / portTICK_PERIOD_MS);
         
         xSemaphoreGive(dht_lock);
     }

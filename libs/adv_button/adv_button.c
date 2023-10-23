@@ -37,7 +37,7 @@
 #include <timers_helper.h>
 #include "adv_button.h"
 
-#define ADV_BUTTON_DEFAULT_EVAL     (5)
+#define ADV_BUTTON_DEFAULT_EVAL     (4)
 
 #define DOUBLEPRESS_TIME            (450)
 #define LONGPRESS_TIME              (DOUBLEPRESS_TIME + 10)
@@ -330,6 +330,8 @@ static void IRAM adv_button_interrupt_normal(const uint8_t gpio) {
     if (xHigherPriorityTaskWoken != pdFALSE) {
         portYIELD_FROM_ISR();
     }
+#else
+    portEND_SWITCHING_ISR(xHigherPriorityTaskWoken);
 #endif
 }
 
@@ -447,7 +449,7 @@ void adv_button_init(const uint16_t new_delay_ms, const bool continuos_mode) {
         }
         
         adv_button_main_config->button_evaluate_sleep_time = ((HOLDPRESS_TIME + 1000) / portTICK_PERIOD_MS) / adv_button_main_config->button_evaluate_delay;
-        adv_button_main_config->button_evaluate_timer = rs_esp_timer_create(adv_button_main_config->button_evaluate_delay * portTICK_PERIOD_MS, true, NULL, button_evaluate_fn);
+        adv_button_main_config->button_evaluate_timer = rs_esp_timer_create(adv_button_main_config->button_evaluate_delay * portTICK_PERIOD_MS, pdTRUE, NULL, button_evaluate_fn);
         
         adv_button_main_config->continuos_mode = continuos_mode;
         
@@ -633,7 +635,7 @@ int adv_button_register_callback_fn(const uint16_t gpio, const button_callback_f
                 
             case DOUBLEPRESS_TYPE:
                 if (!button->press_timer) {
-                    button->press_timer = rs_esp_timer_create(DOUBLEPRESS_TIME, false, (void*) button, adv_button_single_callback);
+                    button->press_timer = rs_esp_timer_create(DOUBLEPRESS_TIME, pdFALSE, (void*) button, adv_button_single_callback);
                 }
                 adv_button_callback_fn->next = button->doublepress_callback_fn;
                 button->doublepress_callback_fn = adv_button_callback_fn;
@@ -651,7 +653,7 @@ int adv_button_register_callback_fn(const uint16_t gpio, const button_callback_f
                 
             case HOLDPRESS_TYPE:
                 if (!button->hold_timer) {
-                    button->hold_timer = rs_esp_timer_create(HOLDPRESS_TIME, false, (void*) button, adv_button_hold_callback);
+                    button->hold_timer = rs_esp_timer_create(HOLDPRESS_TIME, pdFALSE, (void*) button, adv_button_hold_callback);
                 }
                 adv_button_callback_fn->next = button->holdpress_callback_fn;
                 button->holdpress_callback_fn = adv_button_callback_fn;

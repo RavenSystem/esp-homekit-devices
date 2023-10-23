@@ -37,7 +37,7 @@ BaseType_t rs_esp_timer_manager(const uint8_t option, TimerHandle_t xTimer, Tick
 
 BaseType_t rs_esp_timer_change_period_manager(TimerHandle_t xTimer, const uint32_t new_period_ms, TickType_t xBlockTime) {
     if (xTimer) {
-        return xTimerChangePeriod(xTimer, pdMS_TO_TICKS(new_period_ms), xBlockTime);
+        return xTimerChangePeriod(xTimer, new_period_ms / portTICK_PERIOD_MS, xBlockTime);
     }
     
     return pdFALSE;
@@ -59,23 +59,17 @@ BaseType_t IRAM rs_esp_timer_manager_from_ISR(const uint8_t option, TimerHandle_
     return pdFALSE;
 }
 
-TimerHandle_t rs_esp_timer_create(const uint32_t period_ms, const bool auto_reload, void* pvTimerID, TimerCallbackFunction_t pxCallbackFunction) {
-    UBaseType_t uxAutoReload = pdFALSE;
-    if (auto_reload) {
-        uxAutoReload = pdTRUE;
-    }
+TimerHandle_t rs_esp_timer_create(const uint32_t period_ms, const UBaseType_t auto_reload, void* pvTimerID, TimerCallbackFunction_t pxCallbackFunction) {
+    unsigned int tries = 0;
     
-    uint8_t tries = 0;
-    
-    TimerHandle_t result = xTimerCreate(0, pdMS_TO_TICKS(period_ms), uxAutoReload, pvTimerID, pxCallbackFunction);
-    while (!result) {
+    TimerHandle_t result;
+    while (!(result = xTimerCreate(NULL, period_ms / portTICK_PERIOD_MS, auto_reload, pvTimerID, pxCallbackFunction))) {
         tries++;
-        printf("! Timer Create Failed (%i/%i)\n", tries, XTIMER_MAX_TRIES);
+        //printf("! Timer Create Failed (%i/%i)\n", tries, XTIMER_MAX_TRIES);
         if (tries == XTIMER_MAX_TRIES) {
             break;
         }
         vTaskDelay(tries);
-        result = xTimerCreate(0, pdMS_TO_TICKS(period_ms), uxAutoReload, pvTimerID, pxCallbackFunction);
     }
     
     return result;

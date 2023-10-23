@@ -79,7 +79,7 @@ void sdk_eagle_auth_done() {
 
     uint32_t channel = cnx_node->channel->num;
     char *ssid = (char *)sdk_g_ic.s.sta_ssid.ssid;
-    printf("Connected to %s Ch%d\n", ssid, channel);
+    printf("Connected %s Ch%d\n", ssid, channel);
     
     RTCMEM_SYSTEM[61] = 0x00010000 | channel;
 
@@ -94,9 +94,9 @@ void sdk_eagle_auth_done() {
 
     if (dhcp_supplied_address(netif))
         return;
-
+    
     if (sdk_dhcpc_flag != DHCP_STOPPED) {
-        printf("DHCP client start\n");
+        printf("DHCP start\n");
         LOCK_TCPIP_CORE();
         netif_set_up(netif);
         dhcp_start(netif);

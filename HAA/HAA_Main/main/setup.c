@@ -1597,7 +1597,7 @@ static void wifi_config_station_connect() {
         
         if (setup_mode == 1) {
             INFO("Auto reboot");
-            context->auto_reboot_timer = rs_esp_timer_create(AUTO_REBOOT_TIMEOUT, false, NULL, auto_reboot_run);
+            context->auto_reboot_timer = rs_esp_timer_create(AUTO_REBOOT_TIMEOUT, pdFALSE, NULL, auto_reboot_run);
             rs_esp_timer_start_forced(context->auto_reboot_timer);
         } else if (setup_mode == 2) {
             ERROR("Script");

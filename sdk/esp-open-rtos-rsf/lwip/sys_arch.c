@@ -80,8 +80,12 @@ err_t sys_sem_new(sys_sem_t *pxSemaphore, u8_t initial_count)
     SYS_STATS_INC_USED(sem);
 
     if (initial_count == 1) {
+#ifndef LWIP_NOASSERT
         BaseType_t ret = xSemaphoreGive(*pxSemaphore);
         LWIP_ASSERT("sys_sem_new: initial give failed", ret == pdTRUE);
+#else
+        xSemaphoreGive(*pxSemaphore);
+#endif
     }
     return ERR_OK;
 }
@@ -178,8 +182,12 @@ void sys_mutex_lock(sys_mutex_t *pxMutex)
  * @param mutex the mutex to unlock */
 void sys_mutex_unlock(sys_mutex_t *pxMutex)
 {
+#ifndef LWIP_NOASSERT
     BaseType_t ret = xSemaphoreGiveRecursive(*pxMutex);
     LWIP_ASSERT("failed to give the mutex", ret == pdTRUE);
+#else
+    xSemaphoreGiveRecursive(*pxMutex);
+#endif
 }
 
 

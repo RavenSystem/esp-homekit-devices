@@ -407,7 +407,9 @@ lwiperf_tx_start(lwiperf_state_tcp_t *conn)
 static err_t
 lwiperf_tcp_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
 {
+#ifndef LWIP_NOASSERT
   u8_t tmp;
+#endif
   u16_t tot_len;
   u32_t packet_idx;
   struct pbuf *q;
@@ -477,8 +479,12 @@ lwiperf_tcp_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
       return ERR_OK;
     }
     conn->next_num = 4; /* 24 bytes received... */
+#ifndef LWIP_NOASSERT
     tmp = pbuf_remove_header(p, 24);
     LWIP_ASSERT("pbuf_remove_header failed", tmp == 0);
+#else
+    pbuf_remove_header(p, 24);
+#endif
   }
 
   packet_idx = 0;

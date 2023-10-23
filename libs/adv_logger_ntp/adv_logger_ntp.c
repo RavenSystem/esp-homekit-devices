@@ -262,7 +262,7 @@ static void adv_logger_buffered_task() {
             i = 0;
         }
         
-        vTaskDelay(pdMS_TO_TICKS(10));
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }
 
@@ -271,11 +271,11 @@ static void adv_logger_init_task(void* args) {
     
 #ifdef ESP_PLATFORM
     while (!adv_logger_data->ip_address) {
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(200 / portTICK_PERIOD_MS);
     }
 #else
     while (sdk_wifi_station_get_connect_status() != STATION_GOT_IP) {
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(200 / portTICK_PERIOD_MS);
     }
 #endif
     
@@ -306,13 +306,13 @@ static void adv_logger_init_task(void* args) {
     dest_port += 1;
     
     while (getaddrinfo(destination, dest_port, &hints, &adv_logger_data->res) != 0) {
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(200 / portTICK_PERIOD_MS);
     }
     
     free(args);     // destination and port
     
     while ((adv_logger_data->socket = lwip_socket(adv_logger_data->res->ai_family, adv_logger_data->res->ai_socktype, 0)) < 0) {
-        vTaskDelay(pdMS_TO_TICKS(200));
+        vTaskDelay(200 / portTICK_PERIOD_MS);
     }
     
     if (adv_logger_data->is_buffered) {

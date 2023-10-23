@@ -479,8 +479,8 @@ void sdk_system_station_got_ip_set(struct ip4_addr *ip, struct ip4_addr *mask, s
     uint32_t gpio_mask;
 
     sdk_g_ic.v.station_netif_info->connect_status = STATION_GOT_IP;
-    printf("IP:%d.%d.%d.%d/%d.%d.%d.%d GW:%d.%d.%d.%d", ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3], mask_bytes[0], mask_bytes[1], mask_bytes[2], mask_bytes[3], gw_bytes[0], gw_bytes[1], gw_bytes[2], gw_bytes[3]);
-    printf("\n");
+    printf("IP:%d.%d.%d.%d/%d.%d.%d.%d GW:%d.%d.%d.%d\n", ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3], mask_bytes[0], mask_bytes[1], mask_bytes[2], mask_bytes[3], gw_bytes[0], gw_bytes[1], gw_bytes[2], gw_bytes[3]);
+    
     if ((sdk_g_ic.s.wifi_led_enable == 1) && (sdk_g_ic.s.wifi_mode == 1)) {
         sdk_os_timer_disarm(&sdk_sta_con_timer);
         gpio_mask = 1 << sdk_g_ic.s.wifi_led_gpio;

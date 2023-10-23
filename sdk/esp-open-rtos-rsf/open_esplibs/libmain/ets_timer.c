@@ -322,8 +322,10 @@ void sdk_ets_timer_init()
      * xTaskGenericCreate(task_handle, "rtc_timer_task", 200, 0, 12, &handle,
      *     NULL, NULL);
      */
-    xTaskCreate(timer_task, "rtc_timer_task", 200, 0, 12, &task_handle);
-    printf("frc2_timer_task_hdl:%p, prio:%d, stack:%d\n", task_handle, 12, 200);
+    //xTaskCreate(timer_task, "rtc_timer_task", 200, 0, 12, &task_handle);
+    //printf("frc2_timer_task_hdl:%p, prio:%d, stack:%d\n", task_handle, 12, 200);
+    
+    xTaskCreate(timer_task, "rtc", configMINIMAL_STACK_SIZE, 0, configMAX_PRIORITIES - 3, &task_handle);
 
     TIMER_FRC2.ALARM = 0;
     TIMER_FRC2.CTRL =  VAL2FIELD(TIMER_CTRL_CLKDIV, TIMER_CLKDIV_16)

@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.9.0"
+#define HAA_FIRMWARE_VERSION                "12.9.1"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -555,11 +555,12 @@
 #define FM_MATHS_GET_TIME_DAYYEAR           (-7)
 #define FM_MATHS_GET_TIME_YEAR              (-8)
 #define FM_MATHS_GET_TIME_IS_SAVING         (-9)
-#define FM_MATHS_GEN_RANDOM_NUMBER          (-10)
-#define FM_MATHS_GET_UPTIME                 (-11)
-#define FM_MATHS_GET_WIFI_RSSI              (-12)
-#define FM_MATHS_GET_HK_CLIENT_IPADDR       (-13)
-#define FM_MATHS_GET_HK_CLIENT_COUNT        (-14)
+#define FM_MATHS_GET_TIME_UNIX              (-10)
+#define FM_MATHS_GEN_RANDOM_NUMBER          (-11)
+#define FM_MATHS_GET_UPTIME                 (-12)
+#define FM_MATHS_GET_WIFI_RSSI              (-13)
+#define FM_MATHS_GET_HK_CLIENT_IPADDR       (-14)
+#define FM_MATHS_GET_HK_CLIENT_COUNT        (-15)
 #define FM_MATHS_OPERATIONS                 ch_group->num_i[1]
 #define FM_MATHS_FIRST_OPERATION            (2)
 #define FM_MATHS_INT                        ch_group->num_i

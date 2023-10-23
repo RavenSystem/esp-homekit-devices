@@ -176,16 +176,14 @@ static void show_freeheap() {
 // ESP-IDF ADC
 #ifdef ESP_PLATFORM
 int haa_adc_oneshot_read_by_gpio(int gpio) {
-    int adc_int;
+    int adc_int = -1;
     adc_channel_t adc_channel;
     adc_unit_t adc_unit;    // Needed to make adc_oneshot_io_to_channel() happy
     if (adc_oneshot_io_to_channel(gpio, &adc_unit, &adc_channel) == ESP_OK) {
-        if (adc_oneshot_read(main_config.adc_dac_data->adc_oneshot_handle, adc_channel, &adc_int) == ESP_OK) {
-            return adc_int;
-        }
+        adc_oneshot_read(main_config.adc_dac_data->adc_oneshot_handle, adc_channel, &adc_int);
     }
     
-    return -1;
+    return adc_int;
 }
 #endif
 
@@ -416,7 +414,7 @@ void led_create(const uint16_t gpio, const bool inverted) {
     main_config.status_led = malloc(sizeof(led_t));
     memset(main_config.status_led, 0, sizeof(*main_config.status_led));
     
-    main_config.status_led->timer = rs_esp_timer_create(10, false, NULL, led_code_run);
+    main_config.status_led->timer = rs_esp_timer_create(10, pdFALSE, NULL, led_code_run);
     
     main_config.status_led->gpio = gpio;
     
@@ -1329,7 +1327,7 @@ void hkc_custom_setup_setter(homekit_characteristic_t* ch, const homekit_value_t
                 
             case '3':   // WiFi Reconnection
                 main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
-                rs_esp_timer_start_forced(rs_esp_timer_create(1000, false, NULL, wifi_config_reset));
+                rs_esp_timer_start_forced(rs_esp_timer_create(1000, pdFALSE, NULL, wifi_config_reset));
                 break;
                 
             default:
@@ -2918,7 +2916,7 @@ void temperature_task(void* args) {
                     /*
                      * Only for tests. Keep comment for releases
                      */
-                    //get_temp = true; temperature_value = 23; humidity_value = 68;
+                    //get_temp = true; temperature_value = (((float) (hwrand() % 51)) / 10.0f) + 20; humidity_value = 68;
                     
                     if (get_temp) {
                         TH_SENSOR_ERROR_COUNT = 0;
@@ -2943,10 +2941,10 @@ void temperature_task(void* args) {
                                 if (ch_group->chs > 4) {
                                     hkc_th_setter(ch_group->ch[0], ch_group->ch[0]->value);
                                 }
-                                
-                                if (ch_group->main_enabled) {
-                                    do_wildcard_actions(ch_group, 0, temperature_value);
-                                }
+                            }
+                            
+                            if (ch_group->main_enabled) {
+                                do_wildcard_actions(ch_group, 0, temperature_value);
                             }
                         }
                         
@@ -2969,10 +2967,10 @@ void temperature_task(void* args) {
                                 if (ch_group->chs > 4) {
                                     hkc_humidif_setter(ch_group->ch[1], ch_group->ch[1]->value);
                                 }
-                                
-                                if (ch_group->main_enabled) {
-                                    do_wildcard_actions(ch_group, 1, humidity_value_int);
-                                }
+                            }
+                            
+                            if (ch_group->main_enabled) {
+                                do_wildcard_actions(ch_group, 1, humidity_value_int);
                             }
                         }
                         
@@ -4563,10 +4561,10 @@ void light_sensor_task(void* args) {
     if ((uint32_t) ch_group->ch[0]->value.float_value != (uint32_t) luxes) {
         ch_group->ch[0]->value.float_value = luxes;
         homekit_characteristic_notify_safe(ch_group->ch[0]);
-        
-        if (ch_group->main_enabled) {
-            do_wildcard_actions(ch_group, 0, luxes);
-        }
+    }
+    
+    if (ch_group->main_enabled) {
+        do_wildcard_actions(ch_group, 0, luxes);
     }
     
     ch_group->is_working = false;
@@ -4824,8 +4822,6 @@ void battery_manager(homekit_characteristic_t* ch, int value, bool is_free_monit
                 homekit_characteristic_notify_safe(ch);
             }
             
-            do_wildcard_actions(ch_group, 0, value);
-            
             int status_low_changed = false;
             if (value <= BATTERY_LOW_THRESHOLD &&
                 BATTERY_STATUS_LOW_CH_INT == 0) {
@@ -4848,6 +4844,8 @@ void battery_manager(homekit_characteristic_t* ch, int value, bool is_free_monit
                 do_actions(ch_group, BATTERY_STATUS_LOW_CH_INT);
             }
         }
+        
+        do_wildcard_actions(ch_group, 0, value);
     }
 }
 
@@ -5240,75 +5238,85 @@ void free_monitor_task(void* args) {
                             read_value = get_hkch_value(ch_group_find_by_serv(read_service)->ch[(uint8_t) FM_MATHS_FLOAT[float_index]]);
                             
                         } else {
-                            if (!main_config.clock_ready && read_service >= FM_MATHS_GET_TIME_IS_SAVING) {
-                                get_value = false;
-                                break;
-                            }
-                            
-                            struct tm* timeinfo;
-                            time_t time = raven_ntp_get_time();
-                            timeinfo = localtime(&time);
-                            
-                            switch (read_service) {
-                                case FM_MATHS_GET_TIME_HOUR:
-                                    read_value = timeinfo->tm_hour;
-                                    break;
+                            if (read_service >= FM_MATHS_GET_TIME_UNIX) {
+                                if (main_config.clock_ready) {
+                                    struct tm* timeinfo;
+                                    time_t time = raven_ntp_get_time();
+                                    timeinfo = localtime(&time);
                                     
-                                case FM_MATHS_GET_TIME_MINUTE:
-                                    read_value = timeinfo->tm_min;
-                                    break;
-                                    
-                                case FM_MATHS_GET_TIME_SECOND:
-                                    read_value = timeinfo->tm_sec;
-                                    break;
-                                    
-                                case FM_MATHS_GET_TIME_DAYWEEK:
-                                    read_value = timeinfo->tm_wday;
-                                    break;
-                                    
-                                case FM_MATHS_GET_TIME_DAYMONTH:
-                                    read_value = timeinfo->tm_mday;
-                                    break;
-                                    
-                                case FM_MATHS_GET_TIME_MONTH:
-                                    read_value = timeinfo->tm_mon;
-                                    break;
-                                    
-                                case FM_MATHS_GET_TIME_YEAR:
-                                    read_value = timeinfo->tm_year;
-                                    break;
-                                    
-                                case FM_MATHS_GET_TIME_DAYYEAR:
-                                    read_value = timeinfo->tm_yday;
-                                    break;
-                                    
-                                case FM_MATHS_GET_TIME_IS_SAVING:
-                                    read_value = timeinfo->tm_isdst;
-                                    break;
-                                    
-                                case FM_MATHS_GEN_RANDOM_NUMBER:
-                                    read_value = hwrand() % (((uint32_t) FM_MATHS_FLOAT[float_index]) + 1);
-                                    break;
-#ifdef ESP_PLATFORM
-                                case FM_MATHS_GET_WIFI_RSSI:
-                                    int wifi_rssi = 0;
-                                    if (esp_wifi_sta_get_rssi(&wifi_rssi) != ESP_OK) {
-                                        get_value = false;
+                                    switch (read_service) {
+                                        case FM_MATHS_GET_TIME_HOUR:
+                                            read_value = timeinfo->tm_hour;
+                                            break;
+                                            
+                                        case FM_MATHS_GET_TIME_MINUTE:
+                                            read_value = timeinfo->tm_min;
+                                            break;
+                                            
+                                        case FM_MATHS_GET_TIME_SECOND:
+                                            read_value = timeinfo->tm_sec;
+                                            break;
+                                            
+                                        case FM_MATHS_GET_TIME_DAYWEEK:
+                                            read_value = timeinfo->tm_wday;
+                                            break;
+                                            
+                                        case FM_MATHS_GET_TIME_DAYMONTH:
+                                            read_value = timeinfo->tm_mday;
+                                            break;
+                                            
+                                        case FM_MATHS_GET_TIME_MONTH:
+                                            read_value = timeinfo->tm_mon;
+                                            break;
+                                            
+                                        case FM_MATHS_GET_TIME_YEAR:
+                                            read_value = timeinfo->tm_year;
+                                            break;
+                                            
+                                        case FM_MATHS_GET_TIME_DAYYEAR:
+                                            read_value = timeinfo->tm_yday;
+                                            break;
+                                            
+                                        case FM_MATHS_GET_TIME_IS_SAVING:
+                                            read_value = timeinfo->tm_isdst;
+                                            break;
+                                            
+                                        default:    // case FM_MATHS_GET_TIME_UNIX:
+                                            read_value = time;
+                                            break;
                                     }
-                                    read_value = wifi_rssi;
+                                    
+                                } else {
+                                    get_value = false;
                                     break;
+                                }
+                                
+                            } else {
+                                switch (read_service) {
+                                    case FM_MATHS_GEN_RANDOM_NUMBER:
+                                        read_value = hwrand() % (((uint32_t) FM_MATHS_FLOAT[float_index]) + 1);
+                                        break;
+#ifdef ESP_PLATFORM
+                                    case FM_MATHS_GET_WIFI_RSSI:
+                                        int wifi_rssi = 0;
+                                        if (esp_wifi_sta_get_rssi(&wifi_rssi) != ESP_OK) {
+                                            get_value = false;
+                                        }
+                                        read_value = wifi_rssi;
+                                        break;
 #endif
-                                case FM_MATHS_GET_UPTIME:
-                                    read_value = xTaskGetTickCount() / (1000 / portTICK_PERIOD_MS);
-                                    break;
-                                    
-                                case FM_MATHS_GET_HK_CLIENT_IPADDR:
-                                    read_value = homekit_get_unique_client_ipaddr();
-                                    break;
-                                    
-                                default:    // case FM_MATHS_GET_HK_CLIENT_COUNT:
-                                    read_value = homekit_get_client_count();
-                                    break;
+                                    case FM_MATHS_GET_UPTIME:
+                                        read_value = xTaskGetTickCount() / (1000 / portTICK_PERIOD_MS);
+                                        break;
+                                        
+                                    case FM_MATHS_GET_HK_CLIENT_IPADDR:
+                                        read_value = homekit_get_unique_client_ipaddr();
+                                        break;
+                                        
+                                    default:    // case FM_MATHS_GET_HK_CLIENT_COUNT:
+                                        read_value = homekit_get_client_count();
+                                        break;
+                                }
                             }
                         }
                         
@@ -5705,7 +5713,10 @@ void free_monitor_task(void* args) {
                         set_hkch_value(ch_target, value);
                     }
                     
-                    do_wildcard_actions(ch_group, 0, value);
+                    // Actions
+                    if (ch_group->child_enabled) {
+                        do_wildcard_actions(ch_group, 0, value);
+                    }
                 }
             }
         }
@@ -6904,7 +6915,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
             INFO("<%i> DigO %i->%i (%"HAA_LONGINT_F")", ch_group->serv_index, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
             
             if (action_binary_output->inching > 0) {
-                rs_esp_timer_start(rs_esp_timer_create(action_binary_output->inching, false, (void*) action_binary_output, autoswitch_timer));
+                rs_esp_timer_start(rs_esp_timer_create(action_binary_output->inching, pdFALSE, (void*) action_binary_output, autoswitch_timer));
             }
         }
         
@@ -7366,9 +7377,9 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         action_task->type = type;
         action_task->ch_group = ch_group;
         
-        timer_delay += portTICK_PERIOD_MS * 2;
+        timer_delay += portTICK_PERIOD_MS * 8;
         
-        TimerHandle_t xTimer = rs_esp_timer_create(timer_delay, true, action_task, action_task_timer);
+        TimerHandle_t xTimer = rs_esp_timer_create(timer_delay, pdTRUE, action_task, action_task_timer);
         if (rs_esp_timer_start(xTimer) != pdPASS) {
             free(action_task);
             rs_esp_timer_delete(xTimer);
@@ -7508,10 +7519,10 @@ void run_homekit_server() {
     if (main_config.ntp_host && strcmp(main_config.ntp_host, NTP_DISABLE_STRING) == 0) {
         free(main_config.ntp_host);
     } else {
-        rs_esp_timer_start_forced(rs_esp_timer_create(NTP_POLL_PERIOD_MS, true, NULL, ntp_timer_worker));
+        rs_esp_timer_start_forced(rs_esp_timer_create(NTP_POLL_PERIOD_MS, pdTRUE, NULL, ntp_timer_worker));
         
         if (main_config.timetable_actions) {
-            rs_esp_timer_start_forced(rs_esp_timer_create(1000, true, NULL, timetable_actions_timer_worker));
+            rs_esp_timer_start_forced(rs_esp_timer_create(1000, pdTRUE, NULL, timetable_actions_timer_worker));
         }
         
         vTaskDelay(MS_TO_TICKS(500));
@@ -7527,11 +7538,11 @@ void run_homekit_server() {
     
     led_blink(4);
     
-    WIFI_WATCHDOG_TIMER = rs_esp_timer_create(WIFI_WATCHDOG_POLL_PERIOD_MS, true, NULL, wifi_watchdog);
+    WIFI_WATCHDOG_TIMER = rs_esp_timer_create(WIFI_WATCHDOG_POLL_PERIOD_MS, pdTRUE, NULL, wifi_watchdog);
     rs_esp_timer_start_forced(WIFI_WATCHDOG_TIMER);
     
     if (main_config.ping_inputs) {
-        rs_esp_timer_start_forced(rs_esp_timer_create(main_config.ping_poll_period * 1000.00f, true, NULL, ping_task_timer_worker));
+        rs_esp_timer_start_forced(rs_esp_timer_create(main_config.ping_poll_period * 1000.00f, pdTRUE, NULL, ping_task_timer_worker));
     }
 }
 
@@ -8366,7 +8377,7 @@ void normal_mode_init() {
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, AUTOSWITCH_TIME) != NULL) {
             const uint32_t time = cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, AUTOSWITCH_TIME)->valuefloat * 1000.f;
             if (time > 0) {
-                return rs_esp_timer_create(time, false, (void*) ch_group, hkc_autooff_setter_task);
+                return rs_esp_timer_create(time, pdFALSE, (void*) ch_group, hkc_autooff_setter_task);
             }
         }
         return NULL;
@@ -8461,7 +8472,7 @@ void normal_mode_init() {
     }
     
     void th_sensor_starter(ch_group_t* ch_group, float poll_period) {
-        ch_group->timer = rs_esp_timer_create(poll_period * 1000, true, (void*) ch_group, temperature_timer_worker);
+        ch_group->timer = rs_esp_timer_create(poll_period * 1000, pdTRUE, (void*) ch_group, temperature_timer_worker);
     }
     
     int virtual_stop(cJSON_rsf* json_accessory) {
@@ -9403,7 +9414,7 @@ void normal_mode_init() {
     }
     
     if (main_config.setup_mode_toggle_counter_max > 0) {
-        main_config.setup_mode_toggle_timer = rs_esp_timer_create(SETUP_MODE_TOGGLE_TIME_MS, false, NULL, setup_mode_toggle);
+        main_config.setup_mode_toggle_timer = rs_esp_timer_create(SETUP_MODE_TOGGLE_TIME_MS, pdFALSE, NULL, setup_mode_toggle);
     }
     
     // Buttons to enter setup mode
@@ -9723,7 +9734,7 @@ void normal_mode_init() {
                 ch_group->ch[1]->value.int_value = initial_time;
             }
             
-            ch_group->timer = rs_esp_timer_create(1000, true, (void*) ch_group, on_timer_worker);
+            ch_group->timer = rs_esp_timer_create(1000, pdTRUE, (void*) ch_group, on_timer_worker);
         }
         
         diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, BUTTONS_ARRAY), diginput, ch_group, 2);
@@ -10052,8 +10063,6 @@ void normal_mode_init() {
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_0), binary_sensor, ch_group, 2);
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_STATUS_ARRAY_1), binary_sensor, ch_group, 3);
         
-        const unsigned int exec_actions_on_boot = get_exec_actions_on_boot(json_context);
-        
         unsigned int initial_state = 4;
         
         if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_0), binary_sensor, ch_group, 0)) {
@@ -10071,7 +10080,7 @@ void normal_mode_init() {
         }
         
         if (initial_state < 4) {
-            if (!exec_actions_on_boot) {
+            if (!get_exec_actions_on_boot(json_context)) {
                 initial_state += 2;
             }
             
@@ -10252,7 +10261,7 @@ void normal_mode_init() {
                 ch_group->ch[2]->value.int_value = initial_time;
             }
             
-            ch_group->timer = rs_esp_timer_create(1000, true, (void*) ch_group, valve_timer_worker);
+            ch_group->timer = rs_esp_timer_create(1000, pdTRUE, (void*) ch_group, valve_timer_worker);
         }
         
         if (ch_group->homekit_enabled) {
@@ -10497,7 +10506,7 @@ void normal_mode_init() {
             TH_IAIRZONING_CONTROLLER = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER)->valuefloat;
         }
         
-        ch_group->timer2 = rs_esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, process_th_timer);
+        ch_group->timer2 = rs_esp_timer_create(th_update_delay(json_context) * 1000, pdFALSE, (void*) ch_group, process_th_timer);
         
         const int sensor_gpio = TH_SENSOR_GPIO;
         
@@ -10594,7 +10603,7 @@ void normal_mode_init() {
             IAIRZONING_DELAY_AFT_CLOSE_CH_GROUP = cJSON_rsf_GetObjectItemCaseSensitive(json_context, IAIRZONING_DELAY_AFT_CLOSE_SET)->valuefloat * MS_TO_TICKS(1000);
         }
         
-        ch_group->timer2 = rs_esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, set_zones_timer_worker);
+        ch_group->timer2 = rs_esp_timer_create(th_update_delay(json_context) * 1000, pdFALSE, (void*) ch_group, set_zones_timer_worker);
         
         th_sensor_starter(ch_group, sensor_poll_period(json_context, TH_SENSOR_POLL_PERIOD_DEFAULT));
     }
@@ -10918,7 +10927,7 @@ void normal_mode_init() {
         register_wildcard_actions(ch_group, json_context);
         const float poll_period = th_sensor(ch_group, json_context);
         
-        ch_group->timer2 = rs_esp_timer_create(th_update_delay(json_context) * 1000, false, (void*) ch_group, process_humidif_timer);
+        ch_group->timer2 = rs_esp_timer_create(th_update_delay(json_context) * 1000, pdFALSE, (void*) ch_group, process_humidif_timer);
         
         const int sensor_gpio = TH_SENSOR_GPIO;
         
@@ -11062,7 +11071,7 @@ void normal_mode_init() {
         lightbulb_group->next = main_config.lightbulb_groups;
         main_config.lightbulb_groups = lightbulb_group;
         
-        LIGHTBULB_SET_DELAY_TIMER = rs_esp_timer_create(LIGHTBULB_SET_DELAY_MS, false, (void*) ch_group, lightbulb_task_timer);
+        LIGHTBULB_SET_DELAY_TIMER = rs_esp_timer_create(LIGHTBULB_SET_DELAY_MS, pdFALSE, (void*) ch_group, lightbulb_task_timer);
         
         LIGHTBULB_TYPE = LIGHTBULB_TYPE_PWM;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHTBULB_TYPE_SET) != NULL) {
@@ -11083,7 +11092,7 @@ void normal_mode_init() {
         
         if (LIGHTBULB_TYPE != LIGHTBULB_TYPE_VIRTUAL) {
             if (!main_config.set_lightbulb_timer) {
-                main_config.set_lightbulb_timer = rs_esp_timer_create(RGBW_PERIOD, true, NULL, rgbw_set_timer_worker);
+                main_config.set_lightbulb_timer = rs_esp_timer_create(RGBW_PERIOD, pdTRUE, NULL, rgbw_set_timer_worker);
             }
         }
         
@@ -11327,7 +11336,7 @@ void normal_mode_init() {
         ping_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_PINGS_ARRAY_0), diginput, ch_group, 0);
         
         if (lightbulb_group->autodimmer_task_step > 0) {
-            LIGHTBULB_AUTODIMMER_TIMER = rs_esp_timer_create(AUTODIMMER_DELAY, false, (void*) ch_group->ch[0], no_autodimmer_called);
+            LIGHTBULB_AUTODIMMER_TIMER = rs_esp_timer_create(AUTODIMMER_DELAY, pdFALSE, (void*) ch_group->ch[0], no_autodimmer_called);
         }
         
         if (get_initial_state(json_context) != INIT_STATE_FIXED_INPUT) {
@@ -11401,7 +11410,7 @@ void normal_mode_init() {
         GARAGE_DOOR_CLOSE_TIME_FACTOR = 1;
         GARAGE_DOOR_VIRTUAL_STOP = virtual_stop(json_context);
         
-        GARAGE_DOOR_WORKER_TIMER = rs_esp_timer_create(1000, true, (void*) ch_group, garage_door_timer_worker);
+        GARAGE_DOOR_WORKER_TIMER = rs_esp_timer_create(1000, pdTRUE, (void*) ch_group, garage_door_timer_worker);
         
         AUTOOFF_TIMER = autoswitch_time(json_context, ch_group);
         
@@ -11566,9 +11575,9 @@ void normal_mode_init() {
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
         
-        ch_group->timer = rs_esp_timer_create(WINDOW_COVER_TIMER_WORKER_PERIOD_MS, true, (void*) ch_group, window_cover_timer_worker);
+        ch_group->timer = rs_esp_timer_create(WINDOW_COVER_TIMER_WORKER_PERIOD_MS, pdTRUE, (void*) ch_group, window_cover_timer_worker);
         
-        ch_group->timer2 = rs_esp_timer_create(WINDOW_COVER_STOP_ENABLE_DELAY_MS, false, (void*) ch_group, window_cover_timer_rearm_stop);
+        ch_group->timer2 = rs_esp_timer_create(WINDOW_COVER_STOP_ENABLE_DELAY_MS, pdFALSE, (void*) ch_group, window_cover_timer_rearm_stop);
         
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_OPEN_SET) != NULL) {
             WINDOW_COVER_TIME_OPEN = cJSON_rsf_GetObjectItemCaseSensitive(json_context, WINDOW_COVER_TIME_OPEN_SET)->valuefloat;
@@ -11708,7 +11717,7 @@ void normal_mode_init() {
         }
         
         const float poll_period = sensor_poll_period(json_context, LIGHT_SENSOR_POLL_PERIOD_DEFAULT);
-        rs_esp_timer_start_forced(rs_esp_timer_create(poll_period * 1000, true, (void*) ch_group, light_sensor_timer_worker));
+        rs_esp_timer_start_forced(rs_esp_timer_create(poll_period * 1000, pdTRUE, (void*) ch_group, light_sensor_timer_worker));
         
         set_killswitch(ch_group, json_context);
     }
@@ -11755,7 +11764,7 @@ void normal_mode_init() {
         SEC_SYSTEM_CH_CURRENT_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_CURRENT_STATE, target_valid_values[valid_values_len - 1], .min_value=(float[]) {current_valid_values[0]}, .valid_values={.count=valid_values_len + 1, .values=current_valid_values});
         SEC_SYSTEM_CH_TARGET_STATE = NEW_HOMEKIT_CHARACTERISTIC(SECURITY_SYSTEM_TARGET_STATE, target_valid_values[valid_values_len - 1], .min_value=(float[]) {target_valid_values[0]}, .max_value=(float[]) {target_valid_values[valid_values_len - 1]}, .valid_values={.count=valid_values_len, .values=target_valid_values}, .setter_ex=hkc_sec_system);
   
-        SEC_SYSTEM_REC_ALARM_TIMER = rs_esp_timer_create(SEC_SYSTEM_REC_ALARM_PERIOD_MS, true, (void*) ch_group, sec_system_recurrent_alarm);
+        SEC_SYSTEM_REC_ALARM_TIMER = rs_esp_timer_create(SEC_SYSTEM_REC_ALARM_PERIOD_MS, pdTRUE, (void*) ch_group, sec_system_recurrent_alarm);
         
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
@@ -12014,7 +12023,7 @@ void normal_mode_init() {
         AUTOOFF_TIMER = autoswitch_time(json_context, ch_group);
         
         if (ch_group->homekit_enabled) {
-            FAN_SET_DELAY_TIMER = rs_esp_timer_create(FAN_SET_DELAY_MS, false, (void*) ch_group, process_fan_timer);   // Only used with HomeKit
+            FAN_SET_DELAY_TIMER = rs_esp_timer_create(FAN_SET_DELAY_MS, pdFALSE, (void*) ch_group, process_fan_timer);   // Only used with HomeKit
             
             accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
             accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
@@ -12265,7 +12274,7 @@ void normal_mode_init() {
         
         if (pm_sensor_type <= 4) {
             PM_POLL_PERIOD = sensor_poll_period(json_context, PM_POLL_PERIOD_DEFAULT);
-            rs_esp_timer_start_forced(rs_esp_timer_create(PM_POLL_PERIOD * 1000, true, (void*) ch_group, power_monitor_timer_worker));
+            rs_esp_timer_start_forced(rs_esp_timer_create(PM_POLL_PERIOD * 1000, pdTRUE, (void*) ch_group, power_monitor_timer_worker));
         }
         
         set_killswitch(ch_group, json_context);
@@ -12595,7 +12604,7 @@ void normal_mode_init() {
             fm_sensor_type < FM_SENSOR_TYPE_UART) {
             const float poll_period = sensor_poll_period(json_context, FM_POLL_PERIOD_DEFAULT);
             if (poll_period > 0) {
-                rs_esp_timer_start_forced(rs_esp_timer_create(poll_period * 1000, true, (void*) ch_group, free_monitor_timer_worker));
+                rs_esp_timer_start_forced(rs_esp_timer_create(poll_period * 1000, pdTRUE, (void*) ch_group, free_monitor_timer_worker));
             }
         }
         
@@ -12663,7 +12672,7 @@ void normal_mode_init() {
         
         const float poll_period = sensor_poll_period(json_context, 0);
         if (poll_period > 0.00f) {
-            rs_esp_timer_start_forced(rs_esp_timer_create(poll_period * 1000, true, (void*) ch_group->ch[hist_size], data_history_timer_worker));
+            rs_esp_timer_start_forced(rs_esp_timer_create(poll_period * 1000, pdTRUE, (void*) ch_group->ch[hist_size], data_history_timer_worker));
         }
         
         set_killswitch(ch_group, json_context);
@@ -12680,7 +12689,7 @@ void normal_mode_init() {
     set_killswitch(root_device_ch_group, json_config);
     
     // Saved States Timer Function
-    root_device_ch_group->timer = rs_esp_timer_create(SAVE_STATES_DELAY_MS, false, NULL, save_states);
+    root_device_ch_group->timer = rs_esp_timer_create(SAVE_STATES_DELAY_MS, pdFALSE, NULL, save_states);
     
     // Run action 0 from root device
     do_actions(root_device_ch_group, 0);
@@ -12939,7 +12948,7 @@ void normal_mode_init() {
     if (re_pair == 1) {
         config.re_pair = true;
         sysparam_erase(HOMEKIT_RE_PAIR_SYSPARAM);
-        rs_esp_timer_start_forced(rs_esp_timer_create(HOMEKIT_RE_PAIR_TIME_MS, false, NULL, homekit_re_pair_timer));
+        rs_esp_timer_start_forced(rs_esp_timer_create(HOMEKIT_RE_PAIR_TIME_MS, pdFALSE, NULL, homekit_re_pair_timer));
     }
     
     main_config.setup_mode_toggle_counter = 0;
@@ -12954,7 +12963,7 @@ void normal_mode_init() {
 #else
         uart_flush_rxfifo(0);
 #endif
-        rs_esp_timer_start_forced(rs_esp_timer_create(RECV_UART_POLL_PERIOD_MS, true, NULL, recv_uart_timer_worker));
+        rs_esp_timer_start_forced(rs_esp_timer_create(RECV_UART_POLL_PERIOD_MS, pdTRUE, NULL, recv_uart_timer_worker));
     }
     
     int8_t wifi_mode = 0;
@@ -13199,11 +13208,11 @@ void init_task() {
         if (haa_setup == 1) {
 #ifdef HAA_DEBUG
             free_heap_watchdog();
-            rs_esp_timer_start_forced(rs_esp_timer_create(1000, true, NULL, free_heap_watchdog));
+            rs_esp_timer_start_forced(rs_esp_timer_create(1000, pdTRUE, NULL, free_heap_watchdog));
 #endif // HAA_DEBUG
             
             // Arming emergency Setup Mode
-            rs_esp_timer_start_forced(rs_esp_timer_create(EXIT_EMERGENCY_SETUP_MODE_TIME, false, NULL, disable_emergency_setup));
+            rs_esp_timer_start_forced(rs_esp_timer_create(EXIT_EMERGENCY_SETUP_MODE_TIME, pdFALSE, NULL, disable_emergency_setup));
             
             name.value = HOMEKIT_STRING(main_config.name_value, .is_static=true);
             

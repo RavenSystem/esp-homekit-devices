@@ -90,6 +90,7 @@ typedef int sys_prot_t;
 #else
 #define LWIP_PLATFORM_DIAG(x)
 #define LWIP_PLATFORM_ASSERT(x)
+#define LWIP_NOASSERT 1
 #endif
 
 #define LWIP_PLATFORM_BYTESWAP 1

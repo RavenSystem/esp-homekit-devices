@@ -720,7 +720,7 @@ void mdns_add_facility_work(const char* instanceName,   // Friendly name, need n
     free(fullName);
     free(devName);
 
-    mdns_announce_timer = rs_esp_timer_create((MDNS_TTL_SAFE_MARGIN * MDNS_TTL_MULTIPLIER_MS), true, NULL, mdns_announce);
+    mdns_announce_timer = rs_esp_timer_create((MDNS_TTL_SAFE_MARGIN * MDNS_TTL_MULTIPLIER_MS), pdTRUE, NULL, mdns_announce);
     
     mdns_announce_start();
 }

@@ -1243,7 +1243,7 @@ static void wifi_config_sta_connect_timeout_task() {
             
             wifi_config_context_free(context);
             
-            rs_esp_timer_start_forced(rs_esp_timer_create(AUTO_REBOOT_ON_HANG_OTA_TIMEOUT, false, NULL, auto_reboot_run));
+            rs_esp_timer_start_forced(rs_esp_timer_create(AUTO_REBOOT_ON_HANG_OTA_TIMEOUT, pdFALSE, NULL, auto_reboot_run));
             
             break;
 
@@ -1457,7 +1457,7 @@ static void wifi_config_station_connect() {
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
         
         if (setup_mode == 1) {
-            context->auto_reboot_timer = rs_esp_timer_create(AUTO_REBOOT_TIMEOUT, false, NULL, auto_reboot_run);
+            context->auto_reboot_timer = rs_esp_timer_create(AUTO_REBOOT_TIMEOUT, pdFALSE, NULL, auto_reboot_run);
             rs_esp_timer_start_forced(context->auto_reboot_timer);
         }
     }

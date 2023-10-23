@@ -47,7 +47,7 @@ BaseType_t rs_esp_timer_manager(const uint8_t option, TimerHandle_t xTimer, Tick
 BaseType_t rs_esp_timer_change_period_manager(TimerHandle_t xTimer, const uint32_t new_period_ms, TickType_t xBlockTime);
 BaseType_t rs_esp_timer_manager_from_ISR(const uint8_t option, TimerHandle_t xTimer);
 
-TimerHandle_t rs_esp_timer_create(const uint32_t period_ms, const bool auto_reload, void* pvTimerID, TimerCallbackFunction_t pxCallbackFunction);
+TimerHandle_t rs_esp_timer_create(const uint32_t period_ms, const UBaseType_t auto_reload, void* pvTimerID, TimerCallbackFunction_t pxCallbackFunction);
 
 #ifdef __cplusplus
 }
