@@ -7194,7 +7194,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             } else if (value_int >= 10) {
                                 hkc_sec_system_status(SEC_SYSTEM_CH_TARGET_STATE, HOMEKIT_UINT8(value_int - 10));
                                 
-                            } else {    // if (value_int <= 3)
+                            } else if (value_int <= 3) {
                                 hkc_sec_system(SEC_SYSTEM_CH_TARGET_STATE, HOMEKIT_UINT8(value_int));
                             }
                             break;
