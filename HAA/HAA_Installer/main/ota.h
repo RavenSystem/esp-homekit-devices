@@ -31,7 +31,7 @@
 #define HAAVERSIONFILE          "haaversion"
 
 #define SIGNFILESUFIX           ".sec"
-#define VERSIONFILESIZE         (16)
+#define VERSIONSTRINGLEN        (15)
 
 #define MAX_GLOBAL_TRIES        (2)
 #define TRIES_PARTIAL_COUNT_MAX (5)

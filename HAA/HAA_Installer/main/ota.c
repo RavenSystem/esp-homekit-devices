@@ -801,10 +801,10 @@ int ota_get_file(char* repo, char* file, int sector, uint16_t port, const bool i
 char* ota_get_version(char* repo, char* version_file, uint16_t port, const bool is_ssl) {
     INFO(">>> Version from %s", repo);
 
-    uint8_t* version = malloc(VERSIONFILESIZE + 1);
-    memset(version, 0, VERSIONFILESIZE + 1);
+    uint8_t* version = malloc(VERSIONSTRINGLEN + 1);
+    memset(version, 0, VERSIONSTRINGLEN + 1);
 
-    if (ota_get_file_ex(repo, version_file, 0, version, VERSIONFILESIZE, port, is_ssl, NULL) == 0) {
+    if (ota_get_file_ex(repo, version_file, 0, version, VERSIONSTRINGLEN, port, is_ssl, NULL) == 0) {
         INFO("**** %s v%s", version_file, (char*) version);
     } else {
         free(version);

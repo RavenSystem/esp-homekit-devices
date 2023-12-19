@@ -14,8 +14,6 @@
 #include "esp_system.h"
 #include "esp_timer.h"
 
-#define sdk_system_get_time_raw()         esp_timer_get_time()
-
 #else
 
 #include <espressif/esp_common.h>
@@ -58,7 +56,8 @@ time_t raven_ntp_get_time() {
     raven_ntp_init();
     
 #ifdef ESP_PLATFORM
-    const uint64_t diff = (sdk_system_get_time_raw() - raven_ntp_config->last_system_time) / 1000000;
+    const uint64_t now = esp_timer_get_time();
+    const uint64_t diff = (now - raven_ntp_config->last_system_time) / 1000000;
 #else
     const uint32_t now = sdk_system_get_time_raw();
     const uint32_t diff = (now - raven_ntp_config->last_system_time) / 1000000;
@@ -179,7 +178,12 @@ int raven_ntp_update(char* ntp_server) {
                         uint32_t recv_time = 0;
                         memcpy(&recv_time, &ntp_payload[32], sizeof(recv_time));
                         
+#ifdef ESP_PLATFORM
+                        raven_ntp_config->last_system_time = esp_timer_get_time();
+#else
                         raven_ntp_config->last_system_time = sdk_system_get_time_raw();
+#endif
+                        
                         raven_ntp_config->time = (ntohl(recv_time) - NTP_TIME_DIFF_1900_1970);
                         
                         ntp_result = 0;

@@ -778,7 +778,7 @@ static void wifi_config_server_on_settings(client_t *client) {
             snprintf(
                 buffer, sizeof(buffer),
                 html_network_item,
-                net->secure ? "secure" : "unsecure", bssid, net->ssid, net->ssid, net->rssi, net->channel, bssid
+                net->secure ? "sec" : "unsec", bssid, net->ssid, net->ssid, net->rssi, net->channel, bssid
             );
             client_send_chunk(client, buffer);
             

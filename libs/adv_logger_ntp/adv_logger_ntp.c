@@ -17,7 +17,7 @@
 #include "esp_timer.h"
 #include "esp_attr.h"
 
-#define sdk_system_get_time_raw()           esp_timer_get_time()
+#define sdk_system_get_time_raw()           ((uint32_t) esp_timer_get_time())
 
 #else
 
@@ -323,7 +323,7 @@ static void adv_logger_init_task(void* args) {
     }
     adv_logger_data->udplogstring[0] = 0;
     
-    strcat(adv_logger_data->udplogstring, "\r\nAdvanced ESP Logger (c) 2022-2023 José A. Jiménez Campos\r\n\r\n");
+    strcat(adv_logger_data->udplogstring, "\r\nAdv Log (c) 2022-2023 José A. Jiménez Campos\r\n\r\n");
     adv_logger_data->udplogstring_len = strlen(adv_logger_data->udplogstring);
     
     if (adv_logger_data->is_buffered) {

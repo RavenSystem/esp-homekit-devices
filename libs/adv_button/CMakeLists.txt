@@ -5,6 +5,7 @@ idf_component_register(
         "."
     REQUIRES
         driver
+        esp_timer
         timers_helper
         adv_i2c
 )

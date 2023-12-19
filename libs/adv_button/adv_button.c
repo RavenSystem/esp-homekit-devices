@@ -20,7 +20,9 @@
 #include "freertos/task.h"
 #include "driver/gpio.h"
 #include "esp_attr.h"
+#include "esp_timer.h"
 #define IRAM                        IRAM_ATTR
+#define sdk_system_get_time_raw()   ((uint32_t) esp_timer_get_time())
 
 #define gpio_read(gpio)             gpio_get_level(gpio)
 #define gpio_write(gpio, level)     gpio_set_level(gpio, level)
@@ -37,26 +39,25 @@
 #include <timers_helper.h>
 #include "adv_button.h"
 
-#define ADV_BUTTON_DEFAULT_EVAL     (4)
+#define ADV_BUTTON_DEFAULT_EVAL             (4)
+#define ADV_BUTTON_DEFAULT_PULSE_TIME_US    (UINT16_MAX)
 
-#define DOUBLEPRESS_TIME            (450)
-#define LONGPRESS_TIME              (DOUBLEPRESS_TIME + 10)
-#define VERYLONGPRESS_TIME          (1500)
-#define HOLDPRESS_TIME              (8000)
+#define DOUBLEPRESS_TIME                    (450)
+#define LONGPRESS_TIME                      (DOUBLEPRESS_TIME + 10)
+#define VERYLONGPRESS_TIME                  (1500)
+#define HOLDPRESS_TIME                      (8000)
 
-#define BUTTON_EVAL_DELAY_MIN       (1)
+#define BUTTON_EVAL_DELAY_MIN               (1)
 
-#define DISABLE_PRESS_COUNT         (15)
+#define DISABLE_PRESS_COUNT                 (15)    // (4 bits max) 2^4 - 1
 
-#define MCP_CHANNEL_A               (0)
-#define MCP_CHANNEL_B               (1)
-#define MCP_CHANNEL_BOTH            (2)
+#define MCP_CHANNEL_A                       (0)
+#define MCP_CHANNEL_B                       (1)
+#define MCP_CHANNEL_BOTH                    (2)
 
-#define DISABLE_TIME                (ADV_BUTTON_DEFAULT_EVAL * 10)
-#define ADV_BUTTON_MIN(x, y)        (((x) < (y)) ? (x) : (y))
-#define ADV_BUTTON_MAX(x, y)        (((x) > (y)) ? (x) : (y))
+#define DISABLE_TIME                        (ADV_BUTTON_DEFAULT_EVAL * 10)
 
-#define ADC_MID_VALUE               (511)
+#define ADC_MID_VALUE                       (511)
 
 
 typedef struct _adv_button_callback_fn {
@@ -73,16 +74,19 @@ typedef struct _adv_button {
     uint8_t mode;
     uint8_t max_eval;
     
-    volatile uint8_t value;
-    uint8_t press_count;    // 4 bits
-    bool inverted;          // 1 bit
-    bool state: 1;          // 1 bit
-    bool old_state: 1;      // 1 bit
+    uint8_t value;
+    uint8_t press_count: 4;         // 4 bits
+    bool inverted: 1;               // 1 bit
+    bool state: 1;                  // 1 bit
+    bool old_state: 1;              // 1 bit
+    bool pulse_low_detected: 1;     // 1 bit
+    uint16_t pulse_max_duration_time_us;
 
     TimerHandle_t press_timer;
     TimerHandle_t hold_timer;
     
     uint32_t last_event_time;
+    uint32_t last_pulse_time_us;
     
     adv_button_callback_fn_t* singlepress0_callback_fn;
     adv_button_callback_fn_t* singlepress_callback_fn;
@@ -303,8 +307,42 @@ static void IRAM_ATTR adv_button_interrupt_pulse(void* args) {
 static void IRAM adv_button_interrupt_pulse(const uint8_t gpio) {
 #endif
 
+    const unsigned int read_value = gpio_read(gpio);
     adv_button_t *button = button_find_by_gpio(gpio);
-    button->value = ADV_BUTTON_MIN(button->value++, button->max_eval);
+    if (button->pulse_max_duration_time_us == 0) {
+        if (read_value && button->value < button->max_eval) {
+            button->value++;
+        }
+        
+        return;
+    }
+    
+    const uint32_t now = sdk_system_get_time_raw();
+    
+    if (read_value) {
+        button->last_pulse_time_us = now | 1;
+        return;
+        
+    } else if (button->last_pulse_time_us != 0) {
+        const uint32_t diff = now - button->last_pulse_time_us;
+        button->last_pulse_time_us = 0;
+        if (diff <= button->pulse_max_duration_time_us) {
+            if (button->value < button->max_eval) {
+                button->value++;
+            }
+        } else {
+            const unsigned int times = diff / button->pulse_max_duration_time_us;
+            for (unsigned int i = 0; i < times; i++) {
+                if (button->value > 0) {
+                    button->value--;
+                } else {
+                    break;
+                }
+            }
+            
+            button->pulse_low_detected = true;
+        }
+    }
 }
 
 #ifdef ESP_PLATFORM
@@ -388,7 +426,10 @@ static void button_evaluate_fn() {
                 if (button->state) {
                     button->value = button->max_eval;
                 } else {
-                    button->value = ADV_BUTTON_MIN(button->value++, button->max_eval);
+                    if (button->value < button->max_eval) {
+                        button->value++;
+                    }
+                    
                     if (button->value == button->max_eval) {
                         button->state = true;
                     }
@@ -397,7 +438,10 @@ static void button_evaluate_fn() {
                 if (!button->state) {
                     button->value = 0;
                 } else {
-                    button->value = ADV_BUTTON_MAX(button->value--, 0);
+                    if (button->value > 0) {
+                        button->value--;
+                    }
+                    
                     if (button->value == 0) {
                         button->state = false;
                     }
@@ -405,15 +449,18 @@ static void button_evaluate_fn() {
             }
             
         } else {    // button->mode == ADV_BUTTON_PULSE_MODE
-            if (button->value == button->max_eval) {
-                button->value = button->value >> 1;
+            if (button->value == button->max_eval && !button->pulse_low_detected) {
                 button->state = true;
-            } else {
-                button->value = ADV_BUTTON_MAX(button->value--, 0);
-                if (button->value == 0) {
-                    button->state = false;
-                }
+                
+            } else if (button->value > 0) {
+                button->value--;
             }
+            
+            if (button->value == 0) {
+                button->state = false;
+            }
+            
+            button->pulse_low_detected = false;
         }
         
         if (button->state != button->old_state) {
@@ -495,7 +542,7 @@ void adv_button_create_shift_register(const uint8_t index, const uint8_t mode, c
     private_adv_button_new_mcp_data(index, mode, mcp_bus, len);
 }
 
-int adv_button_create(const uint16_t gpio, const bool inverted, const uint8_t mode, const uint8_t mcp_bus, const uint8_t max_eval) {
+int adv_button_create(const uint16_t gpio, const bool inverted, const uint8_t mode, const uint16_t extra_data, const uint8_t max_eval) {
     if (!adv_button_main_config) {
         adv_button_init(0, ADV_BUTTON_CONTINUOS_MODE_OFF);
     }
@@ -563,12 +610,14 @@ int adv_button_create(const uint16_t gpio, const bool inverted, const uint8_t mo
             }
             
         } else if (mode == ADV_BUTTON_PULSE_MODE) {
+            button->pulse_max_duration_time_us = extra_data;
             
 #ifdef ESP_PLATFORM
-            gpio_set_intr_type(gpio, GPIO_INTR_NEGEDGE);
+            gpio_install_isr_service(0);
+            gpio_set_intr_type(gpio, GPIO_INTR_ANYEDGE);
             ret = gpio_isr_handler_add(gpio, adv_button_interrupt_pulse, (void*) ((uint32_t) gpio));
 #else
-            gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_NEG, adv_button_interrupt_pulse);
+            gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt_pulse);
 #endif
             
         } else {    // MCP23017
@@ -577,7 +626,7 @@ int adv_button_create(const uint16_t gpio, const bool inverted, const uint8_t mo
             
             adv_button_mcp_t* adv_button_mcp = mcp_find_by_index(index);
             if (!adv_button_mcp) {
-                adv_button_mcp = private_adv_button_new_mcp_data(index, mode, mcp_bus, 0);
+                adv_button_mcp = private_adv_button_new_mcp_data(index, mode, extra_data, 0);
                 
                 if (mcp_gpio < 8) {
                     adv_button_mcp->channels = MCP_CHANNEL_A;

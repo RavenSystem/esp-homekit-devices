@@ -29,7 +29,7 @@
 #include "esp_adc/adc_oneshot.h"
 #include "esp_attr.h"
 
-#define sdk_system_get_time_raw()           esp_timer_get_time()
+#define sdk_system_get_time_raw()           ((uint32_t) esp_timer_get_time())
 
 #define HAA_ENTER_CRITICAL_TASK()           portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED; taskENTER_CRITICAL(&mux)
 #define HAA_EXIT_CRITICAL_TASK()            taskEXIT_CRITICAL(&mux)
@@ -226,6 +226,10 @@ void haa_pwm_set_duty(const uint8_t gpio, const uint16_t duty) {
 #define haa_pwm_set_duty(gpio, duty)        adv_pwm_set_duty(gpio, duty)
 #endif
 
+#ifdef ESP_PLATFORM
+#define HAA_POW(x, y)                       pow(x, y)
+#else
+#define HAA_POW(x, y)                       fast_precise_pow(x, y)
 // https://martin.ankerl.com/2012/01/25/optimized-approximative-pow-in-c-and-cpp/
 double fast_precise_pow(double a, double b) {
     int32_t e = private_abs((int32_t) b);
@@ -250,6 +254,7 @@ double fast_precise_pow(double a, double b) {
     
     return r * u.d;
 }
+#endif
 
 /*
 int get_used_gpio(const int16_t gpio) {
@@ -1294,7 +1299,8 @@ void save_states_callback() {
 }
 
 void homekit_characteristic_notify_safe(homekit_characteristic_t *ch) {
-    if (ch_group_find(ch)->homekit_enabled && main_config.wifi_status == WIFI_STATUS_CONNECTED && main_config.enable_homekit_server) {
+    ch_group_t* ch_group = ch_group_find(ch);
+    if ((!ch_group || ch_group->homekit_enabled) && main_config.wifi_status == WIFI_STATUS_CONNECTED && main_config.enable_homekit_server) {
         homekit_characteristic_notify(ch);
     }
 }
@@ -1954,13 +1960,13 @@ void set_zones_task(void* args) {
             IAIRZONING_MAIN_MODE = THERMOSTAT_MODE_OFF;
             iairzoning_final_main_mode = THERMOSTAT_ACTION_TOTAL_OFF;
             
-            // Open all gates
+            // Set default off state to all gates
             ch_group = main_config.ch_groups;
             while (ch_group) {
                 if (ch_group->serv_type == SERV_TYPE_THERMOSTAT && iairzoning_group->serv_index == (uint8_t) TH_IAIRZONING_CONTROLLER) {
-                    if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_OPEN) {
-                        TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_OPEN;
-                        do_actions(ch_group, THERMOSTAT_ACTION_GATE_OPEN);
+                    if (TH_IAIRZONING_GATE_CURRENT_STATE != TH_IAIRZONING_GATE_ALL_OFF_STATE) {
+                        TH_IAIRZONING_GATE_CURRENT_STATE = TH_IAIRZONING_GATE_ALL_OFF_STATE;
+                        do_actions(ch_group, THERMOSTAT_ACTION_GATE_CLOSE + TH_IAIRZONING_GATE_ALL_OFF_STATE);
                         vTaskDelay(IAIRZONING_DELAY_ACTION);
                     }
                 }
@@ -3209,11 +3215,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
     
     // *** HSI TO RGBW FUNCTION ***
 #ifdef LIGHT_DEBUG
-#ifdef ESP_PLATFORM
-    uint64_t run_time = sdk_system_get_time_raw();
-#else
     uint32_t run_time = sdk_system_get_time_raw();
-#endif
 #endif
     
     lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_group->ch[0]);
@@ -3278,7 +3280,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
     // (2) convert to XYZ then to xy(ignore Y). Also now apply gamma correction.
     float gc[3];
     for (unsigned int i = 0; i < 3; i++) {
-        gc[i] = (wheel_rgb[i] > 0.04045f) ? fast_precise_pow((wheel_rgb[i] + 0.055f) / (1.0f + 0.055f), 2.4f) : (wheel_rgb[i] / 12.92f);
+        gc[i] = (wheel_rgb[i] > 0.04045f) ? HAA_POW((wheel_rgb[i] + 0.055f) / (1.0f + 0.055f), 2.4f) : (wheel_rgb[i] / 12.92f);
     }
     
     // Get the xy coordinates using sRGB Primaries. This appears to be the space that HomeKit gives HSV commands in, however, we need to do some gamut streching.
@@ -3690,7 +3692,7 @@ void lightbulb_no_task(ch_group_t* ch_group) {
                 target_color = PWM_SCALE;
                 
             } else if (ch_group->ch[2]->value.int_value > COLOR_TEMP_MIN + 1) { // Conversion based on @seritos curve
-                target_color = PWM_SCALE * (((0.09 + fast_precise_pow(0.18 + (0.1352 * (ch_group->ch[2]->value.int_value - COLOR_TEMP_MIN - 1)), 0.5)) / 0.0676) - 1) / 100;
+                target_color = PWM_SCALE * (((0.09 + HAA_POW(0.18 + (0.1352 * (ch_group->ch[2]->value.int_value - COLOR_TEMP_MIN - 1)), 0.5)) / 0.0676) - 1) / 100;
             }
             
             if (LIGHTBULB_TYPE == LIGHTBULB_TYPE_PWM_CWWW) {
@@ -4540,7 +4542,7 @@ void light_sensor_task(void* args) {
             ldr_resistor = (LIGHT_SENSOR_RESISTOR  * adc_raw_read) / ((HAA_ADC_MAX_VALUE + 0.01) - adc_raw_read);
         }
         
-        luxes = 1 / fast_precise_pow(ldr_resistor, LIGHT_SENSOR_POW);
+        luxes = 1 / HAA_POW(ldr_resistor, LIGHT_SENSOR_POW);
         
     } else if (light_sersor_type == 2) {  // BH1750
         uint8_t value[2] = { 0, 0 };
@@ -4729,11 +4731,11 @@ void hkc_tv_power_mode(homekit_characteristic_t* ch, const homekit_value_t value
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("<%i> -> TV Settings %i", ch_group->serv_index, value.int_value + 30);
+        INFO("<%i> -> TV Settings %i", ch_group->serv_index, value.int_value + 50);
         
         ch->value.int_value = value.int_value;
         
-        do_actions(ch_group, value.int_value + 30);
+        do_actions(ch_group, value.int_value + 50);
         
         save_data_history(ch);
     }
@@ -4991,12 +4993,11 @@ void reset_uart_buffer() {
 
 #ifdef ESP_PLATFORM
 void IRAM_ATTR fm_pulse_interrupt(void* args) {
-    const uint64_t time = sdk_system_get_time_raw();
     const uint8_t gpio = (uint32_t) args;
 #else
 void IRAM fm_pulse_interrupt(const uint8_t gpio) {
-    const uint32_t time = sdk_system_get_time_raw();
 #endif
+    const uint32_t time = sdk_system_get_time_raw();
     
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
@@ -5024,12 +5025,11 @@ void IRAM fm_pulse_interrupt(const uint8_t gpio) {
 
 #ifdef ESP_PLATFORM
 void IRAM_ATTR fm_pwm_interrupt(void* args) {
-    const uint64_t time = sdk_system_get_time_raw();
     const uint8_t gpio = (uint32_t) args;
 #else
 void IRAM fm_pwm_interrupt(const uint8_t gpio) {
-    const uint32_t time = sdk_system_get_time_raw();
 #endif
+    const uint32_t time = sdk_system_get_time_raw();
     
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
@@ -5350,11 +5350,11 @@ void free_monitor_task(void* args) {
                                 break;
                                 
                             case FM_MATHS_OPERATION_POW:
-                                value = fast_precise_pow(value, read_value);
+                                value = HAA_POW(value, read_value);
                                 break;
                                 
                             case FM_MATHS_OPERATION_POW_INV:
-                                value = fast_precise_pow(read_value, value);
+                                value = HAA_POW(read_value, value);
                                 break;
                                 
                             case FM_MATHS_OPERATION_INV:
@@ -6755,11 +6755,7 @@ void irrf_tx_task(void* pvParameters) {
             }
             
             // IR TRANSMITTER
-#ifdef ESP_PLATFORM
-            uint64_t start;
-#else
             uint32_t start;
-#endif
             unsigned int ir_true, ir_false, ir_gpio;
             if (freq > 1) {
                 ir_true = !main_config.ir_tx_inv;
@@ -6924,11 +6920,12 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     
     // Service Notification Manager
     action_serv_manager_t* action_serv_manager = ch_group->action_serv_manager;
+    ch_group_t* ch_group_ori = ch_group;
     while (action_serv_manager) {
         if (action_serv_manager->action == action) {
             ch_group_t* ch_group = ch_group_find_by_serv(action_serv_manager->serv_index);
             if (ch_group) {
-                INFO("<%i> ServNot %i->%g", ch_group->serv_index, action_serv_manager->serv_index, action_serv_manager->value);
+                INFO("<%i> ServNot %i->%g", ch_group_ori->serv_index, action_serv_manager->serv_index, action_serv_manager->value);
                 
                 int value_int = action_serv_manager->value;
                 
@@ -7092,7 +7089,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                         new_bri = 100;
                                     }
                                     hkc_rgbw_setter(ch_group->ch[1], HOMEKIT_INT(new_bri));
-                                } else if (value_int >= 300) {      // BRI-
+                                } else {    // if (value_int >= 300)    // BRI-
                                     int new_bri = ch_group->ch[1]->value.int_value - (value_int - 300);
                                     if (new_bri < 1) {
                                         new_bri = 1;
@@ -7197,15 +7194,15 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             } else if (value_int >= 10) {
                                 hkc_sec_system_status(SEC_SYSTEM_CH_TARGET_STATE, HOMEKIT_UINT8(value_int - 10));
                                 
-                            } else if (value_int <= 3) {
+                            } else {    // if (value_int <= 3)
                                 hkc_sec_system(SEC_SYSTEM_CH_TARGET_STATE, HOMEKIT_UINT8(value_int));
                             }
                             break;
                             
                         case SERV_TYPE_TV:
-                            if (value_int == -1 || value_int == -2) {
+                            if (value_int < 0) {
                                 hkc_tv_status_active(ch_group->ch[0], HOMEKIT_UINT8(value_int + 2));
-                            } else if (value_int == 0 || value_int == 1) {
+                            } else if (value_int < 2) {
                                 hkc_tv_active(ch_group->ch[0], HOMEKIT_UINT8(value_int));
                             } else if (value_int < 20) {
                                 hkc_tv_key(ch_group->ch[3], HOMEKIT_UINT8(value_int - 2));
@@ -7213,9 +7210,9 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 hkc_tv_mute(ch_group->ch[5], HOMEKIT_BOOL((bool) (value_int - 20)));
                             } else if (value_int < 24) {
                                 hkc_tv_volume(ch_group->ch[6], HOMEKIT_UINT8(value_int - 22));
-                            } else if (value_int < 32) {
-                                hkc_tv_power_mode(ch_group->ch[4], HOMEKIT_UINT8(value_int - 30));
-                            } else if (value_int > 100) {
+                            } else if (value_int < 100) {
+                                hkc_tv_power_mode(ch_group->ch[4], HOMEKIT_UINT8(value_int - 50));
+                            } else {    // if (value_int > 100)
                                 hkc_tv_active_identifier(ch_group->ch[2], HOMEKIT_UINT8(value_int - 100));
                             }
                             break;
@@ -7229,7 +7226,10 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                         case SERV_TYPE_FREE_MONITOR:
                         case SERV_TYPE_FREE_MONITOR_ACCUMULATVE:
                             if (ch_group->main_enabled) {
-                                if (!ch_group->is_working) {
+                                if (ch_group == ch_group_ori) {
+                                    ch_group->ch[0]->value.float_value = action_serv_manager->value;
+                                    
+                                } else if (!ch_group->is_working) {
                                     ch_group->is_working = true;
                                     FM_OVERRIDE_VALUE = action_serv_manager->value;
                                     if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
@@ -8741,10 +8741,12 @@ void normal_mode_init() {
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER) != NULL) {
         adv_button_filter_value = (uint16_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, BUTTON_FILTER)->valuefloat;
     }
+    
     unsigned int adv_button_continuous_mode = false;
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, BUTTON_CONTINUOS_MODE) != NULL) {
         adv_button_continuous_mode = (bool) cJSON_rsf_GetObjectItemCaseSensitive(json_config, BUTTON_CONTINUOS_MODE)->valuefloat;
     }
+    
     if (adv_button_filter_value || adv_button_continuous_mode) {
         adv_button_init(adv_button_filter_value, adv_button_continuous_mode);
     }
@@ -9036,10 +9038,10 @@ void normal_mode_init() {
                         const unsigned int pulse_mode = (bool) (IO_GPIO_BUTTON_MODE & 0b10);
                         
 #ifdef ESP_PLATFORM
-                        gpio_ret = adv_button_create(gpio, inverted, pulse_mode, 0, IO_GPIO_BUTTON_FILTER);
+                        gpio_ret = adv_button_create(gpio, inverted, pulse_mode, IO_GPIO_US_TIME_BETWEEN_PULSES, IO_GPIO_BUTTON_FILTER);
                         INFO("GPIO %i: M 6 (0x%x), p %i, i %i, f %i, m %i", gpio, gpio_ret, IO_GPIO_PULL_UP_DOWN, inverted, IO_GPIO_BUTTON_FILTER, pulse_mode);
 #else
-                        adv_button_create(gpio, inverted, pulse_mode, 0, IO_GPIO_BUTTON_FILTER);
+                        adv_button_create(gpio, inverted, pulse_mode, IO_GPIO_US_TIME_BETWEEN_PULSES, IO_GPIO_BUTTON_FILTER);
                         INFO("GPIO %i: M 6, p %i, i %i, f %i, m %i", gpio, IO_GPIO_PULL_UP_DOWN, inverted, IO_GPIO_BUTTON_FILTER, pulse_mode);
 #endif
                         
@@ -10333,7 +10335,7 @@ void normal_mode_init() {
     
     // *** NEW THERMOSTAT
     void new_thermostat(const uint8_t accessory,  uint8_t service, const uint8_t total_services, cJSON_rsf* json_context, const uint8_t serv_type) {
-        ch_group_t* ch_group = new_ch_group(7, 8, 5, 4);
+        ch_group_t* ch_group = new_ch_group(7, 9, 5, 4);
         ch_group->serv_type = SERV_TYPE_THERMOSTAT;
         ch_group->serv_index = service_numerator;
         unsigned int homekit_enabled = acc_homekit_enabled(json_context);
@@ -10502,8 +10504,13 @@ void normal_mode_init() {
         register_wildcard_actions(ch_group, json_context);
         const float poll_period = th_sensor(ch_group, json_context);
         
-        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER) != NULL) {
-            TH_IAIRZONING_CONTROLLER = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_IAIRZONING_CONTROLLER)->valuefloat;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, TH_IAIRZONING_CONTROLLER_SET) != NULL) {
+            TH_IAIRZONING_CONTROLLER = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, TH_IAIRZONING_CONTROLLER_SET)->valuefloat;
+            
+            TH_IAIRZONING_GATE_ALL_OFF_STATE = TH_IAIRZONING_GATE_OPEN;
+            if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, TH_IAIRZONING_GATE_ALL_OFF_STATE_SET) != NULL) {
+                TH_IAIRZONING_GATE_ALL_OFF_STATE = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, TH_IAIRZONING_GATE_ALL_OFF_STATE_SET)->valuefloat;
+            }
         }
         
         ch_group->timer2 = rs_esp_timer_create(th_update_delay(json_context) * 1000, pdFALSE, (void*) ch_group, process_th_timer);
@@ -13026,6 +13033,8 @@ void normal_mode_init() {
 }
 
 void irrf_capture_task(void* args) {
+    vTaskDelay(1);
+    
     const unsigned int irrf_capture_gpio = ((int) args) - 100;
     INFO("\nGPIO %i\n", irrf_capture_gpio);
     //set_used_gpio(irrf_capture_gpio);
@@ -13042,11 +13051,7 @@ void irrf_capture_task(void* args) {
     unsigned int read, last = true;
     unsigned int i, c = 0;
     uint16_t* buffer = malloc(sizeof(uint16_t) * IRRF_CAPTURE_BUFFER_SIZE);
-#ifdef ESP_PLATFORM
-    uint64_t now, new_time, current_time = sdk_system_get_time_raw();
-#else
     uint32_t now, new_time, current_time = sdk_system_get_time_raw();
-#endif
     
     for (;;) {
         read = gpio_read(irrf_capture_gpio);

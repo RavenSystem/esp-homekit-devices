@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.9.1"
+#define HAA_FIRMWARE_VERSION                "12.10.0"
 #define HAA_FIRMWARE_BETA_REVISION          ""
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -172,6 +172,7 @@
 #define IO_GPIO_PULL_UP_DOWN                io_value[1]
 #define IO_GPIO_BUTTON_MODE                 io_value[2]
 #define IO_GPIO_BUTTON_FILTER               io_value[3]
+#define IO_GPIO_US_TIME_BETWEEN_PULSES      io_value[4]
 #define IO_GPIO_OUTPUT_INIT_VALUE           io_value[2]
 #define IO_GPIO_PWM_MODE                    io_value[3]
 #define IO_GPIO_PWM_DITHERING               io_value[4]
@@ -218,10 +219,12 @@
 #define THERMOSTAT_UPDATE_DELAY_MIN         (0.15f)
 #define THERMOSTAT_UPDATE_DELAY_DEFAULT     (3.0f)
 #define THERMOSTAT_TARGET_TEMP_STEP         "st"
-#define THERMOSTAT_IAIRZONING_CONTROLLER    "ia"
+#define TH_IAIRZONING_CONTROLLER_SET        "ia"
+#define TH_IAIRZONING_GATE_ALL_OFF_STATE_SET "it"
 #define THERMOSTAT_CURRENT_ACTION           ch_group->num_i[5]
 #define TH_IAIRZONING_CONTROLLER            ch_group->num_i[6]
 #define TH_IAIRZONING_GATE_CURRENT_STATE    ch_group->num_i[7]
+#define TH_IAIRZONING_GATE_ALL_OFF_STATE    ch_group->num_i[8]
 #define TH_IAIRZONING_GATE_CLOSE            (0)
 #define TH_IAIRZONING_GATE_OPEN             (1)
 #define THERMOSTAT_MODE_OFF                 (0)
@@ -768,7 +771,7 @@
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
-#define CUSTOM_HAA_COMMAND                  "po"
+#define CUSTOM_HAA_COMMAND                  "bl"
 #define HAA_SETUP_ACCESSORY_SET             "s"
 
 #define IRRF_CAPTURE_BUFFER_SIZE            (2048)
