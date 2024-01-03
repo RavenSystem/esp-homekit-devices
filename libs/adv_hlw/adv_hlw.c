@@ -1,7 +1,7 @@
 /*
  * Advanced HLW8012 Driver
  *
- * Copyright 2020-2023 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2020-2024 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -32,18 +32,19 @@
 
 #include "adv_hlw.h"
 
-#define MODE_CURRENT            (0)
-#define MODE_VOLTAGE            (1)
+#define MODE_CURRENT            (false)     // 0
+#define MODE_VOLTAGE            (true)      // 1
 
-#define ADV_HLW_FREQ_BASE_HZ    (1000000)
+#define ADV_HLW_FREQ_BASE_HZ    (1000000.f)
 #define PERIOD_TIMEOUT_US       (1500000)
 
 typedef struct _adv_hlw_unit {
     int8_t gpio_cf;
     int8_t gpio_cf1;
     int8_t gpio_sel;
-    uint8_t current_mode: 4;    // 1 bit
-    uint8_t mode: 4;            // 1 bit
+    bool current_mode: 1;    // 1 bit
+    bool mode: 1;            // 1 bit
+    uint8_t _padding: 6;
     
     uint32_t last_cf;
     uint32_t period_cf;
@@ -69,8 +70,20 @@ static adv_hlw_unit_t* IRAM adv_hlw_find_by_gpio(const int gpio) {
     return adv_hlw_unit;
 }
 
+static void IRAM change_mode(adv_hlw_unit_t* adv_hlw_unit) {
+    if (adv_hlw_unit->gpio_sel >= 0) {
+        adv_hlw_unit->mode = !adv_hlw_unit->mode;
+        gpio_write(adv_hlw_unit->gpio_sel, adv_hlw_unit->mode);
+    }
+}
+
 static void normalize_cf1(adv_hlw_unit_t* adv_hlw_unit) {
-    if ((sdk_system_get_time_raw() - adv_hlw_unit->last_cf1) > PERIOD_TIMEOUT_US) {
+    const uint32_t last_cf1 = adv_hlw_unit->last_cf1;
+    const uint32_t now = sdk_system_get_time_raw();
+    const uint32_t diff = now - last_cf1;
+    if (diff > PERIOD_TIMEOUT_US) {
+        adv_hlw_unit->last_cf1 = now;
+        adv_hlw_unit->first_cf1 = now;
         
         if (adv_hlw_unit->mode == adv_hlw_unit->current_mode) {
             adv_hlw_unit->period_cf1_c = 0;
@@ -78,33 +91,19 @@ static void normalize_cf1(adv_hlw_unit_t* adv_hlw_unit) {
             adv_hlw_unit->period_cf1_v = 0;
         }
         
-        if (adv_hlw_unit->gpio_sel >= 0) {
-            uint8_t mode = MODE_CURRENT;
-            
-            if (adv_hlw_unit->mode == adv_hlw_unit->current_mode) {
-                mode = MODE_VOLTAGE;
-            }
-
-            if (mode == MODE_CURRENT) {
-                adv_hlw_unit->mode = adv_hlw_unit->current_mode;
-            } else {
-                adv_hlw_unit->mode = 1 - adv_hlw_unit->current_mode;
-            }
-            
-            gpio_write(adv_hlw_unit->gpio_sel, mode);
-        }
-        
-        adv_hlw_unit->last_cf1 = adv_hlw_unit->first_cf1;
+        change_mode(adv_hlw_unit);
     }
 }
 
 float adv_hlw_get_voltage_freq(const int gpio) {
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
     
-    if (adv_hlw_unit && adv_hlw_unit->period_cf1_v > 0) {
+    if (adv_hlw_unit) {
         normalize_cf1(adv_hlw_unit);
-
-        return ((double) ADV_HLW_FREQ_BASE_HZ / (double) adv_hlw_unit->period_cf1_v);
+        
+        if (adv_hlw_unit->period_cf1_v > 0) {
+            return (ADV_HLW_FREQ_BASE_HZ / (float) adv_hlw_unit->period_cf1_v);
+        }
     }
     
     return 0;
@@ -113,10 +112,12 @@ float adv_hlw_get_voltage_freq(const int gpio) {
 float adv_hlw_get_current_freq(const int gpio) {
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
     
-    if (adv_hlw_unit && adv_hlw_unit->period_cf1_c > 0) {
+    if (adv_hlw_unit) {
         normalize_cf1(adv_hlw_unit);
-
-        return ((double) ADV_HLW_FREQ_BASE_HZ / (double) adv_hlw_unit->period_cf1_c);
+        
+        if (adv_hlw_unit->period_cf1_c > 0) {
+            return (ADV_HLW_FREQ_BASE_HZ / (float) adv_hlw_unit->period_cf1_c);
+        }
     }
     
     return 0;
@@ -124,14 +125,13 @@ float adv_hlw_get_current_freq(const int gpio) {
 
 float adv_hlw_get_power_freq(const int gpio) {
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
-    
-    if (adv_hlw_unit && adv_hlw_unit->period_cf > 0) {
-        if ((sdk_system_get_time_raw() - adv_hlw_unit->last_cf) > PERIOD_TIMEOUT_US) {
-            adv_hlw_unit->period_cf = 0;
-            return 0;
-        }
+    if (adv_hlw_unit) {
+        const uint32_t last_cf = adv_hlw_unit->last_cf;
+        const uint32_t diff = sdk_system_get_time_raw() - last_cf;
         
-        return ((double) ADV_HLW_FREQ_BASE_HZ / (double) adv_hlw_unit->period_cf);
+        if (diff < PERIOD_TIMEOUT_US) {
+            return (ADV_HLW_FREQ_BASE_HZ / (float) adv_hlw_unit->period_cf);
+        }
     }
     
     return 0;
@@ -147,28 +147,21 @@ static void IRAM adv_hlw_cf1_callback(const uint8_t gpio) {
     const uint32_t now = sdk_system_get_time_raw();
     
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio);
-
+    
     if ((now - adv_hlw_unit->first_cf1) > PERIOD_TIMEOUT_US) {
-#ifdef ESP_PLATFORM
-        uint64_t period = 0;
-#else
-        uint32_t period = 0;
-#endif
+        uint32_t new_period = 0;
         
         if (adv_hlw_unit->last_cf1 != adv_hlw_unit->first_cf1) {
-            period = now - adv_hlw_unit->last_cf1;
+            new_period = now - adv_hlw_unit->last_cf1;
         }
-
+        
         if (adv_hlw_unit->mode == adv_hlw_unit->current_mode) {
-            adv_hlw_unit->period_cf1_c = period;
+            adv_hlw_unit->period_cf1_c = new_period;
         } else {
-            adv_hlw_unit->period_cf1_v = period;
+            adv_hlw_unit->period_cf1_v = new_period;
         }
-
-        if (adv_hlw_unit->gpio_sel >= 0) {
-            adv_hlw_unit->mode = 1 - adv_hlw_unit->mode;
-            gpio_write(adv_hlw_unit->gpio_sel, adv_hlw_unit->mode);
-        }
+        
+        change_mode(adv_hlw_unit);
         
         adv_hlw_unit->first_cf1 = now;
     }
@@ -194,7 +187,7 @@ static void IRAM adv_hlw_cf_callback(const uint8_t gpio) {
     //printf("ADV_HLW_CF: gpio: %i, period_cf: %i\n", gpio, adv_hlw_unit->period_cf);
 }
 
-int adv_hlw_unit_create(const int8_t gpio_cf, const int8_t gpio_cf1, const int8_t gpio_sel, const unsigned int current_mode, const unsigned int interrupt_type) {
+int adv_hlw_unit_create(const int gpio_cf, const int gpio_cf1, const int gpio_sel, const bool current_mode, const uint8_t interrupt_type) {
     adv_hlw_unit_t* adv_hlw_unit = adv_hlw_find_by_gpio(gpio_cf);
     
     if (!adv_hlw_unit) {

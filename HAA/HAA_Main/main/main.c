@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * Copyright 2019-2023 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2024 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -1687,7 +1687,7 @@ void power_monitor_task(void* args) {
         
 #ifdef POWER_MONITOR_DEBUG
         voltage = (hwrand() % 40) + 200;
-        current = (hwrand() % 100) / 10.0f;
+        current = (hwrand() % 100) / 10.f;
         power = hwrand() % 70;
 #endif //POWER_MONITOR_DEBUG
         
@@ -2112,7 +2112,7 @@ void process_th_task(void* args) {
             
         } else if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT + deadband)) {
             if (TH_MODE_INT == THERMOSTAT_MODE_HEATER) {
-                if (TH_DEADBAND_SOFT_ON > 0.000f) {
+                if (TH_DEADBAND_SOFT_ON > 0.f) {
                     if (th_current_action != THERMOSTAT_ACTION_HEATER_SOFT_ON) {
                         THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_SOFT_ON;
                         do_actions(ch_group, THERMOSTAT_ACTION_HEATER_SOFT_ON);
@@ -2136,7 +2136,7 @@ void process_th_task(void* args) {
             }
             
         } else if (SENSOR_TEMPERATURE_FLOAT >= (TH_HEATER_TARGET_TEMP_FLOAT + deadband + deadband_force_idle) &&
-                   TH_DEADBAND_FORCE_IDLE > 0.000f) {
+                   TH_DEADBAND_FORCE_IDLE > 0.f) {
             TH_MODE_INT = THERMOSTAT_MODE_IDLE;
             if (th_current_action != THERMOSTAT_ACTION_HEATER_FORCE_IDLE) {
                 THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_FORCE_IDLE;
@@ -2146,7 +2146,7 @@ void process_th_task(void* args) {
             
         } else {
             TH_MODE_INT = THERMOSTAT_MODE_IDLE;
-            if (TH_DEADBAND_FORCE_IDLE == 0.000f ||
+            if (TH_DEADBAND_FORCE_IDLE == 0.f ||
                 th_current_action != THERMOSTAT_ACTION_HEATER_FORCE_IDLE) {
                 if (th_current_action != THERMOSTAT_ACTION_HEATER_IDLE) {
                     THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_IDLE;
@@ -2177,7 +2177,7 @@ void process_th_task(void* args) {
             
         } else if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT - deadband)) {
             if (TH_MODE_INT == THERMOSTAT_MODE_COOLER) {
-                if (TH_DEADBAND_SOFT_ON > 0.000f) {
+                if (TH_DEADBAND_SOFT_ON > 0.f) {
                     if (th_current_action != THERMOSTAT_ACTION_COOLER_SOFT_ON) {
                         THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_SOFT_ON;
                         do_actions(ch_group, THERMOSTAT_ACTION_COOLER_SOFT_ON);
@@ -2201,7 +2201,7 @@ void process_th_task(void* args) {
             }
             
         } else if (SENSOR_TEMPERATURE_FLOAT <= (TH_COOLER_TARGET_TEMP_FLOAT - deadband - deadband_force_idle) &&
-                   TH_DEADBAND_FORCE_IDLE > 0.000f) {
+                   TH_DEADBAND_FORCE_IDLE > 0.f) {
             TH_MODE_INT = THERMOSTAT_MODE_IDLE;
             if (th_current_action != THERMOSTAT_ACTION_COOLER_FORCE_IDLE) {
                 THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_FORCE_IDLE;
@@ -2211,7 +2211,7 @@ void process_th_task(void* args) {
             
         } else {
             TH_MODE_INT = THERMOSTAT_MODE_IDLE;
-            if (TH_DEADBAND_FORCE_IDLE == 0.000f ||
+            if (TH_DEADBAND_FORCE_IDLE == 0.f ||
                 th_current_action != THERMOSTAT_ACTION_COOLER_FORCE_IDLE) {
                 if (th_current_action != THERMOSTAT_ACTION_COOLER_IDLE) {
                     THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_IDLE;
@@ -2236,7 +2236,7 @@ void process_th_task(void* args) {
             homekit_characteristic_notify_safe(ch_group->ch[6]);
             
         } else {    // THERMOSTAT_TARGET_MODE_AUTO
-            const float mid_target = (TH_HEATER_TARGET_TEMP_FLOAT + TH_COOLER_TARGET_TEMP_FLOAT) / 2.000f;
+            const float mid_target = (TH_HEATER_TARGET_TEMP_FLOAT + TH_COOLER_TARGET_TEMP_FLOAT) / 2.f;
             
             unsigned int is_heater = false;
             if (TH_MODE_INT == THERMOSTAT_MODE_OFF) {
@@ -2245,7 +2245,7 @@ void process_th_task(void* args) {
                 }
             } else if (SENSOR_TEMPERATURE_FLOAT <= TH_HEATER_TARGET_TEMP_FLOAT) {
                 is_heater = true;
-            } else if (SENSOR_TEMPERATURE_FLOAT < (TH_COOLER_TARGET_TEMP_FLOAT + 1.5) &&
+            } else if (SENSOR_TEMPERATURE_FLOAT < (TH_COOLER_TARGET_TEMP_FLOAT + 1.5f) &&
                        (th_current_action == THERMOSTAT_ACTION_HEATER_IDLE ||
                         th_current_action == THERMOSTAT_ACTION_HEATER_ON ||
                         th_current_action == THERMOSTAT_ACTION_HEATER_FORCE_IDLE ||
@@ -2254,7 +2254,7 @@ void process_th_task(void* args) {
             }
             
             const float deadband_force_idle = TH_COOLER_TARGET_TEMP_FLOAT - mid_target;
-            const float deadband = deadband_force_idle / 1.500f;
+            const float deadband = deadband_force_idle / 1.5f;
             
             if (is_heater) {
                 heating(deadband, deadband_force_idle - deadband, deadband_force_idle);
@@ -2400,12 +2400,12 @@ void th_input_temp(const uint16_t gpio, void* args, const uint8_t type) {
             float set_h_temp = TH_HEATER_TARGET_TEMP_FLOAT;
             
             if (type == THERMOSTAT_TEMP_UP) {
-                set_h_temp += 0.5;
+                set_h_temp += 0.5f;
                 if (set_h_temp > TH_HEATER_MAX_TEMP) {
                     set_h_temp = TH_HEATER_MAX_TEMP;
                 }
             } else {    // type == THERMOSTAT_TEMP_DOWN
-                set_h_temp -= 0.5;
+                set_h_temp -= 0.5f;
                 if (set_h_temp < TH_HEATER_MIN_TEMP) {
                     set_h_temp = TH_HEATER_MIN_TEMP;
                 }
@@ -2419,12 +2419,12 @@ void th_input_temp(const uint16_t gpio, void* args, const uint8_t type) {
             float set_c_temp = TH_COOLER_TARGET_TEMP_FLOAT;
             
             if (type == THERMOSTAT_TEMP_UP) {
-                set_c_temp += 0.5;
+                set_c_temp += 0.5f;
                 if (set_c_temp > TH_COOLER_MAX_TEMP) {
                     set_c_temp = TH_COOLER_MAX_TEMP;
                 }
             } else {    // type == THERMOSTAT_TEMP_DOWN
-                set_c_temp -= 0.5;
+                set_c_temp -= 0.5f;
                 if (set_c_temp < TH_COOLER_MIN_TEMP) {
                     set_c_temp = TH_COOLER_MIN_TEMP;
                 }
@@ -2473,7 +2473,7 @@ void process_hum_task(void* args) {
             
         } else if (SENSOR_HUMIDITY_FLOAT < (HM_HUM_TARGET_FLOAT + deadband)) {
             if (HM_MODE_INT == HUMIDIF_MODE_HUM) {
-                if (HM_DEADBAND_SOFT_ON > 0.000f) {
+                if (HM_DEADBAND_SOFT_ON > 0.f) {
                     if (humidif_current_action != HUMIDIF_ACTION_HUM_SOFT_ON) {
                         HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_SOFT_ON;
                         do_actions(ch_group, HUMIDIF_ACTION_HUM_SOFT_ON);
@@ -2495,7 +2495,7 @@ void process_hum_task(void* args) {
             
         } else if ((SENSOR_HUMIDITY_FLOAT >= (HM_HUM_TARGET_FLOAT + deadband + deadband_force_idle) ||
                     SENSOR_HUMIDITY_FLOAT == 100.f ) &&
-                   HM_DEADBAND_FORCE_IDLE > 0.000f) {
+                   HM_DEADBAND_FORCE_IDLE > 0.f) {
             HM_MODE_INT = HUMIDIF_MODE_IDLE;
             if (humidif_current_action != HUMIDIF_ACTION_HUM_FORCE_IDLE) {
                 HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_FORCE_IDLE;
@@ -2504,7 +2504,7 @@ void process_hum_task(void* args) {
             
         } else {
             HM_MODE_INT = HUMIDIF_MODE_IDLE;
-            if (HM_DEADBAND_FORCE_IDLE == 0.000f ||
+            if (HM_DEADBAND_FORCE_IDLE == 0.f ||
                 humidif_current_action != HUMIDIF_ACTION_HUM_FORCE_IDLE) {
                 if (humidif_current_action != HUMIDIF_ACTION_HUM_IDLE) {
                     HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_IDLE;
@@ -2532,7 +2532,7 @@ void process_hum_task(void* args) {
             
         } else if (SENSOR_HUMIDITY_FLOAT > (HM_DEHUM_TARGET_FLOAT - deadband)) {
             if (HM_MODE_INT == HUMIDIF_MODE_DEHUM) {
-                if (HM_DEADBAND_SOFT_ON > 0.000f) {
+                if (HM_DEADBAND_SOFT_ON > 0.f) {
                     if (humidif_current_action != HUMIDIF_ACTION_DEHUM_SOFT_ON) {
                         HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_SOFT_ON;
                         do_actions(ch_group, HUMIDIF_ACTION_DEHUM_SOFT_ON);
@@ -2554,7 +2554,7 @@ void process_hum_task(void* args) {
             
         } else if ((SENSOR_HUMIDITY_FLOAT <= (HM_DEHUM_TARGET_FLOAT - deadband - deadband_force_idle) ||
                     SENSOR_HUMIDITY_FLOAT == 0.f) &&
-                   HM_DEADBAND_FORCE_IDLE > 0.000f) {
+                   HM_DEADBAND_FORCE_IDLE > 0.f) {
             HM_MODE_INT = HUMIDIF_MODE_IDLE;
             if (humidif_current_action != HUMIDIF_ACTION_DEHUM_FORCE_IDLE) {
                 HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_FORCE_IDLE;
@@ -2563,7 +2563,7 @@ void process_hum_task(void* args) {
             
         } else {
             HM_MODE_INT = HUMIDIF_MODE_IDLE;
-            if (HM_DEADBAND_FORCE_IDLE == 0.000f ||
+            if (HM_DEADBAND_FORCE_IDLE == 0.f ||
                 humidif_current_action != HUMIDIF_ACTION_DEHUM_FORCE_IDLE) {
                 if (humidif_current_action != HUMIDIF_ACTION_DEHUM_IDLE) {
                     HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_IDLE;
@@ -2587,7 +2587,7 @@ void process_hum_task(void* args) {
             homekit_characteristic_notify_safe(ch_group->ch[6]);
             
         } else {    // HUMIDIF_TARGET_MODE_AUTO
-            const float mid_target = (HM_HUM_TARGET_FLOAT + HM_DEHUM_TARGET_FLOAT) / 2.000f;
+            const float mid_target = (HM_HUM_TARGET_FLOAT + HM_DEHUM_TARGET_FLOAT) / 2.f;
             
             int is_hum = false;
             if (HM_MODE_INT == HUMIDIF_MODE_OFF) {
@@ -2605,7 +2605,7 @@ void process_hum_task(void* args) {
             }
             
             const float deadband_force_idle = HUMIDIF_TARGET_MODE_HUM - mid_target;
-            const float deadband = deadband_force_idle / 1.500f;
+            const float deadband = deadband_force_idle / 1.5f;
             
             if (is_hum) {
                 hum(deadband, deadband_force_idle - deadband, deadband_force_idle);
@@ -2884,10 +2884,10 @@ void temperature_task(void* args) {
 #endif
                             if (sensor_type == 5) {
                                 // https://github.com/arendst/Tasmota/blob/7177c7d8e003bb420d8cae39f544c2b8a9af09fe/tasmota/xsns_02_analog.ino#L201
-                                temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 + taylor_log(((32000 * adc) / ((HAA_ADC_RESOLUTION_ESP8266 * 3.3) - adc)) / 10000))) - 15;
+                                temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15f + taylor_log(((32000 * adc) / ((HAA_ADC_RESOLUTION_ESP8266 * 3.3f) - adc)) / 10000))) - 15;
                                 
                             } else if (sensor_type == 6) {
-                                temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15 - taylor_log(((32000 * adc) / ((HAA_ADC_RESOLUTION_ESP8266 * 3.3) - adc)) / 10000))) + 15;
+                                temperature_value = KELVIN_TO_CELSIUS(3350 / (3350 / 298.15f - taylor_log(((32000 * adc) / ((HAA_ADC_RESOLUTION_ESP8266 * 3.3f) - adc)) / 10000))) + 15;
                                 
                             } else if (sensor_type == 7) {
                                 temperature_value = HAA_ADC_MAX_VALUE - adc;
@@ -2906,10 +2906,10 @@ void temperature_task(void* args) {
                                 humidity_value *= 0.09775171066f;  // (100 / 1023)
                             }
                             
-                            if (TH_SENSOR_HUM_OFFSET != 0.000000f && sensor_type < 9) {
+                            if (TH_SENSOR_HUM_OFFSET != 0.f && sensor_type < 9) {
                                 temperature_value *= TH_SENSOR_HUM_OFFSET;
                                 
-                            } else if (TH_SENSOR_TEMP_OFFSET != 0.000000f && sensor_type >= 9) {
+                            } else if (TH_SENSOR_TEMP_OFFSET != 0.f && sensor_type >= 9) {
                                 humidity_value *= TH_SENSOR_TEMP_OFFSET;
                             }
                             
@@ -2922,7 +2922,7 @@ void temperature_task(void* args) {
                     /*
                      * Only for tests. Keep comment for releases
                      */
-                    //get_temp = true; temperature_value = (((float) (hwrand() % 51)) / 10.0f) + 20; humidity_value = 68;
+                    //get_temp = true; temperature_value = (((float) (hwrand() % 51)) / 10.f) + 20; humidity_value = 68;
                     
                     if (get_temp) {
                         TH_SENSOR_ERROR_COUNT = 0;
@@ -2936,7 +2936,7 @@ void temperature_task(void* args) {
                             }
                             
                             temperature_value *= 10.f;
-                            temperature_value = ((int) temperature_value) / 10.0f;
+                            temperature_value = ((int) temperature_value) / 10.f;
                             
                             INFO("<%i> TEMP %.1fC", ch_group->serv_index, temperature_value);
                             
@@ -3121,7 +3121,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
     void array_rescale(float arr[], const unsigned int num_elements) {
         const float amax = array_max(arr, num_elements);
         if (amax != 0) {
-            array_multiply(arr, 1.0f / amax, num_elements);
+            array_multiply(arr, 1.f / amax, num_elements);
         } else {
             array_multiply(arr, 0, num_elements);
         }
@@ -3280,7 +3280,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
     // (2) convert to XYZ then to xy(ignore Y). Also now apply gamma correction.
     float gc[3];
     for (unsigned int i = 0; i < 3; i++) {
-        gc[i] = (wheel_rgb[i] > 0.04045f) ? HAA_POW((wheel_rgb[i] + 0.055f) / (1.0f + 0.055f), 2.4f) : (wheel_rgb[i] / 12.92f);
+        gc[i] = (wheel_rgb[i] > 0.04045f) ? HAA_POW((wheel_rgb[i] + 0.055f) / (1.f + 0.055f), 2.4f) : (wheel_rgb[i] / 12.92f);
     }
     
     // Get the xy coordinates using sRGB Primaries. This appears to be the space that HomeKit gives HSV commands in, however, we need to do some gamut streching.
@@ -3473,7 +3473,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
         float extraRGB[3] = { targetRGB[0], targetRGB[1], targetRGB[2] }; // initialize the target for convenienece
         // Adjust the extra RGB according to relative flux; need to rescale those fluxes to >=1 in order to only shrink components, not go over calculated allotment
         float rflux[3] =  { lightbulb_group->flux[0], lightbulb_group->flux[1], lightbulb_group->flux[2] };
-        array_multiply(rflux, 1.0f / array_min(rflux), 3); // assumes nonzero fluxes
+        array_multiply(rflux, 1.f / array_min(rflux), 3); // assumes nonzero fluxes
         for (unsigned int i = 0; i < 3; i++) {
             if (rflux[i] != 0) {
                 extraRGB[i] /= rflux[i];
@@ -4184,7 +4184,7 @@ float window_cover_step(ch_group_t* ch_group, const float cover_time) {
     const float time = actual_time - WINDOW_COVER_LAST_TIME;
     WINDOW_COVER_LAST_TIME = actual_time;
     
-    return (100.00000000f / cover_time) * (time / 1000.00000000f);
+    return (100.f / cover_time) * (time / 1000.f);
 }
 
 void window_cover_stop(ch_group_t* ch_group) {
@@ -4390,7 +4390,7 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
     }
     
     float window_cover_homekit_position() {
-        return WINDOW_COVER_MOTOR_POSITION / (1.00000000f + ((100.00000000f - WINDOW_COVER_MOTOR_POSITION) * ((float) WINDOW_COVER_CORRECTION) * 0.00020000f));
+        return WINDOW_COVER_MOTOR_POSITION / (1.f + ((100.f - WINDOW_COVER_MOTOR_POSITION) * ((float) WINDOW_COVER_CORRECTION) * 0.0002f));
     }
     
     switch (WINDOW_COVER_CH_STATE->value.int_value) {
@@ -6755,7 +6755,6 @@ void irrf_tx_task(void* pvParameters) {
             }
             
             // IR TRANSMITTER
-            uint32_t start;
             unsigned int ir_true, ir_false, ir_gpio;
             if (freq > 1) {
                 ir_true = !main_config.ir_tx_inv;
@@ -6768,7 +6767,6 @@ void irrf_tx_task(void* pvParameters) {
             }
 
             for (unsigned int r = 0; r < action_irrf_tx->repeats; r++) {
-                
                 HAA_ENTER_CRITICAL_TASK();
                 
                 for (unsigned int i = 0; i < ir_code_len; i++) {
@@ -6777,9 +6775,10 @@ void irrf_tx_task(void* pvParameters) {
                             gpio_write(ir_gpio, ir_false);
                             sdk_os_delay_us(ir_code[i]);
                         } else {        // Mark
-                            start = sdk_system_get_time_raw();
+                            const uint32_t start = sdk_system_get_time_raw();
                             if (freq > 1) {
-                                while ((sdk_system_get_time_raw() - start) < ir_code[i]) {
+                                const uint32_t time_limit = ir_code[i];
+                                while (((uint32_t) (sdk_system_get_time_raw() - start)) < time_limit) {
                                     gpio_write(ir_gpio, ir_true);
                                     sdk_os_delay_us(freq);
                                     gpio_write(ir_gpio, ir_false);
@@ -7127,7 +7126,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 WINDOW_COVER_HOMEKIT_POSITION = value_int - 200;
                                 
                                 WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_HOMEKIT_POSITION;
-                                WINDOW_COVER_MOTOR_POSITION = ((double) ((100.00000000f * WINDOW_COVER_CORRECTION * WINDOW_COVER_HOMEKIT_POSITION) + (5000.00000000f * WINDOW_COVER_HOMEKIT_POSITION))) / ((double) ((WINDOW_COVER_CORRECTION * WINDOW_COVER_HOMEKIT_POSITION) + 5000.00000000f));
+                                WINDOW_COVER_MOTOR_POSITION = ((float) ((100.f * WINDOW_COVER_CORRECTION * WINDOW_COVER_HOMEKIT_POSITION) + (5000.f * WINDOW_COVER_HOMEKIT_POSITION))) / ((float) ((WINDOW_COVER_CORRECTION * WINDOW_COVER_HOMEKIT_POSITION) + 5000.f));
                                 
                                 if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
                                     WINDOW_COVER_CH_TARGET_POSITION->value.int_value = WINDOW_COVER_CH_CURRENT_POSITION->value.int_value;
@@ -7542,7 +7541,7 @@ void run_homekit_server() {
     rs_esp_timer_start_forced(WIFI_WATCHDOG_TIMER);
     
     if (main_config.ping_inputs) {
-        rs_esp_timer_start_forced(rs_esp_timer_create(main_config.ping_poll_period * 1000.00f, pdTRUE, NULL, ping_task_timer_worker));
+        rs_esp_timer_start_forced(rs_esp_timer_create(main_config.ping_poll_period * 1000.f, pdTRUE, NULL, ping_task_timer_worker));
     }
 }
 
@@ -8438,7 +8437,7 @@ void normal_mode_init() {
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_POLL_PERIOD) != NULL) {
             poll_period = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_POLL_PERIOD)->valuefloat;
             
-            if (poll_period < TH_SENSOR_POLL_PERIOD_MIN && poll_period > 0.00f) {
+            if (poll_period < TH_SENSOR_POLL_PERIOD_MIN && poll_period > 0.f) {
                 poll_period = TH_SENSOR_POLL_PERIOD_MIN;
             }
         }
@@ -9394,7 +9393,7 @@ void normal_mode_init() {
     
     // ARP Gratuitous period
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_WATCHDOG_ARP_PERIOD_SET) != NULL) {
-        main_config.wifi_arp_count_max = ((uint32_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_WATCHDOG_ARP_PERIOD_SET)->valuefloat) / (WIFI_WATCHDOG_POLL_PERIOD_MS / 1000.0f);
+        main_config.wifi_arp_count_max = ((uint32_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_WATCHDOG_ARP_PERIOD_SET)->valuefloat) / (WIFI_WATCHDOG_POLL_PERIOD_MS / 1000.f);
     }
     
     // Common serial prefix
@@ -10365,7 +10364,7 @@ void normal_mode_init() {
         // Temperature Deadbands
         TH_DEADBAND = 0;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND) != NULL) {
-            TH_DEADBAND = cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND)->valuefloat / 2.000f;
+            TH_DEADBAND = cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND)->valuefloat / 2.f;
         }
         
         TH_DEADBAND_FORCE_IDLE = 0;
@@ -10799,7 +10798,7 @@ void normal_mode_init() {
         // Humidity Deadbands
         HM_DEADBAND = 0;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND) != NULL) {
-            HM_DEADBAND = cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND)->valuefloat / 2.000f;
+            HM_DEADBAND = cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND)->valuefloat / 2.f;
         }
         
         HM_DEADBAND_FORCE_IDLE = 0;
@@ -11603,7 +11602,7 @@ void normal_mode_init() {
         }
         
         WINDOW_COVER_HOMEKIT_POSITION = set_initial_state(ch_group->serv_index, 0, init_last_state_json, WINDOW_COVER_CH_CURRENT_POSITION, CH_TYPE_INT8, 0);
-        WINDOW_COVER_MOTOR_POSITION = (((float) WINDOW_COVER_HOMEKIT_POSITION) * (1 + (0.02000000f * ((float) WINDOW_COVER_CORRECTION)))) / (1 + (0.00020000f * ((float) WINDOW_COVER_CORRECTION) * ((float) WINDOW_COVER_HOMEKIT_POSITION)));
+        WINDOW_COVER_MOTOR_POSITION = (((float) WINDOW_COVER_HOMEKIT_POSITION) * (1 + (0.02f * ((float) WINDOW_COVER_CORRECTION)))) / (1 + (0.0002f * ((float) WINDOW_COVER_CORRECTION) * ((float) WINDOW_COVER_HOMEKIT_POSITION)));
         WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = WINDOW_COVER_HOMEKIT_POSITION;
         WINDOW_COVER_CH_TARGET_POSITION->value.int_value = WINDOW_COVER_CH_CURRENT_POSITION->value.int_value;
         
@@ -12678,7 +12677,7 @@ void normal_mode_init() {
         HIST_LAST_REGISTER = hist_size * HIST_BLOCK_SIZE;
         
         const float poll_period = sensor_poll_period(json_context, 0);
-        if (poll_period > 0.00f) {
+        if (poll_period > 0.f) {
             rs_esp_timer_start_forced(rs_esp_timer_create(poll_period * 1000, pdTRUE, (void*) ch_group->ch[hist_size], data_history_timer_worker));
         }
         

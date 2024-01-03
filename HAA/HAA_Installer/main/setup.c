@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect OTA Update
  *
- * Copyright 2020-2023 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2020-2024 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -769,6 +769,11 @@ static void wifi_config_context_free(wifi_config_context_t *context) {
     free(context);
     context = NULL;
 }
+    
+static void wifi_config_remove_ap_settings() {
+    sysparam_erase(WIFI_AP_ENABLE_SYSPARAM);
+    sysparam_erase(WIFI_AP_PASSWORD_SYSPARAM);
+}
 
 static void wifi_config_server_on_settings_update_task(void* args) {
     client_t* client = args;
@@ -865,7 +870,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                 sysparam_erase(WIFI_STA_PASSWORD_SYSPARAM);
                 sysparam_erase(WIFI_STA_BSSID_SYSPARAM);
                 sysparam_erase(WIFI_STA_MODE_SYSPARAM);
-                sysparam_erase(WIFI_AP_PASSWORD_SYSPARAM);
+                wifi_config_remove_ap_settings();
 #ifndef ESP_PLATFORM
                 sysparam_erase(WIFI_LAST_WORKING_PHY_SYSPARAM);
 #endif
@@ -916,8 +921,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                     sysparam_erase(WIFI_STA_PASSWORD_SYSPARAM);
                 }
                 
-                sysparam_set_int8(WIFI_AP_ENABLE_SYSPARAM, 1);
-                sysparam_erase(WIFI_AP_PASSWORD_SYSPARAM);
+                wifi_config_remove_ap_settings();
             }
             
             if (fm_param && fm_param->value) {
@@ -947,8 +951,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                 
                 if (current_wifi_mode != new_wifi_mode) {
                     sysparam_set_int8(WIFI_STA_MODE_SYSPARAM, new_wifi_mode);
-                    sysparam_set_int8(WIFI_AP_ENABLE_SYSPARAM, 1);
-                    sysparam_erase(WIFI_AP_PASSWORD_SYSPARAM);
+                    wifi_config_remove_ap_settings();
                 }
             }
 #endif

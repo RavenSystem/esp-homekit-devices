@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * Copyright 2019-2023 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2024 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -804,6 +804,11 @@ static void wifi_config_context_free(wifi_config_context_t* context) {
     context = NULL;
 }
 
+static void wifi_config_remove_ap_settings() {
+    sysparam_erase(WIFI_AP_ENABLE_SYSPARAM);
+    sysparam_erase(WIFI_AP_PASSWORD_SYSPARAM);
+}
+
 static void wifi_config_server_on_settings_update_task(void* args) {
     client_t* client = args;
     context->end_setup = true;
@@ -940,7 +945,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                 sysparam_erase(WIFI_STA_PASSWORD_SYSPARAM);
                 sysparam_erase(WIFI_STA_BSSID_SYSPARAM);
                 sysparam_erase(WIFI_STA_MODE_SYSPARAM);
-                sysparam_erase(WIFI_AP_PASSWORD_SYSPARAM);
+                wifi_config_remove_ap_settings();
 #ifndef ESP_PLATFORM
                 sysparam_erase(WIFI_LAST_WORKING_PHY_SYSPARAM);
 #endif
@@ -990,13 +995,10 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                     sysparam_erase(WIFI_STA_PASSWORD_SYSPARAM);
                 }
                 
-                sysparam_set_int8(WIFI_AP_ENABLE_SYSPARAM, 1);
-                sysparam_erase(WIFI_AP_PASSWORD_SYSPARAM);
+                wifi_config_remove_ap_settings();
                 
             } else {
-                if (wifi_ap_param) {
-                    sysparam_set_int8(WIFI_AP_ENABLE_SYSPARAM, 1);
-                } else {
+                if (!wifi_ap_param) {
                     sysparam_set_int8(WIFI_AP_ENABLE_SYSPARAM, 0);
                     sysparam_erase(WIFI_AP_PASSWORD_SYSPARAM);
                 }
@@ -1010,8 +1012,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                 
                 if (current_wifi_mode != new_wifi_mode) {
                     sysparam_set_int8(WIFI_STA_MODE_SYSPARAM, new_wifi_mode);
-                    sysparam_set_int8(WIFI_AP_ENABLE_SYSPARAM, 1);
-                    sysparam_erase(WIFI_AP_PASSWORD_SYSPARAM);
+                    wifi_config_remove_ap_settings();
                 }
             }
             
@@ -1199,7 +1200,7 @@ static void http_task(void *arg) {
 }
 
 static void wifi_config_softap_start(const int8_t wifi_ap_enable) {
-    if (wifi_ap_enable) {
+    if (wifi_ap_enable != 0) {
         haa_sdk_wifi_set_opmode(STATIONAP_MODE);
         
         uint8_t macaddr[6];
@@ -1566,8 +1567,6 @@ void wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool with_
 
 static void wifi_config_station_connect() {
     vTaskDelay(1);
-    
-
     
     char *wifi_ssid = NULL;
     sysparam_get_string(WIFI_STA_SSID_SYSPARAM, &wifi_ssid);

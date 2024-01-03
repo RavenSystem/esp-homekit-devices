@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * Copyright 2019-2023 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2024 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -11,8 +11,8 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.10.1"
-#define HAA_FIRMWARE_BETA_REVISION          ""
+#define HAA_FIRMWARE_VERSION                "12.10.2"
+#define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
 // Characteristic types (ch_type)
@@ -22,7 +22,7 @@
 #define CH_TYPE_FLOAT                       (3)
 #define CH_TYPE_STRING                      (4)
 
-#define FLOAT_FACTOR_SAVE_AS_INT            (100000.00000f)
+#define FLOAT_FACTOR_SAVE_AS_INT            (100000.f)
 
 // Task Stack Sizes
 #define GLOBAL_TASK_SIZE                    (TASK_SIZE_FACTOR * (640))

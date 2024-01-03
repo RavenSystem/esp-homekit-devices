@@ -1,7 +1,7 @@
 /*
  * Advanced PWM Driver
  *
- * Copyright 2021-2023 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2021-2024 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -351,7 +351,7 @@ void adv_pwm_new_channel(const uint8_t gpio, const bool inverted, const bool lea
     }
 }
 
-void adv_pwm_set_zc_gpio(const uint8_t gpio, const unsigned int int_type) {
+void adv_pwm_set_zc_gpio(const uint8_t gpio, const uint8_t int_type) {
     adv_pwm_init(0);
     
     adv_pwm_config->zc_status = 1;

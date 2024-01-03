@@ -1,7 +1,7 @@
 /*
 * Advanced PWM Driver
 *
-* Copyright 2021-2023 José Antonio Jiménez Campos (@RavenSystem)
+* Copyright 2021-2024 José Antonio Jiménez Campos (@RavenSystem)
 *
 */
 
@@ -22,7 +22,7 @@ int adv_pwm_get_dithering(const uint8_t gpio);
 void adv_pwm_set_duty(const uint8_t gpio, uint16_t duty);
 int adv_pwm_get_duty(const uint8_t gpio);
 void adv_pwm_new_channel(const uint8_t gpio, const bool inverted, const bool leading, const uint16_t dithering, const uint16_t duty);
-void adv_pwm_set_zc_gpio(const uint8_t gpio, const unsigned int int_type);
+void adv_pwm_set_zc_gpio(const uint8_t gpio, const uint8_t int_type);
 
 #ifdef __cplusplus
 }

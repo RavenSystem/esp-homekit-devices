@@ -1,7 +1,7 @@
 /*
  * Advanced ESP Logger
  *
- * Copyright 2020-2022 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2020-2024 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -235,7 +235,7 @@ static void adv_logger_init_task(void* args) {
     adv_logger_data->udplogstring = malloc(UDP_LOG_LEN);
     adv_logger_data->udplogstring[0] = 0;
     
-    strcat(adv_logger_data->udplogstring, "\r\nAdv Log (c) 2022-2023 José A. Jiménez Campos\r\n\r\n");
+    strcat(adv_logger_data->udplogstring, "\r\nAdv Log (c) 2022-2024 José A. Jiménez Campos\r\n\r\n");
     adv_logger_data->udplogstring_len = strlen(adv_logger_data->udplogstring);
 
     xTaskCreate(adv_logger_buffered_task, "LOG", ADV_LOGGER_BUFFERED_TASK_SIZE, NULL, ADV_LOGGER_BUFFERED_TASK_PRIORITY, &adv_logger_data->xHandle);
