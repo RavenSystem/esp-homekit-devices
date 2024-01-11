@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.10.2"
+#define HAA_FIRMWARE_VERSION                "12.10.3"
 #define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -771,7 +771,7 @@
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
-#define CUSTOM_HAA_COMMAND                  "bl"
+#define CUSTOM_HAA_COMMAND                  "dt"
 #define HAA_SETUP_ACCESSORY_SET             "s"
 
 #define IRRF_CAPTURE_BUFFER_SIZE            (2048)

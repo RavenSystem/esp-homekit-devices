@@ -11466,15 +11466,7 @@ void normal_mode_init() {
             GARAGE_DOOR_HAS_F5 = 1;
             
             if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_5), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSING)) {
-                initial_sensor = GARAGE_DOOR_OPENED;
-            }
-        }
-        
-        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4) != NULL) {
-            GARAGE_DOOR_HAS_F4 = 1;
-            
-            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), garage_door_sensor, ch_group, GARAGE_DOOR_OPENING)) {
-                initial_sensor = GARAGE_DOOR_OPENED;
+                initial_sensor = GARAGE_DOOR_CLOSED;
             }
         }
         
@@ -11483,6 +11475,14 @@ void normal_mode_init() {
             
             if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_3), garage_door_sensor, ch_group, GARAGE_DOOR_CLOSED)) {
                 initial_sensor = GARAGE_DOOR_CLOSED;
+            }
+        }
+        
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4) != NULL) {
+            GARAGE_DOOR_HAS_F4 = 1;
+            
+            if (diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_ARRAY_4), garage_door_sensor, ch_group, GARAGE_DOOR_OPENING)) {
+                initial_sensor = GARAGE_DOOR_OPENED;
             }
         }
         
