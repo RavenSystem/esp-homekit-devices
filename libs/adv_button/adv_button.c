@@ -451,16 +451,18 @@ static void button_evaluate_fn() {
         } else {    // button->mode == ADV_BUTTON_PULSE_MODE
             if (button->value == button->max_eval && !button->pulse_low_detected) {
                 button->state = true;
-                
-            } else if (button->value > 0) {
+            }
+            
+            if ((button->pulse_low_detected || button->pulse_max_duration_time_us == 0) 
+                && button->value > 0) {
                 button->value--;
             }
+            
+            button->pulse_low_detected = false;
             
             if (button->value == 0) {
                 button->state = false;
             }
-            
-            button->pulse_low_detected = false;
         }
         
         if (button->state != button->old_state) {

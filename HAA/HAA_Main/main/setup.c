@@ -208,12 +208,13 @@ static void client_send_redirect(client_t *client, int code, const char *redirec
     client_send(client, buffer, len);
 }
 
-int wifi_config_get_ip() {
 #ifdef ESP_PLATFORM
+int wifi_config_get_ip() {
     if (ip_addr.addr != 0) {
         return ip4_addr4_16(&ip_addr);
     }
 #else
+int IRAM wifi_config_get_ip() {
     if (sdk_wifi_station_get_connect_status() == STATION_GOT_IP) {
         struct ip_info info;
         if (sdk_wifi_get_ip_info(STATION_IF, &info) && info.ip.addr != 0) {

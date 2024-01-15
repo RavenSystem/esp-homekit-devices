@@ -1027,6 +1027,10 @@ void wifi_reconnection_task() {
         } else if (new_ip >= 0) {
             vTaskDelay(MS_TO_TICKS(WIFI_RECONNECTION_POLL_PERIOD_MS));
             
+            if (wifi_config_get_ip() < 0) {
+                continue;
+            }
+            
             main_config.wifi_status = WIFI_STATUS_CONNECTED;
             main_config.wifi_error_count = 0;
             main_config.wifi_arp_count = 0;
@@ -2093,7 +2097,15 @@ void process_th_task(void* args) {
     unsigned int mode_has_changed = false;
     
     void heating(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
-        INFO("<%i> Heating", ch_group->serv_index);
+        INFO("<%i> Heat", ch_group->serv_index);
+        
+        // Security measure
+        if (SENSOR_TEMPERATURE_FLOAT > (TH_HEATER_TARGET_TEMP_FLOAT + deadband + deadband_force_idle + SAFE_TEMPERATURE_MARGIN)) {
+            THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_ON;
+        } else if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband - deadband_soft_on - SAFE_TEMPERATURE_MARGIN)) {
+            THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_IDLE;
+        }
+        
         if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband - deadband_soft_on)) {
             TH_MODE_INT = THERMOSTAT_MODE_HEATER;
             if (th_current_action != THERMOSTAT_ACTION_HEATER_ON) {
@@ -2158,7 +2170,15 @@ void process_th_task(void* args) {
     }
     
     void cooling(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
-        INFO("<%i> Cooling", ch_group->serv_index);
+        INFO("<%i> Cool", ch_group->serv_index);
+        
+        // Security measure
+        if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband + deadband_soft_on + SAFE_TEMPERATURE_MARGIN)) {
+            THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_IDLE;
+        } else if (SENSOR_TEMPERATURE_FLOAT < (TH_COOLER_TARGET_TEMP_FLOAT - deadband- deadband_force_idle - SAFE_TEMPERATURE_MARGIN)) {
+            THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_ON;
+        }
+        
         if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband + deadband_soft_on)) {
             TH_MODE_INT = THERMOSTAT_MODE_COOLER;
             if (th_current_action != THERMOSTAT_ACTION_COOLER_ON) {

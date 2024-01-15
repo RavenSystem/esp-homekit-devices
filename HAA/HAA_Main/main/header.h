@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.10.3"
+#define HAA_FIRMWARE_VERSION                "12.10.4"
 #define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -67,7 +67,7 @@
 #define FREE_MONITOR_TASK_PRIORITY          (tskIDLE_PRIORITY + 1)
 #define LIGHT_SENSOR_TASK_PRIORITY          (tskIDLE_PRIORITY + 1)
 #define WIFI_PING_GW_TASK_PRIORITY          (tskIDLE_PRIORITY + 1)
-#define WIFI_RECONNECTION_TASK_PRIORITY     (tskIDLE_PRIORITY + 3)
+#define WIFI_RECONNECTION_TASK_PRIORITY     (tskIDLE_PRIORITY + 1)
 #define RECV_UART_TASK_PRIORITY             (tskIDLE_PRIORITY + 4)
 #define REBOOT_TASK_PRIORITY                (tskIDLE_PRIORITY + 3)
 #define IRRF_CAPTURE_TASK_PRIORITY          (configMAX_PRIORITIES - 2)
@@ -256,6 +256,7 @@
 #define TH_TARGET_MODE_INT                  ch_group->ch[4]->value.int_value
 #define TH_HEATER_TARGET_TEMP_FLOAT         ch_group->ch[5]->value.float_value
 #define TH_COOLER_TARGET_TEMP_FLOAT         ch_group->ch[6]->value.float_value
+#define SAFE_TEMPERATURE_MARGIN             (3.f)
 
 #define IAIRZONING_LAST_ACTION              iairzoning_group->num_i[0]
 #define IAIRZONING_MAIN_MODE                iairzoning_group->num_i[1]
@@ -791,8 +792,8 @@
 #define WIFI_SLEEP_MODE_SET                 "d"
 #define WIFI_BANDWIDTH_40_SET               "dt"
 
-#define WIFI_RECONNECTION_POLL_PERIOD_MS    (1000)
-#define WIFI_DISCONNECTED_LONG_TIME         (254)    // * WIFI_RECONNECTION_POLL_PERIOD_MS
+#define WIFI_RECONNECTION_POLL_PERIOD_MS    (1500)
+#define WIFI_DISCONNECTED_LONG_TIME         (170)    // * WIFI_RECONNECTION_POLL_PERIOD_MS
 
 #define WIFI_WATCHDOG_POLL_PERIOD_MS        (1500)
 #define WIFI_WATCHDOG_ARP_PERIOD_SET        "e"
