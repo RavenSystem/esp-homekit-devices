@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.10.4"
+#define HAA_FIRMWARE_VERSION                "12.11.0"
 #define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -215,6 +215,8 @@
 #define TH_DEADBAND_FORCE_IDLE              ch_group->num_f[3]
 #define THERMOSTAT_DEADBAND_SOFT_ON         "ds"
 #define TH_DEADBAND_SOFT_ON                 ch_group->num_f[4]
+#define THERMOSTAT_SAFE_MARGIN_TEMP         "mc"
+#define TH_SAFE_MARGIN_TEMP                 ch_group->num_f[5]
 #define THERMOSTAT_UPDATE_DELAY             "dl"
 #define THERMOSTAT_UPDATE_DELAY_MIN         (0.15f)
 #define THERMOSTAT_UPDATE_DELAY_DEFAULT     (3.0f)
@@ -249,6 +251,10 @@
 #define THERMOSTAT_ACTION_GATE_CLOSE        (12)
 #define THERMOSTAT_ACTION_GATE_OPEN         (13)
 #define THERMOSTAT_ACTION_ON                (14)
+#define THERMOSTAT_ACTION_HEATER_SAFE_UP    (15)
+#define THERMOSTAT_ACTION_HEATER_SAFE_DOWN  (16)
+#define THERMOSTAT_ACTION_COOLER_SAFE_UP    (17)
+#define THERMOSTAT_ACTION_COOLER_SAFE_DOWN  (18)
 #define THERMOSTAT_TEMP_UP                  (0)
 #define THERMOSTAT_TEMP_DOWN                (1)
 #define TH_ACTIVE_INT                       ch_group->ch[2]->value.int_value

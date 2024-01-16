@@ -2099,13 +2099,6 @@ void process_th_task(void* args) {
     void heating(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
         INFO("<%i> Heat", ch_group->serv_index);
         
-        // Security measure
-        if (SENSOR_TEMPERATURE_FLOAT > (TH_HEATER_TARGET_TEMP_FLOAT + deadband + deadband_force_idle + SAFE_TEMPERATURE_MARGIN)) {
-            THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_ON;
-        } else if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband - deadband_soft_on - SAFE_TEMPERATURE_MARGIN)) {
-            THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_IDLE;
-        }
-        
         if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband - deadband_soft_on)) {
             TH_MODE_INT = THERMOSTAT_MODE_HEATER;
             if (th_current_action != THERMOSTAT_ACTION_HEATER_ON) {
@@ -2167,17 +2160,19 @@ void process_th_task(void* args) {
                 }
             }
         }
+        
+        // Security measure
+        if (TH_SAFE_MARGIN_TEMP > 0.f && !mode_has_changed) {
+            if (SENSOR_TEMPERATURE_FLOAT > (TH_HEATER_TARGET_TEMP_FLOAT + deadband + deadband_force_idle + TH_SAFE_MARGIN_TEMP)) {
+                do_actions(ch_group, THERMOSTAT_ACTION_HEATER_SAFE_UP);
+            } else if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband - deadband_soft_on - TH_SAFE_MARGIN_TEMP)) {
+                do_actions(ch_group, THERMOSTAT_ACTION_HEATER_SAFE_DOWN);
+            }
+        }
     }
     
     void cooling(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
         INFO("<%i> Cool", ch_group->serv_index);
-        
-        // Security measure
-        if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband + deadband_soft_on + SAFE_TEMPERATURE_MARGIN)) {
-            THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_IDLE;
-        } else if (SENSOR_TEMPERATURE_FLOAT < (TH_COOLER_TARGET_TEMP_FLOAT - deadband- deadband_force_idle - SAFE_TEMPERATURE_MARGIN)) {
-            THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_ON;
-        }
         
         if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband + deadband_soft_on)) {
             TH_MODE_INT = THERMOSTAT_MODE_COOLER;
@@ -2238,6 +2233,15 @@ void process_th_task(void* args) {
                     do_actions(ch_group, THERMOSTAT_ACTION_COOLER_IDLE);
                     mode_has_changed = true;
                 }
+            }
+        }
+        
+        // Security measure
+        if (TH_SAFE_MARGIN_TEMP > 0.f && !mode_has_changed) {
+            if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband + deadband_soft_on + TH_SAFE_MARGIN_TEMP)) {
+                do_actions(ch_group, THERMOSTAT_ACTION_COOLER_SAFE_UP);
+            } else if (SENSOR_TEMPERATURE_FLOAT < (TH_COOLER_TARGET_TEMP_FLOAT - deadband- deadband_force_idle - TH_SAFE_MARGIN_TEMP)) {
+                do_actions(ch_group, THERMOSTAT_ACTION_COOLER_SAFE_DOWN);
             }
         }
     }
@@ -2964,7 +2968,7 @@ void temperature_task(void* args) {
                                 ch_group->ch[0]->value.float_value = temperature_value;
                                 homekit_characteristic_notify_safe(ch_group->ch[0]);
                                 
-                                if (ch_group->chs > 4) {
+                                if (ch_group->serv_type == SERV_TYPE_THERMOSTAT) {
                                     hkc_th_setter(ch_group->ch[0], ch_group->ch[0]->value);
                                 }
                             }
@@ -2990,7 +2994,7 @@ void temperature_task(void* args) {
                                 ch_group->ch[1]->value.float_value = humidity_value_int;
                                 homekit_characteristic_notify_safe(ch_group->ch[1]);
                                 
-                                if (ch_group->chs > 4) {
+                                if (ch_group->serv_type == SERV_TYPE_HUMIDIFIER) {
                                     hkc_humidif_setter(ch_group->ch[1], ch_group->ch[1]->value);
                                 }
                             }
@@ -6775,6 +6779,7 @@ void irrf_tx_task(void* pvParameters) {
             }
             
             // IR TRANSMITTER
+            uint32_t start;
             unsigned int ir_true, ir_false, ir_gpio;
             if (freq > 1) {
                 ir_true = !main_config.ir_tx_inv;
@@ -6787,6 +6792,7 @@ void irrf_tx_task(void* pvParameters) {
             }
 
             for (unsigned int r = 0; r < action_irrf_tx->repeats; r++) {
+                
                 HAA_ENTER_CRITICAL_TASK();
                 
                 for (unsigned int i = 0; i < ir_code_len; i++) {
@@ -6795,10 +6801,9 @@ void irrf_tx_task(void* pvParameters) {
                             gpio_write(ir_gpio, ir_false);
                             sdk_os_delay_us(ir_code[i]);
                         } else {        // Mark
-                            const uint32_t start = sdk_system_get_time_raw();
+                            start = sdk_system_get_time_raw();
                             if (freq > 1) {
-                                const uint32_t time_limit = ir_code[i];
-                                while (((uint32_t) (sdk_system_get_time_raw() - start)) < time_limit) {
+                                while ((sdk_system_get_time_raw() - start) < ir_code[i]) {
                                     gpio_write(ir_gpio, ir_true);
                                     sdk_os_delay_us(freq);
                                     gpio_write(ir_gpio, ir_false);
@@ -8482,7 +8487,7 @@ void normal_mode_init() {
         TH_SENSOR_TYPE = sensor_type;
         TH_SENSOR_TEMP_OFFSET = th_sensor_temp_offset(json_accessory);
         TH_SENSOR_HUM_OFFSET = th_sensor_hum_offset(json_accessory);
-        TH_SENSOR_ERROR_COUNT = 0;
+        //TH_SENSOR_ERROR_COUNT = 0;
         if (sensor_type == 3) {
             TH_SENSOR_INDEX = th_sensor_index(json_accessory);
         }
@@ -10354,7 +10359,7 @@ void normal_mode_init() {
     
     // *** NEW THERMOSTAT
     void new_thermostat(const uint8_t accessory,  uint8_t service, const uint8_t total_services, cJSON_rsf* json_context, const uint8_t serv_type) {
-        ch_group_t* ch_group = new_ch_group(7, 9, 5, 4);
+        ch_group_t* ch_group = new_ch_group(7, 9, 6, 4);
         ch_group->serv_type = SERV_TYPE_THERMOSTAT;
         ch_group->serv_index = service_numerator;
         unsigned int homekit_enabled = acc_homekit_enabled(json_context);
@@ -10382,19 +10387,25 @@ void normal_mode_init() {
         const float default_target_temp = (min_temp + max_temp) / 2;
         
         // Temperature Deadbands
-        TH_DEADBAND = 0;
+        //TH_DEADBAND = 0;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND) != NULL) {
             TH_DEADBAND = cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND)->valuefloat / 2.f;
         }
         
-        TH_DEADBAND_FORCE_IDLE = 0;
+        //TH_DEADBAND_FORCE_IDLE = 0;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_FORCE_IDLE) != NULL) {
             TH_DEADBAND_FORCE_IDLE = cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_FORCE_IDLE)->valuefloat;
         }
         
-        TH_DEADBAND_SOFT_ON = 0;
+        //TH_DEADBAND_SOFT_ON = 0;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_SOFT_ON) != NULL) {
             TH_DEADBAND_SOFT_ON = cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_SOFT_ON)->valuefloat;
+        }
+        
+        // Temperature Safe Margin;
+        //TH_SAFE_MARGIN_TEMP = 0;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_SAFE_MARGIN_TEMP) != NULL) {
+            TH_SAFE_MARGIN_TEMP = cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_SAFE_MARGIN_TEMP)->valuefloat;
         }
         
         // Thermostat Type
@@ -10816,17 +10827,17 @@ void normal_mode_init() {
         service++;
         
         // Humidity Deadbands
-        HM_DEADBAND = 0;
+        //HM_DEADBAND = 0;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND) != NULL) {
             HM_DEADBAND = cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND)->valuefloat / 2.f;
         }
         
-        HM_DEADBAND_FORCE_IDLE = 0;
+        //HM_DEADBAND_FORCE_IDLE = 0;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_FORCE_IDLE) != NULL) {
             HM_DEADBAND_FORCE_IDLE = cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_FORCE_IDLE)->valuefloat;
         }
         
-        HM_DEADBAND_SOFT_ON = 0;
+        //HM_DEADBAND_SOFT_ON = 0;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_SOFT_ON) != NULL) {
             HM_DEADBAND_SOFT_ON = cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_SOFT_ON)->valuefloat;
         }
@@ -11064,7 +11075,7 @@ void normal_mode_init() {
         }
         
         LIGHTBULB_MAX_POWER = 1;
-        LIGHTBULB_CURVE_FACTOR = 0;
+        //LIGHTBULB_CURVE_FACTOR = 0;
         lightbulb_group->r[0] = 0.6914;
         lightbulb_group->r[1] = 0.3077;
         lightbulb_group->g[0] = 0.1451;
@@ -11430,9 +11441,9 @@ void normal_mode_init() {
 
         register_actions(ch_group, json_context, 0);
         set_accessory_ir_protocol(ch_group, json_context);
-        GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_TIME_MARGIN_DEFAULT;
+        //GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_TIME_MARGIN_DEFAULT;
         GARAGE_DOOR_WORKING_TIME = GARAGE_DOOR_TIME_OPEN_DEFAULT;
-        GARAGE_DOOR_TIME_MARGIN = GARAGE_DOOR_TIME_MARGIN_DEFAULT;
+        //GARAGE_DOOR_TIME_MARGIN = GARAGE_DOOR_TIME_MARGIN_DEFAULT;
         GARAGE_DOOR_CLOSE_TIME_FACTOR = 1;
         GARAGE_DOOR_VIRTUAL_STOP = virtual_stop(json_context);
         
@@ -11594,7 +11605,7 @@ void normal_mode_init() {
         
         WINDOW_COVER_TIME_OPEN = WINDOW_COVER_TIME_DEFAULT;
         WINDOW_COVER_TIME_CLOSE = WINDOW_COVER_TIME_DEFAULT;
-        WINDOW_COVER_CORRECTION = WINDOW_COVER_CORRECTION_DEFAULT;
+        //WINDOW_COVER_CORRECTION = WINDOW_COVER_CORRECTION_DEFAULT;
         WINDOW_COVER_MARGIN_SYNC = WINDOW_COVER_MARGIN_SYNC_DEFAULT;
         WINDOW_COVER_VIRTUAL_STOP = virtual_stop(json_context);
         register_actions(ch_group, json_context, 0);
@@ -11714,7 +11725,7 @@ void normal_mode_init() {
             LIGHT_SENSOR_FACTOR = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_FACTOR_SET)->valuefloat;
         }
         
-        LIGHT_SENSOR_OFFSET = LIGHT_SENSOR_OFFSET_DEFAULT;
+        //LIGHT_SENSOR_OFFSET = LIGHT_SENSOR_OFFSET_DEFAULT;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_OFFSET_SET) != NULL) {
             LIGHT_SENSOR_OFFSET = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_OFFSET_SET)->valuefloat;
         }
@@ -12172,7 +12183,7 @@ void normal_mode_init() {
         set_accessory_ir_protocol(ch_group, json_context);
         register_wildcard_actions(ch_group, json_context);
         
-        PM_LAST_SAVED_CONSUPTION = 0;
+        //PM_LAST_SAVED_CONSUPTION = 0;
         
         ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_VOLT, 0);
         ch_group->ch[1] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_AMPERE, 0);
@@ -12216,7 +12227,7 @@ void normal_mode_init() {
             PM_VOLTAGE_FACTOR = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_VOLTAGE_FACTOR_SET)->valuefloat;
         }
         
-        PM_VOLTAGE_OFFSET = PM_VOLTAGE_OFFSET_DEFAULT;
+        //PM_VOLTAGE_OFFSET = PM_VOLTAGE_OFFSET_DEFAULT;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_VOLTAGE_OFFSET_SET) != NULL) {
             PM_VOLTAGE_OFFSET = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_VOLTAGE_OFFSET_SET)->valuefloat;
         }
@@ -12226,7 +12237,7 @@ void normal_mode_init() {
             PM_CURRENT_FACTOR = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_CURRENT_FACTOR_SET)->valuefloat;
         }
         
-        PM_CURRENT_OFFSET = PM_CURRENT_OFFSET_DEFAULT;
+        //PM_CURRENT_OFFSET = PM_CURRENT_OFFSET_DEFAULT;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_CURRENT_OFFSET_SET) != NULL) {
             PM_CURRENT_OFFSET = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_CURRENT_OFFSET_SET)->valuefloat;
         }
@@ -12236,7 +12247,7 @@ void normal_mode_init() {
             PM_POWER_FACTOR = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_POWER_FACTOR_SET)->valuefloat;
         }
         
-        PM_POWER_OFFSET = PM_POWER_OFFSET_DEFAULT;
+        //PM_POWER_OFFSET = PM_POWER_OFFSET_DEFAULT;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_POWER_OFFSET_SET) != NULL) {
             PM_POWER_OFFSET = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, PM_POWER_OFFSET_SET)->valuefloat;
         }
@@ -12486,7 +12497,7 @@ void normal_mode_init() {
             FM_FACTOR = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_FACTOR_SET)->valuefloat;
         }
         
-        FM_OFFSET = FM_OFFSET_DEFAULT;
+        //FM_OFFSET = FM_OFFSET_DEFAULT;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_OFFSET_SET) != NULL) {
             FM_OFFSET = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_OFFSET_SET)->valuefloat;
         }
@@ -12560,7 +12571,7 @@ void normal_mode_init() {
             FM_I2C_ADDR = i2c_addr;
             FM_I2C_REG_LEN = i2c_read_len;
             
-            FM_I2C_VAL_OFFSET = FM_I2C_VAL_OFFSET_DEFAULT;
+            //FM_I2C_VAL_OFFSET = FM_I2C_VAL_OFFSET_DEFAULT;
             if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_I2C_VAL_OFFSET_SET) != NULL) {
                 FM_I2C_VAL_OFFSET = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_I2C_VAL_OFFSET_SET)->valuefloat;
             }

@@ -345,7 +345,7 @@ static void wifi_scan_sc_done() {
         return;
     }
     
-    INFO("Search BSSID for %s", wifi_ssid);
+    INFO("Searching %s", wifi_ssid);
     
     int8_t best_rssi = INT8_MIN;
     uint8_t* best_bssid = malloc(6);
@@ -386,7 +386,7 @@ static void wifi_scan_sc_done(void* arg, sdk_scan_status_t status) {
         return;
     }
     
-    INFO("Search BSSID for %s", wifi_ssid);
+    INFO("Searching %s", wifi_ssid);
     
     struct sdk_bss_info* bss = (struct sdk_bss_info*) arg;
     // first one is invalid

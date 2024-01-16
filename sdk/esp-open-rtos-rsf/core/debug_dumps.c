@@ -78,19 +78,21 @@ static void dump_excinfo(void) {
     uint32_t excinfo[8];
 
     RSR(exccause, exccause);
-    printf("Fatal exception (%d): \n", (int)exccause);
+    printf("FATAL (%d)\n", (int)exccause);
     RSR(epc1, epc1);
     RSR(epc2, epc2);
     RSR(epc3, epc3);
     RSR(excvaddr, excvaddr);
     RSR(depc, depc);
     RSR(excsave1, excsave1);
+    /* Removed to save storage
     printf("%s=0x%08x\n", "epc1", epc1);
     printf("%s=0x%08x\n", "epc2", epc2);
     printf("%s=0x%08x\n", "epc3", epc3);
     printf("%s=0x%08x\n", "excvaddr", excvaddr);
     printf("%s=0x%08x\n", "depc", depc);
     printf("%s=0x%08x\n", "excsave1", excsave1);
+     */
     sdk_system_rtc_mem_read(0, excinfo, 32); // Why?
     excinfo[0] = 2;
     excinfo[1] = exccause;
@@ -112,23 +114,26 @@ static void dump_excinfo(void) {
    0xa5a5a5a5 probably constitutes the end of our stack.
 */
 void dump_stack(uint32_t *sp) {
+    /* Removed to save storage
     printf("\nStack: SP=%p\n", sp);
     for(uint32_t *p = sp; p < sp + 32; p += 4) {
         if((intptr_t)p >= 0x3fffc000) {
-            break; /* approximate end of RAM */
+            break; // Approximate end of RAM
         }
         printf("%p: %08x %08x %08x %08x\n", p, p[0], p[1], p[2], p[3]);
         if(p[0] == 0xa5a5a5a5 && p[1] == 0xa5a5a5a5
            && p[2] == 0xa5a5a5a5 && p[3] == 0xa5a5a5a5) {
-            break; /* FreeRTOS uses this pattern to mark untouched stack space */
+            break; // FreeRTOS uses this pattern to mark untouched stack space
         }
     }
+    */
 }
 
 /* Dump normal registers that were stored above 'sp'
    by the exception handler preamble
 */
 void dump_registers_in_exception_handler(uint32_t *sp) {
+    /* Removed to save storage
     uint32_t excsave1;
     uint32_t *saved = sp - (0x50 / sizeof(uint32_t));
     printf("Registers:\n");
@@ -139,6 +144,7 @@ void dump_registers_in_exception_handler(uint32_t *sp) {
         printf("a%-2d %08x%c", a, saved[a+3], a == 3 || a == 7 || a == 11 ? '\n':' ');
     }
     printf("SAR %08x\n", saved[0x13]);
+    */
 }
 
 static void __attribute__((noreturn)) post_crash_reset(void) {
@@ -189,7 +195,7 @@ static void standard_fatal_exception_handler_inner(uint32_t *sp, bool registers_
 */
 static void second_fatal_exception_handler_inner(uint32_t *sp, bool registers_saved_on_stack) {
     dump_excinfo();
-    printf("Second fatal exception handler inner\n");
+    printf("Second FATAL\n");
     post_crash_reset();
 }
 
@@ -206,7 +212,7 @@ void dump_heapinfo(void)
 
     /* Total free heap is all memory that could be allocated via
        malloc (assuming fragmentation doesn't become a problem) */
-    printf("\nFree Heap: %d\n", sp - brk_val + mi.fordblks);
+    printf("\nFree Heap %d\n", sp - brk_val + mi.fordblks);
 
     /* delta between brk & supervisor sp is the contiguous memory
        region that is available to be put into heap space via
@@ -224,7 +230,7 @@ void dump_heapinfo(void)
 
        "arena" should be equal to brk-_heap_start ie total size available.
      */
-    printf("arena (total_size) %d fordblks (free_size) %d uordblocks (used_size) %d\n",
+    printf("arena (total) %d fordblks (free) %d uordblocks (used) %d\n",
            mi.arena, mi.fordblks, mi.uordblks);
 }
 
@@ -232,7 +238,7 @@ void dump_heapinfo(void)
    IRAM.
 */
 static void abort_handler_inner(uint32_t *caller, uint32_t *sp) {
-    printf("abort() at %p\n", caller);
+    printf("ABORT at %p\n", caller);
     dump_stack(sp);
     dump_heapinfo();
     post_crash_reset();
