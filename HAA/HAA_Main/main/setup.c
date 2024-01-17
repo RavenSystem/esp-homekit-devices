@@ -999,7 +999,9 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                 wifi_config_remove_ap_settings();
                 
             } else {
-                if (!wifi_ap_param) {
+                char* ssid = NULL;
+                sysparam_get_string(WIFI_STA_SSID_SYSPARAM, &ssid);
+                if (ssid && !nowifi_param) {
                     sysparam_set_int8(WIFI_AP_ENABLE_SYSPARAM, 0);
                     sysparam_erase(WIFI_AP_PASSWORD_SYSPARAM);
                 }
@@ -1596,11 +1598,11 @@ static void wifi_config_station_connect() {
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 0);
         
         if (setup_mode == 1) {
-            INFO("Auto reboot");
+            // Auto reboot
             context->auto_reboot_timer = rs_esp_timer_create(AUTO_REBOOT_TIMEOUT, pdFALSE, NULL, auto_reboot_run);
             rs_esp_timer_start_forced(context->auto_reboot_timer);
         } else if (setup_mode == 2) {
-            ERROR("Script");
+            // Error in Script
             context->param += 100;
         }
     }
