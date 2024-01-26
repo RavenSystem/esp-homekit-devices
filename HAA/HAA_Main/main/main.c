@@ -1019,7 +1019,7 @@ void wifi_reconnection_task() {
             main_config.wifi_status = WIFI_STATUS_CONNECTING;
             
 #ifdef ESP_PLATFORM
-            wifi_config_connect(1, true);
+            wifi_config_connect(1);
 #else
             wifi_config_connect(1, phy_mode, true);
 #endif
@@ -1336,8 +1336,11 @@ void hkc_custom_setup_setter(homekit_characteristic_t* ch, const homekit_value_t
                 break;
                 
             case '3':   // WiFi Reconnection
+#ifdef ESP_PLATFORM
                 main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
+#else
                 rs_esp_timer_start_forced(rs_esp_timer_create(1000, pdFALSE, NULL, wifi_config_reset));
+#endif
                 break;
                 
             default:
@@ -13052,6 +13055,8 @@ void normal_mode_init() {
 #ifdef ESP_PLATFORM
     wifi_config_init("HAA", run_homekit_server, custom_hostname, 0, wifi_sleep_mode, wifi_bandwidth_40);
 #else
+    int8_t phy_mode = 3;
+    sysparam_set_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, phy_mode);
     wifi_config_init("HAA", run_homekit_server, custom_hostname, 0);
 #endif
     

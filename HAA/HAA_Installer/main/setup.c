@@ -849,7 +849,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             
             char saved_state_id[8];
             for (int serv = 1; serv <= hk_total_serv; serv++) {
-                for (int ch = 0; ch <= HIGH_HOMEKIT_CH_NUMBER; ch++) {
+                for (int ch = 0; ch < HIGH_HOMEKIT_CH_NUMBER; ch++) {
                     uint32_t int_saved_state_id = (serv * 100) + ch;
                     itoa(int_saved_state_id, saved_state_id, 10);
                     sysparam_erase(saved_state_id);
@@ -1323,20 +1323,22 @@ static void wifi_config_connect(const uint8_t phy) {
     esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_disconnect, NULL);
     
     strncpy((char*) sta_config.sta.ssid, wifi_ssid, sizeof(sta_config.sta.ssid) - 1);
+    free(wifi_ssid);
     
     if (wifi_password) {
-       strncpy((char*) sta_config.sta.password, wifi_password, sizeof(sta_config.sta.password) - 1);
-    }
+        strncpy((char*) sta_config.sta.password, wifi_password, sizeof(sta_config.sta.password) - 1);
 #else
     struct sdk_station_config sta_config;
     memset(&sta_config, 0, sizeof(sta_config));
     
     strncpy((char*) sta_config.ssid, wifi_ssid, sizeof(sta_config.ssid) - 1);
+    free(wifi_ssid);
     
     if (wifi_password) {
-       strncpy((char*) sta_config.password, wifi_password, sizeof(sta_config.password) - 1);
-    }
+        strncpy((char*) sta_config.password, wifi_password, sizeof(sta_config.password) - 1);
 #endif
+        free(wifi_password);
+    }
     
     int8_t wifi_mode = 0;
     sysparam_get_int8(WIFI_STA_MODE_SYSPARAM, &wifi_mode);
@@ -1399,12 +1401,6 @@ static void wifi_config_connect(const uint8_t phy) {
         vTaskDelay(MS_TO_TICKS(5000));
     }
     
-    free(wifi_ssid);
-    
-    if (wifi_password) {
-        free(wifi_password);
-    }
-    
     if (wifi_bssid) {
         free(wifi_bssid);
     }
@@ -1430,6 +1426,8 @@ static void wifi_config_station_connect() {
     sysparam_get_string(WIFI_STA_SSID_SYSPARAM, &wifi_ssid);
     
     if (wifi_ssid && setup_mode == 0) {
+        free(wifi_ssid);
+        
         INFO("* NORMAL");
         
 #ifdef ESP_PLATFORM
@@ -1448,11 +1446,14 @@ static void wifi_config_station_connect() {
         wifi_config_softap_start();
         
         if (wifi_ssid) {
+            free(wifi_ssid);
+            
 #ifdef ESP_PLATFORM
             wifi_config_connect();
 #else
             connect_to_wifi();
 #endif
+            
         }
         
         adv_logger_close_buffered_task();

@@ -31,7 +31,7 @@ typedef struct _json_stream {
 
 
 void json_init(json_stream *json, void *context);
-json_stream *json_new(size_t buffer_size, uint8_t* buffer_data, json_flush_callback on_flush, void *context);
+//json_stream *json_new(size_t buffer_size, uint8_t* buffer_data, json_flush_callback on_flush, void *context);
 void json_buffer_free(json_stream *json);
 
 void json_flush(json_stream *json);

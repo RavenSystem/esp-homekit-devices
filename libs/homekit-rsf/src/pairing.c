@@ -1,12 +1,16 @@
+#include <string.h>
 #include "pairing.h"
 
 
 pairing_t *pairing_new() {
     pairing_t *p = malloc(sizeof(pairing_t));
+    memset(p, 0, sizeof(*p));
     p->id = -1;
+    /*
     p->device_id = NULL;
     p->device_key = NULL;
     p->permissions = 0;
+    */
 
     return p;
 }

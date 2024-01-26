@@ -65,7 +65,7 @@
 #endif
 
 #ifndef HOMEKIT_MIN_FREEHEAP
-#define HOMEKIT_MIN_FREEHEAP                    (14336)
+#define HOMEKIT_MIN_FREEHEAP                    (14848)
 #endif
 
 #ifndef HOMEKIT_NETWORK_FIRST_MIN_FREEHEAP
@@ -81,7 +81,7 @@
 #endif
 
 #ifndef HOMEKIT_NETWORK_MIN_FREEHEAP_CRITIC
-#define HOMEKIT_NETWORK_MIN_FREEHEAP_CRITIC     (16384)
+#define HOMEKIT_NETWORK_MIN_FREEHEAP_CRITIC     (16896)
 #endif
 
 #ifndef HOMEKIT_NETWORK_PAUSE_COUNT_CRITIC
@@ -916,9 +916,10 @@ int send_207_response(client_context_t* context) {
 }
 
 void send_404_response(client_context_t* context) {
-    CLIENT_ERROR(context, "Not Found");
+    CLIENT_ERROR(context, "Not found");
     byte response[] = "HTTP/1.1 404 Not Found\r\n\r\n";
     client_send(context, response, sizeof(response) - 1);
+    homekit_disconnect_client(context);
 }
 
 void send_tlv_response(client_context_t *context, tlv_values_t *values) {
@@ -929,13 +930,21 @@ void send_tlv_response(client_context_t *context, tlv_values_t *values) {
     tlv_format(values, NULL, &payload_size);
 
     byte *payload = malloc(payload_size);
+    
+    if (!payload) {
+        CLIENT_ERROR(context, "TLV payload DRAM");
+        tlv_free(values);
+        homekit_remove_oldest_client();
+        return;
+    }
+    
     int r = tlv_format(values, payload, &payload_size);
     if (r) {
         CLIENT_ERROR(context, "Format TLV payload (%d)", r);
         free(payload);
         return;
     }
-
+    
     tlv_free(values);
     
     const char http_headers[] =
@@ -945,6 +954,14 @@ void send_tlv_response(client_context_t *context, tlv_values_t *values) {
     
     size_t response_size = strlen(http_headers) + payload_size + 32;
     char *response = malloc(response_size);
+    
+    if (!response) {
+        CLIENT_ERROR(context, "TLV response DRAM");
+        free(payload);
+        homekit_remove_oldest_client();
+        return;
+    }
+    
     size_t response_len = snprintf(response, response_size, http_headers, payload_size);
 
     if (response_size - response_len < payload_size + 1) {
@@ -1303,17 +1320,23 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             );
             
             byte *decrypted_data = malloc(decrypted_data_size);
-            // TODO: check malloc result
-            r = crypto_chacha20poly1305_decrypt(
-                shared_secret, (byte *)"\x0\x0\x0\x0PS-Msg05", NULL, 0,
-                tlv_encrypted_data->value, tlv_encrypted_data->size,
-                decrypted_data, &decrypted_data_size
-            );
+            if (decrypted_data) {
+                r = crypto_chacha20poly1305_decrypt(
+                        shared_secret, (byte *)"\x0\x0\x0\x0PS-Msg05", NULL, 0,
+                        tlv_encrypted_data->value, tlv_encrypted_data->size,
+                        decrypted_data, &decrypted_data_size
+                    );
+            } else {
+                r = -100;
+            }
+            
             if (r) {
                 CLIENT_ERROR(context, "Decrypt data (%d)", r);
-
-                free(decrypted_data);
-
+                
+                if (decrypted_data) {
+                    free(decrypted_data);
+                }
+                
                 send_tlv_error_response(context, 6, TLVError_Authentication);
                 break;
             }
@@ -1321,7 +1344,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             tlv_values_t *decrypted_message = tlv_new();
             r = tlv_parse(decrypted_data, decrypted_data_size, decrypted_message);
             if (r) {
-                CLIENT_ERROR(context, "Parse decrypted TLV (%d)", r);
+                CLIENT_ERROR(context, "Decrypted TLV (%d)", r);
 
                 tlv_free(decrypted_message);
                 free(decrypted_data);
@@ -1925,10 +1948,10 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
             }
 
             char *device_id = strndup((const char *)tlv_device_id->value, tlv_device_id->size);
-            CLIENT_DEBUG(context, "Searching pairing with %s", device_id);
+            CLIENT_DEBUG(context, "Searching pairing for %s", device_id);
             pairing_t *pairing = homekit_storage_find_pairing(device_id);
             if (!pairing) {
-                CLIENT_ERROR(context, "No pairing for %s", device_id);
+                CLIENT_ERROR(context, "No pairing %s", device_id);
 
                 free(device_id);
                 tlv_free(decrypted_message);
@@ -1938,9 +1961,9 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
                 break;
             }
             
-            free(device_id);
+            CLIENT_INFO(context, "Verify %s", device_id);
             
-            CLIENT_INFO(context, "Pair found");
+            free(device_id);
             
             byte permissions = pairing->permissions;
             int pairing_id = pairing->id;
@@ -2802,7 +2825,7 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
     TLV_DEBUG(message);
 
     int r;
-
+    
     if (tlv_get_integer_value(message, TLVType_State, -1) != 1) {
         send_tlv_error_response(context, 2, TLVError_Unknown);
         tlv_free(message);
@@ -2811,7 +2834,7 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
 
     switch(tlv_get_integer_value(message, TLVType_Method, -1)) {
         case TLVMethod_AddPairing: {
-            CLIENT_INFO(context, "Pairing");
+            CLIENT_INFO(context, "Adding pairing");
 
             if (!(context->permissions & pairing_permissions_admin)) {
                 CLIENT_ERROR(context, "Non-admin");
@@ -2883,7 +2906,7 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
 
                 free(pairing_public_key);
 
-                r = homekit_storage_update_pairing(device_identifier, device_permissions);
+                r = homekit_storage_update_pairing(device_identifier, device_key, device_permissions);
                 if (r) {
                     CLIENT_ERROR(context, "Storage (%d)", r);
                     free(device_identifier);
@@ -2892,7 +2915,7 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
                     break;
                 }
                 
-                HOMEKIT_INFO("Updated pairing %s", device_identifier);
+                HOMEKIT_INFO("Updated pairing %s, %i", device_identifier, device_permissions);
             } else {
                 if (!homekit_storage_can_add_pairing()) {
                     CLIENT_ERROR(context, "Max peers");
@@ -2913,7 +2936,7 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
                     break;
                 }
 
-                HOMEKIT_INFO("Paired %s", device_identifier);
+                HOMEKIT_INFO("Added %s", device_identifier);
 
                 HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_PAIRING_ADDED);
             }
@@ -2929,7 +2952,7 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
             break;
         }
         case TLVMethod_RemovePairing: {
-            CLIENT_INFO(context, "Removing Pairing");
+            CLIENT_INFO(context, "Removing pairing");
 
             if (!(context->permissions & pairing_permissions_admin)) {
                 CLIENT_ERROR(context, "Non-admin");
@@ -2963,7 +2986,7 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
                     break;
                 }
                 
-                HOMEKIT_INFO("Pairing removed");
+                HOMEKIT_INFO("Removed %s", device_identifier);
                 
                 HOMEKIT_NOTIFY_EVENT(homekit_server, HOMEKIT_EVENT_PAIRING_REMOVED);
 
@@ -2987,23 +3010,23 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
                         }
                         pairing_free(pairing);
                     };
-                    homekit_storage_pairing_iterator_free(pairing_it);
+                    free(pairing_it);
 
                     if (!pairing) {
                         // No admins left, enable pairing again
-                        HOMEKIT_INFO("Pairing removed, resetting");
+                        HOMEKIT_INFO("No admin pairing");
                         homekit_server_on_reset(context);
                     } else {
                         pairing_free(pairing);
                     }
                 }
             }
-
+            
             free(device_identifier);
-
+            
             tlv_values_t *response = tlv_new();
             tlv_add_integer_value(response, TLVType_State, 1, 2);
-
+            
             send_tlv_response(context, response);
             
             break;
@@ -3021,32 +3044,49 @@ void homekit_server_on_pairings(client_context_t *context, const byte *data, siz
             tlv_add_integer_value(response, TLVType_State, 1, 2);
 
             unsigned int first = true;
+            unsigned int error = false;
 
             pairing_iterator_t *it = homekit_storage_pairing_iterator();
-            pairing_t *pairing = NULL;
+            pairing_t *pairing;
 
-            size_t public_key_size = 32;
-            byte *public_key = malloc(public_key_size);
+            size_t public_key_size = 0;
 
             while ((pairing = homekit_storage_next_pairing(it))) {
-                if (!first) {
-                    tlv_add_value(response, TLVType_Separator, NULL, 0);
-                }
+                crypto_ed25519_export_public_key(pairing->device_key, NULL, &public_key_size);
+                byte *public_key = malloc(public_key_size);
                 r = crypto_ed25519_export_public_key(pairing->device_key, public_key, &public_key_size);
-
-                tlv_add_string_value(response, TLVType_Identifier, pairing->device_id);
-                tlv_add_value(response, TLVType_PublicKey, public_key, public_key_size);
-                tlv_add_integer_value(response, TLVType_Permissions, 1, pairing->permissions);
-
-                first = false;
-
+                if (!r) {
+                    if (!first) {
+                        tlv_add_value(response, TLVType_Separator, NULL, 0);
+                    }
+                    
+                    tlv_add_string_value(response, TLVType_Identifier, pairing->device_id);
+                    tlv_add_value(response, TLVType_PublicKey, public_key, public_key_size);
+                    tlv_add_integer_value(response, TLVType_Permissions, 1, pairing->permissions);
+                    
+                    first = false;
+                    
+                    CLIENT_DEBUG(context, "TLV_List %s, %i", pairing->device_id, pairing->permissions);
+                } else {
+                    error = true;
+                }
+                
+                free(public_key);
                 pairing_free(pairing);
+                
+                if (error) {
+                    break;
+                }
             }
             
-            free(public_key);
-            homekit_storage_pairing_iterator_free(it);
+            free(it);
 
-            send_tlv_response(context, response);
+            if (error) {
+                tlv_free(response);
+                send_tlv_error_response(context, 2, TLVError_Unknown);
+            } else {
+                send_tlv_response(context, response);
+            }
             
             break;
         }
@@ -3138,7 +3178,7 @@ int homekit_server_on_url(http_parser *parser, const char *data, size_t length) 
 
     if (context->endpoint == HOMEKIT_ENDPOINT_UNKNOWN) {
         char *url = strndup(data, length);
-        HOMEKIT_ERROR("? %s %s", http_method_str(parser->method), url);
+        HOMEKIT_ERROR("%s %s", http_method_str(parser->method), url);
         free(url);
     }
 
@@ -3750,7 +3790,7 @@ void homekit_server_init(homekit_server_config_t *config) {
     } else {
         HOMEKIT_INFO("HK ID: %s", homekit_server->accessory_id);
     }
-
+    
     pairing_iterator_t *pairing_it = homekit_storage_pairing_iterator();
     pairing_t *pairing = NULL;
     if (!homekit_server->config->re_pair) {
@@ -3761,8 +3801,8 @@ void homekit_server_init(homekit_server_config_t *config) {
             pairing_free(pairing);
         }
     }
-    homekit_storage_pairing_iterator_free(pairing_it);
-
+    free(pairing_it);
+    
     if (pairing) {
         HOMEKIT_INFO("Found %s", pairing->device_id);
         pairing_free(pairing);

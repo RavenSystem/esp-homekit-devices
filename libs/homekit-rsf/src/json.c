@@ -22,7 +22,7 @@ void json_init(json_stream *json, void *context) {
     json->nesting_idx = 0;
     json->context = context;
 }
-
+/*
 json_stream *json_new(size_t buffer_size, uint8_t* buffer_data, json_flush_callback on_flush, void *context) {
     json_stream* json = malloc(sizeof(json_stream));
     if (json) {
@@ -42,7 +42,7 @@ json_stream *json_new(size_t buffer_size, uint8_t* buffer_data, json_flush_callb
     
     return json;
 }
-
+*/
 void json_buffer_free(json_stream *json) {
     free(json->buffer);
     free(json);

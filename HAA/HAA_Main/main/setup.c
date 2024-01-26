@@ -473,7 +473,7 @@ void wifi_config_smart_connect() {
 }
 
 #ifdef ESP_PLATFORM
-void wifi_config_connect(const uint8_t mode, const bool with_reset);
+void wifi_config_connect(const uint8_t mode);
 #else
 void wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool with_reset);
 #endif
@@ -890,7 +890,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             
             char saved_state_id[8];
             for (int serv = 1; serv <= hk_total_serv; serv++) {
-                for (unsigned int ch = 0; ch <= HIGH_HOMEKIT_CH_NUMBER; ch++) {
+                for (unsigned int ch = 0; ch < HIGH_HOMEKIT_CH_NUMBER; ch++) {
                     uint32_t int_saved_state_id = (serv * 100) + ch;
                     itoa(int_saved_state_id, saved_state_id, 10);
                     sysparam_erase(saved_state_id);
@@ -966,10 +966,6 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             }
             sysparam_set_int32(LAST_CONFIG_NUMBER_SYSPARAM, last_config_number);
             
-            if (wifi_ap_password_param && wifi_ap_password_param->value && strlen(wifi_ap_password_param->value) >= 8) {
-                sysparam_set_string(WIFI_AP_PASSWORD_SYSPARAM, wifi_ap_password_param->value);
-            }
-            
             if (ssid_param && ssid_param->value) {
                 sysparam_set_string(WIFI_STA_SSID_SYSPARAM, ssid_param->value);
                 
@@ -1001,9 +997,16 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             } else {
                 char* ssid = NULL;
                 sysparam_get_string(WIFI_STA_SSID_SYSPARAM, &ssid);
-                if (ssid && !nowifi_param) {
-                    sysparam_set_int8(WIFI_AP_ENABLE_SYSPARAM, 0);
-                    sysparam_erase(WIFI_AP_PASSWORD_SYSPARAM);
+                if (ssid) {
+                    if (!wifi_ap_param) {
+                        sysparam_set_int8(WIFI_AP_ENABLE_SYSPARAM, 0);
+                        sysparam_erase(WIFI_AP_PASSWORD_SYSPARAM);
+                    } else {
+                        sysparam_set_int8(WIFI_AP_ENABLE_SYSPARAM, 1);
+                        if (wifi_ap_password_param && wifi_ap_password_param->value && strlen(wifi_ap_password_param->value) >= 8) {
+                            sysparam_set_string(WIFI_AP_PASSWORD_SYSPARAM, wifi_ap_password_param->value);
+                        }
+                    }
                 }
             }
             
@@ -1389,7 +1392,7 @@ static void wifi_config_sta_connect_timeout_task() {
             if (context->check_counter > 35) {
                 context->check_counter = 0;
 #ifdef ESP_PLATFORM
-                wifi_config_connect(0, true);
+                wifi_config_connect(0);
 #else
                 wifi_config_connect(0, 4, true);
 #endif
@@ -1430,16 +1433,12 @@ static void on_disconnect(void *arg, esp_event_base_t event_base, int32_t event_
     sdk_wifi_station_connect();
 }
 
-void wifi_config_connect(const uint8_t mode, const bool with_reset) {
+void wifi_config_connect(const uint8_t mode) {
 #else
 void wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool with_reset) {
 #endif
     char *wifi_ssid = NULL;
     sysparam_get_string(WIFI_STA_SSID_SYSPARAM, &wifi_ssid);
-    
-    if (!wifi_ssid) {
-        return;
-    }
     
 #ifdef ESP_PLATFORM
     wifi_config_t sta_config = {
@@ -1451,21 +1450,25 @@ void wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool with_
     
     sdk_wifi_station_set_config(&sta_config);
     
-    if (!context->bandwidth_40) {
-        esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20);
+    if (mode == 0) {
+        if (!context->bandwidth_40) {
+            esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20);
+        }
+        
+        if (context->wifi_sleep_mode == 0) {
+            esp_wifi_set_ps(WIFI_PS_NONE);
+        } else {
+            esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+        }
     }
     
-    if (context->wifi_sleep_mode == 0) {
-        esp_wifi_set_ps(WIFI_PS_NONE);
-    } else {
-        esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
-    }
-#endif
+#else
     
     if (with_reset) {
         wifi_config_reset();
         vTaskDelay(MS_TO_TICKS(5000));
     }
+#endif
     
     sdk_wifi_station_disconnect();
     vTaskDelay(1);
@@ -1478,20 +1481,22 @@ void wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool with_
     esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, &on_disconnect, NULL);
     
     strncpy((char*) sta_config.sta.ssid, wifi_ssid, sizeof(sta_config.sta.ssid) - 1);
+    free(wifi_ssid);
     
     if (wifi_password) {
-       strncpy((char*) sta_config.sta.password, wifi_password, sizeof(sta_config.sta.password) - 1);
-    }
+        strncpy((char*) sta_config.sta.password, wifi_password, sizeof(sta_config.sta.password) - 1);
 #else
     struct sdk_station_config sta_config;
     memset(&sta_config, 0, sizeof(sta_config));
     
     strncpy((char*) sta_config.ssid, wifi_ssid, sizeof(sta_config.ssid) - 1);
+    free(wifi_ssid);
     
     if (wifi_password) {
-       strncpy((char*) sta_config.password, wifi_password, sizeof(sta_config.password) - 1);
-    }
+        strncpy((char*) sta_config.password, wifi_password, sizeof(sta_config.password) - 1);
 #endif
+        free(wifi_password);
+    }
 
     int8_t wifi_mode = 0;
     sysparam_get_int8(WIFI_STA_MODE_SYSPARAM, &wifi_mode);
@@ -1557,12 +1562,6 @@ void wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool with_
         vTaskDelay(MS_TO_TICKS(5000));
     }
     
-    free(wifi_ssid);
-    
-    if (wifi_password) {
-        free(wifi_password);
-    }
-    
     if (wifi_bssid) {
         free(wifi_bssid);
     }
@@ -1574,21 +1573,24 @@ static void wifi_config_station_connect() {
     char *wifi_ssid = NULL;
     sysparam_get_string(WIFI_STA_SSID_SYSPARAM, &wifi_ssid);
     
+    int8_t wifi_ap_enable = 1;
+    
     if (wifi_ssid) {
+        free(wifi_ssid);
+        
 #ifdef ESP_PLATFORM
-        wifi_config_connect(0, false);
+        wifi_config_connect(0);
 #else
         int8_t phy_mode = 3;
         sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
-        wifi_config_connect(0, phy_mode, false);
+        wifi_config_connect(0, phy_mode, true);
 #endif
+        
+        sysparam_get_int8(WIFI_AP_ENABLE_SYSPARAM, &wifi_ap_enable);
     }
     
     if (!context->on_wifi_ready) {
         INFO("HAA Setup");
-        
-        int8_t wifi_ap_enable = 1;
-        sysparam_get_int8(WIFI_AP_ENABLE_SYSPARAM, &wifi_ap_enable);
         
         wifi_config_softap_start(wifi_ap_enable);
         

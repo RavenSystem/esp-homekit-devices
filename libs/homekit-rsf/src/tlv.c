@@ -182,7 +182,7 @@ int tlv_format(const tlv_values_t *values, byte *buffer, size_t *size) {
 
 
 int tlv_parse(const byte *buffer, size_t length, tlv_values_t *values) {
-    if (length <= 1) {
+    if (length < 2) {
         return -1;
     }
     
@@ -194,13 +194,13 @@ int tlv_parse(const byte *buffer, size_t length, tlv_values_t *values) {
 
         // scan TLVs to accumulate total size of subsequent TLVs with same type (chunked data)
         size_t j = i;
-        while (j < length && buffer[j] == type && buffer[j+1] == 255) {
-            size_t chunk_size = buffer[j+1];
+        while (j < length && buffer[j] == type && buffer[j + 1] == 255) {
+            size_t chunk_size = buffer[j + 1];
             size += chunk_size;
             j += chunk_size + 2;
         }
         if (j < length && buffer[j] == type) {
-            size_t chunk_size = buffer[j+1];
+            size_t chunk_size = buffer[j + 1];
             size += chunk_size;
         }
 
@@ -211,14 +211,18 @@ int tlv_parse(const byte *buffer, size_t length, tlv_values_t *values) {
 
             size_t remaining = size;
             while (remaining) {
-                size_t chunk_size = buffer[i+1];
-                memcpy(p, &buffer[i+2], chunk_size);
+                size_t chunk_size = buffer[i + 1];
+                memcpy(p, &buffer[i + 2], chunk_size);
                 p += chunk_size;
                 i += chunk_size + 2;
                 remaining -= chunk_size;
             }
+            
+        } else {
+            i += 2;
         }
-
+        
+        //printf("tlv_add_value_ type=%i, size=%i, data=%i\n", type, size, data ? data[0] : -1);
         tlv_add_value_(values, type, data, size);
     }
 

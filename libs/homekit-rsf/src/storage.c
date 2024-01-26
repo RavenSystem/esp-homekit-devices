@@ -32,7 +32,7 @@
 #define ACCESSORY_ID_SIZE       (17)
 #define ACCESSORY_KEY_SIZE      (64)
 
-const char magic1[] = "HAP";
+const char magic1[] = "HAP";    // Must be 3 chars + null terminator
 
 #ifdef ESP_PLATFORM
 esp_partition_t* hap_partition = NULL;
@@ -55,7 +55,7 @@ static void enable_hap_partition() {
 #endif
 
 int homekit_storage_reset() {
-    byte blank[2];
+    byte blank[3];
     memset(blank, 0, sizeof(blank));
     
     enable_hap_partition();
@@ -170,12 +170,13 @@ ed25519_key *homekit_storage_load_accessory_key() {
 
 // TODO: figure out alignment issues
 typedef struct {
-    char magic[sizeof(magic1)];
-    byte permissions;
-    char device_id[36];
-    byte device_public_key[32];
+    char magic[sizeof(magic1)];     // 4  bytes (3 chars + null erminator)
+    byte permissions;               // 1  bytes
+    char device_id[36];             // 36 bytes
+    byte device_public_key[32];     // 32 bytes
 
-    byte _reserved[7]; // align record to be 80 bytes
+    byte _reserved[7];              // 7  bytes
+                                    // Align record to be 80 bytes
 } pairing_data_t;
 
 
@@ -206,7 +207,7 @@ static int compact_data() {
         pairing_data_t *pairing_data = (pairing_data_t *)&data[PAIRINGS_OFFSET + sizeof(pairing_data_t) * i];
         if (!strncmp(pairing_data->magic, magic1, sizeof(magic1))) {
             if (i != next_pairing_idx) {
-                memcpy(&data[PAIRINGS_ADDR + sizeof(pairing_data_t) * next_pairing_idx],
+                memcpy(&data[PAIRINGS_OFFSET + sizeof(pairing_data_t) * next_pairing_idx],
                        pairing_data, sizeof(*pairing_data));
             }
             next_pairing_idx++;
@@ -298,38 +299,23 @@ int homekit_storage_add_pairing(const char *device_id, const ed25519_key *device
 }
 
 
-int homekit_storage_update_pairing(const char *device_id, byte permissions) {
+int homekit_storage_update_pairing(const char *device_id, const ed25519_key *device_key, byte permissions) {
     pairing_data_t data;
     for (unsigned int i = 0; i < MAX_PAIRINGS; i++) {
         if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
-            if (strncmp(data.magic, magic1, sizeof(magic1)))
+            if (strncmp(data.magic, magic1, sizeof(magic1))) {
                 continue;
+            }
             
             if (!strncmp(data.device_id, device_id, sizeof(data.device_id))) {
-                int r;
-                
-                ed25519_key *device_key = crypto_ed25519_new();
-                r = crypto_ed25519_import_public_key(device_key, data.device_public_key, sizeof(data.device_public_key));
-                if (r) {
-                    ERROR("Import dev pub key (%d)", r);
-                    crypto_ed25519_free(device_key);
-                    return -2;
-                }
-                
-                if (memcmp(device_key, data.device_public_key, sizeof(data.device_public_key)) != 0) {
-                    r = homekit_storage_add_pairing(data.device_id, device_key, permissions);
-                    crypto_ed25519_free(device_key);
-                    if (r) {
+                if (data.permissions != permissions) {
+                    memset(&data, 0, sizeof(data));
+                    if (!spiflash_write(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
+                        ERROR("Erase old pairing");
                         return -2;
                     }
                     
-                    memset(&data, 0, sizeof(data));
-                    if (!spiflash_write(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
-                        ERROR("Update pairing: erasing old");
-                        return -2;
-                    }
-                } else {
-                    INFO("Dev pub key not updated");
+                    return homekit_storage_add_pairing(device_id, device_key, permissions);
                 }
                 
                 return 0;
@@ -345,8 +331,9 @@ int homekit_storage_remove_pairing(const char *device_id) {
     pairing_data_t data;
     for (int i = 0; i<MAX_PAIRINGS; i++) {
         if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
-            if (strncmp(data.magic, magic1, sizeof(magic1)))
+            if (strncmp(data.magic, magic1, sizeof(magic1))) {
                 continue;
+            }
             
             if (!strncmp(data.device_id, device_id, sizeof(data.device_id))) {
                 memset(&data, 0, sizeof(data));
@@ -370,8 +357,9 @@ int homekit_storage_pairing_count() {
     unsigned int count = 0;
     for (unsigned int i = 0; i < MAX_PAIRINGS; i++) {
         if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
-            if (strncmp(data.magic, magic1, sizeof(magic1)))
+            if (strncmp(data.magic, magic1, sizeof(magic1))) {
                 continue;
+            }
             
             count++;
         }
@@ -387,8 +375,9 @@ int homekit_storage_remove_extra_pairing(const unsigned int last_keep) {
     unsigned int count = 0;
     for (unsigned int i = 0; i < MAX_PAIRINGS; i++) {
         if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
-            if (strncmp(data.magic, magic1, sizeof(magic1)))
+            if (strncmp(data.magic, magic1, sizeof(magic1))) {
                 continue;
+            }
             
             count++;
             
@@ -410,8 +399,9 @@ pairing_t *homekit_storage_find_pairing(const char *device_id) {
     pairing_data_t data;
     for (unsigned int i = 0; i < MAX_PAIRINGS; i++) {
         if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * i, (byte *)&data, sizeof(data))) {
-            if (strncmp(data.magic, magic1, sizeof(magic1)))
+            if (strncmp(data.magic, magic1, sizeof(magic1))) {
                 continue;
+            }
             
             if (!strncmp(data.device_id, device_id, sizeof(data.device_id))) {
                 ed25519_key *device_key = crypto_ed25519_new();
@@ -448,15 +438,11 @@ pairing_iterator_t *homekit_storage_pairing_iterator() {
 }
 
 
-void homekit_storage_pairing_iterator_free(pairing_iterator_t *iterator) {
-    free(iterator);
-}
-
-
 pairing_t *homekit_storage_next_pairing(pairing_iterator_t *it) {
     pairing_data_t data;
     while(it->idx < MAX_PAIRINGS) {
-        int id = it->idx++;
+        int id = it->idx;
+        it->idx++;
 
         if (spiflash_read(PAIRINGS_ADDR + sizeof(data) * id, (byte *)&data, sizeof(data))) {
             if (!strncmp(data.magic, magic1, sizeof(magic1))) {
@@ -465,7 +451,6 @@ pairing_t *homekit_storage_next_pairing(pairing_iterator_t *it) {
                 if (r) {
                     ERROR("Import dev pub key (%d)", r);
                     crypto_ed25519_free(device_key);
-                    it->idx++;
                     continue;
                 }
                 

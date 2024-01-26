@@ -89,7 +89,7 @@
 #define AUTO_REBOOT_ON_HANG_OTA_TIMEOUT     (2000000)
 #define BEST_RSSI_MARGIN                    (1)
 
-#define HIGH_HOMEKIT_CH_NUMBER              (6)
+#define HIGH_HOMEKIT_CH_NUMBER              (7)
 
 #define DEBUG(message, ...)                 printf("%s: " message "\n", __func__, ##__VA_ARGS__)
 #define INFO(message, ...)                  INFO_NNL(message "\n", ##__VA_ARGS__)
