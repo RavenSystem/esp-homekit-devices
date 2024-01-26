@@ -140,7 +140,11 @@ int tlv_format(const tlv_values_t *values, byte *buffer, size_t *size) {
     size_t required_size = 0;
     tlv_t *t = values->head;
     while (t) {
-        required_size += t->size + 2 * ((t->size + 254) / 255);
+        if (t->size > 0) {
+            required_size += t->size + 2 * ((t->size + 254) / 255);
+        } else {
+            required_size += 2;
+        }
         t = t->next;
     }
 

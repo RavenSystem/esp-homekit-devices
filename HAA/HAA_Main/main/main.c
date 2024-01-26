@@ -7574,7 +7574,7 @@ void run_homekit_server() {
 }
 
 void printf_header() {
-    INFO("\nHome Accessory Architect "HAA_FIRMWARE_VERSION""HAA_FIRMWARE_BETA_REVISION"\n(c) 2018-2023 José A. Jiménez Campos\n");
+    INFO("\nHome Accessory Architect "HAA_FIRMWARE_VERSION""HAA_FIRMWARE_BETA_REVISION"\n(c) 2018-2024 José A. Jiménez Campos\n");
     
 #ifdef HAA_DEBUG
     INFO("HAA DEBUG ENABLED\n");
