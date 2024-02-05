@@ -706,7 +706,7 @@ static void wifi_config_server_on_settings(client_t *client) {
     
     int8_t int8_value = 0;
     sysparam_get_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, &int8_value);
-    if (int8_value > 1 && homekit_pairings > int8_value) {
+    if (int8_value > 0 && homekit_pairings > int8_value) {
         client_send_chunk(client, html_settings_remove_extra_pairing);
     }
     
@@ -918,7 +918,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             }
             
             if (rm_re_pair_param) {
-                int8_t count = 2;
+                int8_t count = 1;
                 sysparam_get_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, &count);
                 homekit_remove_extra_pairing(count);
                 sysparam_erase(HOMEKIT_PAIRING_COUNT_SYSPARAM);
@@ -1570,11 +1570,10 @@ void wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool with_
 static void wifi_config_station_connect() {
     vTaskDelay(1);
     
-    char *wifi_ssid = NULL;
-    sysparam_get_string(WIFI_STA_SSID_SYSPARAM, &wifi_ssid);
-    
     int8_t wifi_ap_enable = 1;
     
+    char *wifi_ssid = NULL;
+    sysparam_get_string(WIFI_STA_SSID_SYSPARAM, &wifi_ssid);
     if (wifi_ssid) {
         free(wifi_ssid);
         

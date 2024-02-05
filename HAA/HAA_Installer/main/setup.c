@@ -1407,34 +1407,28 @@ static void wifi_config_connect(const uint8_t phy) {
 }
 
 static void wifi_config_station_connect() {
-#ifndef ESP_PLATFORM
-    void connect_to_wifi() {
-        int8_t phy_mode = 3;
-        sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
-        wifi_config_connect(phy_mode);
-    }
-#endif
-    
     vTaskDelay(1);
     
     int8_t setup_mode = 3;
     sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &setup_mode);
     
-    INFO("HAA INSTALLER");
-    
     char *wifi_ssid = NULL;
     sysparam_get_string(WIFI_STA_SSID_SYSPARAM, &wifi_ssid);
-    
-    if (wifi_ssid && setup_mode == 0) {
+    if (wifi_ssid) {
         free(wifi_ssid);
-        
-        INFO("* NORMAL");
         
 #ifdef ESP_PLATFORM
         wifi_config_connect();
 #else
-        connect_to_wifi();
+        int8_t phy_mode = 3;
+        sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
+        wifi_config_connect(phy_mode);
 #endif
+        
+    }
+    
+    if (setup_mode == 0) {
+        INFO("* NORMAL");
         
         sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
         
@@ -1444,17 +1438,6 @@ static void wifi_config_station_connect() {
         INFO("* SETUP");
         
         wifi_config_softap_start();
-        
-        if (wifi_ssid) {
-            free(wifi_ssid);
-            
-#ifdef ESP_PLATFORM
-            wifi_config_connect();
-#else
-            connect_to_wifi();
-#endif
-            
-        }
         
         adv_logger_close_buffered_task();
         vTaskDelete(context->ota_task);

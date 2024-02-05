@@ -89,6 +89,12 @@ void init_task() {
     
     adv_logger_init();
     
+#ifdef HAABOOT
+    INFO("HAABOOT");
+#else
+    INFO("OTAMAIN");
+#endif
+    
     sysparam_status_t status = sysparam_init(SYSPARAMSECTOR, 0);
     if (status != SYSPARAM_OK) {
         setup_mode_reset_sysparam();
@@ -158,7 +164,8 @@ void ota_task(void *arg) {
     sysparam_compact();
     
 #else   // HAABOOT
-    INFO_NNL("OTAMAIN\nHAAMAIN ");
+    INFO("OTAMAIN");
+    INFO("HAAMAIN ");
     
     status = sysparam_get_string(HAAMAIN_VERSION_SYSPARAM, &haamain_installed_version);
     if (status != SYSPARAM_OK || haamain_installed_version[0] == 0) {

@@ -85,6 +85,21 @@
 
 static SemaphoreHandle_t dht_lock = NULL;
 
+void dht_init_pin(uint8_t pin) {
+#ifdef ESP_PLATFORM
+    gpio_reset_pin(pin);
+    gpio_set_direction(pin, GPIO_MODE_INPUT_OUTPUT_OD);
+    gpio_set_pull_mode(pin, GPIO_FLOATING);
+    gpio_sleep_set_direction(pin, GPIO_MODE_INPUT_OUTPUT_OD);
+    gpio_sleep_set_pull_mode(pin, GPIO_FLOATING);
+#else
+    gpio_enable(pin, GPIO_OUT_OPEN_DRAIN);
+    gpio_set_pullup(pin, false, false);
+#endif
+    
+    gpio_write(pin, 1);
+}
+
 /**
  * Wait specified time for pin to go to a specified state.
  * If timeout is reached and pin doesn't go to a requested state
@@ -94,10 +109,6 @@ static SemaphoreHandle_t dht_lock = NULL;
 static bool dht_await_pin_state(uint8_t pin, uint32_t timeout,
         bool expected_pin_state, uint32_t *duration)
 {
-#ifdef ESP_PLATFORM
-    gpio_set_direction(pin, GPIO_MODE_INPUT);
-#endif
-    
     for (uint32_t i = 0; i < timeout; i += DHT_TIMER_INTERVAL) {
         // need to wait at least a single interval to prevent reading a jitter
         sdk_os_delay_us(DHT_TIMER_INTERVAL);
@@ -123,26 +134,41 @@ static inline bool dht_fetch_data(dht_sensor_type_t sensor_type, uint8_t pin, bo
     uint32_t high_duration;
 
     // Phase 'A' pulling signal low to initiate read sequence
-#ifdef ESP_PLATFORM
-    gpio_set_direction(pin, GPIO_MODE_OUTPUT_OD);
-#endif
-    gpio_write(pin, false);
-    sdk_os_delay_us(sensor_type == DHT_TYPE_SI7021 ? 500 : 20000);
-    gpio_write(pin, true);
+    gpio_write(pin, 0);
     
-    // Step through Phase 'B', 200us
-    if (!dht_await_pin_state(pin, sensor_type == DHT_TYPE_SI7021 ? 200 : 40, false, NULL)) {
+    uint32_t initial_delay = 1100;
+    switch (sensor_type) {
+        case DHT_TYPE_DHT11:
+            initial_delay = 20000;  // Data sheet says "at least 18ms"; 20ms (20000us) just to be safe
+            break;
+            
+        case DHT_TYPE_DHT22:
+            initial_delay = 11000;  // Data sheet says "at least 1-10ms"; 11ms (11000us) just to be safe
+            break;
+            
+        case DHT_TYPE_SI7021:
+            initial_delay = 500;
+            break;
+    }
+    
+    sdk_os_delay_us(initial_delay);
+    
+    // Phase 'B' pulling signal floating (high with external pullup resistor)
+    gpio_write(pin, 1);
+    
+    // Step through Phase 'B', 40us, or 200us for DHT_TYPE_SI7021
+    if (!dht_await_pin_state(pin, sensor_type == DHT_TYPE_SI7021 ? 200 : 44, false, NULL)) {
         debug("Initialization error, problem in phase 'B'\n");
         return false;
     }
     
-    // Step through Phase 'C', 88us
+    // Step through Phase 'C', 80us
     if (!dht_await_pin_state(pin, 88, true, NULL)) {
         debug("Initialization error, problem in phase 'C'\n");
         return false;
     }
 
-    // Step through Phase 'D', 88us
+    // Step through Phase 'D', 80us
     if (!dht_await_pin_state(pin, 88, false, NULL)) {
         debug("Initialization error, problem in phase 'D'\n");
         return false;
@@ -160,6 +186,7 @@ static inline bool dht_fetch_data(dht_sensor_type_t sensor_type, uint8_t pin, bo
         }
         bits[i] = high_duration > low_duration;
     }
+    
     return true;
 }
 
@@ -192,30 +219,9 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
     bool result = false;
     
     if (xSemaphoreTake(dht_lock, DHT_TIMEOUT_MS / portTICK_PERIOD_MS) == pdTRUE) {
-        
-#ifdef ESP_PLATFORM
-        gpio_set_direction(pin, GPIO_MODE_OUTPUT_OD);
-        gpio_set_pull_mode(pin, false);
-        gpio_sleep_set_pull_mode(pin, false);
-#else
-        gpio_enable(pin, GPIO_OUT_OPEN_DRAIN);
-        gpio_set_pullup(pin, false, false);
-#endif
-        
-        gpio_write(pin, true);
-        
-        vTaskDelay(1);
-        
         PORT_ENTER_CRITICAL();
         result = dht_fetch_data(sensor_type, pin, bits);
         PORT_EXIT_CRITICAL();
-        
-#ifdef ESP_PLATFORM
-        gpio_reset_pin(pin);
-        gpio_set_direction(pin, GPIO_MODE_DISABLE);
-#else
-        gpio_enable(pin, GPIO_INPUT);
-#endif
         
         vTaskDelay(20 / portTICK_PERIOD_MS);
         

@@ -25,6 +25,9 @@ typedef enum
     DHT_TYPE_SI7021     //!< Itead SI7021
 } dht_sensor_type_t;
 
+
+void dht_init_pin(uint8_t pin);
+
 /**
  * Read data from sensor on specified pin.
  *

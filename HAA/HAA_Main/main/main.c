@@ -7557,8 +7557,15 @@ void run_homekit_server() {
         ntp_timer_worker(NULL);
     }
     
-    if (homekit_pairing_count() == 0) {
+    const int homekit_pairings = homekit_pairing_count();
+    if (homekit_pairings == 0) {
         sysparam_erase(HOMEKIT_PAIRING_COUNT_SYSPARAM);
+    } else {
+        int8_t pairing_count_saved = 0;
+        sysparam_get_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, &pairing_count_saved);
+        if (pairing_count_saved > 0 && homekit_pairings > pairing_count_saved) {
+            config.no_pairing_erase = true;
+        }
     }
     
     do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 2);
@@ -8493,6 +8500,8 @@ void normal_mode_init() {
         //TH_SENSOR_ERROR_COUNT = 0;
         if (sensor_type == 3) {
             TH_SENSOR_INDEX = th_sensor_index(json_accessory);
+        } else if (sensor_type > 0 && sensor_type < 5) {
+            dht_init_pin(TH_SENSOR_GPIO);
         }
         
         return sensor_poll_period(json_accessory, TH_SENSOR_POLL_PERIOD_DEFAULT);
@@ -10548,9 +10557,7 @@ void normal_mode_init() {
         
         ch_group->timer2 = rs_esp_timer_create(th_update_delay(json_context) * 1000, pdFALSE, (void*) ch_group, process_th_timer);
         
-        const int sensor_gpio = TH_SENSOR_GPIO;
-        
-        if ((sensor_gpio != -1 || TH_SENSOR_TYPE >= 5) && TH_IAIRZONING_CONTROLLER == 0) {
+        if ((TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE >= 5) && TH_IAIRZONING_CONTROLLER == 0) {
             th_sensor_starter(ch_group, poll_period);
         }
         
@@ -10688,9 +10695,7 @@ void normal_mode_init() {
             //service_iid += 2;
         }
         
-        const int sensor_gpio = TH_SENSOR_GPIO;
-        
-        if (sensor_gpio != -1 || TH_SENSOR_TYPE >= 5) {
+        if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE >= 5) {
             th_sensor_starter(ch_group, poll_period);
         }
         
@@ -10737,9 +10742,7 @@ void normal_mode_init() {
             //service_iid += 2;
         }
         
-        const int sensor_gpio = TH_SENSOR_GPIO;
-        
-        if (sensor_gpio != -1 || TH_SENSOR_TYPE >= 9) {
+        if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE >= 9) {
             th_sensor_starter(ch_group, poll_period);
         }
         
@@ -10806,8 +10809,7 @@ void normal_mode_init() {
             //service_iid += 2;
         }
         
-        const int sensor_gpio = TH_SENSOR_GPIO;
-        if (sensor_gpio != -1) {
+        if (TH_SENSOR_GPIO != -1) {
             th_sensor_starter(ch_group, poll_period);
         }
         
@@ -10969,9 +10971,7 @@ void normal_mode_init() {
         
         ch_group->timer2 = rs_esp_timer_create(th_update_delay(json_context) * 1000, pdFALSE, (void*) ch_group, process_humidif_timer);
         
-        const int sensor_gpio = TH_SENSOR_GPIO;
-        
-        if (sensor_gpio != -1 || TH_SENSOR_TYPE >= 9) {
+        if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE >= 9) {
             th_sensor_starter(ch_group, poll_period);
         }
         
@@ -13014,35 +13014,33 @@ void normal_mode_init() {
     main_config.wifi_mode = (uint8_t) wifi_mode;
     
     // Delayed TH Sensors
+    void th_sensor_timer_starter(TimerHandle_t xTimer) {
+        vTaskDelay(MS_TO_TICKS(3200));
+        
+        temperature_timer_worker(xTimer);
+        rs_esp_timer_start_forced(xTimer);
+    }
+    
     ch_group_t* th_ch_group = main_config.ch_groups;
     while (th_ch_group) {
         if (th_ch_group->serv_type >= SERV_TYPE_THERMOSTAT &&
             th_ch_group->serv_type <= SERV_TYPE_HUMIDIFIER_WITH_TEMP &&
             th_ch_group->timer) {
-            
             INFO("<%i> Start TH", th_ch_group->serv_index);
             
-            temperature_timer_worker(th_ch_group->timer);
-            rs_esp_timer_start_forced(th_ch_group->timer);
+            th_sensor_timer_starter(th_ch_group->timer);
         }
         
         th_ch_group = th_ch_group->next;
-        
-        if (th_ch_group) {
-            vTaskDelay(MS_TO_TICKS(2800));
-        }
     }
     
     // Delayed iAirZoning
     th_ch_group = main_config.ch_groups;
     while (th_ch_group) {
         if (th_ch_group->serv_type == SERV_TYPE_IAIRZONING) {
-            vTaskDelay(MS_TO_TICKS(2800));
-            
             INFO("<%i> Start iAZ", th_ch_group->serv_index);
             
-            temperature_timer_worker(th_ch_group->timer);
-            rs_esp_timer_start_forced(th_ch_group->timer);
+            th_sensor_timer_starter(th_ch_group->timer);
         }
         
         th_ch_group = th_ch_group->next;

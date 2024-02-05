@@ -32,9 +32,10 @@ typedef struct {
     
     uint16_t config_number;
     homekit_device_category_t category: 8;  // 6 bits
-    uint8_t max_clients: 6;                 // 5 bits
+    uint8_t max_clients: 5;                 // 5 bits
     bool insecure: 1;
     bool re_pair: 1;
+    bool no_pairing_erase: 1;
     
 #ifdef HOMEKIT_SERVER_ON_RESOURCE_ENABLE
     // Callback for "POST /resource" to get snapshot image from camera
