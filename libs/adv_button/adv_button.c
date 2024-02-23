@@ -306,11 +306,11 @@ static void IRAM_ATTR adv_button_interrupt_pulse(void* args) {
 #else
 static void IRAM adv_button_interrupt_pulse(const uint8_t gpio) {
 #endif
-
+    
     const unsigned int read_value = gpio_read(gpio);
     adv_button_t *button = button_find_by_gpio(gpio);
     if (button->pulse_max_duration_time_us == 0) {
-        if (read_value && button->value < button->max_eval) {
+        if (!read_value && button->value < button->max_eval) {
             button->value++;
         }
         
@@ -449,16 +449,25 @@ static void button_evaluate_fn() {
             }
             
         } else {    // button->mode == ADV_BUTTON_PULSE_MODE
-            if (button->value == button->max_eval && !button->pulse_low_detected) {
-                button->state = true;
+            if (button->pulse_max_duration_time_us == 0) {
+                if (button->value == button->max_eval) {
+                    button->value = button->value >> 1;
+                    button->state = true;
+                } else if (button->value > 0) {
+                    button->value--;
+                }
+            } else {
+                if (button->value == button->max_eval && !button->pulse_low_detected) {
+                    button->state = true;
+                }
+                
+                if ((button->pulse_low_detected || button->pulse_max_duration_time_us == 0)
+                    && button->value > 0) {
+                    button->value--;
+                }
+                
+                button->pulse_low_detected = false;
             }
-            
-            if ((button->pulse_low_detected || button->pulse_max_duration_time_us == 0) 
-                && button->value > 0) {
-                button->value--;
-            }
-            
-            button->pulse_low_detected = false;
             
             if (button->value == 0) {
                 button->state = false;

@@ -31,8 +31,8 @@
 
 #define sdk_system_get_time_raw()           ((uint32_t) esp_timer_get_time())
 
-#define HAA_ENTER_CRITICAL_TASK()           portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED; taskENTER_CRITICAL(&mux)
-#define HAA_EXIT_CRITICAL_TASK()            taskEXIT_CRITICAL(&mux)
+#define HAA_ENTER_CRITICAL_TASK()           portMUX_TYPE *my_spinlock = malloc(sizeof(portMUX_TYPE)); portMUX_INITIALIZE(my_spinlock); taskENTER_CRITICAL(my_spinlock)
+#define HAA_EXIT_CRITICAL_TASK()            taskEXIT_CRITICAL(my_spinlock); free(my_spinlock)
 
 #define HAA_LONGINT_F                       "li"
 
@@ -7557,17 +7557,6 @@ void run_homekit_server() {
         ntp_timer_worker(NULL);
     }
     
-    const int homekit_pairings = homekit_pairing_count();
-    if (homekit_pairings == 0) {
-        sysparam_erase(HOMEKIT_PAIRING_COUNT_SYSPARAM);
-    } else {
-        int8_t pairing_count_saved = 0;
-        sysparam_get_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, &pairing_count_saved);
-        if (pairing_count_saved > 0 && homekit_pairings > pairing_count_saved) {
-            config.no_pairing_erase = true;
-        }
-    }
-    
     do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 2);
     
     led_blink(4);
@@ -8498,10 +8487,16 @@ void normal_mode_init() {
         TH_SENSOR_TEMP_OFFSET = th_sensor_temp_offset(json_accessory);
         TH_SENSOR_HUM_OFFSET = th_sensor_hum_offset(json_accessory);
         //TH_SENSOR_ERROR_COUNT = 0;
-        if (sensor_type == 3) {
-            TH_SENSOR_INDEX = th_sensor_index(json_accessory);
-        } else if (sensor_type > 0 && sensor_type < 5) {
-            dht_init_pin(TH_SENSOR_GPIO);
+        if (sensor_type > 0 && sensor_type < 5) {
+#ifdef ESP_PLATFORM
+            gpio_reset_pin(TH_SENSOR_GPIO);
+#endif
+            
+            if (sensor_type == 3) {
+                TH_SENSOR_INDEX = th_sensor_index(json_accessory);
+            } else {
+                dht_init_pin(TH_SENSOR_GPIO);
+            }
         }
         
         return sensor_poll_period(json_accessory, TH_SENSOR_POLL_PERIOD_DEFAULT);
@@ -8908,7 +8903,6 @@ void normal_mode_init() {
 #ifdef ESP_PLATFORM
                 gpio_reset_pin(clock_gpio);
                 gpio_set_direction(clock_gpio, GPIO_MODE_OUTPUT);
-                gpio_sleep_set_direction(clock_gpio, GPIO_MODE_OUTPUT);
 #else
                 gpio_enable(clock_gpio, GPIO_OUTPUT);
 #endif
@@ -8918,7 +8912,6 @@ void normal_mode_init() {
 #ifdef ESP_PLATFORM
                     gpio_reset_pin(mcp23017->addr);
                     gpio_set_direction(mcp23017->addr, GPIO_MODE_OUTPUT);
-                    gpio_sleep_set_direction(mcp23017->addr, GPIO_MODE_OUTPUT);
 #else
                     gpio_enable(mcp23017->addr, GPIO_OUTPUT);
 #endif
@@ -8928,7 +8921,6 @@ void normal_mode_init() {
 #ifdef ESP_PLATFORM
                         gpio_reset_pin(latch_gpio);
                         gpio_set_direction(latch_gpio, GPIO_MODE_OUTPUT);
-                        gpio_sleep_set_direction(latch_gpio, GPIO_MODE_OUTPUT);
 #else
                         gpio_enable(latch_gpio, GPIO_OUTPUT);
 #endif
@@ -8953,13 +8945,11 @@ void normal_mode_init() {
                 } else {    // Shift Register INPUT
 #ifdef ESP_PLATFORM
                     gpio_reset_pin(mcp23017->addr);
-                    gpio_set_pull_mode(mcp23017->addr, GPIO_FLOATING);
-                    gpio_sleep_set_pull_mode(mcp23017->addr, GPIO_FLOATING);
                     gpio_set_direction(mcp23017->addr, GPIO_MODE_INPUT);
-                    gpio_sleep_set_direction(mcp23017->addr, GPIO_MODE_INPUT);
+                    gpio_set_pull_mode(mcp23017->addr, GPIO_FLOATING);
 #else
-                    gpio_set_pullup(mcp23017->addr, false, false);
                     gpio_enable(mcp23017->addr, GPIO_INPUT);
+                    gpio_set_pullup(mcp23017->addr, false, false);
 #endif
                     
                     adv_button_create_shift_register(mcp23017->index, mcp23017->addr, mcp23017->bus, mcp23017->len);
@@ -9004,21 +8994,20 @@ void normal_mode_init() {
 #endif
                     
 #ifdef ESP_PLATFORM
-                        unsigned int esp_idf_pull = GPIO_FLOATING;
+                        gpio_pull_mode_t esp_idf_pull_resistor = GPIO_FLOATING;
                         switch (IO_GPIO_PULL_UP_DOWN) {
                             case 1:
-                                esp_idf_pull = GPIO_PULLUP_ONLY;
+                                esp_idf_pull_resistor = GPIO_PULLUP_ONLY;
                                 break;
                             case 2:
-                                esp_idf_pull = GPIO_PULLDOWN_ONLY;
+                                esp_idf_pull_resistor = GPIO_PULLDOWN_ONLY;
                                 break;
                             case 3:
-                                esp_idf_pull = GPIO_PULLUP_PULLDOWN;
+                                esp_idf_pull_resistor = GPIO_PULLUP_PULLDOWN;
                                 break;
                         }
                         
-                        gpio_set_pull_mode(gpio, esp_idf_pull);
-                        gpio_sleep_set_pull_mode(gpio, esp_idf_pull);
+                        gpio_set_pull_mode(gpio, esp_idf_pull_resistor);
 #else
                         gpio_set_pullup(gpio, IO_GPIO_PULL_UP_DOWN, IO_GPIO_PULL_UP_DOWN);
 #endif
@@ -9042,7 +9031,6 @@ void normal_mode_init() {
                 if (IO_GPIO_MODE <= 5) {
 #ifdef ESP_PLATFORM
                     gpio_ret = gpio_set_direction(gpio, IO_GPIO_MODE);
-                    gpio_sleep_set_direction(gpio, IO_GPIO_MODE);
 #else
                     if (IO_GPIO_MODE == 0) {
                         gpio_disable(gpio);
@@ -12991,6 +12979,17 @@ void normal_mode_init() {
         rs_esp_timer_start_forced(rs_esp_timer_create(HOMEKIT_RE_PAIR_TIME_MS, pdFALSE, NULL, homekit_re_pair_timer));
     }
     
+    int8_t pairing_count_saved = 0;
+    sysparam_get_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, &pairing_count_saved);
+    if (pairing_count_saved > 0) {
+        const int8_t pairing_count_current = homekit_pairing_count() + re_pair;
+        if (pairing_count_current > pairing_count_saved) {
+            config.no_pairing_erase = true;
+        } else {
+            sysparam_erase(HOMEKIT_PAIRING_COUNT_SYSPARAM);
+        }
+    }
+    
     main_config.setup_mode_toggle_counter = 0;
     
     if (main_config.uart_receiver_data) {
@@ -13074,7 +13073,6 @@ void irrf_capture_task(void* args) {
     
 #ifdef ESP_PLATFORM
     gpio_set_direction(irrf_capture_gpio, GPIO_MODE_INPUT);
-    gpio_sleep_set_direction(irrf_capture_gpio, GPIO_MODE_INPUT);
 #else
     gpio_enable(irrf_capture_gpio, GPIO_INPUT);
 #endif

@@ -63,7 +63,7 @@ void homekit_remove_oldest_client();
 void homekit_server_reset();
 
 void homekit_remove_extra_pairing(const unsigned int last_keep);
-int homekit_pairing_count();
+unsigned int homekit_pairing_count();
 
 void homekit_mdns_announce_start();
 void homekit_mdns_announce_stop();

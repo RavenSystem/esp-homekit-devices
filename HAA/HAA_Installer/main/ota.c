@@ -1,7 +1,7 @@
 /*
 * Home Accessory Architect OTA Installer
 *
-* Copyright 2020-2023 José Antonio Jiménez Campos (@RavenSystem)
+* Copyright 2020-2024 José Antonio Jiménez Campos (@RavenSystem)
 *
 */
 
@@ -317,7 +317,7 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
 }
 
 static int ota_get_final_location(char* repo, char* file, uint16_t port, const bool is_ssl) {
-    int ota_conn_result;
+    int ota_conn_result = -1;
     int ret = 0;
     int error = 0;
     int slash;

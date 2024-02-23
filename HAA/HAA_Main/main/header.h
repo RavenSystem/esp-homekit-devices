@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.11.4"
+#define HAA_FIRMWARE_VERSION                "12.12.0"
 #define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -438,7 +438,7 @@
 #define WINDOW_COVER_CORRECTION_DEFAULT     (0)
 #define WINDOW_COVER_TIMER_WORKER_PERIOD_MS (250)
 #define WINDOW_COVER_MARGIN_SYNC_SET        "m"
-#define WINDOW_COVER_MARGIN_SYNC_DEFAULT    (15)
+#define WINDOW_COVER_MARGIN_SYNC_DEFAULT    (10)
 #define WINDOW_COVER_TIME_OPEN              ch_group->num_f[0]
 #define WINDOW_COVER_TIME_CLOSE             ch_group->num_f[1]
 #define WINDOW_COVER_MOTOR_POSITION         ch_group->num_f[2]

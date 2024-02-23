@@ -6,8 +6,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#define PORT_ENTER_CRITICAL()       portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED; taskENTER_CRITICAL(&mux)
-#define PORT_EXIT_CRITICAL()        taskEXIT_CRITICAL(&mux)
+#define PORT_ENTER_CRITICAL()       portMUX_TYPE *my_spinlock = malloc(sizeof(portMUX_TYPE)); portMUX_INITIALIZE(my_spinlock); taskENTER_CRITICAL(my_spinlock)
+#define PORT_EXIT_CRITICAL()        taskEXIT_CRITICAL(my_spinlock); free(my_spinlock)
 
 #else
 

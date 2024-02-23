@@ -10,8 +10,8 @@
 #define sdk_os_delay_us(time)       ets_delay_us(time)
 #define gpio_read(level)            gpio_get_level(level)
 #define gpio_write(gpio, level)     gpio_set_level(gpio, level)
-#define PORT_ENTER_CRITICAL()       portMUX_TYPE mux = portMUX_INITIALIZER_UNLOCKED; taskENTER_CRITICAL(&mux)
-#define PORT_EXIT_CRITICAL()        taskEXIT_CRITICAL(&mux)
+#define PORT_ENTER_CRITICAL()       portMUX_TYPE *my_spinlock = malloc(sizeof(portMUX_TYPE)); portMUX_INITIALIZE(my_spinlock); taskENTER_CRITICAL(my_spinlock)
+#define PORT_EXIT_CRITICAL()        taskEXIT_CRITICAL(my_spinlock); free(my_spinlock)
 
 #else
 
@@ -50,12 +50,13 @@ static inline bool _onewire_wait_for_bus(int pin, unsigned int max_wait) {
 static void setup_pin(uint8_t pin, bool open_drain)
 {
 #ifdef ESP_PLATFORM
-    gpio_reset_pin(pin);
-    gpio_set_direction(pin, open_drain ? GPIO_MODE_INPUT_OUTPUT_OD : GPIO_MODE_OUTPUT);
+    gpio_mode_t gpio_mode = GPIO_MODE_OUTPUT;
+    if (open_drain) {
+        gpio_mode = GPIO_MODE_INPUT_OUTPUT_OD;
+    }
+    gpio_set_direction(pin, gpio_mode);
     gpio_set_pull_mode(pin, GPIO_PULLUP_ONLY);
-    gpio_sleep_set_pull_mode(pin, GPIO_PULLUP_ONLY);
 #else
-    //gpio_disable(pin);
     gpio_enable(pin, open_drain ? GPIO_OUT_OPEN_DRAIN : GPIO_OUTPUT);
     gpio_set_pullup(pin, true, true);
 #endif

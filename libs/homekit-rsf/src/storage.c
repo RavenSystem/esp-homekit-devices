@@ -350,7 +350,7 @@ int homekit_storage_remove_pairing(const char *device_id) {
     return 0;
 }
 
-int homekit_storage_pairing_count() {
+unsigned int homekit_storage_pairing_count() {
     enable_hap_partition();
     
     pairing_data_t data;

@@ -692,7 +692,7 @@ static void wifi_config_server_on_settings(client_t *client) {
     
     client_send_chunk(client, html_settings_pairings);
     
-    const int homekit_pairings = homekit_pairing_count();
+    const unsigned int homekit_pairings = homekit_pairing_count();
     char homekit_pairings_text[4];
     itoa(homekit_pairings, homekit_pairings_text, 10);
     
@@ -706,7 +706,7 @@ static void wifi_config_server_on_settings(client_t *client) {
     
     int8_t int8_value = 0;
     sysparam_get_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, &int8_value);
-    if (int8_value > 0 && homekit_pairings > int8_value) {
+    if (int8_value > 0) {
         client_send_chunk(client, html_settings_remove_extra_pairing);
     }
     
@@ -848,7 +848,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             char* haamain_version_string = NULL;
             sysparam_get_string(HAAMAIN_VERSION_SYSPARAM, &haamain_version_string);
             
-            int8_t saved_pairing_count = -1;
+            int8_t saved_pairing_count = 0;
             sysparam_get_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, &saved_pairing_count);
             
             setup_mode_reset_sysparam();
@@ -865,7 +865,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                 sysparam_set_string(HAAMAIN_VERSION_SYSPARAM, haamain_version_string);
             }
             
-            if (saved_pairing_count > -1) {
+            if (saved_pairing_count > 0) {
                 sysparam_set_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, saved_pairing_count);
             }
             

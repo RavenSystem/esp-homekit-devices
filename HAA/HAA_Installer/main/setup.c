@@ -808,7 +808,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             char* haamain_version_string = NULL;
             sysparam_get_string(HAAMAIN_VERSION_SYSPARAM, &haamain_version_string);
             
-            int8_t saved_pairing_count = -1;
+            int8_t saved_pairing_count = 0;
             sysparam_get_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, &saved_pairing_count);
             
             setup_mode_reset_sysparam();
@@ -825,7 +825,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
                 sysparam_set_string(HAAMAIN_VERSION_SYSPARAM, haamain_version_string);
             }
             
-            if (saved_pairing_count > -1) {
+            if (saved_pairing_count > 0) {
                 sysparam_set_int8(HOMEKIT_PAIRING_COUNT_SYSPARAM, saved_pairing_count);
             }
             
