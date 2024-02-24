@@ -307,15 +307,16 @@ static void IRAM_ATTR adv_button_interrupt_pulse(void* args) {
 static void IRAM adv_button_interrupt_pulse(const uint8_t gpio) {
 #endif
     
-    const unsigned int read_value = gpio_read(gpio);
     adv_button_t *button = button_find_by_gpio(gpio);
     if (button->pulse_max_duration_time_us == 0) {
-        if (!read_value && button->value < button->max_eval) {
+        if (button->value < button->max_eval) {
             button->value++;
         }
         
         return;
     }
+    
+    const unsigned int read_value = gpio_read(gpio);
     
     const uint32_t now = sdk_system_get_time_raw();
     
@@ -449,29 +450,31 @@ static void button_evaluate_fn() {
             }
             
         } else {    // button->mode == ADV_BUTTON_PULSE_MODE
+            unsigned int my_button_value = button->value;
             if (button->pulse_max_duration_time_us == 0) {
-                if (button->value == button->max_eval) {
-                    button->value = button->value >> 1;
+                if (my_button_value == button->max_eval) {
+                    my_button_value = my_button_value >> 1;
                     button->state = true;
-                } else if (button->value > 0) {
-                    button->value--;
+                } else if (my_button_value > 0) {
+                    my_button_value--;
                 }
             } else {
-                if (button->value == button->max_eval && !button->pulse_low_detected) {
+                if (my_button_value == button->max_eval && !button->pulse_low_detected) {
                     button->state = true;
                 }
                 
-                if ((button->pulse_low_detected || button->pulse_max_duration_time_us == 0)
-                    && button->value > 0) {
-                    button->value--;
+                if (button->pulse_low_detected && my_button_value > 0) {
+                    my_button_value--;
                 }
                 
                 button->pulse_low_detected = false;
             }
             
-            if (button->value == 0) {
+            if (my_button_value == 0) {
                 button->state = false;
             }
+            
+            button->value = my_button_value;
         }
         
         if (button->state != button->old_state) {
@@ -625,10 +628,18 @@ int adv_button_create(const uint16_t gpio, const bool inverted, const uint8_t mo
             
 #ifdef ESP_PLATFORM
             gpio_install_isr_service(0);
-            gpio_set_intr_type(gpio, GPIO_INTR_ANYEDGE);
+            if (extra_data == 0) {
+                gpio_set_intr_type(gpio, GPIO_INTR_NEGEDGE);
+            } else {
+                gpio_set_intr_type(gpio, GPIO_INTR_ANYEDGE);
+            }
             ret = gpio_isr_handler_add(gpio, adv_button_interrupt_pulse, (void*) ((uint32_t) gpio));
 #else
-            gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt_pulse);
+            if (extra_data == 0) {
+                gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_NEG, adv_button_interrupt_pulse);
+            } else {
+                gpio_set_interrupt(gpio, GPIO_INTTYPE_EDGE_ANY, adv_button_interrupt_pulse);
+            }
 #endif
             
         } else {    // MCP23017

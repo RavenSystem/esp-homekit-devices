@@ -25,13 +25,9 @@
 #include "errno.h"
 #include "esp32_port.h"
 
-#define sdk_system_overclock()
-#define sdk_system_restoreclock()
-
 #else   // ESP_OPEN_RTOS
 
 #include <esp8266.h>
-#include <esplibs/libmain.h>
 #include <sysparam.h>
 #include <spiflash.h>
 #include <rboot-api.h>
@@ -293,12 +289,11 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
         
         //wolfSSL_Debugging_OFF();
         
-        sdk_system_overclock();
-        
         INFO_NNL("OK\nSSLConnect..");
-        ret = wolfSSL_connect(*ssl);
         
-        sdk_system_restoreclock();
+        vTaskDelay(50 / portTICK_PERIOD_MS);
+        ret = wolfSSL_connect(*ssl);
+        vTaskDelay(50 / portTICK_PERIOD_MS);
         
         if (ret != SSL_SUCCESS) {
             freeaddrinfo(res);
@@ -592,9 +587,9 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
                 //wolfSSL_Debugging_ON();
                 do {
                     if (is_ssl) {
-                        sdk_system_overclock();
+                        vTaskDelay(50 / portTICK_PERIOD_MS);
                         ret = wolfSSL_read(ssl, recv_buf, RECV_BUF_LEN - 1);
-                        sdk_system_restoreclock();
+                        vTaskDelay(50 / portTICK_PERIOD_MS);
                     } else {
                         ret = lwip_read(socket, recv_buf, RECV_BUF_LEN - 1);
                     }
@@ -843,8 +838,6 @@ int ota_get_sign(char* repo, char* file, uint8_t* signature, uint16_t port, bool
 int ota_verify_sign(int start_sector, int filesize, uint8_t* signature) {
     INFO(">>> Verifying");
     
-    sdk_system_overclock();
-    
     int bytes;
     uint8_t hash[HASHSIZE];
     uint8_t* buffer = malloc(1024);
@@ -885,8 +878,6 @@ int ota_verify_sign(int start_sector, int filesize, uint8_t* signature) {
     
     int verify = 0;
     wc_ecc_verify_hash(signature, SIGNSIZE, hash, HASHSIZE, &verify, &public_key);
-    
-    sdk_system_restoreclock();
     
     INFO(">>> Result %s", verify == 1 ? "OK" : "ERROR");
 

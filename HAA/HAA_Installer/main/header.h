@@ -11,6 +11,6 @@
 #include "../../common/common_headers.h"
 
 #define INSTALLER_BETA_REVISION     ""      // Format: "b01"
-#define INSTALLER_VERSION           "7.10.0"INSTALLER_BETA_REVISION
+#define INSTALLER_VERSION           "7.10.1"INSTALLER_BETA_REVISION
 
 #endif  // __HAA_OTA_HEADER_H__
