@@ -836,7 +836,7 @@ int ota_get_sign(char* repo, char* file, uint8_t* signature, uint16_t port, bool
 }
 
 int ota_verify_sign(int start_sector, int filesize, uint8_t* signature) {
-    INFO(">>> Verifying");
+    INFO(">>> Verify");
     
     int bytes;
     uint8_t hash[HASHSIZE];
@@ -851,7 +851,7 @@ int ota_verify_sign(int start_sector, int filesize, uint8_t* signature) {
 #else
         if (!spiflash_read(start_sector + bytes, buffer, 1024)) {
 #endif
-            ERROR("Reading flash");
+            ERROR("Read flash");
             break;
         }
         
@@ -867,7 +867,7 @@ int ota_verify_sign(int start_sector, int filesize, uint8_t* signature) {
 #else
     if (!spiflash_read(start_sector + bytes, buffer, filesize - bytes)) {
 #endif
-        ERROR("Reading flash");
+        ERROR("Read flash");
     }
     
     wc_Sha384Update(&sha, buffer, filesize - bytes);
@@ -879,7 +879,7 @@ int ota_verify_sign(int start_sector, int filesize, uint8_t* signature) {
     int verify = 0;
     wc_ecc_verify_hash(signature, SIGNSIZE, hash, HASHSIZE, &verify, &public_key);
     
-    INFO(">>> Result %s", verify == 1 ? "OK" : "ERROR");
+    INFO(">>> %s", verify == 1 ? "OK" : "ERROR");
 
     return verify - 1;
 }
@@ -893,7 +893,7 @@ void ota_finalize_file(int sector) {
     if (!spiflash_write(sector, file_first_byte, 1)) {
 #endif
         
-        ERROR("Writing flash");
+        ERROR("Write flash");
     }
 }
 
