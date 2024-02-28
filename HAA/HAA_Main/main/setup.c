@@ -962,6 +962,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             if (reset_hk_param) {
                 homekit_server_reset();
                 sysparam_erase(HOMEKIT_RE_PAIR_SYSPARAM);
+                sysparam_erase(HOMEKIT_PAIRING_COUNT_SYSPARAM);
                 last_config_number = 1;
             }
             sysparam_set_int32(LAST_CONFIG_NUMBER_SYSPARAM, last_config_number);
