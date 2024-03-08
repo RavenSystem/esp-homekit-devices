@@ -1923,13 +1923,13 @@ void set_zones_task(void* args) {
         ch_group = ch_group->next;
     }
     
-    bool thermostat_all_off = true;
-    bool thermostat_all_idle = true;
-    bool thermostat_all_soft_on = true;
-    bool thermostat_force_idle = false;
+    unsigned int thermostat_all_off = true;
+    unsigned int thermostat_all_idle = true;
+    unsigned int thermostat_all_soft_on = true;
+    unsigned int thermostat_force_idle = false;
     
     ch_group = main_config.ch_groups;
-    while (ch_group && thermostat_all_idle) {
+    while (ch_group) {
         if (ch_group->serv_type == SERV_TYPE_THERMOSTAT && iairzoning_group->serv_index == (uint8_t) TH_IAIRZONING_CONTROLLER) {
             const int th_current_action = THERMOSTAT_CURRENT_ACTION;
             if (th_current_action != THERMOSTAT_ACTION_TOTAL_OFF) {
@@ -13100,9 +13100,7 @@ void irrf_capture_task(void* args) {
             if (c > 0) {
                 INFO("Packets %i", c - 1);
                 for (i = 1; i < c; i++) {
-                    INFO_NNL("%s%5"HAA_LONGINT_F" ",
-                           i & 1 ? "+" : "-",
-                           (uint32_t) (buffer[i] * 1.02f));
+                    INFO_NNL("%s%5"HAA_LONGINT_F" ", i & 1 ? "+" : "-", buffer[i]);
                     
                     if ((i - 1) % 16 == 15) {
                         INFO_NNL("\n");

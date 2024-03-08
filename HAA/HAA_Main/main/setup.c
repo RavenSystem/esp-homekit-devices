@@ -962,7 +962,6 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             if (reset_hk_param) {
                 homekit_server_reset();
                 sysparam_erase(HOMEKIT_RE_PAIR_SYSPARAM);
-                sysparam_erase(HOMEKIT_PAIRING_COUNT_SYSPARAM);
                 last_config_number = 1;
             }
             sysparam_set_int32(LAST_CONFIG_NUMBER_SYSPARAM, last_config_number);
@@ -1421,7 +1420,7 @@ static void on_got_ip(void* arg, esp_event_base_t event_base, int32_t event_id, 
     ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
     ip_addr.addr = event->ip_info.ip.addr;
     gw_addr.addr = event->ip_info.gw.addr;
-    INFO("Wifi connected. ip:" IPSTR " gw:" IPSTR, IP2STR(&ip_addr), IP2STR(&gw_addr));
+    INFO("IP:" IPSTR "/" IPSTR " GW:" IPSTR, IP2STR(&ip_addr), IP2STR(&event->ip_info.netmask), IP2STR(&gw_addr));
     
     char* buf = malloc(16);
     snprintf(buf, 16, IPSTR, IP2STR(&event->ip_info.ip));

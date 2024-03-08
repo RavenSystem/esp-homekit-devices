@@ -32,7 +32,7 @@
 #define ACCESSORY_ID_SIZE       (17)
 #define ACCESSORY_KEY_SIZE      (64)
 
-const char magic1[] = "HAP";    // Must be 3 chars + null terminator
+const char magic1[] = "HAP";    // Must be size of 4 (3 chars + null terminator)
 
 #ifdef ESP_PLATFORM
 esp_partition_t* hap_partition = NULL;
@@ -55,18 +55,19 @@ static void enable_hap_partition() {
 #endif
 
 int homekit_storage_reset() {
-    byte blank[3];
-    memset(blank, 0, sizeof(blank));
-    
     enable_hap_partition();
 
-#ifdef ESP_PLATFORM
-    if (esp_partition_write(hap_partition, MAGIC_ADDR, blank, sizeof(blank)) != ESP_OK) {
-#else
-    if (!spiflash_write(MAGIC_ADDR, blank, sizeof(blank))) {
-#endif
-        ERROR("Reset flash");
+    if (!spiflash_erase_sector(SPIFLASH_HOMEKIT_BASE_ADDR)) {
+        ERROR("Erase flash");
         return -1;
+    }
+    
+    char magic[sizeof(magic1)];
+    strncpy(magic, magic1, sizeof(magic));
+    
+    if (!spiflash_write(MAGIC_ADDR, (byte*) magic, sizeof(magic))) {
+        ERROR("Init sec");
+        return -2;
     }
 
     return 0;
@@ -82,20 +83,9 @@ int homekit_storage_init() {
     if (!spiflash_read(MAGIC_ADDR, (byte*) magic, sizeof(magic))) {
         ERROR("Read magic");
     }
-
+    
     if (strncmp(magic, magic1, 2)) {
-        if (!spiflash_erase_sector(SPIFLASH_HOMEKIT_BASE_ADDR)) {
-            ERROR("Erase flash");
-            return -1;
-        }
-        
-        strncpy(magic, magic1, sizeof(magic));
-        if (!spiflash_write(MAGIC_ADDR, (byte*) magic, sizeof(magic))) {
-            ERROR("Init sec");
-            return -1;
-        }
-        
-        return 1;
+        return homekit_storage_reset();
     }
     
     return 0;
@@ -171,12 +161,12 @@ ed25519_key *homekit_storage_load_accessory_key() {
 // TODO: figure out alignment issues
 typedef struct {
     char magic[sizeof(magic1)];     // 4  bytes (3 chars + null erminator)
-    byte permissions;               // 1  bytes
+    byte permissions;               // 1  byte
     char device_id[36];             // 36 bytes
     byte device_public_key[32];     // 32 bytes
 
     byte _reserved[7];              // 7  bytes
-                                    // Align record to be 80 bytes
+                                    // Align record to be 80 bytes!!!
 } pairing_data_t;
 
 
@@ -221,11 +211,6 @@ static int compact_data() {
 
     if (homekit_storage_reset() != 0) {
         ERROR("Compact resetting");
-        free(data);
-        return -1;
-    }
-    if (homekit_storage_init() < 0) {
-        ERROR("Compact initializing");
         free(data);
         return -1;
     }
@@ -351,7 +336,7 @@ int homekit_storage_remove_pairing(const char *device_id) {
 }
 
 unsigned int homekit_storage_pairing_count() {
-    enable_hap_partition();
+    homekit_storage_init();
     
     pairing_data_t data;
     unsigned int count = 0;
@@ -369,7 +354,7 @@ unsigned int homekit_storage_pairing_count() {
 }
 
 int homekit_storage_remove_extra_pairing(const unsigned int last_keep) {
-    enable_hap_partition();
+    homekit_storage_init();
     
     pairing_data_t data;
     unsigned int count = 0;

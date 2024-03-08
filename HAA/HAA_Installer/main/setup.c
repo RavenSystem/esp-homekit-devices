@@ -964,7 +964,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
     
     INFO("Reboot");
     vTaskDelay(MS_TO_TICKS(1000));
-
+    
 #ifndef HAABOOT
     rboot_set_temp_rom(1);
 #endif
@@ -1273,7 +1273,7 @@ static void wifi_config_sta_connect_timeout_task() {
 static void on_got_ip(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     got_ip = true;
     ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
-    INFO("Wifi connected. ip:" IPSTR " gw:" IPSTR, IP2STR(&event->ip_info.ip), IP2STR(&event->ip_info.gw));
+    INFO("IP:" IPSTR "/" IPSTR " GW:" IPSTR, IP2STR(&event->ip_info.ip), IP2STR(&event->ip_info.netmask), IP2STR(&event->ip_info.gw));
     
     char* buf = malloc(16);
     snprintf(buf, 16, IPSTR, IP2STR(&event->ip_info.ip));
@@ -1410,7 +1410,6 @@ static void wifi_config_station_connect() {
     vTaskDelay(1);
     
     int8_t setup_mode = 3;
-    sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &setup_mode);
     
     char *wifi_ssid = NULL;
     sysparam_get_string(WIFI_STA_SSID_SYSPARAM, &wifi_ssid);
@@ -1425,6 +1424,7 @@ static void wifi_config_station_connect() {
         wifi_config_connect(phy_mode);
 #endif
         
+        sysparam_get_int8(HAA_SETUP_MODE_SYSPARAM, &setup_mode);
     }
     
     if (setup_mode == 0) {
