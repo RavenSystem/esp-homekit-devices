@@ -16,9 +16,13 @@ HAA supports many different [HomeKit service types](https://github.com/RavenSyst
 
 Go to the [Wiki](https://github.com/RavenSystem/esp-homekit-devices/wiki) for additional information.
 
-In addition to this firmware, you can obtain [**HAA Manager**](https://apps.apple.com/app/id1556105121), the perfect App companion to manage your HAA devices, with batch updates, enable setup mode, and other extra features.
+In addition to this firmware, you can obtain [**HAA Home Manager App**](https://apps.apple.com/app/id1556105121), the perfect App companion to manage your HAA devices, with batch updates, enable setup mode, and other extra features:
 
-<p align="center"><a href="https://apps.apple.com/app/id1556105121"><img src="https://raw.githubusercontent.com/RavenSystem/ravensystem-media/master/badge-app-store.png"></a></p>
+<p align="center"><a href="https://apps.apple.com/app/id1556105121"><img src="https://raw.githubusercontent.com/RavenSystem/ravensystem-media/master/haamanager_app.png"></a></p>
+
+If you want to measure the performance of your Apple Home, you can get [**Home Bench App**](home-bench), the only App that performs speed tests directly over accessories using Apple HomeKit API: 
+
+<p align="center"><a href="https://apps.apple.com/app/id6473729247"><img src="https://raw.githubusercontent.com/RavenSystem/ravensystem-media/master/homebench_app.png"></a></p>
 
 And don't forget to subscribe to YouTube Channel:
 
