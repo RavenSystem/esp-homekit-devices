@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.12.4"
+#define HAA_FIRMWARE_VERSION                "12.12.5"
 #define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -215,8 +215,8 @@
 #define TH_DEADBAND_FORCE_IDLE              ch_group->num_f[3]
 #define THERMOSTAT_DEADBAND_SOFT_ON         "ds"
 #define TH_DEADBAND_SOFT_ON                 ch_group->num_f[4]
-#define THERMOSTAT_SAFE_MARGIN_TEMP         "mc"
-#define TH_SAFE_MARGIN_TEMP                 ch_group->num_f[5]
+#define THERMOSTAT_DEADBAND_OFFSET          "o"
+#define TH_DEADBAND_OFFSET                  ch_group->num_f[5]
 #define THERMOSTAT_UPDATE_DELAY             "dl"
 #define THERMOSTAT_UPDATE_DELAY_MIN         (0.15f)
 #define THERMOSTAT_UPDATE_DELAY_DEFAULT     (3.0f)
@@ -251,10 +251,6 @@
 #define THERMOSTAT_ACTION_GATE_CLOSE        (12)
 #define THERMOSTAT_ACTION_GATE_OPEN         (13)
 #define THERMOSTAT_ACTION_ON                (14)
-#define THERMOSTAT_ACTION_HEATER_SAFE_UP    (15)
-#define THERMOSTAT_ACTION_HEATER_SAFE_DOWN  (16)
-#define THERMOSTAT_ACTION_COOLER_SAFE_UP    (17)
-#define THERMOSTAT_ACTION_COOLER_SAFE_DOWN  (18)
 #define THERMOSTAT_TEMP_UP                  (0)
 #define THERMOSTAT_TEMP_DOWN                (1)
 #define TH_ACTIVE_INT                       ch_group->ch[2]->value.int_value
@@ -262,7 +258,6 @@
 #define TH_TARGET_MODE_INT                  ch_group->ch[4]->value.int_value
 #define TH_HEATER_TARGET_TEMP_FLOAT         ch_group->ch[5]->value.float_value
 #define TH_COOLER_TARGET_TEMP_FLOAT         ch_group->ch[6]->value.float_value
-#define SAFE_TEMPERATURE_MARGIN             (3.f)
 
 #define IAIRZONING_LAST_ACTION              iairzoning_group->num_i[0]
 #define IAIRZONING_MAIN_MODE                iairzoning_group->num_i[1]
@@ -310,6 +305,8 @@
 #define HM_DEADBAND_FORCE_IDLE              ch_group->num_f[3]
 #define HUMIDIF_DEADBAND_SOFT_ON            "ds"
 #define HM_DEADBAND_SOFT_ON                 ch_group->num_f[4]
+#define HUMIDIF_DEADBAND_OFFSET             "o"
+#define HM_DEADBAND_OFFSET                  ch_group->num_f[5]
 #define HUMIDIF_CURRENT_ACTION              ch_group->num_i[5]
 #define HUMIDIF_MODE_OFF                    (0)
 #define HUMIDIF_MODE_IDLE                   (1)
@@ -806,10 +803,6 @@
 #define WIFI_WATCHDOG_ARP_PERIOD_DEFAULT    (190)   // * WIFI_WATCHDOG_POLL_PERIOD_MS
 #define WIFI_WATCHDOG_ROAMING_PERIOD        (1234)  // * WIFI_WATCHDOG_POLL_PERIOD_MS
 
-#define HAA_RMT_LED_STRIP_BLOCK_SYMBOLS     (128)   // Bigger than 128 does not work
-#define HAA_RMT_LED_STRIP_RESOLUTION_HZ     (10000000)
-#define HAA_RMT_LED_STRIP_QUEUE_DEPTH       (2)
-
 #define STATUS_LED_DURATION_ON              (30)
 #define STATUS_LED_DURATION_OFF             (120)
 
@@ -834,11 +827,27 @@
 
 #define HAA_ADC_FACTOR                      (HAA_ADC_RESOLUTION_ESP32 / HAA_ADC_RESOLUTION_ESP8266)
 
+
 #ifdef ESP_PLATFORM
-#define HAA_ADC_MAX_VALUE                   ((HAA_ADC_RESOLUTION_ESP32 - 1) / HAA_ADC_FACTOR)
+
+#if defined(CONFIG_IDF_TARGET_ESP32) \
+    || defined(CONFIG_IDF_TARGET_ESP32S2)
+#define HAA_RMT_LED_STRIP_BLOCK_SYMBOLS     (64)
 #else
-#define HAA_ADC_MAX_VALUE                   (HAA_ADC_RESOLUTION_ESP8266 - 1)
+#define HAA_RMT_LED_STRIP_BLOCK_SYMBOLS     (48)
 #endif
+
+#define HAA_RMT_LED_STRIP_RESOLUTION_HZ     (10000000)
+#define HAA_RMT_LED_STRIP_QUEUE_DEPTH       (2)
+
+#define HAA_ADC_MAX_VALUE                   ((HAA_ADC_RESOLUTION_ESP32 - 1) / HAA_ADC_FACTOR)
+
+#else   // ESP_PLATFORM
+
+#define HAA_ADC_MAX_VALUE                   (HAA_ADC_RESOLUTION_ESP8266 - 1)
+
+#endif  // ESP_PLATFORM
+
 
 #define KELVIN_TO_CELSIUS(x)                ((x) - 273.15)
 

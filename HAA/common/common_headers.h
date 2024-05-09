@@ -31,11 +31,33 @@
 #define ESP_HAS_GPIO_FLEX_FILTER            (1)
 #endif
 
+// UART TX PIN
+#if defined(CONFIG_IDF_TARGET_ESP32)
+#define HAA_TX_UART_DEFAULT_PIN             (1)
+
+#elif defined(CONFIG_IDF_TARGET_ESP32C2)
+#define HAA_TX_UART_DEFAULT_PIN             (20)
+
+#elif defined(CONFIG_IDF_TARGET_ESP32C3)
+#define HAA_TX_UART_DEFAULT_PIN             (21)
+
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+#define HAA_TX_UART_DEFAULT_PIN             (19)
+
+#elif defined(CONFIG_IDF_TARGET_ESP32S2) \
+    || defined(CONFIG_IDF_TARGET_ESP32S3)
+#define HAA_TX_UART_DEFAULT_PIN             (43)
+
+#endif  // UART TX PIN
+
+
 #else   // ESP-OPEN-RTOS
 
 #define TASK_SIZE_FACTOR                    (1)
 #define MAX_SETUP_BODY_LEN                  (16500)
 #define MAX_GPIOS                           (17)
+
+#define HAA_TX_UART_DEFAULT_PIN             (1)
 
 #define INFO_NNL(message, ...)              printf(message, ##__VA_ARGS__)
 

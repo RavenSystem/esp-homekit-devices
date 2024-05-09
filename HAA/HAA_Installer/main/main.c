@@ -75,8 +75,8 @@ void init_task() {
     
     uart_driver_install(0, SDK_UART_BUFFER_SIZE, 0, 0, NULL, 0);
     uart_param_config(0, &uart_config);
-    gpio_reset_pin(1);
-    uart_set_pin(0, 1, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    gpio_reset_pin(HAA_TX_UART_DEFAULT_PIN);
+    uart_set_pin(0, HAA_TX_UART_DEFAULT_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     
 #else
     

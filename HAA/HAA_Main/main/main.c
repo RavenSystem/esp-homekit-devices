@@ -342,8 +342,8 @@ void extended_gpio_write(const int extended_gpio, bool value) {
         
         if (mcp23017) {
             unsigned int gpio = extended_gpio % 100;
-            unsigned int out_group = gpio >> 3;
-            const uint8_t bit = 1 << gpio;
+            unsigned int out_group = gpio >> 3;     // out_group = gpio / 8
+            const uint8_t bit = 1 << (gpio % 8);
             
             if (value) {
                 mcp23017->outs[out_group] |= bit;
@@ -688,7 +688,8 @@ addressled_t* new_addressled(uint8_t gpio, const uint16_t max_range, float time_
             .resolution_hz = HAA_RMT_LED_STRIP_RESOLUTION_HZ,
             .trans_queue_depth = HAA_RMT_LED_STRIP_QUEUE_DEPTH,
         };
-        rmt_new_tx_channel(&tx_chan_config, &addressled->rmt_channel_handle);
+        const int ret = rmt_new_tx_channel(&tx_chan_config, &addressled->rmt_channel_handle);
+        INFO("GPIO %i: RMT (0x%x)", gpio, ret);
         
         rmt_bytes_encoder_config_t bytes_encoder_config = {
             .bit0 = {
@@ -2099,10 +2100,10 @@ void process_th_task(void* args) {
     const int th_current_action = THERMOSTAT_CURRENT_ACTION;
     unsigned int mode_has_changed = false;
     
-    void heating(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
+    void heating(const float deadband, const float deadband_soft_on, const float deadband_force_idle, const float deadband_offset) {
         INFO("<%i> Heat", ch_group->serv_index);
         
-        if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband - deadband_soft_on)) {
+        if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband - deadband_soft_on + deadband_offset)) {
             TH_MODE_INT = THERMOSTAT_MODE_HEATER;
             if (th_current_action != THERMOSTAT_ACTION_HEATER_ON) {
                 THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_ON;
@@ -2110,7 +2111,7 @@ void process_th_task(void* args) {
                 mode_has_changed = true;
             }
             
-        } else if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband)) {
+        } else if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband + deadband_offset)) {
             TH_MODE_INT = THERMOSTAT_MODE_HEATER;
             if (th_current_action != THERMOSTAT_ACTION_HEATER_SOFT_ON) {
                 THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_HEATER_SOFT_ON;
@@ -2118,7 +2119,7 @@ void process_th_task(void* args) {
                 mode_has_changed = true;
             }
             
-        } else if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT + deadband)) {
+        } else if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT + deadband + deadband_offset)) {
             if (TH_MODE_INT == THERMOSTAT_MODE_HEATER) {
                 if (TH_DEADBAND_SOFT_ON > 0.f) {
                     if (th_current_action != THERMOSTAT_ACTION_HEATER_SOFT_ON) {
@@ -2143,7 +2144,7 @@ void process_th_task(void* args) {
                 }
             }
             
-        } else if (SENSOR_TEMPERATURE_FLOAT >= (TH_HEATER_TARGET_TEMP_FLOAT + deadband + deadband_force_idle) &&
+        } else if (SENSOR_TEMPERATURE_FLOAT >= (TH_HEATER_TARGET_TEMP_FLOAT + deadband + deadband_force_idle + deadband_offset) &&
                    TH_DEADBAND_FORCE_IDLE > 0.f) {
             TH_MODE_INT = THERMOSTAT_MODE_IDLE;
             if (th_current_action != THERMOSTAT_ACTION_HEATER_FORCE_IDLE) {
@@ -2163,21 +2164,12 @@ void process_th_task(void* args) {
                 }
             }
         }
-        
-        // Security measure
-        if (TH_SAFE_MARGIN_TEMP > 0.f && !mode_has_changed) {
-            if (SENSOR_TEMPERATURE_FLOAT > (TH_HEATER_TARGET_TEMP_FLOAT + deadband + deadband_force_idle + TH_SAFE_MARGIN_TEMP)) {
-                do_actions(ch_group, THERMOSTAT_ACTION_HEATER_SAFE_UP);
-            } else if (SENSOR_TEMPERATURE_FLOAT < (TH_HEATER_TARGET_TEMP_FLOAT - deadband - deadband_soft_on - TH_SAFE_MARGIN_TEMP)) {
-                do_actions(ch_group, THERMOSTAT_ACTION_HEATER_SAFE_DOWN);
-            }
-        }
     }
     
-    void cooling(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
+    void cooling(const float deadband, const float deadband_soft_on, const float deadband_force_idle, const float deadband_offset) {
         INFO("<%i> Cool", ch_group->serv_index);
         
-        if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband + deadband_soft_on)) {
+        if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband + deadband_soft_on - deadband_offset)) {
             TH_MODE_INT = THERMOSTAT_MODE_COOLER;
             if (th_current_action != THERMOSTAT_ACTION_COOLER_ON) {
                 THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_ON;
@@ -2185,7 +2177,7 @@ void process_th_task(void* args) {
                 mode_has_changed = true;
             }
             
-        } else if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband)) {
+        } else if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband - deadband_offset)) {
             TH_MODE_INT = THERMOSTAT_MODE_COOLER;
             if (th_current_action != THERMOSTAT_ACTION_COOLER_SOFT_ON) {
                 THERMOSTAT_CURRENT_ACTION = THERMOSTAT_ACTION_COOLER_SOFT_ON;
@@ -2193,7 +2185,7 @@ void process_th_task(void* args) {
                 mode_has_changed = true;
             }
             
-        } else if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT - deadband)) {
+        } else if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT - deadband - deadband_offset)) {
             if (TH_MODE_INT == THERMOSTAT_MODE_COOLER) {
                 if (TH_DEADBAND_SOFT_ON > 0.f) {
                     if (th_current_action != THERMOSTAT_ACTION_COOLER_SOFT_ON) {
@@ -2218,7 +2210,7 @@ void process_th_task(void* args) {
                 }
             }
             
-        } else if (SENSOR_TEMPERATURE_FLOAT <= (TH_COOLER_TARGET_TEMP_FLOAT - deadband - deadband_force_idle) &&
+        } else if (SENSOR_TEMPERATURE_FLOAT <= (TH_COOLER_TARGET_TEMP_FLOAT - deadband - deadband_force_idle - deadband_offset) &&
                    TH_DEADBAND_FORCE_IDLE > 0.f) {
             TH_MODE_INT = THERMOSTAT_MODE_IDLE;
             if (th_current_action != THERMOSTAT_ACTION_COOLER_FORCE_IDLE) {
@@ -2238,15 +2230,6 @@ void process_th_task(void* args) {
                 }
             }
         }
-        
-        // Security measure
-        if (TH_SAFE_MARGIN_TEMP > 0.f && !mode_has_changed) {
-            if (SENSOR_TEMPERATURE_FLOAT > (TH_COOLER_TARGET_TEMP_FLOAT + deadband + deadband_soft_on + TH_SAFE_MARGIN_TEMP)) {
-                do_actions(ch_group, THERMOSTAT_ACTION_COOLER_SAFE_UP);
-            } else if (SENSOR_TEMPERATURE_FLOAT < (TH_COOLER_TARGET_TEMP_FLOAT - deadband- deadband_force_idle - TH_SAFE_MARGIN_TEMP)) {
-                do_actions(ch_group, THERMOSTAT_ACTION_COOLER_SAFE_DOWN);
-            }
-        }
     }
     
     if (TH_ACTIVE_INT) {
@@ -2255,11 +2238,11 @@ void process_th_task(void* args) {
         }
         
         if (TH_TARGET_MODE_INT == THERMOSTAT_TARGET_MODE_HEATER) {
-            heating(TH_DEADBAND, TH_DEADBAND_SOFT_ON, TH_DEADBAND_FORCE_IDLE);
+            heating(TH_DEADBAND, TH_DEADBAND_SOFT_ON, TH_DEADBAND_FORCE_IDLE, TH_DEADBAND_OFFSET);
             homekit_characteristic_notify_safe(ch_group->ch[5]);
-                    
+            
         } else if (TH_TARGET_MODE_INT == THERMOSTAT_TARGET_MODE_COOLER) {
-            cooling(TH_DEADBAND, TH_DEADBAND_SOFT_ON, TH_DEADBAND_FORCE_IDLE);
+            cooling(TH_DEADBAND, TH_DEADBAND_SOFT_ON, TH_DEADBAND_FORCE_IDLE, TH_DEADBAND_OFFSET);
             homekit_characteristic_notify_safe(ch_group->ch[6]);
             
         } else {    // THERMOSTAT_TARGET_MODE_AUTO
@@ -2284,9 +2267,9 @@ void process_th_task(void* args) {
             const float deadband = deadband_force_idle / 1.5f;
             
             if (is_heater) {
-                heating(deadband, deadband_force_idle - deadband, deadband_force_idle);
+                heating(deadband, deadband_force_idle - deadband, deadband_force_idle, 0);
             } else {
-                cooling(deadband, deadband_force_idle - deadband, deadband_force_idle);
+                cooling(deadband, deadband_force_idle - deadband, deadband_force_idle, 0);
             }
             
             homekit_characteristic_notify_safe(ch_group->ch[5]);
@@ -2482,23 +2465,23 @@ void process_hum_task(void* args) {
     
     const int humidif_current_action = HUMIDIF_CURRENT_ACTION;
     
-    void hum(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
+    void hum(const float deadband, const float deadband_soft_on, const float deadband_force_idle, const float deadband_offset) {
         INFO("<%i> Hum", ch_group->serv_index);
-        if (SENSOR_HUMIDITY_FLOAT < (HM_HUM_TARGET_FLOAT - deadband - deadband_soft_on)) {
+        if (SENSOR_HUMIDITY_FLOAT < (HM_HUM_TARGET_FLOAT - deadband - deadband_soft_on + deadband_offset)) {
             HM_MODE_INT = HUMIDIF_MODE_HUM;
             if (humidif_current_action != HUMIDIF_ACTION_HUM_ON) {
                 HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_ON;
                 do_actions(ch_group, HUMIDIF_ACTION_HUM_ON);
             }
             
-        } else if (SENSOR_HUMIDITY_FLOAT < (HM_HUM_TARGET_FLOAT - deadband)) {
+        } else if (SENSOR_HUMIDITY_FLOAT < (HM_HUM_TARGET_FLOAT - deadband + deadband_offset)) {
             HM_MODE_INT = HUMIDIF_MODE_HUM;
             if (humidif_current_action != HUMIDIF_ACTION_HUM_SOFT_ON) {
                 HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_HUM_SOFT_ON;
                 do_actions(ch_group, HUMIDIF_ACTION_HUM_SOFT_ON);
             }
             
-        } else if (SENSOR_HUMIDITY_FLOAT < (HM_HUM_TARGET_FLOAT + deadband)) {
+        } else if (SENSOR_HUMIDITY_FLOAT < (HM_HUM_TARGET_FLOAT + deadband + deadband_offset)) {
             if (HM_MODE_INT == HUMIDIF_MODE_HUM) {
                 if (HM_DEADBAND_SOFT_ON > 0.f) {
                     if (humidif_current_action != HUMIDIF_ACTION_HUM_SOFT_ON) {
@@ -2520,7 +2503,7 @@ void process_hum_task(void* args) {
                 }
             }
             
-        } else if ((SENSOR_HUMIDITY_FLOAT >= (HM_HUM_TARGET_FLOAT + deadband + deadband_force_idle) ||
+        } else if ((SENSOR_HUMIDITY_FLOAT >= (HM_HUM_TARGET_FLOAT + deadband + deadband_force_idle + deadband_offset) ||
                     SENSOR_HUMIDITY_FLOAT == 100.f ) &&
                    HM_DEADBAND_FORCE_IDLE > 0.f) {
             HM_MODE_INT = HUMIDIF_MODE_IDLE;
@@ -2541,23 +2524,23 @@ void process_hum_task(void* args) {
         }
     }
     
-    void dehum(const float deadband, const float deadband_soft_on, const float deadband_force_idle) {
+    void dehum(const float deadband, const float deadband_soft_on, const float deadband_force_idle, const float deadband_offset) {
         INFO("<%i> Dehum", ch_group->serv_index);
-        if (SENSOR_HUMIDITY_FLOAT > (HM_DEHUM_TARGET_FLOAT + deadband + deadband_soft_on)) {
+        if (SENSOR_HUMIDITY_FLOAT > (HM_DEHUM_TARGET_FLOAT + deadband + deadband_soft_on - deadband_offset)) {
             HM_MODE_INT = HUMIDIF_MODE_DEHUM;
             if (humidif_current_action != HUMIDIF_ACTION_DEHUM_ON) {
                 HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_ON;
                 do_actions(ch_group, HUMIDIF_ACTION_DEHUM_ON);
             }
             
-        } else if (SENSOR_HUMIDITY_FLOAT > (HM_DEHUM_TARGET_FLOAT + deadband)) {
+        } else if (SENSOR_HUMIDITY_FLOAT > (HM_DEHUM_TARGET_FLOAT + deadband - deadband_offset)) {
             HM_MODE_INT = HUMIDIF_MODE_DEHUM;
             if (humidif_current_action != HUMIDIF_ACTION_DEHUM_SOFT_ON) {
                 HUMIDIF_CURRENT_ACTION = HUMIDIF_ACTION_DEHUM_SOFT_ON;
                 do_actions(ch_group, HUMIDIF_ACTION_DEHUM_SOFT_ON);
             }
             
-        } else if (SENSOR_HUMIDITY_FLOAT > (HM_DEHUM_TARGET_FLOAT - deadband)) {
+        } else if (SENSOR_HUMIDITY_FLOAT > (HM_DEHUM_TARGET_FLOAT - deadband - deadband_offset)) {
             if (HM_MODE_INT == HUMIDIF_MODE_DEHUM) {
                 if (HM_DEADBAND_SOFT_ON > 0.f) {
                     if (humidif_current_action != HUMIDIF_ACTION_DEHUM_SOFT_ON) {
@@ -2579,7 +2562,7 @@ void process_hum_task(void* args) {
                 }
             }
             
-        } else if ((SENSOR_HUMIDITY_FLOAT <= (HM_DEHUM_TARGET_FLOAT - deadband - deadband_force_idle) ||
+        } else if ((SENSOR_HUMIDITY_FLOAT <= (HM_DEHUM_TARGET_FLOAT - deadband - deadband_force_idle - deadband_offset) ||
                     SENSOR_HUMIDITY_FLOAT == 0.f) &&
                    HM_DEADBAND_FORCE_IDLE > 0.f) {
             HM_MODE_INT = HUMIDIF_MODE_IDLE;
@@ -2606,11 +2589,11 @@ void process_hum_task(void* args) {
         }
         
         if (HM_TARGET_MODE_INT == HUMIDIF_TARGET_MODE_HUM) {
-            hum(HM_DEADBAND, HM_DEADBAND_SOFT_ON, HM_DEADBAND_FORCE_IDLE);
+            hum(HM_DEADBAND, HM_DEADBAND_SOFT_ON, HM_DEADBAND_FORCE_IDLE, HM_DEADBAND_OFFSET);
             homekit_characteristic_notify_safe(ch_group->ch[5]);
-                    
+            
         } else if (HM_TARGET_MODE_INT == HUMIDIF_TARGET_MODE_DEHUM) {
-            dehum(HM_DEADBAND, HM_DEADBAND_SOFT_ON, HM_DEADBAND_FORCE_IDLE);
+            dehum(HM_DEADBAND, HM_DEADBAND_SOFT_ON, HM_DEADBAND_FORCE_IDLE, HM_DEADBAND_OFFSET);
             homekit_characteristic_notify_safe(ch_group->ch[6]);
             
         } else {    // HUMIDIF_TARGET_MODE_AUTO
@@ -2635,9 +2618,9 @@ void process_hum_task(void* args) {
             const float deadband = deadband_force_idle / 1.5f;
             
             if (is_hum) {
-                hum(deadband, deadband_force_idle - deadband, deadband_force_idle);
+                hum(deadband, deadband_force_idle - deadband, deadband_force_idle, 0);
             } else {
-                dehum(deadband, deadband_force_idle - deadband, deadband_force_idle);
+                dehum(deadband, deadband_force_idle - deadband, deadband_force_idle, 0);
             }
             
             homekit_characteristic_notify_safe(ch_group->ch[5]);
@@ -7592,8 +7575,8 @@ void reset_uart() {
     
     uart_driver_install(0, SDK_UART_BUFFER_SIZE, 0, 0, NULL, 0);
     uart_param_config(0, &uart_config_data);
-    gpio_reset_pin(1);
-    uart_set_pin(0, 1, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    gpio_reset_pin(HAA_TX_UART_DEFAULT_PIN);
+    uart_set_pin(0, HAA_TX_UART_DEFAULT_PIN, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 #else
     //set_used_gpio(1);
     gpio_disable(1);
@@ -10402,10 +10385,9 @@ void normal_mode_init() {
             TH_DEADBAND_SOFT_ON = cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_SOFT_ON)->valuefloat;
         }
         
-        // Temperature Safe Margin;
-        //TH_SAFE_MARGIN_TEMP = 0;
-        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_SAFE_MARGIN_TEMP) != NULL) {
-            TH_SAFE_MARGIN_TEMP = cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_SAFE_MARGIN_TEMP)->valuefloat;
+        //TH_DEADBAND_OFFSET = 0;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_OFFSET) != NULL) {
+            TH_DEADBAND_OFFSET = cJSON_rsf_GetObjectItemCaseSensitive(json_context, THERMOSTAT_DEADBAND_OFFSET)->valuefloat;
         }
         
         // Thermostat Type
@@ -10806,7 +10788,7 @@ void normal_mode_init() {
     
     // *** NEW HUMIDIFIER
     void new_humidifier(const uint8_t accessory,  uint8_t service, const uint8_t total_services, cJSON_rsf* json_context, const uint8_t serv_type) {
-        ch_group_t* ch_group = new_ch_group(7, 6, 4, 4);
+        ch_group_t* ch_group = new_ch_group(7, 6, 6, 4);
         ch_group->serv_type = SERV_TYPE_HUMIDIFIER;
         ch_group->serv_index = service_numerator;
         unsigned int homekit_enabled = acc_homekit_enabled(json_context);
@@ -10833,6 +10815,11 @@ void normal_mode_init() {
         //HM_DEADBAND_SOFT_ON = 0;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_SOFT_ON) != NULL) {
             HM_DEADBAND_SOFT_ON = cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_SOFT_ON)->valuefloat;
+        }
+        
+        //HM_DEADBAND_OFFSET = 0;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_OFFSET) != NULL) {
+            HM_DEADBAND_OFFSET = cJSON_rsf_GetObjectItemCaseSensitive(json_context, HUMIDIF_DEADBAND_OFFSET)->valuefloat;
         }
         
         // Humidifier Type
