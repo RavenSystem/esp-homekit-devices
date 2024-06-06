@@ -4284,6 +4284,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
     
     void start_wc_timer() {
         if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
+            WINDOW_COVER_SEND_CUR_POS_COUNTER = 0;
             rs_esp_timer_start(ch_group->timer);
         }
     }
@@ -4403,6 +4404,14 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
         return WINDOW_COVER_MOTOR_POSITION / (1.f + ((100.f - WINDOW_COVER_MOTOR_POSITION) * ((float) WINDOW_COVER_CORRECTION) * 0.0002f));
     }
     
+    void send_hk_current_position() {
+        WINDOW_COVER_SEND_CUR_POS_COUNTER++;
+        if (WINDOW_COVER_SEND_CUR_POS_COUNTER >= WINDOW_COVER_SEND_CUR_POS_MAX) {
+            WINDOW_COVER_SEND_CUR_POS_COUNTER = 0;
+            homekit_characteristic_notify_safe(WINDOW_COVER_CH_CURRENT_POSITION);
+        }
+    }
+    
     switch (WINDOW_COVER_CH_STATE->value.int_value) {
         case WINDOW_COVER_CLOSING:
             WINDOW_COVER_MOTOR_POSITION -= window_cover_step(ch_group, WINDOW_COVER_TIME_CLOSE);
@@ -4416,6 +4425,8 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
             
             if ((WINDOW_COVER_CH_TARGET_POSITION->value.int_value - margin) >= WINDOW_COVER_HOMEKIT_POSITION) {
                 window_cover_stop(ch_group);
+            } else {
+                send_hk_current_position();
             }
             break;
             
@@ -4431,6 +4442,8 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
             
             if ((WINDOW_COVER_CH_TARGET_POSITION->value.int_value + margin) <= WINDOW_COVER_HOMEKIT_POSITION) {
                 window_cover_stop(ch_group);
+            } else {
+                send_hk_current_position();
             }
             break;
             
@@ -11525,7 +11538,7 @@ void normal_mode_init() {
     
     // *** NEW WINDOW COVER
     void new_window_cover(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
-        ch_group_t* ch_group = new_ch_group(4, 4, 5, 1);
+        ch_group_t* ch_group = new_ch_group(4, 5, 5, 1);
         ch_group->serv_type = SERV_TYPE_WINDOW_COVER;
         ch_group->serv_index = service_numerator;
         unsigned int homekit_enabled = acc_homekit_enabled(json_context);

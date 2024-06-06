@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.12.5"
+#define HAA_FIRMWARE_VERSION                "12.12.6"
 #define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -446,6 +446,8 @@
 #define WINDOW_COVER_STOP_ENABLE            ch_group->num_i[2]
 #define WINDOW_COVER_STOP_ENABLE_DELAY_MS   (80)
 #define WINDOW_COVER_VIRTUAL_STOP           ch_group->num_i[3]
+#define WINDOW_COVER_SEND_CUR_POS_COUNTER   ch_group->num_i[4]
+#define WINDOW_COVER_SEND_CUR_POS_MAX       (1000 / WINDOW_COVER_TIMER_WORKER_PERIOD_MS)    // Send every 1000ms
 #define WINDOW_COVER_CH_CURRENT_POSITION    ch_group->ch[0]
 #define WINDOW_COVER_CH_TARGET_POSITION     ch_group->ch[1]
 #define WINDOW_COVER_CH_STATE               ch_group->ch[2]
@@ -775,7 +777,7 @@
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
-#define CUSTOM_HAA_COMMAND                  "dt"
+#define CUSTOM_HAA_COMMAND                  "io"
 #define HAA_SETUP_ACCESSORY_SET             "s"
 
 #define IRRF_CAPTURE_BUFFER_SIZE            (2048)
