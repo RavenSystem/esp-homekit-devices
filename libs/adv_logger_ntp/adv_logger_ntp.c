@@ -262,7 +262,7 @@ static void adv_logger_buffered_task() {
             i = 0;
         }
         
-        vTaskDelay(10 / portTICK_PERIOD_MS);
+        vTaskDelay(20 / portTICK_PERIOD_MS);
     }
 }
 

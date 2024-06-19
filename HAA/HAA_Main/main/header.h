@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.12.6"
+#define HAA_FIRMWARE_VERSION                "12.12.7"
 #define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -433,21 +433,21 @@
 #define WINDOW_COVER_TIME_DEFAULT           (15)
 #define WINDOW_COVER_CORRECTION_SET         "f"
 #define WINDOW_COVER_CORRECTION_DEFAULT     (0)
-#define WINDOW_COVER_TIMER_WORKER_PERIOD_MS (250)
+#define WINDOW_COVER_TIMER_WORKER_PERIOD_MS (200)
 #define WINDOW_COVER_MARGIN_SYNC_SET        "m"
-#define WINDOW_COVER_MARGIN_SYNC_DEFAULT    (10)
-#define WINDOW_COVER_TIME_OPEN              ch_group->num_f[0]
-#define WINDOW_COVER_TIME_CLOSE             ch_group->num_f[1]
+#define WINDOW_COVER_MARGIN_SYNC_DEFAULT    (5)
+#define WINDOW_COVER_TIME_OPEN_STEP         ch_group->num_f[0]
+#define WINDOW_COVER_TIME_CLOSE_STEP        ch_group->num_f[1]
 #define WINDOW_COVER_MOTOR_POSITION         ch_group->num_f[2]
-#define WINDOW_COVER_LAST_TIME              ch_group->num_f[3]
-#define WINDOW_COVER_HOMEKIT_POSITION       ch_group->num_f[4]
+#define WINDOW_COVER_HOMEKIT_POSITION       ch_group->num_f[3]
 #define WINDOW_COVER_MARGIN_SYNC            ch_group->num_i[0]
 #define WINDOW_COVER_CORRECTION             ch_group->num_i[1]
 #define WINDOW_COVER_STOP_ENABLE            ch_group->num_i[2]
 #define WINDOW_COVER_STOP_ENABLE_DELAY_MS   (80)
 #define WINDOW_COVER_VIRTUAL_STOP           ch_group->num_i[3]
 #define WINDOW_COVER_SEND_CUR_POS_COUNTER   ch_group->num_i[4]
-#define WINDOW_COVER_SEND_CUR_POS_MAX       (1000 / WINDOW_COVER_TIMER_WORKER_PERIOD_MS)    // Send every 1000ms
+#define WINDOW_COVER_MUST_STOP              ch_group->num_i[5]
+#define WINDOW_COVER_SEND_CUR_POS_MAX       (2200 / WINDOW_COVER_TIMER_WORKER_PERIOD_MS)    // Send every 2200ms
 #define WINDOW_COVER_CH_CURRENT_POSITION    ch_group->ch[0]
 #define WINDOW_COVER_CH_TARGET_POSITION     ch_group->ch[1]
 #define WINDOW_COVER_CH_STATE               ch_group->ch[2]
@@ -809,7 +809,7 @@
 #define STATUS_LED_DURATION_OFF             (120)
 
 #define SAVE_STATES_DELAY_MS                (3000)
-#define RANDOM_DELAY_MS                     (4500)
+#define RANDOM_DELAY_MS                     (3500)
 
 #define HOMEKIT_RE_PAIR_TIME_MS             (300000)
 

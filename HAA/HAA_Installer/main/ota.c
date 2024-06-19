@@ -291,9 +291,9 @@ static int ota_connect(char* host, uint16_t port, int *socket, WOLFSSL** ssl, co
         
         INFO_NNL("OK\nSSLConnect..");
         
-        vTaskDelay(50 / portTICK_PERIOD_MS);
+        vTaskDelay(30 / portTICK_PERIOD_MS);
         ret = wolfSSL_connect(*ssl);
-        vTaskDelay(50 / portTICK_PERIOD_MS);
+        vTaskDelay(30 / portTICK_PERIOD_MS);
         
         if (ret != SSL_SUCCESS) {
             freeaddrinfo(res);
@@ -568,6 +568,7 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
         connection_tries = 0;
         while (collected < length && connection_tries < MAX_DOWNLOAD_FILE_TRIES) {
             last_collected = collected;
+            writespace = 0;
             
             snprintf(recv_buf, RECV_BUF_LEN - 1, REQUESTHEAD"%s"REQUESTTAIL"%s"RANGE"%d-%d%s", last_location, last_host, collected, collected + 4095, CRLFCRLF);
             
@@ -587,13 +588,13 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
                 //wolfSSL_Debugging_ON();
                 do {
                     if (is_ssl) {
-                        vTaskDelay(50 / portTICK_PERIOD_MS);
+                        vTaskDelay(30 / portTICK_PERIOD_MS);
                         ret = wolfSSL_read(ssl, recv_buf, RECV_BUF_LEN - 1);
-                        vTaskDelay(50 / portTICK_PERIOD_MS);
+                        vTaskDelay(30 / portTICK_PERIOD_MS);
                     } else {
                         ret = lwip_read(socket, recv_buf, RECV_BUF_LEN - 1);
                     }
-
+                    
                     if (ret > 0) {
                         if (header) {
                             //INFO("--------\n%s\n-------- %d", recv_buf, ret);
@@ -708,22 +709,18 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
                         
                     } else {
                         ERROR("Read %i", ret);
+                        
                         if (is_ssl) {
                             ret = wolfSSL_get_error(ssl, ret);
+                            wolfSSL_free(ssl);
                             ERROR("SSL %d", ret);
                         }
                         
-                        if (!ret && collected < length) {
-                            free(recv_buf);
-                            if (is_ssl) {
-                                wolfSSL_free(ssl);
-                            }
-                            lwip_close(socket);
-                            vTaskDelay(1000 / portTICK_PERIOD_MS);
-                            ota_conn_result = new_connection();
-                            recv_buf = malloc(RECV_BUF_LEN);
-                        }
+                        lwip_close(socket);
+                        vTaskDelay(1000 / portTICK_PERIOD_MS);
+                        ota_conn_result = new_connection();
                         
+                        connection_tries++;
                         collected = last_collected;
                         break;
                     }
@@ -740,24 +737,18 @@ static int ota_get_file_ex(char* repo, char* file, int sector, uint8_t* buffer, 
                 
             } else {
                 ERROR("Write %i", ret);
+                
                 if (is_ssl) {
                     ret = wolfSSL_get_error(ssl, ret);
+                    wolfSSL_free(ssl);
                     ERROR("SSL %d", ret);
                 }
                 
-                if (ret == -308) {
-                    free(recv_buf);
-                    if (is_ssl) {
-                        wolfSSL_free(ssl);
-                    }
-                    lwip_close(socket);
-                    vTaskDelay(1000 / portTICK_PERIOD_MS);
-                    ota_conn_result = new_connection();
-                    recv_buf = malloc(RECV_BUF_LEN);
-                } else {
-                    connection_tries = MAX_DOWNLOAD_FILE_TRIES;
-                    break;
-                }
+                lwip_close(socket);
+                vTaskDelay(1000 / portTICK_PERIOD_MS);
+                ota_conn_result = new_connection();
+                
+                connection_tries++;
             }
             
             if (ota_conn_result != 0) {
