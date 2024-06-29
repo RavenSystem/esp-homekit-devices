@@ -111,6 +111,12 @@ if(HAA_SHELLY_PlusI4)
     )
 endif()
 
+if(HAA_SHELLY_I4G3)
+    list(APPEND EXTRA_COMPILE_OPTIONS
+        -DHAA_SHELLY_I4G3
+    )
+endif()
+
 if(HAA_SHELLY_PlusUni)
     list(APPEND EXTRA_COMPILE_OPTIONS
         -DHAA_SHELLY_PlusUni
@@ -126,6 +132,25 @@ endif()
 if(HAA_SHELLY_Mini1G3)
     list(APPEND EXTRA_COMPILE_OPTIONS
         -DHAA_SHELLY_Mini1G3
+    )
+endif()
+
+if(HAA_SHELLY_Plus1PMMini)
+    list(APPEND EXTRA_COMPILE_OPTIONS
+        -DHAA_SHELLY_Plus1PMMini
+    )
+endif()
+
+if(HAA_SHELLY_Mini1PMG3)
+    list(APPEND EXTRA_COMPILE_OPTIONS
+        -DHAA_SHELLY_Mini1PMG3
+    )
+endif()
+
+
+if(HAA_SHELLY_MiniPMG3)
+    list(APPEND EXTRA_COMPILE_OPTIONS
+        -DHAA_SHELLY_MiniPMG3
     )
 endif()
 
