@@ -147,6 +147,11 @@ if(HAA_SHELLY_Mini1PMG3)
     )
 endif()
 
+if(HAA_SHELLY_PlusPMMini)
+    list(APPEND EXTRA_COMPILE_OPTIONS
+        -DHAA_SHELLY_PlusPMMini
+    )
+endif()
 
 if(HAA_SHELLY_MiniPMG3)
     list(APPEND EXTRA_COMPILE_OPTIONS
