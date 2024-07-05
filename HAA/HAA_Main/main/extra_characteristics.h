@@ -74,6 +74,9 @@
     ##__VA_ARGS__
 
 // HAA POWER MONITOR
+#define HKCH_CUSTOM_VOLT_MIN        (-500)
+#define HKCH_CUSTOM_VOLT_MAX        (500)
+
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_VOLT HOMEKIT_CUSTOM_EXTRA_UUID("F0000901")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_VOLT(_value, ...) \
     .type = HOMEKIT_CHARACTERISTIC_CUSTOM_VOLT, \
@@ -81,8 +84,13 @@
     .format = HOMEKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_NOTIFY, \
+    .min_value = (float[]) {HKCH_CUSTOM_VOLT_MIN}, \
+    .max_value = (float[]) {HKCH_CUSTOM_VOLT_MAX}, \
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
+
+#define HKCH_CUSTOM_AMPERE_MIN      (-150)
+#define HKCH_CUSTOM_AMPERE_MAX      (150)
 
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_AMPERE HOMEKIT_CUSTOM_EXTRA_UUID("F0000902")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_AMPERE(_value, ...) \
@@ -91,8 +99,13 @@
     .format = HOMEKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_NOTIFY, \
+    .min_value = (float[]) {HKCH_CUSTOM_AMPERE_MIN}, \
+    .max_value = (float[]) {HKCH_CUSTOM_AMPERE_MAX}, \
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
+
+#define HKCH_CUSTOM_WATT_MIN        (-50000)
+#define HKCH_CUSTOM_WATT_MAX        (50000)
 
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_WATT HOMEKIT_CUSTOM_EXTRA_UUID("F0000903")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_WATT(_value, ...) \
@@ -101,8 +114,13 @@
     .format = HOMEKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_NOTIFY, \
+    .min_value = (float[]) {HKCH_CUSTOM_WATT_MIN}, \
+    .max_value = (float[]) {HKCH_CUSTOM_WATT_MAX}, \
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
+
+#define HKCH_CUSTOM_CONSUMP_MIN     (-100000)
+#define HKCH_CUSTOM_CONSUMP_MAX     (100000)
 
 #define HOMEKIT_CHARACTERISTIC_CUSTOM_CONSUMP HOMEKIT_CUSTOM_EXTRA_UUID("F0000904")
 #define HOMEKIT_DECLARE_CHARACTERISTIC_CUSTOM_CONSUMP(_value, ...) \
@@ -111,6 +129,8 @@
     .format = HOMEKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_NOTIFY, \
+    .min_value = (float[]) {HKCH_CUSTOM_CONSUMP_MIN}, \
+    .max_value = (float[]) {HKCH_CUSTOM_CONSUMP_MAX}, \
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
 
@@ -132,6 +152,8 @@
     .format = HOMEKIT_FORMAT_FLOAT, \
     .permissions = HOMEKIT_PERMISSIONS_PAIRED_READ \
                 | HOMEKIT_PERMISSIONS_NOTIFY, \
+    .min_value = (float[]) {HKCH_CUSTOM_CONSUMP_MIN}, \
+    .max_value = (float[]) {HKCH_CUSTOM_CONSUMP_MAX}, \
     .value = HOMEKIT_FLOAT_(_value), \
     ##__VA_ARGS__
 

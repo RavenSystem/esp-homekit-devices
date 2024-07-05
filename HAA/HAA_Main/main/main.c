@@ -1711,7 +1711,7 @@ void power_monitor_task(void* args) {
             }
         }
         
-        if (voltage < 500.f && voltage > -500.f) {
+        if (voltage < HKCH_CUSTOM_VOLT_MAX && voltage > HKCH_CUSTOM_VOLT_MIN) {
             if (voltage != ch_group->ch[0]->value.float_value) {
                 const int old_voltage = ch_group->ch[0]->value.float_value * 10;
                 ch_group->ch[0]->value.float_value = voltage;
@@ -1726,7 +1726,7 @@ void power_monitor_task(void* args) {
             ERROR("<%i> PM V", ch_group->serv_index);
         }
         
-        if (current < 150.f && current > -150.f) {
+        if (current < HKCH_CUSTOM_AMPERE_MAX && current > HKCH_CUSTOM_AMPERE_MIN) {
             if (current != ch_group->ch[1]->value.float_value) {
                 const int old_current = ch_group->ch[1]->value.float_value * 1000;
                 ch_group->ch[1]->value.float_value = current;
@@ -1746,7 +1746,7 @@ void power_monitor_task(void* args) {
     
     PM_LAST_SAVED_CONSUPTION += PM_POLL_PERIOD;
     
-    if (power < 50000.f && power > -50000.f) {
+    if (power < HKCH_CUSTOM_WATT_MAX && power > HKCH_CUSTOM_WATT_MIN) {
         if (power != ch_group->ch[2]->value.float_value) {
             const int old_power = ch_group->ch[2]->value.float_value * 10;
             ch_group->ch[2]->value.float_value = power;
@@ -4380,7 +4380,7 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
             
             normalize_current_position();
             
-            if ((WINDOW_COVER_CH_TARGET_POSITION->value.int_value - margin) >= WINDOW_COVER_HOMEKIT_POSITION) {
+            if ((WINDOW_COVER_CH_TARGET_POSITION->value.int_value - margin) >= (signed int) WINDOW_COVER_HOMEKIT_POSITION) {
                 WINDOW_COVER_MUST_STOP = 1;
             } else {
                 send_hk_current_position();
@@ -4397,7 +4397,7 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
             
             normalize_current_position();
             
-            if ((WINDOW_COVER_CH_TARGET_POSITION->value.int_value + margin) <= WINDOW_COVER_HOMEKIT_POSITION) {
+            if ((WINDOW_COVER_CH_TARGET_POSITION->value.int_value + margin) <= (signed int) WINDOW_COVER_HOMEKIT_POSITION) {
                 WINDOW_COVER_MUST_STOP = 1;
             } else {
                 send_hk_current_position();
@@ -5024,7 +5024,7 @@ void IRAM fm_pulse_interrupt(const uint8_t gpio) {
     while (ch_group) {
         if ((ch_group->serv_type == SERV_TYPE_FREE_MONITOR ||
              ch_group->serv_type == SERV_TYPE_FREE_MONITOR_ACCUMULATVE) &&
-            private_abs(FM_SENSOR_TYPE) == FM_SENSOR_TYPE_PULSE_US_TIME &&
+            FM_SENSOR_TYPE == FM_SENSOR_TYPE_PULSE_US_TIME &&
             FM_SENSOR_GPIO == gpio) {
             if (FM_NEW_VALUE == 0) {
                 FM_NEW_VALUE = time;
@@ -5056,7 +5056,7 @@ void IRAM fm_pwm_interrupt(const uint8_t gpio) {
     while (ch_group) {
         if ((ch_group->serv_type == SERV_TYPE_FREE_MONITOR ||
              ch_group->serv_type == SERV_TYPE_FREE_MONITOR_ACCUMULATVE) &&
-            private_abs(FM_SENSOR_TYPE) == FM_SENSOR_TYPE_PWM_DUTY &&
+            FM_SENSOR_TYPE == FM_SENSOR_TYPE_PWM_DUTY &&
             FM_SENSOR_GPIO == gpio) {
             
             switch (FM_SENSOR_PWM_DUTY_STATUS) {
@@ -5148,7 +5148,7 @@ void free_monitor_task(void* args) {
             float value = 0;
             unsigned int get_value = false;
             
-            const unsigned int fm_sensor_type = private_abs(FM_SENSOR_TYPE);
+            const unsigned int fm_sensor_type = FM_SENSOR_TYPE;
             
             if (args) {
                 if (fm_sensor_type == FM_SENSOR_TYPE_FREE || FM_OVERRIDE_VALUE != NO_LAST_WILDCARD_ACTION) {
@@ -5706,19 +5706,15 @@ void free_monitor_task(void* args) {
                 value = (FM_FACTOR * value) + FM_OFFSET;
                 
                 if (ch_group->serv_type == SERV_TYPE_FREE_MONITOR_ACCUMULATVE) {
-                    if ((int) value == -2182017) {
-                        value = 0;
-                    } else {
-                        value += ch_group->ch[0]->value.float_value;
-                    }
+                    value += ch_group->ch[0]->value.float_value;
                 }
                 
                 INFO("<%i> FM: %g", ch_group->serv_index, value);
                 
-                if (FM_SENSOR_TYPE > 0 ||
-                    (FM_SENSOR_TYPE < 0 &&
-                    value >= FM_LIMIT_LOWER &&
-                    value <= FM_LIMIT_UPPER)) {
+                if (!ch_group->ch[0]->min_value ||
+                    (ch_group->ch[0]->min_value &&
+                    value >= *ch_group->ch[0]->min_value &&
+                    value <= *ch_group->ch[0]->max_value)) {
                     
                     const int old_value = ch_group->ch[0]->value.float_value * 1000;
                     ch_group->ch[0]->value.float_value = value;
@@ -5764,14 +5760,14 @@ void free_monitor_timer_worker(TimerHandle_t xTimer) {
         if (ch_group->main_enabled) {
             if (!ch_group->is_working) {
                 ch_group_t* ch_group_b = NULL;
-                const unsigned int fm_sensor_type = private_abs(FM_SENSOR_TYPE);
+                const unsigned int fm_sensor_type = FM_SENSOR_TYPE;
                 
                 if (fm_sensor_type == FM_SENSOR_TYPE_I2C || fm_sensor_type == FM_SENSOR_TYPE_I2C_TRIGGER) {
                     ch_group_b = main_config.ch_groups;
                     while (ch_group_b) {
                         if ((ch_group_b->serv_type == SERV_TYPE_FREE_MONITOR ||
                              ch_group_b->serv_type == SERV_TYPE_FREE_MONITOR_ACCUMULATVE) &&
-                            private_abs(FM_SENSOR_TYPE_B) == FM_SENSOR_TYPE_I2C_TRIGGER &&
+                            FM_SENSOR_TYPE_B == FM_SENSOR_TYPE_I2C_TRIGGER &&
                             FM_I2C_BUS_B == FM_I2C_BUS &&
                             FM_I2C_ADDR_B == FM_I2C_ADDR &&
                             ch_group_b->is_working) {
@@ -7247,19 +7243,25 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                         case SERV_TYPE_FREE_MONITOR:
                         case SERV_TYPE_FREE_MONITOR_ACCUMULATVE:
                             if (ch_group->main_enabled) {
-                                if (ch_group == ch_group_ori) {
-                                    ch_group->ch[0]->value.float_value = action_serv_manager->value;
+                                if (ch_group->serv_type == SERV_TYPE_FREE_MONITOR_ACCUMULATVE && value_int == FM_ACCUMULATVE_VALUE_RESET) {
+                                    ch_group->ch[0]->value.float_value = 0;
+                                    homekit_characteristic_notify_safe(ch_group->ch[0]);
                                     
-                                } else if (!ch_group->is_working) {
-                                    ch_group->is_working = true;
-                                    FM_OVERRIDE_VALUE = action_serv_manager->value;
-                                    if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
-                                        ch_group->is_working = false;
-                                        homekit_remove_oldest_client();
-                                        ERROR("FM");
-                                    }
                                 } else {
-                                    ERROR("<%i> Overlaps", ch_group->serv_index);
+                                    if (ch_group == ch_group_ori) {
+                                        ch_group->ch[0]->value.float_value = action_serv_manager->value;
+                                        
+                                    } else if (!ch_group->is_working) {
+                                        ch_group->is_working = true;
+                                        FM_OVERRIDE_VALUE = action_serv_manager->value;
+                                        if (xTaskCreate(free_monitor_task, "FM", FREE_MONITOR_TASK_SIZE, (void*) ch_group, FREE_MONITOR_TASK_PRIORITY, NULL) != pdPASS) {
+                                            ch_group->is_working = false;
+                                            homekit_remove_oldest_client();
+                                            ERROR("FM");
+                                        }
+                                    } else {
+                                        ERROR("<%i> Overlaps", ch_group->serv_index);
+                                    }
                                 }
                             }
                             break;
@@ -12359,11 +12361,6 @@ void normal_mode_init() {
             }
         }
         
-        unsigned int has_limits = 0;
-        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_LIMIT_ARRAY_SET) != NULL) {
-            has_limits = 2;
-        }
-        
         unsigned int is_type_uart = false;
         if (fm_sensor_type >= FM_SENSOR_TYPE_UART) {
             is_type_uart = true;
@@ -12403,22 +12400,12 @@ void normal_mode_init() {
                                             (maths_operations << 1),
                                             
                                             4 +
-                                            has_limits +
                                             maths_operations,
                                             
                                             1);
         
         FM_OVERRIDE_VALUE = NO_LAST_WILDCARD_ACTION;
-        
-        if (has_limits > 0) {
-            cJSON_rsf* limits_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_LIMIT_ARRAY_SET);
-            FM_LIMIT_LOWER = cJSON_rsf_GetArrayItem(limits_array, 0)->valuefloat;
-            FM_LIMIT_UPPER = cJSON_rsf_GetArrayItem(limits_array, 1)->valuefloat;
-            
-            FM_SENSOR_TYPE = -fm_sensor_type;   // If there are limits, sensor_type is negative
-        } else {
-            FM_SENSOR_TYPE = fm_sensor_type;
-        }
+        FM_SENSOR_TYPE = fm_sensor_type;
         
         ch_group->serv_type = serv_type;
         ch_group->serv_index = service_numerator;
@@ -12430,7 +12417,7 @@ void normal_mode_init() {
             
             cJSON_rsf* val_data = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_READ_COMMAND_DATA_ARRAY);
             
-            unsigned int float_index = FM_MATHS_FLOAT_FIRST + has_limits;
+            unsigned int float_index = FM_MATHS_FLOAT_FIRST;
             unsigned int int_index = FM_MATHS_FIRST_OPERATION;
             for (unsigned int i = 0; i < (maths_operations * 3); i++) {
                 for (unsigned int j = 0; j < 2; j++) {
@@ -12459,7 +12446,15 @@ void normal_mode_init() {
         register_wildcard_actions(ch_group, json_context);
         new_action_network(ch_group, json_context, 0);
         
-        ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_FREE_VALUE, 0);
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_LIMIT_ARRAY_SET) != NULL) {
+            cJSON_rsf* limits_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_LIMIT_ARRAY_SET);
+            const float limit_min_value = cJSON_rsf_GetArrayItem(limits_array, 0)->valuefloat;
+            const float limit_max_value = cJSON_rsf_GetArrayItem(limits_array, 1)->valuefloat;
+            
+            ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_FREE_VALUE, 0, .min_value=(float[]) {limit_min_value}, .max_value=(float[]) {limit_max_value}, .min_step=NULL);
+        } else {
+            ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_FREE_VALUE, 0);
+        }
         
         if (tg_serv != 0) {
             ch_group->ch[ch_group->chs - 1] = ch_group_find_by_serv(get_absolut_index(service_numerator, tg_serv))->ch[tg_ch];

@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.12.7"
+#define HAA_FIRMWARE_VERSION                "12.12.8"
 #define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -540,8 +540,6 @@
 #define FM_OFFSET_DEFAULT                   (0)
 #define FM_OFFSET                           ch_group->num_f[1]
 #define FM_LIMIT_ARRAY_SET                  "l"
-#define FM_LIMIT_LOWER                      ch_group->num_f[4]
-#define FM_LIMIT_UPPER                      ch_group->num_f[5]
 #define FM_MATHS_OPERATION_NONE             (0)
 #define FM_MATHS_OPERATION_ADD              (1)
 #define FM_MATHS_OPERATION_SUB              (2)
@@ -607,6 +605,7 @@
 #define FM_I2C_TRIGGER_REG                  ch_group->num_i     // from num_i[FM_I2C_TRIGGER_REG_FIRST] to num_i[FM_I2C_TRIGGER_REG_FIRST + 3]
 #define FM_I2C_TRIGGER_VAL_FIRST            (17)
 #define FM_I2C_TRIGGER_VAL                  ch_group->num_i     // from num_i[FM_I2C_TRIGGER_VAL_FIRST] to num_i[FM_I2C_TRIGGER_VAL_FIRST + 3]
+#define FM_ACCUMULATVE_VALUE_RESET          (-2182017)
 
 #define RECV_UART_POLL_PERIOD_MS            (50)
 
