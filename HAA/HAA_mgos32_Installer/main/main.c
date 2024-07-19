@@ -143,7 +143,7 @@ void init_task() {
     
     free(flash_buffer);
     
-    wifi_config_init("HAA", xHandle);
+    wifi_config_init(xHandle);
     
     vTaskDelete(NULL);
 }

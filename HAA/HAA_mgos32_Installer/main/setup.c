@@ -67,6 +67,12 @@
 #elif defined(HAA_SHELLY_PlusUni)
 #define HAA_SHELLY_INITIAL_SCRIPT   "{\"c\":{\"io\":[[[19,21,18],2],[[37,38],6],[[36],10,0,3]],\"l\":18},\"a\":[{\"0\":{\"r\":[[19]]},\"1\":{\"r\":[[19,1]]},\"b\":[[38]],\"es\":[{\"0\":{\"r\":[[21]]},\"1\":{\"r\":[[21,1]]},\"b\":[[37]]},{\"t\":80,\"j\":5,\"n\":10,\"g\":[36]},{\"t\":24,\"g\":13}]}]}"
 
+#elif defined(HAA_SHELLY_PlusRGBWPM)
+#define HAA_SHELLY_INITIAL_SCRIPT   "{\"c\":{\"io\":[[[25,26],9],[[27,24],9,0,0,2],[[0],2],[[36,37,38,39],6,0,1]],\"l\":0},\"a\":[{\"t\":30,\"g\":[25,26,27,24],\"b\":[[36],[37],[38],[38,0],[39],[39,0]]}]}"
+
+#elif defined(HAA_SHELLY_Plus10V)
+#define HAA_SHELLY_INITIAL_SCRIPT   "{\"c\":{\"io\":[[[26],9,0,65535,1],[[25],6,1],[[4,18],6,0,1],[[32],10,0,3]],\"l\":0,\"b\":[[25,5]]},\"a\":[{\"t\":30,\"g\":[26],\"b\":[[4]]},{\"t\":3,\"f0\":[[18]],\"f1\":[[18,2]],\"f2\":[[18,3]],\"es\":[{\"t\":22,\"h\":2,\"n\":5,\"g\":32,\"j\":10,\"y0\":[{\"v\":75,\"r\":1,\"0\":{\"m\":[[1]]}}]}]}]}"
+
 #elif defined(HAA_SHELLY_Plus1Mini) \
     || defined(HAA_SHELLY_Mini1G3)
 #define HAA_SHELLY_INITIAL_SCRIPT   "{\"c\":{\"io\":[[[7,0],2],[[1],6,1],[[10],6,0,1],[[3],10,0,3]],\"l\":0,\"b\":[[1,5]]},\"a\":[{\"0\":{\"r\":[[7]]},\"1\":{\"r\":[[7,1]]},\"b\":[[10],[10,0],[1]],\"es\":[{\"t\":22,\"h\":2,\"n\":5,\"g\":3,\"j\":10,\"y0\":[{\"v\":75,\"r\":1,\"0\":{\"m\":[[1]]}}]}]}]}"
@@ -81,6 +87,9 @@
 
 #elif defined(HAA_SHELLY_Pro1)
 #define HAA_SHELLY_INITIAL_SCRIPT   "{\"c\":{\"mc\":[[114,13,4,8,8]],\"io\":[[[35],6,1],[[38,39],6,0,1],[[36],10,0,3]],\"l\":105,\"b\":[[35,5]]},\"a\":[{\"0\":{\"r\":[[107],[106]]},\"1\":{\"r\":[[107,1],[106,1]]},\"b\":[[38],[38,0],[39],[35]],\"es\":[{\"t\":22,\"h\":2,\"n\":5,\"g\":36,\"j\":10,\"y0\":[{\"v\":75,\"r\":1,\"0\":{\"m\":[[1]]}}]}]}]}"
+
+#elif defined(HAA_SHELLY_Pro2)
+#define HAA_SHELLY_INITIAL_SCRIPT   "{\"c\":{\"mc\":[[114,13,4,8,8]],\"io\":[[[35],6,1],[[38,39],6,0,1],[[36],10,0,3]],\"l\":105,\"b\":[[35,5]]},\"a\":[{\"0\":{\"r\":[[107]]},\"1\":{\"r\":[[107,1]]},\"b\":[[38],[38,0]]},{\"0\":{\"r\":[[106]]},\"1\":{\"r\":[[106,1]]},\"b\":[[39],[39,0]],\"es\":[{\"t\":22,\"h\":2,\"n\":5,\"g\":36,\"j\":10,\"y0\":[{\"v\":75,\"r\":1,\"0\":{\"m\":[[1],[2]]}}]}]}]}"
 
 #endif
 
@@ -114,13 +123,12 @@ typedef struct _wifi_network_info {
     uint8_t bssid[6];
     char rssi[4];
     char channel[3];
-    bool secure;
+    bool secure;    // 1 bit
 
     struct _wifi_network_info *next;
 } wifi_network_info_t;
 
 typedef struct {
-    char* ssid_prefix;
     uint32_t max_body_size;
     
     TimerHandle_t auto_reboot_timer;
@@ -134,7 +142,7 @@ typedef struct {
     
     uint8_t check_counter;
     
-    bool end_setup: 1;
+    bool end_setup;     // 1 bit
 } wifi_config_context_t;
 
 static wifi_config_context_t* context;
@@ -592,10 +600,6 @@ static void wifi_config_server_on_settings(client_t *client) {
 }
 
 static void wifi_config_context_free(wifi_config_context_t *context) {
-    if (context->ssid_prefix) {
-        free(context->ssid_prefix);
-    }
-    
     wifi_networks_free();
 
     free(context);
@@ -971,7 +975,7 @@ static void wifi_config_softap_start() {
     
     softap_config.ap.ssid_len = snprintf(
         (char*) softap_config.ap.ssid, sizeof(softap_config.ap.ssid),
-        "%s-%02X%02X%02X", context->ssid_prefix, macaddr[3], macaddr[4], macaddr[5]
+        "HAA-%02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]
     );
     
     INFO("Wifi AP %s Ch%i", softap_config.ap.ssid, softap_config.ap.channel);
@@ -1171,7 +1175,7 @@ static void wifi_config_station_connect() {
     vTaskDelete(NULL);
 }
 
-void wifi_config_init(const char *ssid_prefix, TaskHandle_t xHandle) {
+void wifi_config_init(TaskHandle_t xHandle) {
     INFO("Wifi init");
     
     context = malloc(sizeof(wifi_config_context_t));
@@ -1179,11 +1183,10 @@ void wifi_config_init(const char *ssid_prefix, TaskHandle_t xHandle) {
     
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
-    char* setup_hostname = malloc(21);
-    snprintf(setup_hostname, 21, "HAA-%02X%02X%02X-Installer", macaddr[3], macaddr[4], macaddr[5]);
+    char* setup_hostname = malloc(22);
+    snprintf(setup_hostname, 22, "HAA-%02X%02X%02X-InstallerB", macaddr[3], macaddr[4], macaddr[5]);
     esp_netif_set_hostname(setup_esp_netif, setup_hostname);
-
-    context->ssid_prefix = strndup(ssid_prefix, 33 - 7);
+    free(setup_hostname);
     
     context->ota_task = xHandle;
     

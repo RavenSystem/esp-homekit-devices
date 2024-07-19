@@ -123,6 +123,18 @@ if(HAA_SHELLY_PlusUni)
     )
 endif()
 
+if(HAA_SHELLY_Plus10V)
+    list(APPEND EXTRA_COMPILE_OPTIONS
+        -DHAA_SHELLY_Plus10V
+    )
+endif()
+
+if(HAA_SHELLY_PlusRGBWPM)
+    list(APPEND EXTRA_COMPILE_OPTIONS
+        -DHAA_SHELLY_PlusRGBWPM
+    )
+endif()
+
 if(HAA_SHELLY_Plus1Mini)
     list(APPEND EXTRA_COMPILE_OPTIONS
         -DHAA_SHELLY_Plus1Mini
@@ -162,6 +174,12 @@ endif()
 if(HAA_SHELLY_Pro1)
     list(APPEND EXTRA_COMPILE_OPTIONS
         -DHAA_SHELLY_Pro1
+    )
+endif()
+
+if(HAA_SHELLY_Pro2)
+    list(APPEND EXTRA_COMPILE_OPTIONS
+        -DHAA_SHELLY_Pro2
     )
 endif()
 
