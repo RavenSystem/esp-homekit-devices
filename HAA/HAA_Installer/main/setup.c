@@ -102,13 +102,12 @@ typedef struct _wifi_network_info {
     uint8_t bssid[6];
     char rssi[4];
     char channel[3];
-    bool secure;
+    bool secure;        // 1 bit
 
     struct _wifi_network_info *next;
 } wifi_network_info_t;
 
 typedef struct {
-    char* ssid_prefix;
     uint32_t max_body_size;
     
     TimerHandle_t auto_reboot_timer;
@@ -122,7 +121,7 @@ typedef struct {
     
     uint8_t check_counter;
     
-    bool end_setup: 1;
+    bool end_setup;     // 1 bit
 } wifi_config_context_t;
 
 static wifi_config_context_t* context;
@@ -760,10 +759,6 @@ static void wifi_config_server_on_settings(client_t *client) {
 }
 
 static void wifi_config_context_free(wifi_config_context_t *context) {
-    if (context->ssid_prefix) {
-        free(context->ssid_prefix);
-    }
-    
     wifi_networks_free();
 
     free(context);
@@ -1155,7 +1150,7 @@ static void wifi_config_softap_start() {
     
     softap_config.ap.ssid_len = snprintf(
         (char*) softap_config.ap.ssid, sizeof(softap_config.ap.ssid),
-        "%s-%02X%02X%02X", context->ssid_prefix, macaddr[3], macaddr[4], macaddr[5]
+        "HAA-%02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]
     );
     
     INFO("Wifi AP %s Ch%i", softap_config.ap.ssid, softap_config.ap.channel);
@@ -1180,7 +1175,7 @@ static void wifi_config_softap_start() {
     
     softap_config.ssid_len = snprintf(
         (char*) softap_config.ssid, sizeof(softap_config.ssid),
-        "%s-%02X%02X%02X", context->ssid_prefix, macaddr[3], macaddr[4], macaddr[5]
+        "HAA-%02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]
     );
     
     INFO("Wifi AP %s Ch%i", softap_config.ssid, softap_config.channel);
@@ -1226,8 +1221,14 @@ static void wifi_config_sta_connect_timeout_task() {
     
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
-    char* setup_hostname = malloc(21);
-    snprintf(setup_hostname, 21, "HAA-%02X%02X%02X-Installer", macaddr[3], macaddr[4], macaddr[5]);
+    char* setup_hostname = malloc(22);
+    
+#ifdef HAABOOT
+    snprintf(setup_hostname, 22, "HAA-%02X%02X%02X-InstallerB", macaddr[3], macaddr[4], macaddr[5]);
+#else
+    snprintf(setup_hostname, 22, "HAA-%02X%02X%02X-InstallerM", macaddr[3], macaddr[4], macaddr[5]);
+#endif
+    
     netif->hostname = setup_hostname;
 #endif
     
@@ -1456,7 +1457,7 @@ static void wifi_config_station_connect() {
     vTaskDelete(NULL);
 }
 
-void wifi_config_init(const char *ssid_prefix, TaskHandle_t xHandle) {
+void wifi_config_init(TaskHandle_t xHandle) {
     INFO("Wifi init");
     
     context = malloc(sizeof(wifi_config_context_t));
@@ -1465,12 +1466,17 @@ void wifi_config_init(const char *ssid_prefix, TaskHandle_t xHandle) {
 #ifdef ESP_PLATFORM
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);
-    char* setup_hostname = malloc(21);
-    snprintf(setup_hostname, 21, "HAA-%02X%02X%02X-Installer", macaddr[3], macaddr[4], macaddr[5]);
-    esp_netif_set_hostname(setup_esp_netif, setup_hostname);
+    char* setup_hostname = malloc(22);
+    
+#ifdef HAABOOT
+    snprintf(setup_hostname, 22, "HAA-%02X%02X%02X-InstallerB", macaddr[3], macaddr[4], macaddr[5]);
+#else
+    snprintf(setup_hostname, 22, "HAA-%02X%02X%02X-InstallerM", macaddr[3], macaddr[4], macaddr[5]);
 #endif
-
-    context->ssid_prefix = strndup(ssid_prefix, 33 - 7);
+    
+    esp_netif_set_hostname(setup_esp_netif, setup_hostname);
+    free(setup_hostname);
+#endif
     
     context->ota_task = xHandle;
     

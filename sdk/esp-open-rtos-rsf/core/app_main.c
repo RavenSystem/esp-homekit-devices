@@ -267,7 +267,7 @@ void IRAM sdk_user_start(void) {
 
 // .text+0x3a8
 void IRAM vApplicationStackOverflowHook(TaskHandle_t task, char *task_name) {
-    printf("Task \"%s\" overflow (%lu)\n", task_name, uxTaskGetStackHighWaterMark(task));
+    printf("%s overflow (%lu)\n", task_name, uxTaskGetStackHighWaterMark(task));
 }
 
 // .text+0x3d8
@@ -294,11 +294,14 @@ static void init_networking(sdk_phy_info_t *phy_info, uint8_t *mac_addr) {
     // The call to sdk_register_chipv6_phy appears to change the bus clock,
     // perhaps from 40MHz to 26MHz, at least it has such an effect on the uart
     // baud rate. The caller flushes the TX fifos.
+    sdk_register_chipv6_phy(phy_info);
+    /*
     if (sdk_register_chipv6_phy(phy_info)) {
         printf("FATAL: sdk_register_chipv6_phy");
         abort();
     }
-
+     */
+    
     // The boot rom initializes uart0 for a 115200 baud rate but the bus clock
     // does not appear to be as expected so the initial baud rate is actually
     // 74906. On a cold boot, to keep the 74906 baud rate the uart0 divisor

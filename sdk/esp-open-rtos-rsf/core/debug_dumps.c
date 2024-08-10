@@ -73,6 +73,7 @@ void IRAM abort(void) {
 }
 
 /* Dump exception information from special function registers */
+/*
 static void dump_excinfo(void) {
     uint32_t exccause, epc1, epc2, epc3, excvaddr, depc, excsave1;
     uint32_t excinfo[8];
@@ -85,14 +86,14 @@ static void dump_excinfo(void) {
     RSR(excvaddr, excvaddr);
     RSR(depc, depc);
     RSR(excsave1, excsave1);
-    /* Removed to save storage
+    
     printf("%s=0x%08x\n", "epc1", epc1);
     printf("%s=0x%08x\n", "epc2", epc2);
     printf("%s=0x%08x\n", "epc3", epc3);
     printf("%s=0x%08x\n", "excvaddr", excvaddr);
     printf("%s=0x%08x\n", "depc", depc);
     printf("%s=0x%08x\n", "excsave1", excsave1);
-     */
+    
     sdk_system_rtc_mem_read(0, excinfo, 32); // Why?
     excinfo[0] = 2;
     excinfo[1] = exccause;
@@ -104,6 +105,7 @@ static void dump_excinfo(void) {
     excinfo[7] = excsave1;
     sdk_system_rtc_mem_write(0, excinfo, 32);
 }
+ */
 
 /* dump stack memory (frames above sp) to stdout
 
@@ -114,7 +116,6 @@ static void dump_excinfo(void) {
    0xa5a5a5a5 probably constitutes the end of our stack.
 */
 void dump_stack(uint32_t *sp) {
-    /* Removed to save storage
     printf("\nStack: SP=%p\n", sp);
     for(uint32_t *p = sp; p < sp + 32; p += 4) {
         if((intptr_t)p >= 0x3fffc000) {
@@ -126,14 +127,12 @@ void dump_stack(uint32_t *sp) {
             break; // FreeRTOS uses this pattern to mark untouched stack space
         }
     }
-    */
 }
 
 /* Dump normal registers that were stored above 'sp'
    by the exception handler preamble
 */
 void dump_registers_in_exception_handler(uint32_t *sp) {
-    /* Removed to save storage
     uint32_t excsave1;
     uint32_t *saved = sp - (0x50 / sizeof(uint32_t));
     printf("Registers:\n");
@@ -144,7 +143,6 @@ void dump_registers_in_exception_handler(uint32_t *sp) {
         printf("a%-2d %08x%c", a, saved[a+3], a == 3 || a == 7 || a == 11 ? '\n':' ');
     }
     printf("SAR %08x\n", saved[0x13]);
-    */
 }
 
 static void __attribute__((noreturn)) post_crash_reset(void) {
@@ -178,6 +176,7 @@ static void IRAM fatal_handler_prelude(void) {
 static void standard_fatal_exception_handler_inner(uint32_t *sp, bool registers_saved_on_stack) {
     /* Replace the fatal exception handler 'inner' function so we
        don't end up in a crash loop if this handler crashes. */
+    /* Removed to save storage
     fatal_exception_handler_inner = second_fatal_exception_handler_inner;
     dump_excinfo();
     if (sp) {
@@ -187,6 +186,8 @@ static void standard_fatal_exception_handler_inner(uint32_t *sp, bool registers_
         dump_stack(sp);
     }
     dump_heapinfo();
+     */
+    
     post_crash_reset();
 }
 
@@ -194,8 +195,11 @@ static void standard_fatal_exception_handler_inner(uint32_t *sp, bool registers_
    so we don't end up in a crash loop. It doesn't rely on contents of stack or heap.
 */
 static void second_fatal_exception_handler_inner(uint32_t *sp, bool registers_saved_on_stack) {
+    /* Removed to save storage
     dump_excinfo();
     printf("Second FATAL\n");
+     */
+    
     post_crash_reset();
 }
 
@@ -238,14 +242,17 @@ void dump_heapinfo(void)
    IRAM.
 */
 static void abort_handler_inner(uint32_t *caller, uint32_t *sp) {
+    /* Removed to save storage
     printf("ABORT at %p\n", caller);
     dump_stack(sp);
     dump_heapinfo();
+     */
+    
     post_crash_reset();
 }
 
 void set_user_exception_handler(void (*fn)(void))
 {
-  user_exception_handler = fn;
+    user_exception_handler = fn;
 }
 

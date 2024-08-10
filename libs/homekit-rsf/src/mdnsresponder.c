@@ -406,7 +406,7 @@ static u8_t* mdns_labels2str(u8_t* hdrP, u8_t* p, char* qStr)
             mdns_labels2str( hdrP, hdrP + n, qStr);
             return p;
         } else if (n & 0xC0) {
-            HOMEKIT_MDNS_PRINTF("mdns_labels2str,label $%X?",n);
+            //HOMEKIT_MDNS_PRINTF("mdns_labels2str,label $%X?",n);
             return p;
         } else {
             for (i = 0; i < n; i++)
@@ -429,7 +429,7 @@ static int mdns_str2labels(const char* name, u8_t* lseq, int max)
         while (name[idx] != '.' && name[idx] != 0) idx++;
         n = idx - sdx;
         if (lc + 1 + n > max) {
-            HOMEKIT_MDNS_PRINTF("! mDNS oversize (%d)\n", lc + 1 + n);
+            HOMEKIT_MDNS_PRINTF("! mDNS size %d\n", lc + 1 + n);
             return 0;
         }
         *lseq++ = n;
@@ -473,7 +473,7 @@ int mdns_buffer_init(uint16_t new_size) {
     }
     
     if (mdns_response == NULL) {
-        HOMEKIT_MDNS_PRINTF("! mDNS buffer %i\n", mdns_responder_reply_size);
+        HOMEKIT_MDNS_PRINTF("! mDNS alloc %d\n", mdns_responder_reply_size);
         return -1;
     }
     
@@ -517,14 +517,14 @@ void mdns_TXT_append(char* txt, size_t txt_size, const char* record, size_t reco
 
     if (record_size > 255) {
         char *s = strndup(record, record_size);
-        HOMEKIT_MDNS_PRINTF("! mDNS record %s section is longer than 255\n", s);
+        HOMEKIT_MDNS_PRINTF("! mDNS %s too long\n", s); // longer than 255
         free(s);
         return;
     }
 
     if (txt_len + record_size + 2 > txt_size) {  // extra 2 is for length and terminator
         char *s = strndup(record, record_size);
-        HOMEKIT_MDNS_PRINTF("! mDNS space to add TXT record %s\n", s);
+        HOMEKIT_MDNS_PRINTF("! mDNS adding TXT %s\n", s);
         free(s);
         return;
     }
@@ -615,13 +615,13 @@ void mdns_add_AAAA(const char* rKey, u32_t ttl, const ip6_addr_t *addr)
 
 static void mdns_announce() {
     if (mdns_status == MDNS_STATUS_WORKING) {
-        HOMEKIT_MDNS_PRINTF("mDNS prob 1\n");
+        HOMEKIT_MDNS_PRINTF("mDNS 1\n");
         if (rs_esp_timer_change_period(mdns_announce_timer, MDNS_TTL_SAFE_MARGIN * MDNS_TTL_MULTIPLIER_MS) == pdPASS) {
             mdns_status = MDNS_STATUS_PROBING_1;
         }
         
     } else if (mdns_status == MDNS_STATUS_PROBING_2) {
-        HOMEKIT_MDNS_PRINTF("mDNS prob 2\n");
+        HOMEKIT_MDNS_PRINTF("mDNS 2\n");
         mdns_status = MDNS_STATUS_PROBE_OK;
         
     } else if (mdns_status == MDNS_STATUS_PROBE_OK) {
@@ -787,7 +787,7 @@ static int mdns_add_to_answer(mdns_rsrc* rsrcP, u8_t* resp, int respLen)
     }
     if ((len + SIZEOF_DNS_ANSWER + rsrcP->rDataSize) > rem) {
         // Overflow, skip this answer.
-        HOMEKIT_MDNS_PRINTF("! mDNS oversize (%d)\n", len + SIZEOF_DNS_ANSWER + rsrcP->rDataSize);
+        HOMEKIT_MDNS_PRINTF("! mDNS size %d\n", len + SIZEOF_DNS_ANSWER + rsrcP->rDataSize);
         return respLen;
     }
     respLen += len;
@@ -860,7 +860,7 @@ static void mdns_send_mcast(struct netif* netif, const ip_addr_t *addr, u8_t* ms
             HOMEKIT_MDNS_PRINTF("! mDNS send (%d)\n", err);
         }
     } else {
-        HOMEKIT_MDNS_PRINTF(">! mDNS alloc [%d]\n", nBytes);
+        HOMEKIT_MDNS_PRINTF("! mDNS alloc %d\n", nBytes);
     }
 }
     
@@ -1076,7 +1076,7 @@ static void mdns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_a
 #ifdef qLogIncoming
     char addr_str[IPADDR_STRLEN_MAX];
     ipaddr_ntoa_r(addr, addr_str, IPADDR_STRLEN_MAX);
-    HOMEKIT_MDNS_PRINTF("\n\nmDNS IPv%d got %d bytes from %s\n", IP_IS_V6(addr) ? 6 : 4, p->tot_len, addr_str);
+    HOMEKIT_MDNS_PRINTF("\n\nmDNS IPv%d got %db from %s\n", IP_IS_V6(addr) ? 6 : 4, p->tot_len, addr_str);
 #endif
 
     // Sanity checks on size
@@ -1085,7 +1085,7 @@ static void mdns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_a
             p->tot_len < (SIZEOF_DNS_HDR + SIZEOF_DNS_QUERY + 1)) {
             char addr_str[IPADDR_STRLEN_MAX];
             ipaddr_ntoa_r(addr, addr_str, IPADDR_STRLEN_MAX);
-            HOMEKIT_MDNS_PRINTF("! mDNS size %i from %s\n", p->tot_len, addr_str);
+            HOMEKIT_MDNS_PRINTF("! mDNS %ib from %s\n", p->tot_len, addr_str);
         } else {
             struct mdns_hdr* hdrP = (struct mdns_hdr*) p->payload;
     #ifdef qLogAllTraffic
@@ -1102,6 +1102,43 @@ static void mdns_recv(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_a
     pbuf_free(p);
 }
 
+// If we are in station mode and have an IP address, start a multicast UDP receive
+void mdns_init()
+{
+#ifdef ESP_PLATFORM
+    struct netif* netif = netif_default;
+#else
+    struct netif* netif = sdk_system_get_netif(STATION_IF);
+#endif
+    
+    LOCK_TCPIP_CORE();
+    
+    // Start IGMP on the netif for our interface: this isn't done for us
+    if (!(netif->flags & NETIF_FLAG_IGMP)) {
+        netif->flags |= NETIF_FLAG_IGMP;
+        igmp_start(netif);
+    }
+    
+    gDictMutex = xSemaphoreCreateBinary();
+    xSemaphoreGive(gDictMutex);
+    
+    gMDNS_pcb = udp_new_ip_type(IPADDR_TYPE_ANY);
+    
+    igmp_joingroup_netif(netif, ip_2_ip4(&gMulticastV4Addr));
+    
+#if LWIP_IPV6
+    mld6_joingroup_netif(netif, ip_2_ip6(&gMulticastV6Addr));
+#endif
+    
+    udp_bind(gMDNS_pcb, IP_ANY_TYPE, LWIP_IANA_PORT_MDNS);
+    
+    udp_bind_netif(gMDNS_pcb, netif);
+    udp_recv(gMDNS_pcb, mdns_recv, NULL);
+    
+    UNLOCK_TCPIP_CORE();
+}
+
+/*
 // If we are in station mode and have an IP address, start a multicast UDP receive
 void mdns_init()
 {
@@ -1171,3 +1208,4 @@ void mdns_init()
     
     UNLOCK_TCPIP_CORE();
 }
+*/

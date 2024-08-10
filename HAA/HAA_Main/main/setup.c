@@ -110,14 +110,15 @@ typedef struct _wifi_network_info {
     uint8_t bssid[6];
     char rssi[4];
     char channel[3];
-    bool secure;
+    bool secure;    // 1 bit
 
     struct _wifi_network_info *next;
 } wifi_network_info_t;
 
 typedef struct {
-    char* ssid_prefix;
+#ifndef ESP_PLATFORM
     char* custom_hostname;
+#endif
     int32_t param;
     uint32_t max_body_size;
     void (*on_wifi_ready)();
@@ -795,10 +796,6 @@ static void wifi_config_server_on_settings(client_t *client) {
 }
 
 static void wifi_config_context_free(wifi_config_context_t* context) {
-    if (context->ssid_prefix) {
-        free(context->ssid_prefix);
-    }
-
     wifi_networks_free();
 
     free(context);
@@ -1229,7 +1226,7 @@ static void wifi_config_softap_start(const int8_t wifi_ap_enable) {
         
         softap_config.ap.ssid_len = snprintf(
                                              (char*) softap_config.ap.ssid, sizeof(softap_config.ap.ssid),
-                                             "%s-%02X%02X%02X", context->ssid_prefix, macaddr[3], macaddr[4], macaddr[5]
+                                             "HAA-%02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]
                                              );
         
         if (wifi_ap_password) {
@@ -1262,7 +1259,7 @@ static void wifi_config_softap_start(const int8_t wifi_ap_enable) {
         
         softap_config.ssid_len = snprintf(
                                           (char*) softap_config.ssid, sizeof(softap_config.ssid),
-                                          "%s-%02X%02X%02X", context->ssid_prefix, macaddr[3], macaddr[4], macaddr[5]
+                                          "HAA-%02X%02X%02X", macaddr[3], macaddr[4], macaddr[5]
                                           );
         
         if (wifi_ap_password) {
@@ -1618,16 +1615,14 @@ static void wifi_config_station_connect() {
 }
 
 #ifdef ESP_PLATFORM
-void wifi_config_init(const char* ssid_prefix, void (*on_wifi_ready)(), const char* custom_hostname, const int param, const uint8_t wifi_sleep_mode, const bool bandwidth_40) {
+void wifi_config_init(void (*on_wifi_ready)(), char* custom_hostname, const int param, const uint8_t wifi_sleep_mode, const bool bandwidth_40) {
 #else
-void wifi_config_init(const char* ssid_prefix, void (*on_wifi_ready)(), const char* custom_hostname, const int param) {
+void wifi_config_init(void (*on_wifi_ready)(), char* custom_hostname, const int param) {
 #endif
     INFO("Wifi init");
     
     context = malloc(sizeof(wifi_config_context_t));
     memset(context, 0, sizeof(*context));
-    
-    context->ssid_prefix = strndup(ssid_prefix, 33 - 7);
     
 #ifdef ESP_PLATFORM
     free_wifi_config_ip_info();
@@ -1636,20 +1631,22 @@ void wifi_config_init(const char* ssid_prefix, void (*on_wifi_ready)(), const ch
     context->bandwidth_40 = bandwidth_40;
     
     if (on_wifi_ready && custom_hostname) {
-        esp_netif_set_hostname(setup_esp_netif, strdup(custom_hostname));
+        esp_netif_set_hostname(setup_esp_netif, custom_hostname);
+        free(custom_hostname);
     } else {
         uint8_t macaddr[6];
         sdk_wifi_get_macaddr(STATION_IF, macaddr);
         char* setup_hostname = malloc(17);
         snprintf(setup_hostname, 17, "HAA-%02X%02X%02X-Setup", macaddr[3], macaddr[4], macaddr[5]);
         esp_netif_set_hostname(setup_esp_netif, setup_hostname);
+        free(setup_hostname);
     }
 #else
     if (custom_hostname) {
-        context->custom_hostname = strdup(custom_hostname);
+        context->custom_hostname = custom_hostname;
     }
 #endif
-
+    
     context->on_wifi_ready = on_wifi_ready;
     context->param = param;
 

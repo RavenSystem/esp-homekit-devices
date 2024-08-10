@@ -124,7 +124,7 @@ void init_task() {
     //free(running);
 #endif
     
-    wifi_config_init("HAA", xHandle);
+    wifi_config_init(xHandle);
     
     vTaskDelete(NULL);
 }

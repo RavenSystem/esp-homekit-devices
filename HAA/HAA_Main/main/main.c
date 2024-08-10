@@ -983,7 +983,8 @@ void wifi_ping_gw_task() {
 }
 
 void wifi_reconnection_task() {
-    rs_esp_timer_stop_forced(WIFI_WATCHDOG_TIMER);
+    TimerHandle_t wifi_watchdog_timer = WIFI_WATCHDOG_TIMER;
+    rs_esp_timer_stop_forced(wifi_watchdog_timer);
     
     homekit_mdns_announce_stop();
     
@@ -1052,7 +1053,7 @@ void wifi_reconnection_task() {
             
             do_actions(ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE), 3);
             
-            rs_esp_timer_start_forced(WIFI_WATCHDOG_TIMER);
+            rs_esp_timer_start_forced(wifi_watchdog_timer);
             
             break;
             
@@ -1097,14 +1098,16 @@ void wifi_watchdog() {
 #endif
         
         if (main_config.wifi_mode == 3) {
+            TimerHandle_t wifi_watchdog_timer = WIFI_WATCHDOG_TIMER;
+            
             if (main_config.wifi_roaming_count == 0) {
-                if (rs_esp_timer_change_period(WIFI_WATCHDOG_TIMER, WIFI_WATCHDOG_POLL_PERIOD_MS) != pdPASS) {
+                if (rs_esp_timer_change_period(wifi_watchdog_timer, WIFI_WATCHDOG_POLL_PERIOD_MS) != pdPASS) {
                     return;
                 }
             }
             
             if (main_config.wifi_roaming_count >= WIFI_WATCHDOG_ROAMING_PERIOD) {
-                if (rs_esp_timer_change_period(WIFI_WATCHDOG_TIMER, 8000) == pdPASS) {
+                if (rs_esp_timer_change_period(wifi_watchdog_timer, 8000) == pdPASS) {
                     main_config.wifi_roaming_count = 0;
                     wifi_config_smart_connect();
                     return;
@@ -1263,7 +1266,6 @@ void setup_mode_toggle() {
 void save_states() {
     INFO("Saving");
     last_state_t* last_state = main_config.last_states;
-    sysparam_status_t status;
     
     while (last_state) {
         char saved_state_id[8];
@@ -1271,28 +1273,24 @@ void save_states() {
         
         switch (last_state->ch_type) {
             case CH_TYPE_INT8:
-                status = sysparam_set_int8(saved_state_id, last_state->ch->value.int_value);
+                sysparam_set_int8(saved_state_id, last_state->ch->value.int_value);
                 break;
                 
             case CH_TYPE_INT:
-                status = sysparam_set_int32(saved_state_id, last_state->ch->value.int_value);
+                sysparam_set_int32(saved_state_id, last_state->ch->value.int_value);
                 break;
                 
             case CH_TYPE_FLOAT:
-                status = sysparam_set_int32(saved_state_id, (int32_t) (last_state->ch->value.float_value * FLOAT_FACTOR_SAVE_AS_INT));
+                sysparam_set_int32(saved_state_id, (int32_t) (last_state->ch->value.float_value * FLOAT_FACTOR_SAVE_AS_INT));
                 break;
                 
             case CH_TYPE_STRING:
-                status = sysparam_set_string(saved_state_id, last_state->ch->value.string_value);
+                sysparam_set_string(saved_state_id, last_state->ch->value.string_value);
                 break;
                 
             default:    // case CH_TYPE_BOOL
-                status = sysparam_set_bool(saved_state_id, last_state->ch->value.bool_value);
+                sysparam_set_bool(saved_state_id, last_state->ch->value.bool_value);
                 break;
-        }
-        
-        if (status != SYSPARAM_OK) {
-            ERROR("Saving Ch%s", saved_state_id);
         }
         
         last_state = last_state->next;
@@ -1352,7 +1350,7 @@ void hkc_custom_setup_setter(homekit_characteristic_t* ch, const homekit_value_t
 
 void hkc_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
-    INFO("<%i> -> GEN", ch_group->serv_index);
+    INFO("<%i> GEN", ch_group->serv_index);
     ch->value = value;
     homekit_characteristic_notify_safe(ch);
     
@@ -1368,7 +1366,7 @@ void pm_custom_consumption_reset(ch_group_t* ch_group) {
     }
     
     led_blink(1);
-    INFO("<%i> -> KWh Reset", ch_group->serv_index);
+    INFO("<%i> KWh Reset", ch_group->serv_index);
     
     time_t time = raven_ntp_get_time();
     
@@ -1399,7 +1397,7 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     if (ch_group->main_enabled) {
         if (ch->value.bool_value != value.bool_value) {
             led_blink(1);
-            INFO("<%i> -> SW ON %i", ch_group->serv_index, value.bool_value);
+            INFO("<%i> SW ON %i", ch_group->serv_index, value.bool_value);
             
             ch->value.bool_value = value.bool_value;
             
@@ -1438,7 +1436,7 @@ void hkc_on_status_setter(homekit_characteristic_t* ch, const homekit_value_t va
     if (ch->value.bool_value != value.bool_value) {
         led_blink(1);
         ch_group_t* ch_group = ch_group_find(ch);
-        INFO("<%i> -> SW St ON %i", ch_group->serv_index, value.bool_value);
+        INFO("<%i> SW St ON %i", ch_group->serv_index, value.bool_value);
         ch->value.bool_value = value.bool_value;
     }
     
@@ -1464,7 +1462,7 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
     if (ch_group->main_enabled) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            INFO("<%i> -> LOCK %i", ch_group->serv_index, value.int_value);
+            INFO("<%i> LOCK %i", ch_group->serv_index, value.int_value);
             
             ch->value.int_value = value.int_value;
             
@@ -1495,7 +1493,7 @@ void hkc_lock_status_setter(homekit_characteristic_t* ch, const homekit_value_t 
     if (ch->value.int_value != value.int_value) {
         led_blink(1);
         
-        INFO("<%i> -> LOCK St %i", ch_group->serv_index, value.int_value);
+        INFO("<%i> LOCK St %i", ch_group->serv_index, value.int_value);
         
         ch->value.int_value = value.int_value;
         
@@ -1512,7 +1510,7 @@ void button_event(const uint16_t gpio, void* args, const uint8_t event_type) {
     
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("<%i> -> BE %i", ch_group->serv_index, event_type);
+        INFO("<%i> BE %i", ch_group->serv_index, event_type);
         
         ch_group->ch[0]->value.int_value = event_type;
         homekit_characteristic_notify_safe(ch_group->ch[0]);
@@ -1699,7 +1697,7 @@ void power_monitor_task(void* args) {
         power = hwrand() % 70;
 #endif //POWER_MONITOR_DEBUG
         
-        INFO("<%i> -> PM V=%g, C=%g, P=%g", ch_group->serv_index, voltage, current, power);
+        INFO("<%i> PM V=%g, C=%g, P=%g", ch_group->serv_index, voltage, current, power);
         
         if (pm_sensor_type <= 1) {
             if (current < 0) {
@@ -1811,7 +1809,7 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
     if (ch_group->main_enabled) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            INFO("<%i> -> VALVE %i", ch_group->serv_index, value.int_value);
+            INFO("<%i> VALVE %i", ch_group->serv_index, value.int_value);
             
             ch->value.int_value = value.int_value;
             ch_group->ch[1]->value.int_value = value.int_value;
@@ -1857,7 +1855,7 @@ void hkc_valve_status_setter(homekit_characteristic_t* ch, const homekit_value_t
         
         ch_group->ch[1]->value.int_value = value.int_value;
         
-        INFO("<%i> -> VALVE St %i", ch_group->serv_index, value.int_value);
+        INFO("<%i> VALVE St %i", ch_group->serv_index, value.int_value);
     }
     
     homekit_characteristic_notify_safe(ch);
@@ -1881,7 +1879,7 @@ void valve_timer_worker(TimerHandle_t xTimer) {
 void set_zones_task(void* args) {
     ch_group_t* iairzoning_group = args;
     
-    INFO("<%i> -> iAZ", iairzoning_group->serv_index);
+    INFO("<%i> iAZ", iairzoning_group->serv_index);
 
     int iairzoning_final_main_mode = IAIRZONING_LAST_ACTION;
     
@@ -2327,7 +2325,7 @@ void process_th_timer(TimerHandle_t xTimer) {
 void hkc_th_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
-        INFO("<%i> -> TH", ch_group->serv_index);
+        INFO("<%i> TH", ch_group->serv_index);
         
         ch->value = value;
         
@@ -2673,7 +2671,7 @@ void process_humidif_timer(TimerHandle_t xTimer) {
 void hkc_humidif_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
-        INFO("<%i> -> HUM", ch_group->serv_index);
+        INFO("<%i> HUM", ch_group->serv_index);
         
         ch->value = value;
         
@@ -3667,7 +3665,7 @@ void lightbulb_no_task(ch_group_t* ch_group) {
     lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_group->ch[0]);
     
     led_blink(1);
-    INFO("<%i> -> LB ON %i BRI %i", ch_group->serv_index, ch_group->ch[0]->value.bool_value, ch_group->ch[1]->value.int_value);
+    INFO("<%i> LB ON %i BRI %i", ch_group->serv_index, ch_group->ch[0]->value.bool_value, ch_group->ch[1]->value.int_value);
     if (LIGHTBULB_CHANNELS == 2) {
         INFO("<%i> LB TEMP %i", ch_group->serv_index, ch_group->ch[2]->value.int_value);
     } else if (LIGHTBULB_CHANNELS >= 3) {
@@ -3901,7 +3899,7 @@ void autodimmer_task(void* args) {
         vTaskDelete(NULL);
     }
     
-    INFO("<%i> AUTODim ON", ch_group->serv_index);
+    INFO("<%i> AutoDim ON", ch_group->serv_index);
     
     lightbulb_group->autodimmer_reverse = !lightbulb_group->autodimmer_reverse;
     
@@ -3939,7 +3937,7 @@ void autodimmer_task(void* args) {
         }
     }
     
-    INFO("<%i> AUTODim OFF", ch_group->serv_index);
+    INFO("<%i> AutoDim OFF", ch_group->serv_index);
     
     vTaskDelete(NULL);
 }
@@ -4074,7 +4072,7 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
         
         if ((value.int_value != current_door_state && GD_CURRENT_DOOR_STATE_INT != GARAGE_DOOR_STOPPED) || GD_OBSTRUCTION_DETECTED_BOOL) {
             led_blink(1);
-            INFO("<%i> -> GD %i", ch_group->serv_index, value.int_value);
+            INFO("<%i> GD %i", ch_group->serv_index, value.int_value);
             
             ch1->value.int_value = value.int_value;
             
@@ -4239,7 +4237,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
     
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("<%i> -> WC %i->%i", ch_group->serv_index, WINDOW_COVER_CH_CURRENT_POSITION->value.int_value, value.int_value);
+        INFO("<%i> WC %i->%i", ch_group->serv_index, WINDOW_COVER_CH_CURRENT_POSITION->value.int_value, value.int_value);
         
         ch1->value.int_value = value.int_value;
         
@@ -4491,7 +4489,7 @@ void process_fan_timer(TimerHandle_t xTimer) {
 void hkc_fan_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
-        INFO("<%i> -> FAN", ch_group->serv_index);
+        INFO("<%i> FAN", ch_group->serv_index);
         
         const unsigned int old_on_value = ch_group->ch[0]->value.bool_value;
         
@@ -4531,7 +4529,7 @@ void hkc_fan_status_setter(homekit_characteristic_t* ch0, const homekit_value_t 
         led_blink(1);
         ch_group_t* ch_group = ch_group_find(ch0);
         
-        INFO("<%i> -> FAN St %i", ch_group->serv_index, value.bool_value);
+        INFO("<%i> FAN St %i", ch_group->serv_index, value.bool_value);
         
         ch0->value.bool_value = value.bool_value;
         
@@ -4573,7 +4571,7 @@ void light_sensor_task(void* args) {
     }
     
     luxes = (luxes * LIGHT_SENSOR_FACTOR) + LIGHT_SENSOR_OFFSET;
-    INFO("<%i> -> LUX %g", ch_group->serv_index, luxes);
+    INFO("<%i> LUX %g", ch_group->serv_index, luxes);
     
     if (luxes < 0.0001f) {
         luxes = 0.0001f;
@@ -4619,7 +4617,7 @@ void hkc_sec_system(homekit_characteristic_t* ch, const homekit_value_t value) {
     if (ch_group->main_enabled) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            INFO("<%i> -> SEC SYS %i", ch_group->serv_index, value.int_value);
+            INFO("<%i> SEC SYS %i", ch_group->serv_index, value.int_value);
             
             rs_esp_timer_stop(SEC_SYSTEM_REC_ALARM_TIMER);
             
@@ -4645,7 +4643,7 @@ void hkc_sec_system_status(homekit_characteristic_t* ch, const homekit_value_t v
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch->value.int_value != value.int_value) {
         led_blink(1);
-        INFO("<%i> -> SEC SYS St %i", ch_group->serv_index, value.int_value);
+        INFO("<%i> SEC SYS St %i", ch_group->serv_index, value.int_value);
         
         rs_esp_timer_stop(SEC_SYSTEM_REC_ALARM_TIMER);
         
@@ -4680,7 +4678,7 @@ void hkc_tv_active(homekit_characteristic_t* ch0, const homekit_value_t value) {
     if (ch_group->main_enabled) {
         if (ch0->value.int_value != value.int_value) {
             led_blink(1);
-            INFO("<%i> -> TV ON %i", ch_group->serv_index, value.int_value);
+            INFO("<%i> TV ON %i", ch_group->serv_index, value.int_value);
             
             ch0->value.int_value = value.int_value;
             
@@ -4702,7 +4700,7 @@ void hkc_tv_status_active(homekit_characteristic_t* ch0, const homekit_value_t v
         led_blink(1);
         ch_group_t* ch_group = ch_group_find(ch0);
         
-        INFO("<%i> -> TV ON St %i", ch_group->serv_index, value.int_value);
+        INFO("<%i> TV ON St %i", ch_group->serv_index, value.int_value);
         
         ch0->value.int_value = value.int_value;
         
@@ -4719,7 +4717,7 @@ void hkc_tv_active_identifier(homekit_characteristic_t* ch, const homekit_value_
     if (ch_group->main_enabled) {
         if (ch->value.int_value != value.int_value) {
             led_blink(1);
-            INFO("<%i> -> TV In %i", ch_group->serv_index, value.int_value);
+            INFO("<%i> TV In %i", ch_group->serv_index, value.int_value);
             
             ch->value.int_value = value.int_value;
 
@@ -4736,7 +4734,7 @@ void hkc_tv_key(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("<%i> -> TV Key %i", ch_group->serv_index, value.int_value + 2);
+        INFO("<%i> TV Key %i", ch_group->serv_index, value.int_value + 2);
         
         ch->value.int_value = value.int_value;
         
@@ -4752,7 +4750,7 @@ void hkc_tv_power_mode(homekit_characteristic_t* ch, const homekit_value_t value
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("<%i> -> TV Settings %i", ch_group->serv_index, value.int_value + 50);
+        INFO("<%i> TV Setting %i", ch_group->serv_index, value.int_value + 50);
         
         ch->value.int_value = value.int_value;
         
@@ -4768,7 +4766,7 @@ void hkc_tv_mute(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("<%i> -> TV Mute %i", ch_group->serv_index, value.int_value + 20);
+        INFO("<%i> TV Mute %i", ch_group->serv_index, value.int_value + 20);
         
         ch->value.int_value = value.int_value;
         
@@ -4784,7 +4782,7 @@ void hkc_tv_volume(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (ch_group->main_enabled) {
         led_blink(1);
-        INFO("<%i> -> TV Vol %i", ch_group->serv_index, value.int_value + 22);
+        INFO("<%i> TV Vol %i", ch_group->serv_index, value.int_value + 22);
         
         ch->value.int_value = value.int_value;
         
@@ -4800,7 +4798,7 @@ void hkc_tv_configured_name(homekit_characteristic_t* ch1, const homekit_value_t
     ch_group_t* ch_group = ch_group_find(ch1);
     
     if (value.string_value && strcmp(value.string_value, ch1->value.string_value)) {
-        INFO("<%i> -> TV Name %s", ch_group->serv_index, value.string_value);
+        INFO("<%i> TV Name %s", ch_group->serv_index, value.string_value);
         
         free(ch1->value.string_value);
         ch1->value.string_value = strdup(value.string_value);
@@ -4820,7 +4818,7 @@ void battery_manager(homekit_characteristic_t* ch, int value, bool is_free_monit
     ch_group_t* ch_group = ch_group_find(ch);
     
     if (ch_group->main_enabled) {
-        INFO("<%i> -> BAT %i%%", ch_group->serv_index, value);
+        INFO("<%i> BAT %i%%", ch_group->serv_index, value);
         
         if (value < 0 && !is_free_monitor) {
             if (value < 100) {
@@ -5428,7 +5426,7 @@ void free_monitor_task(void* args) {
                                 int result = -1;
                                 
                                 if (xSemaphoreTake(main_config.network_busy_mutex, MS_TO_TICKS(2000)) == pdTRUE) {
-                                    INFO("<%i> Connect %s:%i", ch_group->serv_index, action_network->host, action_network->port_n);
+                                    INFO("<%i> Net %s:%i", ch_group->serv_index, action_network->host, action_network->port_n);
                                     
                                     uint8_t rcvtimeout_s = 1;
                                     int rcvtimeout_us = 0;
@@ -5512,11 +5510,10 @@ void free_monitor_task(void* args) {
                                                              rcvtimeout_s, rcvtimeout_us);
                                         
                                         if (result >= 0) {
-                                            INFO_NNL("<%i> Payload", ch_group->serv_index);
                                             if (action_network->method_n == 4) {
-                                                INFO(" RAW");
+                                                INFO("<%i> Payload RAW", ch_group->serv_index);
                                             } else {
-                                                INFO(":\n%s", req);
+                                                INFO("<%i> Payload\n%s", ch_group->serv_index, req);
                                             }
                                         } else {
                                             ERROR("<%i> TCP (%i)", ch_group->serv_index, result);
@@ -5536,11 +5533,10 @@ void free_monitor_task(void* args) {
                                                              rcvtimeout_s, rcvtimeout_us);
                                         
                                         if (result > 0) {
-                                            INFO_NNL("<%i> Payload", ch_group->serv_index);
                                             if (action_network->method_n == 13) {
-                                                INFO(":\n%s", action_network->content);
+                                                INFO("<%i> Payload\n%s", ch_group->serv_index, action_network->content);
                                             } else {
-                                                INFO(" RAW");
+                                                INFO("<%i> Payload RAW", ch_group->serv_index);
                                             }
                                         } else {
                                             ERROR("<%i> UDP", ch_group->serv_index);
@@ -5551,7 +5547,7 @@ void free_monitor_task(void* args) {
                                     uint8_t* str = NULL;
                                     if (result > 0) {
                                         // Read response
-                                        INFO("<%i> Response", ch_group->serv_index);
+                                        INFO("<%i> Reply", ch_group->serv_index);
                                         int read_byte;
                                         uint8_t* recv_buffer = malloc(65);
                                         do {
@@ -5624,7 +5620,7 @@ void free_monitor_task(void* args) {
                                         
                                         free(str);
                                         
-                                        INFO("<%i> -> %i", ch_group->serv_index, total_recv);
+                                        INFO("<%i> %i", ch_group->serv_index, total_recv);
                                     }
                                 }
                                 
@@ -6320,15 +6316,14 @@ void net_action_task(void* pvParameters) {
                                              rcvtimeout_s, rcvtimeout_us);
                     
                     if (result >= 0) {
-                        INFO_NNL("<%i> Payload", action_task->ch_group->serv_index);
                         if (action_network->method_n == 4) {
-                            INFO(" RAW");
+                            INFO("<%i> Payload RAW", action_task->ch_group->serv_index);
                         } else {
-                            INFO(":\n%s", req);
+                            INFO("<%i> Payload\n%s", action_task->ch_group->serv_index, req);
                         }
                         
                         if (action_network->wait_response > 0) {
-                            INFO("<%i> Response:", action_task->ch_group->serv_index);
+                            INFO("<%i> Reply", action_task->ch_group->serv_index);
                             int read_byte;
                             unsigned int total_recv = 0;
                             uint8_t* recv_buffer = malloc(65);
@@ -7560,8 +7555,9 @@ void run_homekit_server() {
     
     led_blink(4);
     
-    WIFI_WATCHDOG_TIMER = rs_esp_timer_create(WIFI_WATCHDOG_POLL_PERIOD_MS, pdTRUE, NULL, wifi_watchdog);
-    rs_esp_timer_start_forced(WIFI_WATCHDOG_TIMER);
+    TimerHandle_t wifi_watchdog_timer = rs_esp_timer_create(WIFI_WATCHDOG_POLL_PERIOD_MS, pdTRUE, NULL, wifi_watchdog);
+    WIFI_WATCHDOG_TIMER = wifi_watchdog_timer;
+    rs_esp_timer_start_forced(wifi_watchdog_timer);
     
     if (main_config.ping_inputs) {
         rs_esp_timer_start_forced(rs_esp_timer_create(main_config.ping_poll_period * 1000.f, pdTRUE, NULL, ping_task_timer_worker));
@@ -9243,9 +9239,18 @@ void normal_mode_init() {
 #endif
     
     // Custom Hostname
+#ifdef ESP_PLATFORM     // ESP-IDF make a copy of the hostname string. This will be freed then
+    char* custom_hostname = strdup(name.value.string_value);
+#else                   // esp-open-rtos uses the pointer of the hostname string
     char* custom_hostname = name.value.string_value;
+#endif
+
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME) != NULL) {
+#ifdef ESP_PLATFORM     // ESP-IDF make a copy of the hostname string. This will be freed then
+        custom_hostname = strdup(cJSON_rsf_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring);
+#else                   // esp-open-rtos uses the pointer of the hostname string
         custom_hostname = uni_strdup(cJSON_rsf_GetObjectItemCaseSensitive(json_config, CUSTOM_HOSTNAME)->valuestring, &unistrings);
+#endif
     }
     
     // Custom NTP Host
@@ -9916,7 +9921,7 @@ void normal_mode_init() {
             diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_1), digstate, ch_group, 1);
             diginput_register(cJSON_rsf_GetObjectItemCaseSensitive(json_context, FIXED_BUTTONS_STATUS_ARRAY_0), digstate, ch_group, 0);
             
-            ch_group->ch[1]->value.int_value = !((uint8_t) set_initial_state(ch_group->serv_index, 0, json_context, ch_group->ch[1], CH_TYPE_INT8, 1));
+            ch_group->ch[1]->value.int_value = !((uint8_t) set_initial_state(ch_group->serv_index, 1, json_context, ch_group->ch[1], CH_TYPE_INT8, 1));
             if (exec_actions_on_boot) {
                 hkc_lock_setter(ch_group->ch[1], HOMEKIT_UINT8(!ch_group->ch[1]->value.int_value));
             } else {
@@ -12456,6 +12461,8 @@ void normal_mode_init() {
             ch_group->ch[0] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_FREE_VALUE, 0);
         }
         
+        ch_group->ch[0]->value.float_value = set_initial_state(ch_group->serv_index, 0, json_context, ch_group->ch[0], CH_TYPE_FLOAT, 0);
+        
         if (tg_serv != 0) {
             ch_group->ch[ch_group->chs - 1] = ch_group_find_by_serv(get_absolut_index(service_numerator, tg_serv))->ch[tg_ch];
         }
@@ -12715,9 +12722,6 @@ void normal_mode_init() {
     register_actions(root_device_ch_group, json_config, 0);
     set_accessory_ir_protocol(root_device_ch_group, json_config);
     set_killswitch(root_device_ch_group, json_config);
-    
-    // Saved States Timer Function
-    root_device_ch_group->timer = rs_esp_timer_create(SAVE_STATES_DELAY_MS, pdFALSE, NULL, save_states);
     
     // Run action 0 from root device
     do_actions(root_device_ch_group, 0);
@@ -13050,16 +13054,21 @@ void normal_mode_init() {
     //main_config.wifi_status = WIFI_STATUS_CONNECTING;     // Not needed
     
 #ifdef ESP_PLATFORM
-    wifi_config_init("HAA", run_homekit_server, custom_hostname, 0, wifi_sleep_mode, wifi_bandwidth_40);
+    wifi_config_init(run_homekit_server, custom_hostname, 0, wifi_sleep_mode, wifi_bandwidth_40);
 #else
     int8_t phy_mode = 3;
     sysparam_set_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, phy_mode);
-    wifi_config_init("HAA", run_homekit_server, custom_hostname, 0);
+    wifi_config_init(run_homekit_server, custom_hostname, 0);
 #endif
     
     led_blink(2);
     
     do_actions(root_device_ch_group, 1);
+    
+    // SAVE_STATES_TIMER Saved States Timer Function
+    if (main_config.last_states) {
+        root_device_ch_group->timer = rs_esp_timer_create(SAVE_STATES_DELAY_MS, pdFALSE, NULL, save_states);
+    }
     
     vTaskDelete(NULL);
 }
@@ -13190,9 +13199,9 @@ void init_task() {
         printf_header();
         INFO("SETUP");
 #ifdef ESP_PLATFORM
-        wifi_config_init("HAA", NULL, main_config.name_value, param, 0, false);
+        wifi_config_init(NULL, NULL, param, 0, false);
 #else
-        wifi_config_init("HAA", NULL, main_config.name_value, param);
+        wifi_config_init(NULL, NULL, param);
 #endif
     }
     
@@ -13205,9 +13214,10 @@ void init_task() {
         if (wifi_ssid) {
             adv_logger_init(ADV_LOGGER_UART0_UDP, NULL, false);
 #ifdef ESP_PLATFORM
-            wifi_config_init("HAA", wifi_done, main_config.name_value, 0, 0, false);
+            char* custom_hostname = strdup(name.value.string_value);    // ESP-IDF make a copy of the hostname string. This will be freed then
+            wifi_config_init(wifi_done, custom_hostname, 0, 0, false);
 #else
-            wifi_config_init("HAA", wifi_done, main_config.name_value, 0);
+            wifi_config_init(wifi_done, main_config.name_value, 0);
 #endif
             
 #ifdef ESP_PLATFORM
