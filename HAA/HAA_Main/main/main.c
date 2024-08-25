@@ -3423,13 +3423,14 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
             pair_transform(mat2, edge, edge, p5, p6); // this defines mat2
             gamut_transform(p, mat2, d); // this performs the shift by d, applies mat2, then shifts back
 
-            L_DEBUG("LED_RGB+k: [%g, %g]", (LED_RGB+k)[0], (LED_RGB+k)[1]);
+            L_DEBUG("LED_RGB + k: [%g, %g]", *(LED_RGB + k)[0], *(LED_RGB + k)[1]);
             L_DEBUG("new_vertex: [%g, %g]", new_vertex[0], new_vertex[1]);
             L_DEBUG("p5: [%g, %g]", p5[0], p5[1]);
             L_DEBUG("p6: [%g, %g]", p6[0], p6[1]);
             L_DEBUG("mat2 = { {%g, %g}, {%g, %g} }", mat2[0][0], mat2[0][1], mat2[1][0], mat2[1][1]);
             
         }
+        
         INFO("Chrom %g, %g", p[0], p[1]);
     }
   
@@ -7187,6 +7188,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             }
                             
                             if (value_int == 8) {
+                                rs_esp_timer_stop(SEC_SYSTEM_REC_ALARM_TIMER);
                                 SEC_SYSTEM_CH_CURRENT_STATE->value.int_value = SEC_SYSTEM_CH_TARGET_STATE->value.int_value;
                                 do_actions(ch_group, 8);
                                 homekit_characteristic_notify_safe(SEC_SYSTEM_CH_CURRENT_STATE);

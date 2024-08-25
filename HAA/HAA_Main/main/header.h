@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.13.0"
+#define HAA_FIRMWARE_VERSION                "12.13.1"
 #define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -859,7 +859,7 @@
 #endif
 
 #ifdef LIGHT_DEBUG
-#define L_DEBUG(message, ...)               printf(message "\n", ##__VA_ARGS__)
+#define L_DEBUG(message, ...)               INFO(message, ##__VA_ARGS__)
 #else
 #define L_DEBUG(message, ...)
 #endif
