@@ -183,6 +183,12 @@ if(HAA_SHELLY_Pro2)
     )
 endif()
 
+if(HAA_SHELLY_Pro3)
+    list(APPEND EXTRA_COMPILE_OPTIONS
+        -DHAA_SHELLY_Pro3
+    )
+endif()
+
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(HAA_mgos32_Installer)
