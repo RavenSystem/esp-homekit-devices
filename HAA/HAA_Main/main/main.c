@@ -3416,7 +3416,7 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
             L_DEBUG("d: [%g, %g]", d[0], d[1]);
 
             float mat2[2][2], p5[2], p6[2];
-//            array_subtract(p5, (LED_RGB + k), d); THIS DOES NOT WORK for this matrix, idk why
+            array_subtract(p5, *(LED_RGB + k), d);
             float new_vertex[2] = { myRGB[k][0], myRGB[k][1] };
             array_subtract(p5, new_vertex, d);
             array_subtract(p6, vertex, d);
@@ -3428,10 +3428,9 @@ void hsi2rgbw(uint16_t h, float s, uint8_t v, ch_group_t* ch_group) {
             L_DEBUG("p5: [%g, %g]", p5[0], p5[1]);
             L_DEBUG("p6: [%g, %g]", p6[0], p6[1]);
             L_DEBUG("mat2 = { {%g, %g}, {%g, %g} }", mat2[0][0], mat2[0][1], mat2[1][0], mat2[1][1]);
-            
         }
         
-        INFO("Chrom %g, %g", p[0], p[1]);
+        L_DEBUG("Chrom %g, %g", p[0], p[1]);
     }
   
     float targetRGB[3];

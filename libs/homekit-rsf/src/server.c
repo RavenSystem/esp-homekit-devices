@@ -673,7 +673,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
                         size_t encoded_data_size = base64_encoded_size(v.data_value, v.data_size);
                         byte* encoded_data = malloc(encoded_data_size + 1);
                         if (!encoded_data) {
-                            CLIENT_ERROR(client, "Allocate %d bytes for encoding data", encoded_data_size + 1);
+                            CLIENT_ERROR(client, "Allocate %d bytes for encoding", encoded_data_size + 1);
                             json_string(json, "");
                             break;
                         }
@@ -1648,6 +1648,10 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
 }
 
 void homekit_server_on_pair_verify(client_context_t *context, const byte *data, size_t size) {
+#ifdef HOMEKIT_PAIR_VERIFY_TIME_DEBUG
+    uint32_t function_time = sdk_system_get_time_raw();
+#endif
+    
     HOMEKIT_DEBUG_LOG("Pair Verify");
     DEBUG_HEAP();
     
@@ -2073,6 +2077,10 @@ void homekit_server_on_pair_verify(client_context_t *context, const byte *data, 
 #endif // HOMEKIT_OVERCLOCK_PAIR_VERIFY
 
     tlv_free(message);
+    
+#ifdef HOMEKIT_PAIR_VERIFY_TIME_DEBUG
+    CLIENT_INFO(context, "Verify Time %d", sdk_system_get_time_raw() - function_time);
+#endif
 }
 
 
@@ -2691,7 +2699,7 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     // Default max data len = 2,097,152 but that does not make sense
                     // for this accessory
 #ifndef HOMEKIT_DISABLE_MAXLEN_CHECK
-                    unsigned int max_len = (ch->max_data_len) ? *ch->max_data_len : 4096;
+                    unsigned int max_len = (ch->max_data_len) ? *ch->max_data_len : 16384;
 #endif //HOMEKIT_DISABLE_MAXLEN_CHECK
                     
                     char *value = j_value->valuestring;
@@ -2720,6 +2728,14 @@ void homekit_server_on_update_characteristics(client_context_t *context, const b
                     CLIENT_DEBUG(context, "for %d.%d", aid, iid);
 
                     h_value = HOMEKIT_DATA(data, data_size);
+                    if (ch->setter_ex) {
+                        ch->setter_ex(ch, h_value);
+                    } else {
+                        homekit_value_destruct(&ch->value);
+                        homekit_value_copy(&ch->value, &h_value);
+                    }
+                    
+                    free(data);
                     break;
                 }
                 default: {

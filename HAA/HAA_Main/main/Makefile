@@ -30,6 +30,7 @@ FLASH_SPEED = 40
 
 # Max HAA firmware size is 585728 bytes
 
+EXTRA_CFLAGS += -Os
 #EXTRA_CFLAGS += -O2 \
 #	-fpredictive-commoning \
 #	-ftree-slp-vectorize \
@@ -107,6 +108,7 @@ EXTRA_CFLAGS += -DconfigTIMER_TASK_STACK_DEPTH=736
 
 ## HOMEKIT DEBUG
 #EXTRA_CFLAGS += -DHOMEKIT_DEBUG
+#EXTRA_CFLAGS += -DHOMEKIT_PAIR_VERIFY_TIME_DEBUG
 
 ## mDNS Responder DEBUG
 #EXTRA_CFLAGS += -DqDebugLog -DqLogIncoming -DqLogAllTraffic

@@ -85,8 +85,7 @@ typedef struct {
     bool is_null: 1;
     bool is_static: 1;
     homekit_format_t format: 4;
-    int _align: 10;
-    uint16_t data_size;
+    uint32_t data_size: 26;
     union {
         bool bool_value;
         int int_value;
