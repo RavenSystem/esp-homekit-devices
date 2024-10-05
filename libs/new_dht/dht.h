@@ -26,7 +26,7 @@ typedef enum
 } dht_sensor_type_t;
 
 
-void dht_init_pin(uint8_t pin);
+void dht_init_pin(uint8_t pin, int8_t pin_output);
 
 /**
  * Read data from sensor on specified pin.
@@ -36,7 +36,7 @@ void dht_init_pin(uint8_t pin);
  *              temperature=24.4 is 24.4 degrees Celsius
  *
  */
-bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity, int16_t *temperature);
+bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int8_t pin_output, int16_t *humidity, int16_t *temperature);
 
 
 /**
@@ -44,7 +44,7 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
  *
  * Return values as floating point values.
  */
-bool dht_read_float_data(dht_sensor_type_t sensor_type, uint8_t pin, float *humidity, float *temperature);
+bool dht_read_float_data(dht_sensor_type_t sensor_type, uint8_t pin, int8_t pin_output, float *humidity, float *temperature);
 
 #ifdef __cplusplus
 }

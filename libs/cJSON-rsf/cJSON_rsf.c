@@ -80,23 +80,18 @@ static unsigned char* cJSON_rsf_strdup(const unsigned char* string)
 
     length = strlen((const char*)string) + sizeof("");
     copy = malloc(length);
-    if (copy == NULL)
+    if (copy)
     {
-        return NULL;
+        memcpy(copy, string, length);
     }
-    memcpy(copy, string, length);
-
+    
     return copy;
 }
 
 /* Internal constructor. */
 static cJSON_rsf *cJSON_rsf_New_Item()
 {
-    cJSON_rsf* node = malloc(sizeof(cJSON_rsf));
-    if (node)
-    {
-        memset(node, 0, sizeof(cJSON_rsf));
-    }
+    cJSON_rsf* node = calloc(1, sizeof(cJSON_rsf));
 
     return node;
 }

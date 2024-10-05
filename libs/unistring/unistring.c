@@ -25,8 +25,7 @@ unsigned char* uni_memdup(unsigned char* string, size_t size, unistring_t** unis
     }
     
     if (unistring == NULL) {
-        unistring = malloc(sizeof(unistring_t));
-        memset(unistring, 0, sizeof(unistring_t));
+        unistring = calloc(1, sizeof(unistring_t));
         
         unistring->size = size;
         unistring->string = malloc(size);
@@ -50,12 +49,12 @@ void unistring_destroy(unistring_t* unistrings) {
         unistring_t* current_unistring = unistring;
         unistring = unistring->next;
         
-        /*
+#ifdef UNISTRING_DEBUG
         char* str = malloc(current_unistring->size + 1);
         snprintf(str, current_unistring->size, "%s", current_unistring->string);
         printf("UNIString (%i): \"%s\"\n", current_unistring->size, str);
         free(str);
-        */
+#endif
         
         free(current_unistring);
     }

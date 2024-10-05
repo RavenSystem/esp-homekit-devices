@@ -47,8 +47,7 @@ static raven_ntp_config_t* raven_ntp_config = NULL;
 
 static void raven_ntp_init() {
     if (!raven_ntp_config) {
-        raven_ntp_config = malloc(sizeof(raven_ntp_config_t));
-        memset(raven_ntp_config, 0, sizeof(*raven_ntp_config));
+        raven_ntp_config = calloc(1, sizeof(raven_ntp_config_t));
     }
 }
 
@@ -157,9 +156,8 @@ int raven_ntp_update(char* ntp_server) {
     if (getaddr_result == 0) {
         int s = socket(res->ai_family, res->ai_socktype, 0);
         if (s >= 0) {
-            uint8_t* ntp_payload = malloc(49);
+            uint8_t* ntp_payload = calloc(1, 49);
             if (ntp_payload) {
-                memset(ntp_payload, 0, 49);
                 ntp_payload[0] = 0x1B;
                 
                 const struct timeval sndtimeout = { 3, 0 };

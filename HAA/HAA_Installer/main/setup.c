@@ -141,8 +141,7 @@ void setup_mode_reset_sysparam() {
 }
 
 static client_t *client_new() {
-    client_t *client = malloc(sizeof(client_t));
-    memset(client, 0, sizeof(client_t));
+    client_t *client = calloc(1, sizeof(client_t));
     
     context->max_body_size = MAX_SETUP_BODY_LEN;
     
@@ -487,8 +486,8 @@ static void wifi_scan_done_cb() {
         }
         
         if (!net) {
-            wifi_network_info_t *net = malloc(sizeof(wifi_network_info_t));
-            memset(net, 0, sizeof(*net));
+            wifi_network_info_t *net = calloc(1, sizeof(wifi_network_info_t));
+            
             strncpy(net->ssid, (char*) ap_records[i].ssid, sizeof(net->ssid) - 1);
             memcpy(net->bssid, ap_records[i].bssid, 6);
             itoa(ap_records[i].rssi, net->rssi, 10);
@@ -529,8 +528,8 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
         }
         
         if (!net) {
-            wifi_network_info_t *net = malloc(sizeof(wifi_network_info_t));
-            memset(net, 0, sizeof(*net));
+            wifi_network_info_t *net = calloc(1, sizeof(wifi_network_info_t));
+            
             strncpy(net->ssid, (char *)bss->ssid, sizeof(net->ssid) - 1);
             memcpy(net->bssid, bss->bssid, 6);
             itoa(bss->rssi, net->rssi, 10);
@@ -1460,8 +1459,7 @@ static void wifi_config_station_connect() {
 void wifi_config_init(TaskHandle_t xHandle) {
     INFO("Wifi init");
     
-    context = malloc(sizeof(wifi_config_context_t));
-    memset(context, 0, sizeof(*context));
+    context = calloc(1, sizeof(wifi_config_context_t));
     
 #ifdef ESP_PLATFORM
     uint8_t macaddr[6];

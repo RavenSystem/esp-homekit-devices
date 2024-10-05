@@ -5,8 +5,8 @@
 
 
 tlv_values_t *tlv_new() {
-    tlv_values_t *values = malloc(sizeof(tlv_values_t));
-    values->head = NULL;
+    tlv_values_t *values = calloc(1, sizeof(tlv_values_t));
+    
     return values;
 }
 
@@ -25,11 +25,11 @@ void tlv_free(tlv_values_t *values) {
 
 
 int tlv_add_value_(tlv_values_t *values, byte type, byte *value, size_t size) {
-    tlv_t *tlv = malloc(sizeof(tlv_t));
+    tlv_t *tlv = calloc(1, sizeof(tlv_t));
     tlv->type = type;
     tlv->size = size;
     tlv->value = value;
-    tlv->next = NULL;
+    //tlv->next = NULL;
 
     if (!values->head) {
         values->head = tlv;

@@ -79,8 +79,7 @@ int led_create(const int gpio, const bool inverted) {
     led_t* led = led_find_by_gpio(gpio);
     
     if (!led) {
-        led = malloc(sizeof(led_t));
-        memset(led, 0, sizeof(*led));
+        led = calloc(1, sizeof(led_t));
 
         led->next = leds;
         leds = led;

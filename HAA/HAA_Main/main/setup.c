@@ -105,6 +105,36 @@ void haa_sdk_wifi_set_opmode(const uint8_t opmode) {
 }
 #endif
 
+void haa_reset_homekit_id() {
+    homekit_server_reset();
+    sysparam_erase(HOMEKIT_RE_PAIR_SYSPARAM);
+    sysparam_set_int32(LAST_CONFIG_NUMBER_SYSPARAM, 1);
+}
+
+void haa_remove_saved_states() {
+    int32_t hk_total_serv = 0;
+    sysparam_get_int32(TOTAL_SERV_SYSPARAM, &hk_total_serv);
+    
+    char saved_state_id[8];
+    for (int serv = 1; serv <= hk_total_serv; serv++) {
+        for (unsigned int ch = 0; ch < HIGH_HOMEKIT_CH_NUMBER; ch++) {
+            uint32_t int_saved_state_id = (serv * 100) + ch;
+            itoa(int_saved_state_id, saved_state_id, 10);
+            sysparam_erase(saved_state_id);
+        }
+    }
+}
+
+void haa_increase_last_hk_config_number() {
+    int32_t last_config_number = 0;
+    sysparam_get_int32(LAST_CONFIG_NUMBER_SYSPARAM, &last_config_number);
+    last_config_number++;
+    if (last_config_number > 65535) {
+        last_config_number = 1;
+    }
+    sysparam_set_int32(LAST_CONFIG_NUMBER_SYSPARAM, last_config_number);
+}
+
 typedef struct _wifi_network_info {
     char ssid[33];
     uint8_t bssid[6];
@@ -160,8 +190,7 @@ inline static void setup_mode_reset_sysparam() {
 }
 
 static client_t *client_new() {
-    client_t *client = malloc(sizeof(client_t));
-    memset(client, 0, sizeof(client_t));
+    client_t *client = calloc(1, sizeof(client_t));
     
     context->max_body_size = MAX_SETUP_BODY_LEN;
     
@@ -531,8 +560,8 @@ static void wifi_scan_done_cb() {
         }
         
         if (!net) {
-            wifi_network_info_t *net = malloc(sizeof(wifi_network_info_t));
-            memset(net, 0, sizeof(*net));
+            wifi_network_info_t *net = calloc(1, sizeof(wifi_network_info_t));
+            
             strncpy(net->ssid, (char*) ap_records[i].ssid, sizeof(net->ssid) - 1);
             memcpy(net->bssid, ap_records[i].bssid, 6);
             itoa(ap_records[i].rssi, net->rssi, 10);
@@ -573,8 +602,8 @@ static void wifi_scan_done_cb(void *arg, sdk_scan_status_t status) {
         }
         
         if (!net) {
-            wifi_network_info_t *net = malloc(sizeof(wifi_network_info_t));
-            memset(net, 0, sizeof(*net));
+            wifi_network_info_t *net = calloc(1, sizeof(wifi_network_info_t));
+            
             strncpy(net->ssid, (char *)bss->ssid, sizeof(net->ssid) - 1);
             memcpy(net->bssid, bss->bssid, 6);
             itoa(bss->rssi, net->rssi, 10);
@@ -881,18 +910,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             form_param_t *bssid_param = form_params_find(form, "bid");
             form_param_t *password_param = form_params_find(form, "psw");
             
-            // Remove saved states
-            int32_t hk_total_serv = 0;
-            sysparam_get_int32(TOTAL_SERV_SYSPARAM, &hk_total_serv);
-            
-            char saved_state_id[8];
-            for (int serv = 1; serv <= hk_total_serv; serv++) {
-                for (unsigned int ch = 0; ch < HIGH_HOMEKIT_CH_NUMBER; ch++) {
-                    uint32_t int_saved_state_id = (serv * 100) + ch;
-                    itoa(int_saved_state_id, saved_state_id, 10);
-                    sysparam_erase(saved_state_id);
-                }
-            }
+            haa_remove_saved_states();
             
             if (conf_param && conf_param->value) {
                 sysparam_set_string(HAA_SCRIPT_SYSPARAM, conf_param->value);
@@ -949,19 +967,11 @@ static void wifi_config_server_on_settings_update_task(void* args) {
 #endif
             }
             
-            int32_t last_config_number = 0;
-            sysparam_get_int32(LAST_CONFIG_NUMBER_SYSPARAM, &last_config_number);
-            last_config_number++;
-            if (last_config_number > 65535) {
-                last_config_number = 1;
-            }
-            
             if (reset_hk_param) {
-                homekit_server_reset();
-                sysparam_erase(HOMEKIT_RE_PAIR_SYSPARAM);
-                last_config_number = 1;
+                haa_reset_homekit_id();
+            } else {
+                haa_increase_last_hk_config_number();
             }
-            sysparam_set_int32(LAST_CONFIG_NUMBER_SYSPARAM, last_config_number);
             
             if (ssid_param && ssid_param->value) {
                 sysparam_set_string(WIFI_STA_SSID_SYSPARAM, ssid_param->value);
@@ -1621,8 +1631,7 @@ void wifi_config_init(void (*on_wifi_ready)(), char* custom_hostname, const int 
 #endif
     INFO("Wifi init");
     
-    context = malloc(sizeof(wifi_config_context_t));
-    memset(context, 0, sizeof(*context));
+    context = calloc(1, sizeof(wifi_config_context_t));
     
 #ifdef ESP_PLATFORM
     free_wifi_config_ip_info();

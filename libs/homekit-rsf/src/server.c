@@ -247,8 +247,7 @@ void homekit_set_max_clients(const unsigned int clients) {
 #endif // HOMEKIT_CHANGE_MAX_CLIENTS
 
 homekit_server_t *server_new() {
-    homekit_server_t* homekit_server = malloc(sizeof(homekit_server_t));
-    memset(homekit_server, 0, sizeof(*homekit_server));
+    homekit_server_t* homekit_server = calloc(1, sizeof(homekit_server_t));
     
     FD_ZERO(&homekit_server->fds);
     
@@ -342,8 +341,7 @@ typedef enum {
 
 
 pair_verify_context_t *pair_verify_context_new() {
-    pair_verify_context_t *context = malloc(sizeof(pair_verify_context_t));
-    memset(context, 0, sizeof(*context));
+    pair_verify_context_t *context = calloc(1, sizeof(pair_verify_context_t));
     
     return context;
 }
@@ -367,10 +365,8 @@ void pair_verify_context_free(pair_verify_context_t **context) {
 
 
 client_context_t *client_context_new() {
-    client_context_t *c = malloc(sizeof(client_context_t));
+    client_context_t *c = calloc(1, sizeof(client_context_t));
     if (c) {
-        memset(c, 0, sizeof(*c));
-        
         c->pairing_id = -1;
         
         c->parser = malloc(sizeof(*c->parser));
@@ -400,8 +396,7 @@ void client_context_free(client_context_t *c) {
 
 
 pairing_context_t *pairing_context_new() {
-    pairing_context_t *context = malloc(sizeof(pairing_context_t));
-    memset(context, 0, sizeof(*context));
+    pairing_context_t *context = calloc(1, sizeof(pairing_context_t));
     
     context->srp = crypto_srp_new();
     
@@ -586,7 +581,7 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
         homekit_value_t v = value ? *value : ch->getter_ex ? ch->getter_ex(ch) : ch->value;
         
         if (v.is_null) {
-            // json_string(json, "value"); json_null(json);
+            json_string(json, "value"); json_null(json);
         } else if (v.format != ch->format) {
             HOMEKIT_ERROR("Ch value format is different from ch format");
         } else {
@@ -1026,8 +1021,10 @@ void send_json_response(client_context_t *context, int status_code, byte *payloa
     }
     memcpy(response+response_len, payload, payload_size);
     response_len += payload_size;
+    
+#ifdef HOMEKIT_DEBUG
     response[response_len] = 0;  // required for debug output
-
+#endif
     CLIENT_DEBUG(context, "Sending HTTP response: %s", response);
 
     client_send(context, (byte *)response, response_len);
@@ -3470,8 +3467,7 @@ void homekit_characteristic_notify(homekit_characteristic_t *ch) {
             }
         }
         
-        notification_t* notification_new = malloc(sizeof(notification_t));
-        memset(notification_new, 0, sizeof(*notification_new));
+        notification_t* notification_new = calloc(1, sizeof(notification_t));
         
         notification_new->ch = ch;
         
@@ -3727,7 +3723,7 @@ void homekit_setup_mdns() {
     size_t data_size = strlen(homekit_server->config->setup_id) + strlen(homekit_server->accessory_id) + 1;
     char *data = malloc(data_size);
     snprintf(data, data_size, "%s%s", homekit_server->config->setup_id, homekit_server->accessory_id);
-    data[data_size - 1] = 0;
+    //data[data_size - 1] = 0;
     
     unsigned char shaHash[SHA512_DIGEST_SIZE];
     wc_Sha512Hash((const unsigned char*) data, data_size - 1, shaHash);

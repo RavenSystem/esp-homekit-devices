@@ -37,7 +37,7 @@ typedef struct {
  *  @returns `true` if at least one device responds with a presence pulse,
  *           `false` if no devices were detected (or the bus is shorted, etc)
  */
-bool onewire_reset(int pin);
+bool onewire_reset(int pin, int pin_output);
 
 /** Issue a 1-Wire rom select command to select a particular device.
  *
@@ -49,7 +49,7 @@ bool onewire_reset(int pin);
  *  @returns `true` if the "ROM select" command could be succesfully issued,
  *           `false` if there was an error.
  */
-bool onewire_select(int pin, const onewire_addr_t addr);
+bool onewire_select(int pin, int pin_output, const onewire_addr_t addr);
 
 /** Issue a 1-Wire "skip ROM" command to select *all* devices on the bus.
  *
@@ -60,7 +60,7 @@ bool onewire_select(int pin, const onewire_addr_t addr);
  *  @returns `true` if the "skip ROM" command could be succesfully issued,
  *           `false` if there was an error.
  */
-bool onewire_skip_rom(int pin);
+bool onewire_skip_rom(int pin, int pin_output);
 
 /** Write a byte on the onewire bus.
  *
@@ -74,7 +74,7 @@ bool onewire_skip_rom(int pin);
  *
  *  @returns `true` if successful, `false` on error.
  */
-bool onewire_write(int pin, uint8_t v);
+bool onewire_write(int pin, int pin_output, uint8_t v);
 
 /** Write multiple bytes on the 1-Wire bus.
  *
@@ -86,7 +86,7 @@ bool onewire_write(int pin, uint8_t v);
  *
  *  @returns `true` if all bytes written successfully, `false` on error.
  */
-bool onewire_write_bytes(int pin, const uint8_t *buf, unsigned int count);
+bool onewire_write_bytes(int pin, int pin_output, const uint8_t *buf, unsigned int count);
 
 /** Read a byte from a 1-Wire device.
  *
@@ -94,7 +94,7 @@ bool onewire_write_bytes(int pin, const uint8_t *buf, unsigned int count);
  *
  *  @returns the read byte on success, negative value on error.
  */
-int onewire_read(int pin);
+int onewire_read(int pin, int pin_output);
 
 /** Read multiple bytes from a 1-Wire device.
  *
@@ -104,7 +104,7 @@ int onewire_read(int pin);
  *
  *  @returns `true` on success, `false` on error.
  */
-bool onewire_read_bytes(int pin, uint8_t *buf, unsigned int count);
+bool onewire_read_bytes(int pin, int pin_output, uint8_t *buf, unsigned int count);
 
 /** Actively drive the bus high to provide extra power for certain operations
  *  of parasitically-powered devices.
@@ -134,7 +134,7 @@ bool onewire_read_bytes(int pin, uint8_t *buf, unsigned int count);
  *
  *  @returns `true` on success, `false` on error.
  */
-bool onewire_power(int pin);
+bool onewire_power(int pin, int pin_output);
 
 /** Stop forcing power onto the bus.
  *
@@ -145,7 +145,7 @@ bool onewire_power(int pin);
  *
  *  @param pin    The GPIO pin connected to the 1-Wire bus.
  */
-void onewire_depower(int pin);
+void onewire_depower(int pin, int pin_output);
 
 /** Clear the search state so that it will start from the beginning on the next
  *  call to onewire_search_next().
@@ -173,7 +173,7 @@ void onewire_search_prefix(onewire_search_t *search, uint8_t family_code);
  *  It might be a good idea to check the CRC to make sure you didn't get
  *  garbage.
  */
-onewire_addr_t onewire_search_next(onewire_search_t *search, int pin);
+onewire_addr_t onewire_search_next(onewire_search_t *search, int pin, int pin_output);
 
 /** Compute a Dallas Semiconductor 8 bit CRC.
  *

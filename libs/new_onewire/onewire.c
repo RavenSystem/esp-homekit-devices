@@ -47,18 +47,30 @@ static inline bool _onewire_wait_for_bus(int pin, unsigned int max_wait) {
     return state;
 }
 
-static void setup_pin(uint8_t pin, bool open_drain)
+static void setup_pin(uint8_t pin, int8_t pin_output, bool open_drain)
 {
 #ifdef ESP_PLATFORM
-    gpio_mode_t gpio_mode = GPIO_MODE_OUTPUT;
-    if (open_drain) {
-        gpio_mode = GPIO_MODE_INPUT_OUTPUT_OD;
+    if (pin_output < 0) {
+        gpio_mode_t gpio_mode = GPIO_MODE_OUTPUT;
+        if (open_drain) {
+            gpio_mode = GPIO_MODE_INPUT_OUTPUT_OD;
+        }
+        gpio_set_direction(pin, gpio_mode);
+        gpio_set_pull_mode(pin, GPIO_PULLUP_ONLY);
+    } else {
+        gpio_set_direction(pin, GPIO_MODE_INPUT);
+        gpio_set_pull_mode(pin, GPIO_FLOATING);
+        gpio_set_direction(pin_output, GPIO_MODE_OUTPUT);
     }
-    gpio_set_direction(pin, gpio_mode);
-    gpio_set_pull_mode(pin, GPIO_PULLUP_ONLY);
 #else
-    gpio_enable(pin, open_drain ? GPIO_OUT_OPEN_DRAIN : GPIO_OUTPUT);
-    gpio_set_pullup(pin, true, true);
+    if (pin_output < 0) {
+        gpio_enable(pin, open_drain ? GPIO_OUT_OPEN_DRAIN : GPIO_OUTPUT);
+        gpio_set_pullup(pin, true, true);
+    } else {
+        gpio_enable(pin, GPIO_INPUT);
+        gpio_set_pullup(pin, false, false);
+        gpio_enable(pin_output, GPIO_OUTPUT);
+    }
 #endif
 }
 
@@ -68,19 +80,32 @@ static void setup_pin(uint8_t pin, bool open_drain)
 //
 // Returns true if a device asserted a presence pulse, false otherwise.
 //
-bool onewire_reset(int pin) {
+bool onewire_reset(int pin, int pin_output) {
     bool r;
 
-    setup_pin(pin, true);
-    gpio_write(pin, 1);
+    setup_pin(pin, pin_output, true);
+    if (pin_output < 0) {
+        gpio_write(pin, 1);
+    } else {
+        gpio_write(pin_output, 1);
+    }
+    
     // wait until the wire is high... just in case
     if (!_onewire_wait_for_bus(pin, 250)) return false;
 
-    gpio_write(pin, 0);
+    if (pin_output < 0) {
+        gpio_write(pin, 0);
+    } else {
+        gpio_write(pin_output, 0);
+    }
     sdk_os_delay_us(480);
     
     PORT_ENTER_CRITICAL();
-    gpio_write(pin, 1); // allow it to float
+    if (pin_output < 0) {
+        gpio_write(pin, 1); // allow it to float
+    } else {
+        gpio_write(pin_output, 1);
+    }
     sdk_os_delay_us(70);
     r = !gpio_read(pin);
     PORT_EXIT_CRITICAL();
@@ -91,18 +116,23 @@ bool onewire_reset(int pin) {
     return r;
 }
 
-static bool _onewire_write_bit(int pin, bool v) {
+static bool _onewire_write_bit(int pin, int pin_output, bool v) {
     if (!_onewire_wait_for_bus(pin, 10)) return false;
     PORT_ENTER_CRITICAL();
+    
+    if (pin_output < 0) {
+        pin_output = pin;
+    }
+    
     if (v) {
-        gpio_write(pin, 0);  // drive output low
+        gpio_write(pin_output, 0);  // drive output low
         sdk_os_delay_us(10);
-        gpio_write(pin, 1);  // allow output high
+        gpio_write(pin_output, 1);  // allow output high
         sdk_os_delay_us(55);
     } else {
-        gpio_write(pin, 0);  // drive output low
+        gpio_write(pin_output, 0);  // drive output low
         sdk_os_delay_us(65);
-        gpio_write(pin, 1); // allow output high
+        gpio_write(pin_output, 1); // allow output high
     }
     sdk_os_delay_us(1);
     PORT_EXIT_CRITICAL();
@@ -110,15 +140,19 @@ static bool _onewire_write_bit(int pin, bool v) {
     return true;
 }
 
-static int _onewire_read_bit(int pin) {
+static int _onewire_read_bit(int pin, int pin_output) {
     int r;
 
     if (!_onewire_wait_for_bus(pin, 10)) return -1;
     
+    if (pin_output < 0) {
+        pin_output = pin;
+    }
+    
     PORT_ENTER_CRITICAL();
-    gpio_write(pin, 0);
+    gpio_write(pin_output, 0);
     sdk_os_delay_us(2);
-    gpio_write(pin, 1);  // let pin float, pull up will raise
+    gpio_write(pin_output, 1);  // let pin float, pull up will raise
     sdk_os_delay_us(11);
     r = gpio_read(pin);  // Must sample within 15us of start
     sdk_os_delay_us(48);
@@ -132,22 +166,22 @@ static int _onewire_read_bit(int pin) {
 // power after the write (e.g. DS18B20 in parasite power mode) then call
 // onewire_power() after this is complete to actively drive the line high.
 //
-bool onewire_write(int pin, uint8_t v) {
+bool onewire_write(int pin, int pin_output, uint8_t v) {
     uint8_t bitMask;
 
     for (bitMask = 0x01; bitMask; bitMask <<= 1) {
-        if (!_onewire_write_bit(pin, (bitMask & v))) {
+        if (!_onewire_write_bit(pin, pin_output, (bitMask & v))) {
             return false;
         }
     }
     return true;
 }
 
-bool onewire_write_bytes(int pin, const uint8_t *buf, unsigned int count) {
+bool onewire_write_bytes(int pin, int pin_output, const uint8_t *buf, unsigned int count) {
     unsigned int i;
 
     for (i = 0; i < count; i++) {
-        if (!onewire_write(pin, buf[i])) {
+        if (!onewire_write(pin, pin_output, buf[i])) {
             return false;
         }
     }
@@ -156,13 +190,13 @@ bool onewire_write_bytes(int pin, const uint8_t *buf, unsigned int count) {
 
 // Read a byte
 //
-int onewire_read(int pin) {
+int onewire_read(int pin, int pin_output) {
     uint8_t bitMask;
     int r = 0;
     int bit;
 
     for (bitMask = 0x01; bitMask; bitMask <<= 1) {
-        bit = _onewire_read_bit(pin);
+        bit = _onewire_read_bit(pin, pin_output);
         if (bit < 0) {
             return -1;
         } else if (bit) {
@@ -172,27 +206,27 @@ int onewire_read(int pin) {
     return r;
 }
 
-bool onewire_read_bytes(int pin, uint8_t *buf, unsigned int count) {
+bool onewire_read_bytes(int pin, int pin_output, uint8_t *buf, unsigned int count) {
     unsigned int i;
     int b;
 
     for (i = 0; i < count; i++) {
-        b = onewire_read(pin);
+        b = onewire_read(pin, pin_output);
         if (b < 0) return false;
         buf[i] = b;
     }
     return true;
 }
 
-bool onewire_select(int pin, onewire_addr_t addr) {
+bool onewire_select(int pin, int pin_output, onewire_addr_t addr) {
     unsigned int i;
 
-    if (!onewire_write(pin, ONEWIRE_SELECT_ROM)) {
+    if (!onewire_write(pin, pin_output, ONEWIRE_SELECT_ROM)) {
         return false;
     }
 
     for (i = 0; i < 8; i++) {
-        if (!onewire_write(pin, addr & 0xff)) {
+        if (!onewire_write(pin, pin_output, addr & 0xff)) {
             return false;
         }
         addr >>= 8;
@@ -201,23 +235,30 @@ bool onewire_select(int pin, onewire_addr_t addr) {
     return true;
 }
 
-bool onewire_skip_rom(int pin) {
-    return onewire_write(pin, ONEWIRE_SKIP_ROM);
+bool onewire_skip_rom(int pin, int pin_output) {
+    return onewire_write(pin, pin_output, ONEWIRE_SKIP_ROM);
 }
 
-bool onewire_power(int pin) {
+bool onewire_power(int pin, int pin_output) {
     // Make sure the bus is not being held low before driving it high, or we
     // may end up shorting ourselves out.
     if (!_onewire_wait_for_bus(pin, 10)) return false;
     
-    setup_pin(pin, false);
-    gpio_write(pin, 1);
+    setup_pin(pin, pin_output, false);
+    if (pin_output < 0) {
+        gpio_write(pin, 1);
+    } else {
+        gpio_write(pin_output, 1);
+    }
 
     return true;
 }
 
-void onewire_depower(int pin) {
-    setup_pin(pin, true);
+void onewire_depower(int pin, int pin_output) {
+    setup_pin(pin, pin_output, true);
+    if (pin_output >= 0) {
+        gpio_write(pin_output, 1);
+    }
 }
 
 void onewire_search_start(onewire_search_t *search) {
@@ -249,7 +290,7 @@ void onewire_search_prefix(onewire_search_t *search, uint8_t family_code) {
 // Return 1 : device found, ROM number in ROM_NO buffer
 //        0 : device not found, end of search
 //
-onewire_addr_t onewire_search_next(onewire_search_t *search, int pin) {
+onewire_addr_t onewire_search_next(onewire_search_t *search, int pin, int pin_output) {
     //TODO: add more checking for read/write errors
     uint8_t id_bit_number;
     uint8_t last_zero, search_result;
@@ -269,7 +310,7 @@ onewire_addr_t onewire_search_next(onewire_search_t *search, int pin) {
     // if the last call was not the last one
     if (!search->last_device_found) {
         // 1-Wire reset
-        if (!onewire_reset(pin)) {
+        if (!onewire_reset(pin, pin_output)) {
             // reset the search
             search->last_discrepancy = 0;
             search->last_device_found = false;
@@ -277,13 +318,13 @@ onewire_addr_t onewire_search_next(onewire_search_t *search, int pin) {
         }
 
         // issue the search command
-        onewire_write(pin, ONEWIRE_SEARCH);
+        onewire_write(pin, pin_output, ONEWIRE_SEARCH);
 
         // loop to do the search
         do {
             // read a bit and its complement
-            id_bit = _onewire_read_bit(pin);
-            cmp_id_bit = _onewire_read_bit(pin);
+            id_bit = _onewire_read_bit(pin, pin_output);
+            cmp_id_bit = _onewire_read_bit(pin, pin_output);
 
             // check for no devices on 1-wire
             if ((id_bit < 0) || (cmp_id_bit < 0)) {
@@ -320,7 +361,7 @@ onewire_addr_t onewire_search_next(onewire_search_t *search, int pin) {
                 }
 
                 // serial number search direction write bit
-                _onewire_write_bit(pin, search_direction);
+                _onewire_write_bit(pin, pin_output, search_direction);
 
                 // increment the byte counter id_bit_number
                 // and shift the mask rom_byte_mask

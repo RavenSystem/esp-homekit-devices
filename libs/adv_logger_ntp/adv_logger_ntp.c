@@ -107,9 +107,8 @@ static ssize_t adv_logger_write(struct _reent* r, int fd, const void* ptr, size_
             } else {
                 if (!adv_logger_data->udplogstring) {
                     adv_logger_data->udplogstring_size = len + 1;
-                    adv_logger_data->udplogstring = malloc(len);
+                    adv_logger_data->udplogstring = calloc(1, len);
                     if (adv_logger_data->udplogstring) {
-                        adv_logger_data->udplogstring[0] = 0;
                         is_adv_logger_data = true;
                     }
                 } else {
@@ -316,12 +315,11 @@ static void adv_logger_init_task(void* args) {
     }
     
     if (adv_logger_data->is_buffered) {
-        adv_logger_data->udplogstring = malloc(UDP_LOG_LEN);
+        adv_logger_data->udplogstring = calloc(1, UDP_LOG_LEN);
     } else {
         adv_logger_data->udplogstring_size = 63;
-        adv_logger_data->udplogstring = malloc(adv_logger_data->udplogstring_size);
+        adv_logger_data->udplogstring = calloc(1, adv_logger_data->udplogstring_size);
     }
-    adv_logger_data->udplogstring[0] = 0;
     
     strcat(adv_logger_data->udplogstring, "\r\nAdv Log (c) 2022-2024 José A. Jiménez Campos\r\n\r\n");
     adv_logger_data->udplogstring_len = strlen(adv_logger_data->udplogstring);
@@ -412,8 +410,7 @@ void adv_logger_init(const uint8_t log_type, char* dest_addr, const bool with_he
 #endif
         
     } else {
-        adv_logger_data = malloc(sizeof(adv_logger_data_t));
-        memset(adv_logger_data, 0, sizeof(*adv_logger_data));
+        adv_logger_data = calloc(1, sizeof(adv_logger_data_t));
         
         adv_logger_data->log_type = (log_type % 4) - 1;
         adv_logger_data->with_header = with_header;

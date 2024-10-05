@@ -494,8 +494,7 @@ static void button_evaluate_fn() {
 
 void adv_button_init(const uint16_t new_delay_ms, const bool continuos_mode) {
     if (!adv_button_main_config) {
-        adv_button_main_config = malloc(sizeof(adv_button_main_config_t));
-        memset(adv_button_main_config, 0, sizeof(*adv_button_main_config));
+        adv_button_main_config = calloc(1, sizeof(adv_button_main_config_t));
         
         unsigned int new_delay = BUTTON_EVAL_DELAY_MIN;
         
@@ -531,8 +530,7 @@ void adv_button_set_disable_time() {
 }
 
 static adv_button_mcp_t* private_adv_button_new_mcp_data(const uint8_t index, const uint8_t mode, const uint8_t mcp_bus, uint8_t len) {
-    adv_button_mcp_t* adv_button_mcp = malloc(sizeof(adv_button_mcp_t));
-    memset(adv_button_mcp, 0, sizeof(*adv_button_mcp));
+    adv_button_mcp_t* adv_button_mcp = calloc(1, sizeof(adv_button_mcp_t));
     
     adv_button_mcp->next = adv_button_main_config->mcps;
     adv_button_main_config->mcps = adv_button_mcp;
@@ -547,7 +545,7 @@ static adv_button_mcp_t* private_adv_button_new_mcp_data(const uint8_t index, co
         len = 2;
     }
     
-    adv_button_mcp->value = malloc(sizeof(uint8_t) * len);
+    adv_button_mcp->value = malloc(len * sizeof(uint8_t));
     
     return adv_button_mcp;
 }
@@ -564,8 +562,7 @@ int adv_button_create(const uint16_t gpio, const bool inverted, const uint8_t mo
     adv_button_t* button = button_find_by_gpio(gpio);
     
     if (!button) {
-        button = malloc(sizeof(adv_button_t));
-        memset(button, 0, sizeof(*button));
+        button = calloc(1, sizeof(adv_button_t));
         button->next = adv_button_main_config->buttons;
         adv_button_main_config->buttons = button;
         
@@ -691,8 +688,7 @@ int adv_button_register_callback_fn(const uint16_t gpio, const button_callback_f
     
     if (button) {
         adv_button_callback_fn_t *adv_button_callback_fn;
-        adv_button_callback_fn = malloc(sizeof(adv_button_callback_fn_t));
-        memset(adv_button_callback_fn, 0, sizeof(*adv_button_callback_fn));
+        adv_button_callback_fn = calloc(1, sizeof(adv_button_callback_fn_t));
         
         adv_button_callback_fn->callback = callback;
         adv_button_callback_fn->args = args;

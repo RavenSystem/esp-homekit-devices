@@ -44,40 +44,40 @@
 #define debug(fmt, ...)
 #endif
 
-uint8_t ds18b20_read_all(uint8_t pin, ds_sensor_t *result) {
+uint8_t ds18b20_read_all(uint8_t pin, int8_t pin_output, ds_sensor_t *result) {
     onewire_addr_t addr;
     onewire_search_t search;
     uint8_t sensor_id = 0;
 
     onewire_search_start(&search);
 
-    while ((addr = onewire_search_next(&search, pin)) != ONEWIRE_NONE) {
+    while ((addr = onewire_search_next(&search, pin, pin_output)) != ONEWIRE_NONE) {
         uint8_t crc = onewire_crc8((uint8_t *)&addr, 7);
         if (crc != (addr >> 56)){
             debug("CRC check failed: %02X %02X\n", (unsigned)(addr >> 56), crc);
             return 0;
         }
 
-        onewire_reset(pin);
-        onewire_select(pin, addr);
+        onewire_reset(pin, pin_output);
+        onewire_select(pin, pin_output, addr);
         
         PORT_ENTER_CRITICAL();
-        onewire_write(pin, DS18B20_CONVERT_T);
+        onewire_write(pin, pin_output, DS18B20_CONVERT_T);
         // For parasitic devices, power must be applied within 10us after issuing
         // the convert command.
-        onewire_power(pin);
+        onewire_power(pin, pin_output);
         PORT_EXIT_CRITICAL();
         
         vTaskDelay(750 / portTICK_PERIOD_MS);
 
-        onewire_reset(pin);
-        onewire_select(pin, addr);
-        onewire_write(pin, DS18B20_READ_SCRATCHPAD);
+        onewire_reset(pin, pin_output);
+        onewire_select(pin, pin_output, addr);
+        onewire_write(pin, pin_output, DS18B20_READ_SCRATCHPAD);
 
         uint8_t get[10];
 
         for (unsigned int k = 0; k < 9; k++){
-            get[k]=onewire_read(pin);
+            get[k]=onewire_read(pin, pin_output);
         }
 
         //debug("\n ScratchPAD DATA = %X %X %X %X %X %X %X %X %X\n",get[8],get[7],get[6],get[5],get[4],get[3],get[2],get[1],get[0]);
@@ -103,28 +103,28 @@ uint8_t ds18b20_read_all(uint8_t pin, ds_sensor_t *result) {
     return sensor_id;
 }
 
-float ds18b20_read_single(uint8_t pin) {
+float ds18b20_read_single(uint8_t pin, int8_t pin_output) {
 
-    onewire_reset(pin);
-    onewire_skip_rom(pin);
+    onewire_reset(pin, pin_output);
+    onewire_skip_rom(pin, pin_output);
     
     PORT_ENTER_CRITICAL();
-    onewire_write(pin, DS18B20_CONVERT_T);
+    onewire_write(pin, pin_output, DS18B20_CONVERT_T);
     // For parasitic devices, power must be applied within 10us after issuing
     // the convert command.
-    onewire_power(pin);
+    onewire_power(pin, pin_output);
     PORT_EXIT_CRITICAL();
     
     vTaskDelay(750 / portTICK_PERIOD_MS);
 
-    onewire_reset(pin);
-    onewire_skip_rom(pin);
-    onewire_write(pin, DS18B20_READ_SCRATCHPAD);
+    onewire_reset(pin, pin_output);
+    onewire_skip_rom(pin, pin_output);
+    onewire_write(pin, pin_output, DS18B20_READ_SCRATCHPAD);
 
     uint8_t get[10];
 
     for (unsigned int k = 0; k < 9; k++){
-        get[k] = onewire_read(pin);
+        get[k] = onewire_read(pin, pin_output);
     }
 
     //debug("\n ScratchPAD DATA = %X %X %X %X %X %X %X %X %X\n",get[8],get[7],get[6],get[5],get[4],get[3],get[2],get[1],get[0]);
@@ -147,49 +147,49 @@ float ds18b20_read_single(uint8_t pin) {
     //debug("Got a DS18B20 Reading: %d.%02d\n", (int)temperature, (int)(temperature - (int)temperature) * 100);
 }
 
-bool ds18b20_measure(int pin, ds18b20_addr_t addr, bool wait) {
-    if (!onewire_reset(pin)) {
+bool ds18b20_measure(uint8_t pin, int8_t pin_output, ds18b20_addr_t addr, bool wait) {
+    if (!onewire_reset(pin, pin_output)) {
         return false;
     }
     if (addr == DS18B20_ANY) {
-        onewire_skip_rom(pin);
+        onewire_skip_rom(pin, pin_output);
     } else {
-        onewire_select(pin, addr);
+        onewire_select(pin, pin_output, addr);
     }
     
     PORT_ENTER_CRITICAL();
-    onewire_write(pin, DS18B20_CONVERT_T);
+    onewire_write(pin, pin_output, DS18B20_CONVERT_T);
     // For parasitic devices, power must be applied within 10us after issuing
     // the convert command.
-    onewire_power(pin);
+    onewire_power(pin, pin_output);
     PORT_EXIT_CRITICAL();
 
     if (wait) {
         os_sleep_ms(750);
-        onewire_depower(pin);
+        onewire_depower(pin, pin_output);
     }
 
     return true;
 }
 
-bool ds18b20_read_scratchpad(int pin, ds18b20_addr_t addr, uint8_t *buffer) {
+bool ds18b20_read_scratchpad(uint8_t pin, int8_t pin_output, ds18b20_addr_t addr, uint8_t *buffer) {
     uint8_t crc;
     uint8_t expected_crc;
 
-    if (!onewire_reset(pin)) {
+    if (!onewire_reset(pin, pin_output)) {
         return false;
     }
     if (addr == DS18B20_ANY) {
-        onewire_skip_rom(pin);
+        onewire_skip_rom(pin, pin_output);
     } else {
-        onewire_select(pin, addr);
+        onewire_select(pin, pin_output, addr);
     }
-    onewire_write(pin, DS18B20_READ_SCRATCHPAD);
+    onewire_write(pin, pin_output, DS18B20_READ_SCRATCHPAD);
 
     for (int i = 0; i < 8; i++) {
-        buffer[i] = onewire_read(pin);
+        buffer[i] = onewire_read(pin, pin_output);
     }
-    crc = onewire_read(pin);
+    crc = onewire_read(pin, pin_output);
 
     expected_crc = onewire_crc8(buffer, 8);
     if (crc != expected_crc) {
@@ -200,11 +200,11 @@ bool ds18b20_read_scratchpad(int pin, ds18b20_addr_t addr, uint8_t *buffer) {
     return true;
 }
 
-float ds18b20_read_temperature(int pin, ds18b20_addr_t addr) {
+float ds18b20_read_temperature(uint8_t pin, int8_t pin_output, ds18b20_addr_t addr) {
     uint8_t scratchpad[8];
     int16_t temp;
 
-    if (!ds18b20_read_scratchpad(pin, addr, scratchpad)) {
+    if (!ds18b20_read_scratchpad(pin, pin_output, addr, scratchpad)) {
         return NAN;
     }
 
@@ -221,30 +221,30 @@ float ds18b20_read_temperature(int pin, ds18b20_addr_t addr) {
     return res;
 }
 
-float ds18b20_measure_and_read(int pin, ds18b20_addr_t addr) {
-    if (!ds18b20_measure(pin, addr, true)) {
+float ds18b20_measure_and_read(uint8_t pin, int8_t pin_output, ds18b20_addr_t addr) {
+    if (!ds18b20_measure(pin, pin_output, addr, true)) {
         return NAN;
     }
-    return ds18b20_read_temperature(pin, addr);
+    return ds18b20_read_temperature(pin, pin_output, addr);
 }
 
-bool ds18b20_measure_and_read_multi(int pin, ds18b20_addr_t *addr_list, unsigned int addr_count, float *result_list) {
-    if (!ds18b20_measure(pin, DS18B20_ANY, true)) {
+bool ds18b20_measure_and_read_multi(uint8_t pin, int8_t pin_output, ds18b20_addr_t *addr_list, unsigned int addr_count, float *result_list) {
+    if (!ds18b20_measure(pin, pin_output, DS18B20_ANY, true)) {
         for (unsigned int i = 0; i < addr_count; i++) {
             result_list[i] = NAN;
         }
         return false;
     }
-    return ds18b20_read_temp_multi(pin, addr_list, addr_count, result_list);
+    return ds18b20_read_temp_multi(pin, pin_output, addr_list, addr_count, result_list);
 }
 
-unsigned int ds18b20_scan_devices(int pin, ds18b20_addr_t *addr_list, unsigned int addr_count) {
+unsigned int ds18b20_scan_devices(uint8_t pin, int8_t pin_output, ds18b20_addr_t *addr_list, unsigned int addr_count) {
     onewire_search_t search;
     onewire_addr_t addr;
     unsigned int found = 0;
 
     onewire_search_start(&search);
-    while ((addr = onewire_search_next(&search, pin)) != ONEWIRE_NONE) {
+    while ((addr = onewire_search_next(&search, pin, pin_output)) != ONEWIRE_NONE) {
         uint8_t family_id = (uint8_t)addr;
         if (family_id == DS18B20_FAMILY_ID || family_id == DS18S20_FAMILY_ID) {
             if (found < addr_count) {
@@ -256,11 +256,11 @@ unsigned int ds18b20_scan_devices(int pin, ds18b20_addr_t *addr_list, unsigned i
     return found;
 }
 
-bool ds18b20_read_temp_multi(int pin, ds18b20_addr_t *addr_list, unsigned int addr_count, float *result_list) {
+bool ds18b20_read_temp_multi(uint8_t pin, int8_t pin_output, ds18b20_addr_t *addr_list, unsigned int addr_count, float *result_list) {
     bool result = true;
 
     for (unsigned int i = 0; i < addr_count; i++) {
-        result_list[i] = ds18b20_read_temperature(pin, addr_list[i]);
+        result_list[i] = ds18b20_read_temperature(pin, pin_output, addr_list[i]);
         if (isnan(result_list[i])) {
             result = false;
         }

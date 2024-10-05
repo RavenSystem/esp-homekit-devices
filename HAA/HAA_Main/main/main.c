@@ -416,8 +416,7 @@ void led_blink(const uint8_t times) {
 }
 
 void led_create(const uint16_t gpio, const bool inverted) {
-    main_config.status_led = malloc(sizeof(led_t));
-    memset(main_config.status_led, 0, sizeof(*main_config.status_led));
+    main_config.status_led = calloc(1, sizeof(led_t));
     
     main_config.status_led->timer = rs_esp_timer_create(10, pdFALSE, NULL, led_code_run);
     
@@ -565,37 +564,29 @@ int process_hexstr(const char* string, uint8_t** output_hex_string, unistring_t*
 }
 
 action_task_t* new_action_task() {
-    action_task_t* action_task = malloc(sizeof(action_task_t));
-    memset(action_task, 0, sizeof(*action_task));
+    action_task_t* action_task = calloc(1, sizeof(action_task_t));
     
     return action_task;
 }
 
 ch_group_t* new_ch_group(const uint8_t chs, const uint8_t nums_i, const uint8_t nums_f, const uint8_t last_wildcard_actions) {
-    ch_group_t* ch_group = malloc(sizeof(ch_group_t));
-    memset(ch_group, 0, sizeof(*ch_group));
+    ch_group_t* ch_group = calloc(1, sizeof(ch_group_t));
     
     if (chs > 0) {
-        const unsigned int size = chs * sizeof(homekit_characteristic_t*);
         ch_group->chs = chs;
-        ch_group->ch = (homekit_characteristic_t**) malloc(size);
-        memset(ch_group->ch, 0, size);
+        ch_group->ch = (homekit_characteristic_t**) calloc(chs, sizeof(homekit_characteristic_t*));
     }
     
     if (nums_i > 0) {
-        const unsigned int size = nums_i * sizeof(int8_t);
-        ch_group->num_i = (int8_t*) malloc(size);
-        memset(ch_group->num_i, 0, size);
+        ch_group->num_i = (int8_t*) calloc(nums_i, sizeof(int8_t));
     }
     
     if (nums_f > 0) {
-        const unsigned int size = nums_f * sizeof(float);
-        ch_group->num_f = (float*) malloc(size);
-        memset(ch_group->num_f, 0, size);
+        ch_group->num_f = (float*) calloc(nums_f, sizeof(float));
     }
     
     if (last_wildcard_actions > 0) {
-        ch_group->last_wildcard_action = (float*) malloc(last_wildcard_actions * sizeof(float));
+        ch_group->last_wildcard_action = (float*) calloc(last_wildcard_actions, sizeof(float));
         
         for (unsigned int i = 0; i < last_wildcard_actions; i++) {
             ch_group->last_wildcard_action[i] = NO_LAST_WILDCARD_ACTION;
@@ -668,8 +659,7 @@ addressled_t* new_addressled(uint8_t gpio, const uint16_t max_range, float time_
             addressled->max_range = max_range;
         }
     } else {
-        addressled = malloc(sizeof(addressled_t));
-        memset(addressled, 0, sizeof(*addressled));
+        addressled = calloc(1, sizeof(addressled_t));
         
         addressled->gpio = gpio;
         addressled->max_range = max_range;
@@ -2841,7 +2831,8 @@ void temperature_task(void* args) {
             ch_group->serv_type <= SERV_TYPE_HUMIDIFIER_WITH_TEMP) {
             const unsigned int sensor_type = TH_SENSOR_TYPE;
             const int sensor_gpio = TH_SENSOR_GPIO;
-            if (sensor_gpio != -1 || sensor_type >= 5) {
+            const int sensor_gpio_output = TH_SENSOR_GPIO_OUTPUT;
+            if (sensor_type > 0) {
                 get_temp = false;
                 
                 if (iairzoning == 0 || (iairzoning == (uint8_t) TH_IAIRZONING_CONTROLLER)) {
@@ -2856,19 +2847,19 @@ void temperature_task(void* args) {
                             current_sensor_type = DHT_TYPE_SI7021;
                         }
                         
-                        get_temp = dht_read_float_data(current_sensor_type, sensor_gpio, &humidity_value, &temperature_value);
+                        get_temp = dht_read_float_data(current_sensor_type, sensor_gpio, sensor_gpio_output, &humidity_value, &temperature_value);
                         
                     } else if (sensor_type == 3) {
                         const unsigned int sensor_index = TH_SENSOR_INDEX;
                         ds18b20_addr_t ds18b20_addrs[sensor_index];
                         
-                        const unsigned int scaned_devices = ds18b20_scan_devices(sensor_gpio, ds18b20_addrs, sensor_index);
+                        const unsigned int scaned_devices = ds18b20_scan_devices(sensor_gpio, sensor_gpio_output, ds18b20_addrs, sensor_index);
                         
                         if (scaned_devices >= sensor_index) {
                             ds18b20_addr_t ds18b20_addr;
                             ds18b20_addr = ds18b20_addrs[sensor_index - 1];
                             
-                            ds18b20_measure_and_read_multi(sensor_gpio, &ds18b20_addr, 1, &temperature_value);
+                            ds18b20_measure_and_read_multi(sensor_gpio, sensor_gpio_output, &ds18b20_addr, 1, &temperature_value);
                             
                             if (temperature_value < 130.f && temperature_value > -60.f) {
                                 get_temp = true;
@@ -3604,9 +3595,8 @@ void rgbw_set_timer_worker() {
 #ifndef CONFIG_IDF_TARGET_ESP32C2
     addressled_t* addressled = main_config.addressleds;
     while (addressled) {
-        uint8_t* colors = malloc(addressled->max_range);
+        uint8_t* colors = calloc(1, addressled->max_range);
         if (colors) {
-            memset(colors, 0, addressled->max_range);
             unsigned int has_changed = false;
             
             lightbulb_group = main_config.lightbulb_groups;
@@ -6158,8 +6148,7 @@ void net_action_task(void* pvParameters) {
                 
                 len += strlen(buffer) - 9;
                 
-                str_ch_value_t* str_ch_value = malloc(sizeof(str_ch_value_t));
-                memset(str_ch_value, 0, sizeof(*str_ch_value));
+                str_ch_value_t* str_ch_value = calloc(1, sizeof(str_ch_value_t));
                 
                 str_ch_value->string = strdup(buffer);
                 str_ch_value->next = NULL;
@@ -7510,7 +7499,7 @@ homekit_characteristic_t model = HOMEKIT_CHARACTERISTIC_(MODEL, "RavenSystem HAA
 homekit_characteristic_t identify_function = HOMEKIT_CHARACTERISTIC_(IDENTIFY, identify);
 homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, HAA_FIRMWARE_VERSION);
 homekit_characteristic_t hap_version = HOMEKIT_CHARACTERISTIC_(VERSION, "1.1.0");
-homekit_characteristic_t haa_custom_setup_option = HOMEKIT_CHARACTERISTIC_(CUSTOM_SETUP_OPTION, "", .setter_ex=hkc_custom_setup_setter);
+homekit_characteristic_t haa_custom_setup_option = HOMEKIT_CHARACTERISTIC_(CUSTOM_SETUP_OPTION, .setter_ex=hkc_custom_setup_setter);
 
 homekit_server_config_t config;
 
@@ -7669,8 +7658,7 @@ void normal_mode_init() {
             ping_input_t* ping_input = ping_input_find_by_host(cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetArrayItem(json_pings, j), PING_HOST)->valuestring);
             
             if (!ping_input) {
-                ping_input = malloc(sizeof(ping_input_t));
-                memset(ping_input, 0, sizeof(*ping_input));
+                ping_input = calloc(1, sizeof(ping_input_t));
                 
                 ping_input->host = uni_strdup(cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetArrayItem(json_pings, j), PING_HOST)->valuestring, &unistrings);
                 
@@ -7689,8 +7677,7 @@ void normal_mode_init() {
             }
             
             ping_input_callback_fn_t* ping_input_callback_fn;
-            ping_input_callback_fn = malloc(sizeof(ping_input_callback_fn_t));
-            memset(ping_input_callback_fn, 0, sizeof(*ping_input_callback_fn));
+            ping_input_callback_fn = calloc(1, sizeof(ping_input_callback_fn_t));
             
             if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetArrayItem(json_pings, j), PING_DISABLE_WITHOUT_WIFI) != NULL) {
                 ping_input_callback_fn->disable_without_wifi = (bool) cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetArrayItem(json_pings, j), PING_DISABLE_WITHOUT_WIFI)->valuefloat;
@@ -7727,8 +7714,7 @@ void normal_mode_init() {
                 unsigned int int_saved_state_id = (service * 100) + ch_number;
                 itoa(int_saved_state_id, saved_state_id, 10);
                 
-                last_state_t* last_state = malloc(sizeof(last_state_t));
-                memset(last_state, 0, sizeof(*last_state));
+                last_state_t* last_state = calloc(1, sizeof(last_state_t));
                 last_state->ch_type = ch_type;
                 last_state->ch_state_id = int_saved_state_id;
                 last_state->ch = ch;
@@ -7816,8 +7802,7 @@ void normal_mode_init() {
             if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action) != NULL) {
                 cJSON_rsf* json_action = cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action);
                 if (cJSON_rsf_GetObjectItemCaseSensitive(json_action, COPY_ACTIONS) != NULL) {
-                    action_copy_t* action_copy = malloc(sizeof(action_copy_t));
-                    memset(action_copy, 0, sizeof(*action_copy));
+                    action_copy_t* action_copy = calloc(1, sizeof(action_copy_t));
                     
                     action_copy->action = new_int_action;
                     action_copy->new_action = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_action, COPY_ACTIONS)->valuefloat;
@@ -7876,8 +7861,7 @@ void normal_mode_init() {
                             }
                         }
                         
-                        action_binary_output_t* action_binary_output = malloc(sizeof(action_binary_output_t));
-                        memset(action_binary_output, 0, sizeof(*action_binary_output));
+                        action_binary_output_t* action_binary_output = calloc(1, sizeof(action_binary_output_t));
                         
                         action_binary_output->action = new_int_action;
                         action_binary_output->gpio = binary_output_data[0];
@@ -7916,8 +7900,7 @@ void normal_mode_init() {
                     cJSON_rsf* json_acc_managers = cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), SERVICE_MANAGER_ACTIONS_ARRAY);
                     
                     for (int i = cJSON_rsf_GetArraySize(json_acc_managers) - 1; i >= 0; i--) {
-                        action_serv_manager_t* action_serv_manager = malloc(sizeof(action_serv_manager_t));
-                        memset(action_serv_manager, 0, sizeof(*action_serv_manager));
+                        action_serv_manager_t* action_serv_manager = calloc(1, sizeof(action_serv_manager_t));
 
                         action_serv_manager->action = new_int_action;
                         action_serv_manager->value = 0;
@@ -7969,8 +7952,7 @@ void normal_mode_init() {
                     cJSON_rsf* json_set_chs = cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), SET_CH_ACTIONS_ARRAY);
                     
                     for (int i = cJSON_rsf_GetArraySize(json_set_chs) - 1; i >= 0; i--) {
-                        action_set_ch_t* action_set_ch = malloc(sizeof(action_set_ch_t));
-                        memset(action_set_ch, 0, sizeof(*action_set_ch));
+                        action_set_ch_t* action_set_ch = calloc(1, sizeof(action_set_ch_t));
 
                         action_set_ch->action = new_int_action;
                         
@@ -8028,8 +8010,7 @@ void normal_mode_init() {
                 if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), SYSTEM_ACTIONS_ARRAY) != NULL) {
                     cJSON_rsf* json_action_systems = cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), SYSTEM_ACTIONS_ARRAY);
                     for (int i = cJSON_rsf_GetArraySize(json_action_systems) - 1; i >= 0; i--) {
-                        action_system_t* action_system = malloc(sizeof(action_system_t));
-                        memset(action_system, 0, sizeof(*action_system));
+                        action_system_t* action_system = calloc(1, sizeof(action_system_t));
                         
                         action_system->action = new_int_action;
                         
@@ -8066,8 +8047,7 @@ void normal_mode_init() {
                 if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), NETWORK_ACTIONS_ARRAY) != NULL) {
                     cJSON_rsf* json_action_networks = cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), NETWORK_ACTIONS_ARRAY);
                     for (int i = cJSON_rsf_GetArraySize(json_action_networks) - 1; i >= 0; i--) {
-                        action_network_t* action_network = malloc(sizeof(action_network_t));
-                        memset(action_network, 0, sizeof(*action_network));
+                        action_network_t* action_network = calloc(1, sizeof(action_network_t));
                         
                         cJSON_rsf* json_action_network = cJSON_rsf_GetArrayItem(json_action_networks, i);
                         
@@ -8152,8 +8132,7 @@ void normal_mode_init() {
                 if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), IRRF_ACTIONS_ARRAY) != NULL) {
                     cJSON_rsf* json_action_irrf_txs = cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), IRRF_ACTIONS_ARRAY);
                     for (int i = cJSON_rsf_GetArraySize(json_action_irrf_txs) - 1; i >= 0; i--) {
-                        action_irrf_tx_t* action_irrf_tx = malloc(sizeof(action_irrf_tx_t));
-                        memset(action_irrf_tx, 0, sizeof(*action_irrf_tx));
+                        action_irrf_tx_t* action_irrf_tx = calloc(1, sizeof(action_irrf_tx_t));
                         
                         cJSON_rsf* json_action_irrf_tx = cJSON_rsf_GetArrayItem(json_action_irrf_txs, i);
                         
@@ -8223,8 +8202,7 @@ void normal_mode_init() {
                     for (int i = cJSON_rsf_GetArraySize(json_action_uarts) - 1; i >= 0; i--) {
                         cJSON_rsf* json_action_uart = cJSON_rsf_GetArrayItem(json_action_uarts, i);
                         
-                        action_uart_t* action_uart = malloc(sizeof(action_uart_t));
-                        memset(action_uart, 0, sizeof(*action_uart));
+                        action_uart_t* action_uart = calloc(1, sizeof(action_uart_t));
                         
                         action_uart->action = new_int_action;
                         
@@ -8279,8 +8257,7 @@ void normal_mode_init() {
                 if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), PWM_ACTIONS_ARRAY) != NULL) {
                     cJSON_rsf* json_action_pwms = cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), PWM_ACTIONS_ARRAY);
                     for (int i = cJSON_rsf_GetArraySize(json_action_pwms) - 1; i >= 0; i--) {
-                        action_pwm_t* action_pwm = malloc(sizeof(action_pwm_t));
-                        memset(action_pwm, 0, sizeof(*action_pwm));
+                        action_pwm_t* action_pwm = calloc(1, sizeof(action_pwm_t));
                         
                         action_pwm->action = new_int_action;
                         
@@ -8352,8 +8329,7 @@ void normal_mode_init() {
             
             cJSON_rsf* json_wilcard_actions = cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, index);
             for (unsigned int i = 0; i < cJSON_rsf_GetArraySize(json_wilcard_actions); i++) {
-                wildcard_action_t* wildcard_action = malloc(sizeof(wildcard_action_t));
-                memset(wildcard_action, 0, sizeof(*wildcard_action));
+                wildcard_action_t* wildcard_action = calloc(1, sizeof(wildcard_action_t));
                 
                 cJSON_rsf* json_wilcard_action = cJSON_rsf_GetArrayItem(json_wilcard_actions, i);
                 
@@ -8402,57 +8378,6 @@ void normal_mode_init() {
         return NULL;
     }
     
-    int8_t th_sensor_gpio(cJSON_rsf* json_accessory) {
-        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO) != NULL) {
-            /*
-            const uint8_t sensor_gpio = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO)->valuefloat;
-            set_used_gpio(sensor_gpio);
-            return sensor_gpio;
-            */
-            
-            return (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO)->valuefloat;
-        }
-        return -1;
-    }
-    
-    uint8_t th_sensor_type(cJSON_rsf* json_accessory) {
-        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_TYPE) != NULL) {
-            const uint8_t sensor_type = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_TYPE)->valuefloat;
-            
-#ifdef ESP_HAS_INTERNAL_TEMP_SENSOR
-            if (sensor_type == 100 && main_config.temperature_sensor_handle == NULL) {
-                temperature_sensor_config_t temp_sensor_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
-                temperature_sensor_install(&temp_sensor_config, &main_config.temperature_sensor_handle);
-                temperature_sensor_enable(main_config.temperature_sensor_handle);
-            }
-#endif
-            
-            return sensor_type;
-        }
-        return 2;
-    }
-    
-    float th_sensor_temp_offset(cJSON_rsf* json_accessory) {
-        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_OFFSET) != NULL) {
-            return (float) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_OFFSET)->valuefloat;
-        }
-        return 0;
-    }
-    
-    float th_sensor_hum_offset(cJSON_rsf* json_accessory) {
-        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, HUMIDITY_OFFSET) != NULL) {
-            return (float) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, HUMIDITY_OFFSET)->valuefloat;
-        }
-        return 0;
-    }
-    
-    uint8_t th_sensor_index(cJSON_rsf* json_accessory) {
-        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_INDEX) != NULL) {
-            return (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_INDEX)->valuefloat;
-        }
-        return 1;
-    }
-    
     float sensor_poll_period(cJSON_rsf* json_accessory, float poll_period) {
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_POLL_PERIOD) != NULL) {
             poll_period = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_POLL_PERIOD)->valuefloat;
@@ -8477,21 +8402,67 @@ void normal_mode_init() {
     }
     
     float th_sensor(ch_group_t* ch_group, cJSON_rsf* json_accessory) {
-        TH_SENSOR_GPIO = th_sensor_gpio(json_accessory);
-        const unsigned int sensor_type = th_sensor_type(json_accessory);
+        int sensor_gpio = -1;
+        int sensor_gpio_output = -1;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO) != NULL) {
+            cJSON_rsf* json_sensor_gpios = cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO);
+            if (cJSON_rsf_IsArray(json_sensor_gpios)) {
+                sensor_gpio = (int8_t) cJSON_rsf_GetArrayItem(json_sensor_gpios, 0)->valuefloat;
+                if (cJSON_rsf_GetArraySize(json_sensor_gpios) > 1) {
+                    sensor_gpio_output = (int8_t) cJSON_rsf_GetArrayItem(json_sensor_gpios, 1)->valuefloat;
+                }
+            } else {
+                sensor_gpio = (int8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_GPIO)->valuefloat;
+            }
+        }
+        TH_SENSOR_GPIO = sensor_gpio;
+        TH_SENSOR_GPIO_OUTPUT = sensor_gpio_output;
+            
+        unsigned int sensor_type = 2;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_TYPE) != NULL) {
+            sensor_type = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_TYPE)->valuefloat;
+            
+#ifdef ESP_HAS_INTERNAL_TEMP_SENSOR
+            if (sensor_type == 100 && main_config.temperature_sensor_handle == NULL) {
+                temperature_sensor_config_t temp_sensor_config = TEMPERATURE_SENSOR_CONFIG_DEFAULT(-10, 80);
+                temperature_sensor_install(&temp_sensor_config, &main_config.temperature_sensor_handle);
+                temperature_sensor_enable(main_config.temperature_sensor_handle);
+            }
+#endif
+        }
+        
+        if (sensor_type == 2 && TH_SENSOR_GPIO == -1) {
+            sensor_type = 0;
+        }
         TH_SENSOR_TYPE = sensor_type;
-        TH_SENSOR_TEMP_OFFSET = th_sensor_temp_offset(json_accessory);
-        TH_SENSOR_HUM_OFFSET = th_sensor_hum_offset(json_accessory);
+        
+        //TH_SENSOR_TEMP_OFFSET = 0;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_OFFSET) != NULL) {
+            TH_SENSOR_TEMP_OFFSET = (float) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_OFFSET)->valuefloat;
+        }
+        
+        // TH_SENSOR_HUM_OFFSET = 0;
+        if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, HUMIDITY_OFFSET) != NULL) {
+            TH_SENSOR_HUM_OFFSET = cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, HUMIDITY_OFFSET)->valuefloat;
+        }
+        
         //TH_SENSOR_ERROR_COUNT = 0;
+        
         if (sensor_type > 0 && sensor_type < 5) {
 #ifdef ESP_PLATFORM
-            gpio_reset_pin(TH_SENSOR_GPIO);
+            gpio_reset_pin(sensor_gpio);
+            if (sensor_gpio_output >= 0) {
+                gpio_reset_pin(sensor_gpio_output);
+            }
 #endif
             
             if (sensor_type == 3) {
-                TH_SENSOR_INDEX = th_sensor_index(json_accessory);
+                TH_SENSOR_INDEX = 1;
+                if (cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_INDEX) != NULL) {
+                    TH_SENSOR_INDEX = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, TEMPERATURE_SENSOR_INDEX)->valuefloat;
+                }
             } else {
-                dht_init_pin(TH_SENSOR_GPIO);
+                dht_init_pin(sensor_gpio, sensor_gpio_output);
             }
         }
         
@@ -8661,8 +8632,7 @@ void normal_mode_init() {
                 
                 
                 if (uart_with_receiver) {
-                    uart_receiver_data_t* uart_receiver_data = malloc(sizeof(uart_receiver_data_t));
-                    memset(uart_receiver_data, 0, sizeof(uart_receiver_data_t));
+                    uart_receiver_data_t* uart_receiver_data = calloc(1, sizeof(uart_receiver_data_t));
                     
                     uart_receiver_data->next = main_config.uart_receiver_data;
                     main_config.uart_receiver_data = uart_receiver_data;
@@ -8708,7 +8678,6 @@ void normal_mode_init() {
         //INFO("%s\n", txt_config);
         
         char* txt_config_buffer = malloc(256);
-        txt_config_buffer[0] = 0;
         
         for (unsigned int i = 0; i < strlen(txt_config); i += 255) {
             for (unsigned int j = 0; j < 255; j++) {
@@ -8784,8 +8753,7 @@ void normal_mode_init() {
         for (unsigned int i = 0; i < cJSON_rsf_GetArraySize(json_mcp23017s); i++) {
             cJSON_rsf* json_mcp23017 = cJSON_rsf_GetArrayItem(json_mcp23017s, i);
             
-            mcp23017_t* mcp23017 = malloc(sizeof(mcp23017_t));
-            memset(mcp23017, 0, sizeof(*mcp23017));
+            mcp23017_t* mcp23017 = calloc(1, sizeof(mcp23017_t));
             
             mcp23017->next = main_config.mcp23017s;
             main_config.mcp23017s = mcp23017;
@@ -8869,10 +8837,8 @@ void normal_mode_init() {
                         
                     } else {    // Mode OUTPUT
                         if (mcp23017->outs == NULL) {
-                            mcp23017->outs = malloc(sizeof(uint8_t) * 2);
-                            memset(mcp23017->outs, 0, sizeof(*mcp23017->outs));
-                            
-                            mcp23017->len = 16;
+                            mcp23017->outs = calloc(2, sizeof(uint8_t));
+                            mcp23017->len = 2 * sizeof(uint8_t);
                         }
                         
                         reg += 0x14;
@@ -8927,8 +8893,7 @@ void normal_mode_init() {
                     
                     unsigned int out_groups = (mcp23017->len >> 3) + 1;
                     
-                    mcp23017->outs = malloc(sizeof(uint8_t) * out_groups);
-                    memset(mcp23017->outs, 0, sizeof(*mcp23017->outs));
+                    mcp23017->outs = calloc(out_groups, sizeof(uint8_t));
                     
                     for (unsigned int out_group = 0; out_group < cJSON_rsf_GetArraySize(json_mcp23017) - 4; out_group++) {
                         mcp23017->outs[out_group] = (uint8_t) cJSON_rsf_GetArrayItem(json_mcp23017, out_group + 4)->valuefloat;
@@ -9142,8 +9107,7 @@ void normal_mode_init() {
                         ledc_timer_config(&ledc_timer);
                     }
                     
-                    pwmh_channel_t* new_pwmh_channel = malloc(sizeof(pwmh_channel_t));
-                    memset(new_pwmh_channel, 0, sizeof(pwmh_channel_t));
+                    pwmh_channel_t* new_pwmh_channel = calloc(1, sizeof(pwmh_channel_t));
                     
                     unsigned int channel = 0;
                     if (main_config.pwmh_channels) {
@@ -9180,8 +9144,7 @@ void normal_mode_init() {
                     
                 } else if (IO_GPIO_MODE == 10) {    // Only ESP32
                     if (main_config.adc_dac_data == NULL) {
-                        main_config.adc_dac_data = malloc(sizeof(adc_dac_data_t));
-                        memset(main_config.adc_dac_data, 0, sizeof(adc_dac_data_t));
+                        main_config.adc_dac_data = calloc(1, sizeof(adc_dac_data_t));
                         
                         adc_oneshot_unit_init_cfg_t init_config = {
                             .unit_id = ADC_UNIT_1,
@@ -9269,8 +9232,8 @@ void normal_mode_init() {
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, TIMETABLE_ACTION_ARRAY) != NULL) {
         cJSON_rsf* json_timetable_actions = cJSON_rsf_GetObjectItemCaseSensitive(json_config, TIMETABLE_ACTION_ARRAY);
         for (unsigned int i = 0; i < cJSON_rsf_GetArraySize(json_timetable_actions); i++) {
-            timetable_action_t* timetable_action = malloc(sizeof(timetable_action_t));
-            memset(timetable_action, 0, sizeof(*timetable_action));
+            timetable_action_t* timetable_action = calloc(1, sizeof(timetable_action_t));
+            
             timetable_action->mon  = ALL_MONS;
             timetable_action->mday = ALL_MDAYS;
             timetable_action->hour = ALL_HOURS;
@@ -10364,7 +10327,7 @@ void normal_mode_init() {
     
     // *** NEW THERMOSTAT
     void new_thermostat(const uint8_t accessory,  uint8_t service, const uint8_t total_services, cJSON_rsf* json_context, const uint8_t serv_type) {
-        ch_group_t* ch_group = new_ch_group(7, 9, 6, 4);
+        ch_group_t* ch_group = new_ch_group(7, 10, 6, 4);
         ch_group->serv_type = SERV_TYPE_THERMOSTAT;
         ch_group->serv_index = service_numerator;
         unsigned int homekit_enabled = acc_homekit_enabled(json_context);
@@ -10549,7 +10512,7 @@ void normal_mode_init() {
         
         ch_group->timer2 = rs_esp_timer_create(th_update_delay(json_context) * 1000, pdFALSE, (void*) ch_group, process_th_timer);
         
-        if ((TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE >= 5) && TH_IAIRZONING_CONTROLLER == 0) {
+        if (TH_SENSOR_TYPE > 0 && TH_IAIRZONING_CONTROLLER == 0) {
             th_sensor_starter(ch_group, poll_period);
         }
         
@@ -10649,7 +10612,7 @@ void normal_mode_init() {
     
     // *** NEW TEMPERATURE SENSOR
     void new_temp_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
-        ch_group_t* ch_group = new_ch_group(1, 4, 2, 1);
+        ch_group_t* ch_group = new_ch_group(1, 5, 2, 1);
         ch_group->serv_type = SERV_TYPE_TEMP_SENSOR;
         ch_group->serv_index = service_numerator;
         unsigned int homekit_enabled = acc_homekit_enabled(json_context);
@@ -10687,7 +10650,7 @@ void normal_mode_init() {
             //service_iid += 2;
         }
         
-        if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE >= 5) {
+        if (TH_SENSOR_TYPE > 0) {
             th_sensor_starter(ch_group, poll_period);
         }
         
@@ -10696,7 +10659,7 @@ void normal_mode_init() {
     
     // *** NEW HUMIDITY SENSOR
     void new_hum_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
-        ch_group_t* ch_group = new_ch_group(2, 4, 2, 2);
+        ch_group_t* ch_group = new_ch_group(2, 5, 2, 2);
         ch_group->serv_type = SERV_TYPE_HUM_SENSOR;
         ch_group->serv_index = service_numerator;
         unsigned int homekit_enabled = acc_homekit_enabled(json_context);
@@ -10734,7 +10697,7 @@ void normal_mode_init() {
             //service_iid += 2;
         }
         
-        if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE >= 9) {
+        if (TH_SENSOR_TYPE > 0) {
             th_sensor_starter(ch_group, poll_period);
         }
         
@@ -10743,7 +10706,7 @@ void normal_mode_init() {
     
     // *** NEW TEMPERATURE AND HUMIDITY SENSOR
     void new_th_sensor(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
-        ch_group_t* ch_group = new_ch_group(2, 4, 2, 2);
+        ch_group_t* ch_group = new_ch_group(2, 5, 2, 2);
         ch_group->serv_type = SERV_TYPE_TH_SENSOR;
         ch_group->serv_index = service_numerator;
         unsigned int homekit_enabled = acc_homekit_enabled(json_context);
@@ -10801,7 +10764,7 @@ void normal_mode_init() {
             //service_iid += 2;
         }
         
-        if (TH_SENSOR_GPIO != -1) {
+        if (TH_SENSOR_TYPE > 0) {
             th_sensor_starter(ch_group, poll_period);
         }
         
@@ -10810,7 +10773,7 @@ void normal_mode_init() {
     
     // *** NEW HUMIDIFIER
     void new_humidifier(const uint8_t accessory,  uint8_t service, const uint8_t total_services, cJSON_rsf* json_context, const uint8_t serv_type) {
-        ch_group_t* ch_group = new_ch_group(7, 6, 6, 4);
+        ch_group_t* ch_group = new_ch_group(7, 7, 6, 4);
         ch_group->serv_type = SERV_TYPE_HUMIDIFIER;
         ch_group->serv_index = service_numerator;
         unsigned int homekit_enabled = acc_homekit_enabled(json_context);
@@ -10968,7 +10931,7 @@ void normal_mode_init() {
         
         ch_group->timer2 = rs_esp_timer_create(th_update_delay(json_context) * 1000, pdFALSE, (void*) ch_group, process_humidif_timer);
         
-        if (TH_SENSOR_GPIO != -1 || TH_SENSOR_TYPE >= 9) {
+        if (TH_SENSOR_TYPE > 0) {
             th_sensor_starter(ch_group, poll_period);
         }
         
@@ -11063,8 +11026,7 @@ void normal_mode_init() {
         register_wildcard_actions(ch_group, json_context);
         AUTOOFF_TIMER = autoswitch_time(json_context, ch_group);
         
-        lightbulb_group_t* lightbulb_group = malloc(sizeof(lightbulb_group_t));
-        memset(lightbulb_group, 0, sizeof(*lightbulb_group));
+        lightbulb_group_t* lightbulb_group = calloc(1, sizeof(lightbulb_group_t));
         
         lightbulb_group->ch0 = ch_group->ch[0];
         
@@ -12343,8 +12305,7 @@ void normal_mode_init() {
         if (free_monitor_type_is_pattern(fm_sensor_type)) {
             cJSON_rsf* pattern_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, FM_PATTERN_ARRAY_SET);
             for (int i = cJSON_rsf_GetArraySize(pattern_array) - 1; i >= 0; i--) {
-                pattern_t* new_pattern = malloc(sizeof(pattern_t));
-                memset(new_pattern, 0, sizeof(*new_pattern));
+                pattern_t* new_pattern = calloc(1, sizeof(pattern_t));
                 
                 cJSON_rsf* pattern_data = cJSON_rsf_GetArrayItem(pattern_array, i);
                 
@@ -12698,8 +12659,8 @@ void normal_mode_init() {
                 memcpy((char*) (ch_group->ch[i]->type + 5), index, 3);
             }
             
-            ch_group->ch[i]->value.data_value = malloc(HIST_BLOCK_SIZE);
-            memset(ch_group->ch[i]->value.data_value, 0, HIST_BLOCK_SIZE);
+            ch_group->ch[i]->value.data_value = calloc(1, HIST_BLOCK_SIZE);
+            
             ch_group->ch[i]->value.data_size = 8;
             accessories[accessory]->services[service]->characteristics[i] = ch_group->ch[i];
         }
@@ -13091,7 +13052,7 @@ void irrf_capture_task(void* args) {
     
     unsigned int read, last = true;
     unsigned int i, c = 0;
-    uint16_t* buffer = malloc(sizeof(uint16_t) * IRRF_CAPTURE_BUFFER_SIZE);
+    uint16_t* buffer = calloc(IRRF_CAPTURE_BUFFER_SIZE, sizeof(uint16_t));
     uint32_t now, new_time, current_time = sdk_system_get_time_raw();
     
     for (;;) {

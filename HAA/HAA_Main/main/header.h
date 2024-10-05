@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.13.2"
+#define HAA_FIRMWARE_VERSION                "12.13.3"
 #define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -194,7 +194,7 @@
 #define BINARY_SENSOR_EXTRA_DATA_SET        "dt"
 
 #define THERMOSTAT_TYPE                     "w"
-#define TH_TYPE                             ch_group->num_i[4]
+#define TH_TYPE                             ch_group->num_i[5]
 #define THERMOSTAT_TYPE_HEATER              (1)
 #define THERMOSTAT_TYPE_COOLER              (2)
 #define THERMOSTAT_TYPE_HEATERCOOLER        (3)
@@ -223,10 +223,10 @@
 #define THERMOSTAT_TARGET_TEMP_STEP         "st"
 #define TH_IAIRZONING_CONTROLLER_SET        "ia"
 #define TH_IAIRZONING_GATE_ALL_OFF_STATE_SET "it"
-#define THERMOSTAT_CURRENT_ACTION           ch_group->num_i[5]
-#define TH_IAIRZONING_CONTROLLER            ch_group->num_i[6]
-#define TH_IAIRZONING_GATE_CURRENT_STATE    ch_group->num_i[7]
-#define TH_IAIRZONING_GATE_ALL_OFF_STATE    ch_group->num_i[8]
+#define THERMOSTAT_CURRENT_ACTION           ch_group->num_i[6]
+#define TH_IAIRZONING_CONTROLLER            ch_group->num_i[7]
+#define TH_IAIRZONING_GATE_CURRENT_STATE    ch_group->num_i[8]
+#define TH_IAIRZONING_GATE_ALL_OFF_STATE    ch_group->num_i[9]
 #define TH_IAIRZONING_GATE_CLOSE            (0)
 #define TH_IAIRZONING_GATE_OPEN             (1)
 #define THERMOSTAT_MODE_OFF                 (0)
@@ -274,10 +274,11 @@
 
 #define TEMPERATURE_SENSOR_GPIO             "g"
 #define TH_SENSOR_GPIO                      ch_group->num_i[0]
+#define TH_SENSOR_GPIO_OUTPUT               ch_group->num_i[1]
 #define TEMPERATURE_SENSOR_TYPE             "n"
-#define TH_SENSOR_TYPE                      ch_group->num_i[1]
+#define TH_SENSOR_TYPE                      ch_group->num_i[2]
 #define TEMPERATURE_SENSOR_INDEX            "u"
-#define TH_SENSOR_INDEX                     ch_group->num_i[2]
+#define TH_SENSOR_INDEX                     ch_group->num_i[3]
 #define TEMPERATURE_SENSOR_POLL_PERIOD      "j"
 #define TH_SENSOR_POLL_PERIOD_DEFAULT       (30)
 #define TH_SENSOR_POLL_PERIOD_MIN           (0.1f)
@@ -287,12 +288,12 @@
 #define TH_SENSOR_HUM_OFFSET                ch_group->num_f[1]
 #define SENSOR_TEMPERATURE_FLOAT            ch_group->ch[0]->value.float_value
 #define SENSOR_HUMIDITY_FLOAT               ch_group->ch[1]->value.float_value
-#define TH_SENSOR_ERROR_COUNT               ch_group->num_i[3]
+#define TH_SENSOR_ERROR_COUNT               ch_group->num_i[4]
 #define TH_SENSOR_MAX_ALLOWED_ERRORS        (3)
 #define TH_SENSOR_TEMP_VALUE_WHEN_ERROR     (-99.f)
 
 #define HUMIDIF_TYPE                        "w"
-#define HM_TYPE                             ch_group->num_i[4]
+#define HM_TYPE                             ch_group->num_i[5]
 #define HUMIDIF_TYPE_HUM                    (1)
 #define HUMIDIF_TYPE_DEHUM                  (2)
 #define HUMIDIF_TYPE_HUMDEHUM               (3)
@@ -307,7 +308,7 @@
 #define HM_DEADBAND_SOFT_ON                 ch_group->num_f[4]
 #define HUMIDIF_DEADBAND_OFFSET             "o"
 #define HM_DEADBAND_OFFSET                  ch_group->num_f[5]
-#define HUMIDIF_CURRENT_ACTION              ch_group->num_i[5]
+#define HUMIDIF_CURRENT_ACTION              ch_group->num_i[6]
 #define HUMIDIF_MODE_OFF                    (0)
 #define HUMIDIF_MODE_IDLE                   (1)
 #define HUMIDIF_MODE_HUM                    (2)
@@ -777,6 +778,7 @@
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
 #define CUSTOM_HAA_COMMAND                  "io"
+#define CUSTOM_HAA_ADVANCED_COMMAND_LEN     (2)
 #define HAA_SETUP_ACCESSORY_SET             "s"
 
 #define IRRF_CAPTURE_BUFFER_SIZE            (2048)

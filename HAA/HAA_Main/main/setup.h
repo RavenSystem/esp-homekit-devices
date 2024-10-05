@@ -2,6 +2,9 @@
 
 void wifi_config_smart_connect();
 uint32_t wifi_config_get_full_gw();
+void haa_reset_homekit_id();
+void haa_remove_saved_states();
+void haa_increase_last_hk_config_number();
 
 #ifdef ESP_PLATFORM
 

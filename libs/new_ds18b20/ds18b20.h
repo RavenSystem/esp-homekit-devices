@@ -33,6 +33,7 @@ typedef onewire_addr_t ds18b20_addr_t;
  *  first `addr_count` are recorded.
  *
  *  @param pin         The GPIO pin connected to the DS18B20 bus
+ *  @param pin_output     The optional GPIO pin connected as output to the addon converter device. Set to -1 to disable it.
  *  @param addr_list   A pointer to an array of ds18b20_addr_t values.  This
  *                     will be populated with the addresses of the found
  *                     devices.
@@ -43,7 +44,7 @@ typedef onewire_addr_t ds18b20_addr_t;
  *  equal to, or more than `addr_count`, depending on how many DS18B20 devices
  *  are attached to the bus.
  */
-unsigned int ds18b20_scan_devices(int pin, ds18b20_addr_t *addr_list, unsigned int addr_count);
+unsigned int ds18b20_scan_devices(uint8_t pin, int8_t pin_output, ds18b20_addr_t *addr_list, unsigned int addr_count);
 
 /** Tell one or more sensors to perform a temperature measurement and
  *  conversion (CONVERT_T) operation.  This operation can take up to 750ms to
@@ -59,6 +60,7 @@ unsigned int ds18b20_scan_devices(int pin, ds18b20_addr_t *addr_list, unsigned i
  *  command once conversion is done.
  *
  *  @param pin   The GPIO pin connected to the DS18B20 device
+ *  @param pin_output     The optional GPIO pin connected as output to the addon converter device. Set to -1 to disable it.
  *  @param addr  The 64-bit address of the device on the bus.  This can be set
  *               to ::DS18B20_ANY to send the command to all devices on the bus
  *               at the same time.
@@ -68,7 +70,7 @@ unsigned int ds18b20_scan_devices(int pin, ds18b20_addr_t *addr_list, unsigned i
  *
  *  @returns `true` if the command was successfully issued, or `false` on error.
  */
-bool ds18b20_measure(int pin, ds18b20_addr_t addr, bool wait);
+bool ds18b20_measure(uint8_t pin, int8_t pin_output, ds18b20_addr_t addr, bool wait);
 
 /** Read the value from the last CONVERT_T operation.
  *
@@ -76,6 +78,7 @@ bool ds18b20_measure(int pin, ds18b20_addr_t addr, bool wait);
  *  temperature measurement.
  *
  *  @param pin     The GPIO pin connected to the DS18B20 device
+ *  @param pin_output     The optional GPIO pin connected as output to the addon converter device. Set to -1 to disable it.
  *  @param addr    The 64-bit address of the device to read.  This can be set
  *                 to ::DS18B20_ANY to read any device on the bus (but note
  *                 that this will only work if there is exactly one device
@@ -83,7 +86,7 @@ bool ds18b20_measure(int pin, ds18b20_addr_t addr, bool wait);
  *
  *  @returns The temperature in degrees Celsius, or NaN if there was an error.
  */
-float ds18b20_read_temperature(int pin, ds18b20_addr_t addr);
+float ds18b20_read_temperature(uint8_t pin, int8_t pin_output, ds18b20_addr_t addr);
 
 /** Read the value from the last CONVERT_T operation for multiple devices.
  *
@@ -91,6 +94,7 @@ float ds18b20_read_temperature(int pin, ds18b20_addr_t addr);
  *  temperature measurement.
  *
  *  @param pin         The GPIO pin connected to the DS18B20 bus
+ *  @param pin_output     The optional GPIO pin connected as output to the addon converter device. Set to -1 to disable it.
  *  @param addr_list   A list of addresses for devices to read.
  *  @param addr_count  The number of entries in `addr_list`.
  *  @param result_list An array of floats to hold the returned temperature
@@ -100,7 +104,7 @@ float ds18b20_read_temperature(int pin, ds18b20_addr_t addr);
  *  if one or more had errors (the temperature for erroring devices will be
  *  returned as NaN).
  */
-bool ds18b20_read_temp_multi(int pin, ds18b20_addr_t *addr_list, unsigned int addr_count, float *result_list);
+bool ds18b20_read_temp_multi(uint8_t pin, int8_t pin_output, ds18b20_addr_t *addr_list, unsigned int addr_count, float *result_list);
 
 /** Perform a ds18b20_measure() followed by ds18b20_read_temperature()
  *
@@ -112,11 +116,12 @@ bool ds18b20_read_temp_multi(int pin, ds18b20_addr_t *addr_list, unsigned int ad
  *
  *  @returns The temperature in degrees Celsius, or NaN if there was an error.
  */
-float ds18b20_measure_and_read(int pin, ds18b20_addr_t addr);
+float ds18b20_measure_and_read(uint8_t pin, int8_t pin_output, ds18b20_addr_t addr);
 
 /** Perform a ds18b20_measure() followed by ds18b20_read_temp_multi()
  *
  *  @param pin         The GPIO pin connected to the DS18B20 bus
+ *  @param pin_output     The optional GPIO pin connected as output to the addon converter device. Set to -1 to disable it.
  *  @param addr_list   A list of addresses for devices to read.
  *  @param addr_count  The number of entries in `addr_list`.
  *  @param result_list An array of floats to hold the returned temperature
@@ -126,7 +131,7 @@ float ds18b20_measure_and_read(int pin, ds18b20_addr_t addr);
  *  if one or more had errors (the temperature for erroring devices will be
  *  returned as NaN).
  */
-bool ds18b20_measure_and_read_multi(int pin, ds18b20_addr_t *addr_list, unsigned int addr_count, float *result_list);
+bool ds18b20_measure_and_read_multi(uint8_t pin, int8_t pin_output, ds18b20_addr_t *addr_list, unsigned int addr_count, float *result_list);
 
 /** Read the scratchpad data for a particular DS18B20 device.
  *
@@ -134,6 +139,7 @@ bool ds18b20_measure_and_read_multi(int pin, ds18b20_addr_t *addr_list, unsigned
  *  as part of ds18b20_read_temperature().
  *
  *  @param pin     The GPIO pin connected to the DS18B20 device
+ *  @param pin_output     The optional GPIO pin connected as output to the addon converter device. Set to -1 to disable it.
  *  @param addr    The 64-bit address of the device to read.  This can be set
  *                 to ::DS18B20_ANY to read any device on the bus (but note
  *                 that this will only work if there is exactly one device
@@ -142,7 +148,7 @@ bool ds18b20_measure_and_read_multi(int pin, ds18b20_addr_t *addr_list, unsigned
  *
  *  @returns `true` if the data was read successfully, or `false` on error.
  */
-bool ds18b20_read_scratchpad(int pin, ds18b20_addr_t addr, uint8_t *buffer);
+bool ds18b20_read_scratchpad(uint8_t pin, int8_t pin_output, ds18b20_addr_t addr, uint8_t *buffer);
 
 // The following are obsolete/deprecated APIs
 
@@ -153,11 +159,11 @@ typedef struct {
 
 // Scan all ds18b20 sensors on bus and return its amount.
 // Result are saved in array of ds_sensor_t structure.
-uint8_t ds18b20_read_all(uint8_t pin, ds_sensor_t *result);
+uint8_t ds18b20_read_all(uint8_t pin, int8_t pin_output, ds_sensor_t *result);
 
 // This method is just to demonstrate how to read 
 // temperature from single dallas chip.
-float ds18b20_read_single(uint8_t pin);
+float ds18b20_read_single(uint8_t pin, int8_t pin_output);
 
 #ifdef	__cplusplus
 }

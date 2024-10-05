@@ -3,8 +3,8 @@
 
 
 pairing_t *pairing_new() {
-    pairing_t *p = malloc(sizeof(pairing_t));
-    memset(p, 0, sizeof(*p));
+    pairing_t *p = calloc(1, sizeof(pairing_t));
+    
     p->id = -1;
     /*
     p->device_id = NULL;
@@ -16,11 +16,13 @@ pairing_t *pairing_new() {
 }
 
 void pairing_free(pairing_t *pairing) {
-    if (pairing->device_id)
+    if (pairing->device_id) {
         free(pairing->device_id);
+    }
 
-    if (pairing->device_key)
+    if (pairing->device_key) {
         crypto_ed25519_free(pairing->device_key);
+    }
 
     free(pairing);
 }

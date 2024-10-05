@@ -85,16 +85,34 @@
 
 static SemaphoreHandle_t dht_lock = NULL;
 
-void dht_init_pin(uint8_t pin) {
-#ifdef ESP_PLATFORM
-    gpio_set_direction(pin, GPIO_MODE_INPUT_OUTPUT_OD);
-    gpio_set_pull_mode(pin, GPIO_FLOATING);
-#else
-    gpio_enable(pin, GPIO_OUT_OPEN_DRAIN);
-    gpio_set_pullup(pin, false, false);
-#endif
+void dht_init_pin(uint8_t pin, int8_t pin_output) {
     
-    gpio_write(pin, 1);
+#ifdef ESP_PLATFORM
+    if (pin_output < 0) {
+        gpio_set_direction(pin, GPIO_MODE_INPUT_OUTPUT_OD);
+        gpio_set_pull_mode(pin, GPIO_FLOATING);
+        gpio_write(pin, 1);
+    } else {
+        gpio_set_direction(pin, GPIO_MODE_INPUT);
+        gpio_set_pull_mode(pin, GPIO_FLOATING);
+        gpio_set_direction(pin_output, GPIO_MODE_OUTPUT);
+        gpio_write(pin_output, 1);
+    }
+    
+#else
+    if (pin_output < 0) {
+        gpio_enable(pin, GPIO_OUT_OPEN_DRAIN);
+        gpio_set_pullup(pin, false, false);
+        gpio_write(pin, 1);
+        
+    } else {
+        gpio_enable(pin, GPIO_INPUT);
+        gpio_set_pullup(pin, false, false);
+        gpio_enable(pin_output, GPIO_OUTPUT);
+        gpio_write(pin_output, 1);
+    }
+#endif
+
 }
 
 /**
@@ -125,13 +143,17 @@ static bool dht_await_pin_state(uint8_t pin, uint32_t timeout,
  * The function call should be protected from task switching.
  * Return false if error occurred.
  */
-static inline bool dht_fetch_data(dht_sensor_type_t sensor_type, uint8_t pin, bool bits[DHT_DATA_BITS])
+static inline bool dht_fetch_data(dht_sensor_type_t sensor_type, uint8_t pin, int8_t pin_output, bool bits[DHT_DATA_BITS])
 {
     uint32_t low_duration;
     uint32_t high_duration;
 
     // Phase 'A' pulling signal low to initiate read sequence
-    gpio_write(pin, 0);
+    if (pin_output < 0) {
+        gpio_write(pin, 0);
+    } else {
+        gpio_write(pin_output, 0);
+    }
     
     uint32_t initial_delay = 1100;
     switch (sensor_type) {
@@ -151,7 +173,11 @@ static inline bool dht_fetch_data(dht_sensor_type_t sensor_type, uint8_t pin, bo
     sdk_os_delay_us(initial_delay);
     
     // Phase 'B' pulling signal floating (high with external pullup resistor)
-    gpio_write(pin, 1);
+    if (pin_output < 0) {
+        gpio_write(pin, 1);
+    } else {
+        gpio_write(pin_output, 1);
+    }
     
     // Step through Phase 'B', 40us, or 200us for DHT_TYPE_SI7021
     if (!dht_await_pin_state(pin, sensor_type == DHT_TYPE_SI7021 ? 200 : 44, false, NULL)) {
@@ -209,7 +235,7 @@ static inline int16_t dht_convert_data(dht_sensor_type_t sensor_type, uint8_t ms
     return data;
 }
 
-bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity, int16_t *temperature)
+bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int8_t pin_output, int16_t *humidity, int16_t *temperature)
 {
     bool bits[DHT_DATA_BITS];
     uint8_t data[DHT_DATA_BITS / 8] = { 0 };
@@ -217,7 +243,7 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
     
     if (xSemaphoreTake(dht_lock, DHT_TIMEOUT_MS / portTICK_PERIOD_MS) == pdTRUE) {
         PORT_ENTER_CRITICAL();
-        result = dht_fetch_data(sensor_type, pin, bits);
+        result = dht_fetch_data(sensor_type, pin, pin_output, bits);
         PORT_EXIT_CRITICAL();
         
         vTaskDelay(20 / portTICK_PERIOD_MS);
@@ -248,7 +274,7 @@ bool dht_read_data(dht_sensor_type_t sensor_type, uint8_t pin, int16_t *humidity
     return true;
 }
 
-bool dht_read_float_data(dht_sensor_type_t sensor_type, uint8_t pin, float *humidity, float *temperature)
+bool dht_read_float_data(dht_sensor_type_t sensor_type, uint8_t pin, int8_t pin_output, float *humidity, float *temperature)
 {
     if (!dht_lock) {
         dht_lock = xSemaphoreCreateMutex();
@@ -256,7 +282,7 @@ bool dht_read_float_data(dht_sensor_type_t sensor_type, uint8_t pin, float *humi
     
     int16_t i_humidity, i_temp;
 
-    if (dht_read_data(sensor_type, pin, &i_humidity, &i_temp)) {
+    if (dht_read_data(sensor_type, pin, pin_output, &i_humidity, &i_temp)) {
         *humidity = (float)i_humidity / 10;
         *temperature = (float)i_temp / 10;
         return true;

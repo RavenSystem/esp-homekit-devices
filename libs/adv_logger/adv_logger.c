@@ -232,8 +232,7 @@ static void adv_logger_init_task(void* args) {
         vTaskDelay(200 / portTICK_PERIOD_MS);
     }
     
-    adv_logger_data->udplogstring = malloc(UDP_LOG_LEN);
-    adv_logger_data->udplogstring[0] = 0;
+    adv_logger_data->udplogstring = calloc(1, UDP_LOG_LEN);
     
     strcat(adv_logger_data->udplogstring, "\r\nAdv Log (c) 2022-2024 José A. Jiménez Campos\r\n\r\n");
     adv_logger_data->udplogstring_len = strlen(adv_logger_data->udplogstring);
@@ -277,8 +276,7 @@ void adv_logger_close_buffered_task() {
 }
 
 void adv_logger_init() {
-    adv_logger_data = malloc(sizeof(adv_logger_data_t));
-    memset(adv_logger_data, 0, sizeof(*adv_logger_data));
+    adv_logger_data = calloc(1, sizeof(adv_logger_data_t));
     
 #ifdef ESP_PLATFORM
     adv_logger_data->log_sender_semaphore = xSemaphoreCreateMutex();

@@ -233,8 +233,7 @@ void adv_pwm_stop() {
 
 static void adv_pwm_init(const unsigned int mode) {
     if (!adv_pwm_config) {
-        adv_pwm_config = malloc(sizeof(adv_pwm_config_t));
-        memset(adv_pwm_config, 0, sizeof(*adv_pwm_config));
+        adv_pwm_config = calloc(1, sizeof(adv_pwm_config_t));
 
 #ifdef ESP_PLATFORM
         gptimer_config_t timer_config = {
@@ -332,8 +331,7 @@ void adv_pwm_new_channel(const uint8_t gpio, const bool inverted, const bool lea
             adv_pwm_stop();
         }
         
-        adv_pwm_channel_t* adv_pwm_channel = malloc(sizeof(adv_pwm_channel_t));
-        memset(adv_pwm_channel, 0, sizeof(*adv_pwm_channel));
+        adv_pwm_channel_t* adv_pwm_channel = calloc(1, sizeof(adv_pwm_channel_t));
         
         adv_pwm_channel->gpio = gpio;
         adv_pwm_channel->leading = leading;

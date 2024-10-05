@@ -202,8 +202,7 @@ int adv_hlw_unit_create(const int gpio_cf, const int gpio_cf1, const int gpio_se
                     gpio_install_isr_service(0);
                 }
 #endif
-                adv_hlw_unit = malloc(sizeof(adv_hlw_unit_t));
-                memset(adv_hlw_unit, 0, sizeof(*adv_hlw_unit));
+                adv_hlw_unit = calloc(1, sizeof(adv_hlw_unit_t));
                 
                 adv_hlw_unit->current_mode = current_mode;
                 adv_hlw_unit->mode = current_mode;
