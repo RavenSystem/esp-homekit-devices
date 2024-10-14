@@ -1,9 +1,0 @@
-# vim:ft=automake
-# All paths should be given relative to the root
-#
-
-EXTRA_DIST += \
-	     certs/external/ca-globalsign-root-r3.pem \
-	     certs/external/ca-globalsign-root-r1.pem \
-	     certs/external/ca-digicert-ev.pem \
-	     certs/external/baltimore-cybertrust-root.pem
