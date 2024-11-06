@@ -1235,8 +1235,8 @@ void setup_mode_call(const uint16_t gpio, void* args, const uint8_t param) {
     }
 }
 
-void setup_mode_toggle_upcount(const int enabled) {
-    if (enabled && main_config.setup_mode_toggle_counter_max > 0) {
+void setup_mode_toggle_upcount(ch_group_t* ch_group) {
+    if (ch_group->homekit_enabled && main_config.setup_mode_toggle_counter_max > 0) {
         main_config.setup_mode_toggle_counter++;
         INFO("Setup %i/%i", main_config.setup_mode_toggle_counter, main_config.setup_mode_toggle_counter_max);
         
@@ -1397,7 +1397,7 @@ void hkc_on_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
                 rs_esp_timer_stop(AUTOOFF_TIMER);
             }
             
-            setup_mode_toggle_upcount(ch_group->homekit_enabled);
+            setup_mode_toggle_upcount(ch_group);
             
             save_states_callback();
             
@@ -1464,7 +1464,7 @@ void hkc_lock_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
                 rs_esp_timer_stop(AUTOOFF_TIMER);
             }
             
-            setup_mode_toggle_upcount(ch_group->homekit_enabled);
+            setup_mode_toggle_upcount(ch_group);
             
             save_states_callback();
             
@@ -1810,7 +1810,7 @@ void hkc_valve_setter(homekit_characteristic_t* ch, const homekit_value_t value)
                 rs_esp_timer_stop(AUTOOFF_TIMER);
             }
             
-            setup_mode_toggle_upcount(ch_group->homekit_enabled);
+            setup_mode_toggle_upcount(ch_group);
             
             save_states_callback();
             
@@ -2260,8 +2260,8 @@ void process_th_task(void* args) {
                 cooling(deadband, deadband_force_idle - deadband, deadband_force_idle, 0);
             }
             
-            homekit_characteristic_notify_safe(ch_group->ch[5]);
-            homekit_characteristic_notify_safe(ch_group->ch[6]);
+            homekit_characteristic_notify_safe(TH_HEATER_TARGET_TEMP);
+            homekit_characteristic_notify_safe(TH_COOLER_TARGET_TEMP);
         }
         
     } else {
@@ -2289,9 +2289,9 @@ void process_th_task(void* args) {
         }
     }
     
-    homekit_characteristic_notify_safe(ch_group->ch[2]);
-    homekit_characteristic_notify_safe(ch_group->ch[3]);
-    homekit_characteristic_notify_safe(ch_group->ch[4]);
+    homekit_characteristic_notify_safe(TH_ACTIVE);
+    homekit_characteristic_notify_safe(TH_MODE);
+    homekit_characteristic_notify_safe(TH_TARGET_MODE);
     
     if (TH_IAIRZONING_CONTROLLER != 0 && mode_has_changed) {
         rs_esp_timer_start(ch_group_find_by_serv((uint8_t) TH_IAIRZONING_CONTROLLER)->timer2);
@@ -2299,7 +2299,7 @@ void process_th_task(void* args) {
     
     save_states_callback();
     
-    save_data_history(ch_group->ch[3]);
+    save_data_history(TH_MODE);
     
     vTaskDelete(NULL);
 }
@@ -2317,10 +2317,24 @@ void hkc_th_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     if (ch_group->main_enabled) {
         INFO("<%i> TH", ch_group->serv_index);
         
+        if (ch == TH_HEATER_TARGET_TEMP) {
+            if (ch->value.float_value >TH_HEATER_MAX_TEMP) {
+                ch->value.float_value = TH_HEATER_MAX_TEMP;
+            } else if (ch->value.float_value < TH_HEATER_MIN_TEMP) {
+                ch->value.float_value = TH_HEATER_MIN_TEMP;
+            }
+        } else if (ch == TH_COOLER_TARGET_TEMP) {
+            if (ch->value.float_value > TH_COOLER_MAX_TEMP) {
+                ch->value.float_value = TH_COOLER_MAX_TEMP;
+            } else if (ch->value.float_value < TH_COOLER_MIN_TEMP) {
+                ch->value.float_value = TH_COOLER_MIN_TEMP;
+            }
+        }
+        
         ch->value = value;
         
-        if (ch == ch_group->ch[2]) {
-            setup_mode_toggle_upcount(ch_group->homekit_enabled);
+        if (ch == TH_ACTIVE) {
+            setup_mode_toggle_upcount(ch_group);
             homekit_characteristic_notify_safe(ch);
         }
         
@@ -2399,18 +2413,12 @@ void th_input_temp(const uint16_t gpio, void* args, const uint8_t type) {
             
             if (type == THERMOSTAT_TEMP_UP) {
                 set_h_temp += 0.5f;
-                if (set_h_temp > TH_HEATER_MAX_TEMP) {
-                    set_h_temp = TH_HEATER_MAX_TEMP;
-                }
             } else {    // type == THERMOSTAT_TEMP_DOWN
                 set_h_temp -= 0.5f;
-                if (set_h_temp < TH_HEATER_MIN_TEMP) {
-                    set_h_temp = TH_HEATER_MIN_TEMP;
-                }
             }
             
-            TH_HEATER_TARGET_TEMP_FLOAT = set_h_temp;
-            homekit_characteristic_notify_safe(ch_group->ch[5]);
+            hkc_th_setter(TH_HEATER_TARGET_TEMP, HOMEKIT_FLOAT(set_h_temp));
+            homekit_characteristic_notify_safe(TH_HEATER_TARGET_TEMP);
         }
         
         if (TH_TYPE != THERMOSTAT_TYPE_HEATER) {
@@ -2418,21 +2426,13 @@ void th_input_temp(const uint16_t gpio, void* args, const uint8_t type) {
             
             if (type == THERMOSTAT_TEMP_UP) {
                 set_c_temp += 0.5f;
-                if (set_c_temp > TH_COOLER_MAX_TEMP) {
-                    set_c_temp = TH_COOLER_MAX_TEMP;
-                }
             } else {    // type == THERMOSTAT_TEMP_DOWN
                 set_c_temp -= 0.5f;
-                if (set_c_temp < TH_COOLER_MIN_TEMP) {
-                    set_c_temp = TH_COOLER_MIN_TEMP;
-                }
             }
             
-            TH_COOLER_TARGET_TEMP_FLOAT = set_c_temp;
-            homekit_characteristic_notify_safe(ch_group->ch[6]);
+            hkc_th_setter(TH_COOLER_TARGET_TEMP, HOMEKIT_FLOAT(set_c_temp));
+            homekit_characteristic_notify_safe(TH_COOLER_TARGET_TEMP);
         }
-        
-        hkc_th_setter(ch_group->ch[0], ch_group->ch[0]->value);
         
         // Extra actions
         if (type == THERMOSTAT_TEMP_UP) {
@@ -2578,11 +2578,11 @@ void process_hum_task(void* args) {
         
         if (HM_TARGET_MODE_INT == HUMIDIF_TARGET_MODE_HUM) {
             hum(HM_DEADBAND, HM_DEADBAND_SOFT_ON, HM_DEADBAND_FORCE_IDLE, HM_DEADBAND_OFFSET);
-            homekit_characteristic_notify_safe(ch_group->ch[5]);
+            homekit_characteristic_notify_safe(HM_HUM_TARGET);
             
         } else if (HM_TARGET_MODE_INT == HUMIDIF_TARGET_MODE_DEHUM) {
             dehum(HM_DEADBAND, HM_DEADBAND_SOFT_ON, HM_DEADBAND_FORCE_IDLE, HM_DEADBAND_OFFSET);
-            homekit_characteristic_notify_safe(ch_group->ch[6]);
+            homekit_characteristic_notify_safe(HM_DEHUM_TARGET);
             
         } else {    // HUMIDIF_TARGET_MODE_AUTO
             const float mid_target = (HM_HUM_TARGET_FLOAT + HM_DEHUM_TARGET_FLOAT) / 2.f;
@@ -2611,8 +2611,8 @@ void process_hum_task(void* args) {
                 dehum(deadband, deadband_force_idle - deadband, deadband_force_idle, 0);
             }
             
-            homekit_characteristic_notify_safe(ch_group->ch[5]);
-            homekit_characteristic_notify_safe(ch_group->ch[6]);
+            homekit_characteristic_notify_safe(HM_HUM_TARGET);
+            homekit_characteristic_notify_safe(HM_DEHUM_TARGET);
         }
         
     } else {
@@ -2639,13 +2639,13 @@ void process_hum_task(void* args) {
         }
     }
     
-    homekit_characteristic_notify_safe(ch_group->ch[2]);
-    homekit_characteristic_notify_safe(ch_group->ch[3]);
-    homekit_characteristic_notify_safe(ch_group->ch[4]);
+    homekit_characteristic_notify_safe(HM_ACTIVE);
+    homekit_characteristic_notify_safe(HM_MODE);
+    homekit_characteristic_notify_safe(HM_TARGET_MODE);
     
     save_states_callback();
     
-    save_data_history(ch_group->ch[3]);
+    save_data_history(HM_MODE);
     
     vTaskDelete(NULL);
 }
@@ -2663,10 +2663,18 @@ void hkc_humidif_setter(homekit_characteristic_t* ch, const homekit_value_t valu
     if (ch_group->main_enabled) {
         INFO("<%i> HUM", ch_group->serv_index);
         
+        if (ch == HM_HUM_TARGET || ch == HM_DEHUM_TARGET) {
+            if (ch->value.float_value > 100) {
+                ch->value.float_value = 100;
+            } else if (ch->value.float_value < 0) {
+                ch->value.float_value = 0;
+            }
+        }
+        
         ch->value = value;
         
-        if (ch == ch_group->ch[2]) {
-            setup_mode_toggle_upcount(ch_group->homekit_enabled);
+        if (ch == HM_ACTIVE) {
+            setup_mode_toggle_upcount(ch_group);
             homekit_characteristic_notify_safe(ch);
         }
         
@@ -2745,18 +2753,12 @@ void humidif_input_hum(const uint16_t gpio, void* args, const uint8_t type) {
 
             if (type == HUMIDIF_UP) {
                 set_h_temp += 5;
-                if (set_h_temp > 100) {
-                    set_h_temp = 100;
-                }
             } else {    // type == HUMIDIF_DOWN
                 set_h_temp -= 5;
-                if (set_h_temp < 0) {
-                    set_h_temp = 0;
-                }
             }
             
-            HM_HUM_TARGET_FLOAT = set_h_temp;
-            homekit_characteristic_notify_safe(ch_group->ch[5]);
+            hkc_humidif_setter(HM_HUM_TARGET, HOMEKIT_FLOAT(set_h_temp));
+            homekit_characteristic_notify_safe(HM_HUM_TARGET);
         }
         
         if (HM_TYPE != HUMIDIF_TYPE_HUM) {
@@ -2764,21 +2766,13 @@ void humidif_input_hum(const uint16_t gpio, void* args, const uint8_t type) {
 
             if (type == HUMIDIF_UP) {
                 set_c_temp += 5;
-                if (set_c_temp > 100) {
-                    set_c_temp = 100;
-                }
             } else {    // type == HUMIDIF_DOWN
                 set_c_temp -= 5;
-                if (set_c_temp < 0) {
-                    set_c_temp = 0;
-                }
             }
             
-            HM_DEHUM_TARGET_FLOAT = set_c_temp;
-            homekit_characteristic_notify_safe(ch_group->ch[6]);
+            hkc_humidif_setter(HM_DEHUM_TARGET, HOMEKIT_FLOAT(set_c_temp));
+            homekit_characteristic_notify_safe(HM_DEHUM_TARGET);
         }
-        
-        hkc_humidif_setter(ch_group->ch[1], ch_group->ch[1]->value);
         
         // Extra actions
         if (type == HUMIDIF_UP) {
@@ -3676,7 +3670,7 @@ void lightbulb_no_task(ch_group_t* ch_group) {
             lightbulb_group->target[3] == 0 &&
             lightbulb_group->target[4] == 0) {
             
-            setup_mode_toggle_upcount(ch_group->homekit_enabled);
+            setup_mode_toggle_upcount(ch_group);
         }
 
         if (LIGHTBULB_CHANNELS >= 3) {
@@ -3718,7 +3712,7 @@ void lightbulb_no_task(ch_group_t* ch_group) {
             lightbulb_group->target[i] = 0;
         }
         
-        setup_mode_toggle_upcount(ch_group->homekit_enabled);
+        setup_mode_toggle_upcount(ch_group);
     }
     
     homekit_characteristic_notify_safe(ch_group->ch[0]);
@@ -4031,6 +4025,8 @@ void garage_door_sensor(const uint16_t gpio, void* args, const uint8_t type) {
     homekit_characteristic_notify_safe(GD_TARGET_DOOR_STATE);
     homekit_characteristic_notify_safe(GD_CURRENT_DOOR_STATE);
     
+    save_states_callback();
+    
     save_data_history(ch_group->ch[0]);
     
     do_actions(ch_group, type + 4);
@@ -4090,7 +4086,7 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
                 homekit_characteristic_notify_safe(ch1);
             }
             
-            setup_mode_toggle_upcount(ch_group->homekit_enabled);
+            setup_mode_toggle_upcount(ch_group);
             
         } else {
             homekit_characteristic_notify_safe(ch1);
@@ -4251,7 +4247,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
                     WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_CLOSING;
                 }
                 
-                setup_mode_toggle_upcount(ch_group->homekit_enabled);
+                setup_mode_toggle_upcount(ch_group);
                 
             } else {
                 do_actions(ch_group, WINDOW_COVER_CLOSING);
@@ -4279,7 +4275,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
                     WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_OPENING;
                 }
                 
-                setup_mode_toggle_upcount(ch_group->homekit_enabled);
+                setup_mode_toggle_upcount(ch_group);
                 
             } else {
                 do_actions(ch_group, WINDOW_COVER_OPENING);
@@ -4428,7 +4424,7 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
             homekit_characteristic_notify_safe(WINDOW_COVER_CH_STATE);
             homekit_characteristic_notify_safe(WINDOW_COVER_CH_CURRENT_POSITION);
             
-            setup_mode_toggle_upcount(ch_group->homekit_enabled);
+            setup_mode_toggle_upcount(ch_group);
             
             save_data_history(ch_group->ch[0]);
             save_data_history(ch_group->ch[1]);
@@ -4498,7 +4494,7 @@ void hkc_fan_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
         }
         
         if (ch_group->ch[0]->value.bool_value != old_on_value) {
-            setup_mode_toggle_upcount(ch_group->homekit_enabled);
+            setup_mode_toggle_upcount(ch_group);
             
             if (ch_group->ch[0]->value.bool_value) {
                 rs_esp_timer_start(AUTOOFF_TIMER);
@@ -4616,7 +4612,7 @@ void hkc_sec_system(homekit_characteristic_t* ch, const homekit_value_t value) {
             
             do_actions(ch_group, value.int_value);
             
-            setup_mode_toggle_upcount(ch_group->homekit_enabled);
+            setup_mode_toggle_upcount(ch_group);
             
             save_states_callback();
             
@@ -4674,7 +4670,7 @@ void hkc_tv_active(homekit_characteristic_t* ch0, const homekit_value_t value) {
             
             do_actions(ch_group, value.int_value);
             
-            setup_mode_toggle_upcount(ch_group->homekit_enabled);
+            setup_mode_toggle_upcount(ch_group);
             
             save_states_callback();
             
@@ -7021,35 +7017,66 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             break;
                             
                         case SERV_TYPE_THERMOSTAT:
-                            value_int = action_serv_manager->value * 100.f;
-                            if (value_int == 2) {
-                                hkc_th_setter(ch_group->ch[2], HOMEKIT_UINT8(0));
-                            } else if (value_int == 3) {
-                                hkc_th_setter(ch_group->ch[2], HOMEKIT_UINT8(1));
-                            } else if (value_int == 4) {
-                                hkc_th_setter(ch_group->ch[4], HOMEKIT_UINT8(2));
-                            } else if (value_int == 5) {
-                                hkc_th_setter(ch_group->ch[4], HOMEKIT_UINT8(1));
-                            } else if (value_int == 6) {
-                                hkc_th_setter(ch_group->ch[4], HOMEKIT_UINT8(0));
+                            if (value_int >= 1300) {            // Increase cooler target temp
+                                hkc_th_setter(TH_COOLER_TARGET_TEMP, HOMEKIT_FLOAT(TH_COOLER_TARGET_TEMP_FLOAT + (action_serv_manager->value - 1300)));
+                                homekit_characteristic_notify_safe(TH_COOLER_TARGET_TEMP);
+                                
+                            } else if (value_int >= 1200) {     // Reduce cooler target temp
+                                hkc_th_setter(TH_COOLER_TARGET_TEMP, HOMEKIT_FLOAT(TH_COOLER_TARGET_TEMP_FLOAT - (action_serv_manager->value - 1200)));
+                                homekit_characteristic_notify_safe(TH_COOLER_TARGET_TEMP);
+                                
+                            } else if (value_int >= 1100) {     // Increase heater target temp
+                                hkc_th_setter(TH_HEATER_TARGET_TEMP, HOMEKIT_FLOAT(TH_HEATER_TARGET_TEMP_FLOAT + (action_serv_manager->value - 1100)));
+                                homekit_characteristic_notify_safe(TH_HEATER_TARGET_TEMP);
+                                
+                            } else if (value_int >= 1000) {     // Reduce heater target temp
+                                hkc_th_setter(TH_HEATER_TARGET_TEMP, HOMEKIT_FLOAT(TH_HEATER_TARGET_TEMP_FLOAT - (action_serv_manager->value - 1000)));
+                                homekit_characteristic_notify_safe(TH_HEATER_TARGET_TEMP);
+                                
                             } else {
-                                if (value_int % 2 == 0) {
-                                    hkc_th_setter(ch_group->ch[5], HOMEKIT_FLOAT(action_serv_manager->value));
+                                value_int = action_serv_manager->value * 100.f;
+                                if (value_int == 2 || value_int == 3) {
+                                    hkc_th_setter(TH_ACTIVE, HOMEKIT_UINT8(value_int - 2));
+                                } else if (value_int >= 4 && value_int <= 6) {
+                                    hkc_th_setter(TH_TARGET_MODE, HOMEKIT_UINT8(value_int - 4));
                                 } else {
-                                    hkc_th_setter(ch_group->ch[6], HOMEKIT_FLOAT(action_serv_manager->value - 0.01f));
+                                    if (value_int % 2 == 0) {
+                                        hkc_th_setter(TH_HEATER_TARGET_TEMP, HOMEKIT_FLOAT(action_serv_manager->value));
+                                    } else {
+                                        hkc_th_setter(TH_COOLER_TARGET_TEMP, HOMEKIT_FLOAT(action_serv_manager->value - 0.01f));
+                                    }
                                 }
                             }
                             break;
                             
                         case SERV_TYPE_HUMIDIFIER:
                             if (value_int < 0) {
-                                hkc_humidif_setter(ch_group->ch[4], HOMEKIT_UINT8(value_int + 3));
+                                hkc_humidif_setter(HM_TARGET_MODE, HOMEKIT_UINT8(value_int + 3));
+                                
                             } else if (value_int <= 1) {
-                                hkc_humidif_setter(ch_group->ch[2], HOMEKIT_UINT8(value_int));
+                                hkc_humidif_setter(HM_ACTIVE, HOMEKIT_UINT8(value_int));
+                                
                             } else if (value_int <= 1100) {
-                                hkc_humidif_setter(ch_group->ch[5], HOMEKIT_FLOAT(value_int - 1000));
-                            } else {    // if (value_int <= 2100)
-                                hkc_humidif_setter(ch_group->ch[6], HOMEKIT_FLOAT(value_int - 2000));
+                                hkc_humidif_setter(HM_HUM_TARGET, HOMEKIT_FLOAT(value_int - 1000));
+                                
+                            } else if (value_int <= 2100) {
+                                hkc_humidif_setter(HM_DEHUM_TARGET, HOMEKIT_FLOAT(value_int - 2000));
+                                
+                            } else if (value_int <= 3100) {             // Reduce humidifier target humidity
+                                hkc_humidif_setter(HM_HUM_TARGET, HOMEKIT_FLOAT(HM_HUM_TARGET_FLOAT - (value_int - 3100)));
+                                homekit_characteristic_notify_safe(HM_HUM_TARGET);
+                                
+                            } else if (value_int <= 3200) {             // Increase humidifier target humidity
+                                hkc_humidif_setter(HM_HUM_TARGET, HOMEKIT_FLOAT(HM_HUM_TARGET_FLOAT + (value_int - 3200)));
+                                homekit_characteristic_notify_safe(HM_HUM_TARGET);
+                                
+                            } else if (value_int <= 3300) {             // Reduce dehumidifier target humidity
+                                hkc_humidif_setter(HM_DEHUM_TARGET, HOMEKIT_FLOAT(HM_DEHUM_TARGET_FLOAT - (value_int - 3300)));
+                                homekit_characteristic_notify_safe(HM_DEHUM_TARGET);
+                                
+                            } else {    // if (value_int <= 3400)       // Increase dehumidifier target humidity
+                                hkc_humidif_setter(HM_DEHUM_TARGET, HOMEKIT_FLOAT(HM_DEHUM_TARGET_FLOAT + (value_int - 3400)));
+                                homekit_characteristic_notify_safe(HM_DEHUM_TARGET);
                             }
                             break;
                             
@@ -7084,6 +7111,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                     
                                 } else if (value_int >= 1000) {     // HUE
                                     hkc_rgbw_setter(ch_group->ch[2], HOMEKIT_FLOAT(value_int - 1000));
+                                    
                                 } else if (value_int >= 600) {      // BRI+
                                     int new_bri = ch_group->ch[1]->value.int_value + (value_int - 600);
                                     if (new_bri > 100) {
@@ -11696,31 +11724,33 @@ void normal_mode_init() {
             LIGHT_SENSOR_OFFSET = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_OFFSET_SET)->valuefloat;
         }
         
-        if (light_sensor_type < 2) {
-            LIGHT_SENSOR_RESISTOR = LIGHT_SENSOR_RESISTOR_DEFAULT;
-            if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_RESISTOR_SET) != NULL) {
-                LIGHT_SENSOR_RESISTOR = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_RESISTOR_SET)->valuefloat * 1000;
+        if (light_sensor_type >= 0) {
+            if (light_sensor_type < 2) {
+                LIGHT_SENSOR_RESISTOR = LIGHT_SENSOR_RESISTOR_DEFAULT;
+                if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_RESISTOR_SET) != NULL) {
+                    LIGHT_SENSOR_RESISTOR = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_RESISTOR_SET)->valuefloat * 1000;
+                }
+                
+                LIGHT_SENSOR_POW = LIGHT_SENSOR_POW_DEFAULT;
+                if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_POW_SET) != NULL) {
+                    LIGHT_SENSOR_POW = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_POW_SET)->valuefloat;
+                }
+                
+    #ifdef ESP_PLATFORM
+                LIGHT_SENSOR_GPIO = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_GPIO_SET)->valuefloat;
+    #endif
+            } else if (light_sensor_type == 2) {
+                cJSON_rsf* data_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_I2C_DATA_ARRAY_SET);
+                LIGHT_SENSOR_I2C_BUS = cJSON_rsf_GetArrayItem(data_array, 0)->valuefloat;
+                LIGHT_SENSOR_I2C_ADDR = (uint8_t) cJSON_rsf_GetArrayItem(data_array, 1)->valuefloat;
+                
+                const uint8_t start_bh1750 = 0x10;
+                adv_i2c_slave_write(LIGHT_SENSOR_I2C_BUS, (uint8_t) LIGHT_SENSOR_I2C_ADDR, NULL, 0, &start_bh1750, 1);
             }
             
-            LIGHT_SENSOR_POW = LIGHT_SENSOR_POW_DEFAULT;
-            if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_POW_SET) != NULL) {
-                LIGHT_SENSOR_POW = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_POW_SET)->valuefloat;
-            }
-            
-#ifdef ESP_PLATFORM
-            LIGHT_SENSOR_GPIO = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_GPIO_SET)->valuefloat;
-#endif
-        } else if (light_sensor_type == 2) {
-            cJSON_rsf* data_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_I2C_DATA_ARRAY_SET);
-            LIGHT_SENSOR_I2C_BUS = cJSON_rsf_GetArrayItem(data_array, 0)->valuefloat;
-            LIGHT_SENSOR_I2C_ADDR = (uint8_t) cJSON_rsf_GetArrayItem(data_array, 1)->valuefloat;
-            
-            const uint8_t start_bh1750 = 0x10;
-            adv_i2c_slave_write(LIGHT_SENSOR_I2C_BUS, (uint8_t) LIGHT_SENSOR_I2C_ADDR, NULL, 0, &start_bh1750, 1);
+            const float poll_period = sensor_poll_period(json_context, LIGHT_SENSOR_POLL_PERIOD_DEFAULT);
+            rs_esp_timer_start_forced(rs_esp_timer_create(poll_period * 1000, pdTRUE, (void*) ch_group, light_sensor_timer_worker));
         }
-        
-        const float poll_period = sensor_poll_period(json_context, LIGHT_SENSOR_POLL_PERIOD_DEFAULT);
-        rs_esp_timer_start_forced(rs_esp_timer_create(poll_period * 1000, pdTRUE, (void*) ch_group, light_sensor_timer_worker));
         
         set_killswitch(ch_group, json_context);
     }

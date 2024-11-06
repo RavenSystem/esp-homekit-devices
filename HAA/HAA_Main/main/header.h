@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.13.3"
+#define HAA_FIRMWARE_VERSION                "12.13.4"
 #define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -253,6 +253,11 @@
 #define THERMOSTAT_ACTION_ON                (14)
 #define THERMOSTAT_TEMP_UP                  (0)
 #define THERMOSTAT_TEMP_DOWN                (1)
+#define TH_ACTIVE                           ch_group->ch[2]
+#define TH_MODE                             ch_group->ch[3]
+#define TH_TARGET_MODE                      ch_group->ch[4]
+#define TH_HEATER_TARGET_TEMP               ch_group->ch[5]
+#define TH_COOLER_TARGET_TEMP               ch_group->ch[6]
 #define TH_ACTIVE_INT                       ch_group->ch[2]->value.int_value
 #define TH_MODE_INT                         ch_group->ch[3]->value.int_value
 #define TH_TARGET_MODE_INT                  ch_group->ch[4]->value.int_value
@@ -330,6 +335,11 @@
 #define HUMIDIF_ACTION_ON                   (14)
 #define HUMIDIF_UP                          (0)
 #define HUMIDIF_DOWN                        (1)
+#define HM_ACTIVE                           ch_group->ch[2]
+#define HM_MODE                             ch_group->ch[3]
+#define HM_TARGET_MODE                      ch_group->ch[4]
+#define HM_HUM_TARGET                       ch_group->ch[5]
+#define HM_DEHUM_TARGET                     ch_group->ch[6]
 #define HM_ACTIVE_INT                       ch_group->ch[2]->value.int_value
 #define HM_MODE_INT                         ch_group->ch[3]->value.int_value
 #define HM_TARGET_MODE_INT                  ch_group->ch[4]->value.int_value
