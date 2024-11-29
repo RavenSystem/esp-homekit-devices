@@ -52,6 +52,9 @@
 #elif defined(HAA_SHELLY_Plus2PM)
 #define HAA_SHELLY_INITIAL_SCRIPT   "{\"c\":{\"io\":[[[12,13,0],2],[[4],6,1],[[5,18],6,0,1],[[35],10,0,3],[[27]]],\"l\":0,\"b\":[[4,5]],\"ic\":[[25,26,100]]},\"a\":[{\"0\":{\"r\":[[13]]},\"1\":{\"r\":[[13,1]]},\"b\":[[5],[5,0]],\"es\":[{\"0\":{\"r\":[[12]]},\"1\":{\"r\":[[12,1]]},\"b\":[[18],[18,0]]},{\"t\":75,\"cd\":1.5,\"n\":2,\"dt\":[0,56],\"vf\":0.0000382602,\"vo\":-0.068,\"cf\":0.00000949523,\"co\":-0.017,\"pf\":0.006097560976},{\"t\":75,\"n\":3,\"dt\":[0,56],\"vf\":0.0000382602,\"vo\":-0.068,\"cf\":0.00000949523,\"co\":-0.017,\"pf\":0.006097560976},{\"t\":22,\"h\":2,\"n\":5,\"g\":35,\"j\":10,\"y0\":[{\"v\":75,\"r\":1,\"0\":{\"m\":[[1],[2]]}}]}]}]}"
 
+#elif defined(HAA_SHELLY_S2PMG3)
+#define HAA_SHELLY_INITIAL_SCRIPT   "{\"c\":{\"io\":[[[5,3,2],2],[[19],6,1],[[18,10],6,0,1],[[1],10,0,3],[[4]]],\"l\":2,\"b\":[[19,5]],\"ic\":[[7,6,100]]},\"a\":[{\"0\":{\"r\":[[5]]},\"1\":{\"r\":[[5,1]]},\"b\":[[18],[18,0]],\"es\":[{\"0\":{\"r\":[[3]]},\"1\":{\"r\":[[3,1]]},\"b\":[[10],[10,0]]},{\"t\":75,\"cd\":1.5,\"n\":2,\"dt\":[0,56],\"vf\":0.0000382602,\"vo\":-0.068,\"cf\":0.00000949523,\"co\":-0.017,\"pf\":0.006097560976},{\"t\":75,\"n\":3,\"dt\":[0,56],\"vf\":0.0000382602,\"vo\":-0.068,\"cf\":0.00000949523,\"co\":-0.017,\"pf\":0.006097560976},{\"t\":22,\"h\":2,\"n\":5,\"g\":1,\"j\":10,\"y0\":[{\"v\":75,\"r\":1,\"0\":{\"m\":[[1],[2]]}}]}]}]}"
+
 #elif defined(HAA_SHELLY_PlusPlugS) \
     || defined(HAA_SHELLY_PlusPlugUK) \
     || defined(HAA_SHELLY_PlusPlugIT) \
@@ -165,8 +168,7 @@ void setup_mode_reset_sysparam() {
 }
 
 static client_t *client_new() {
-    client_t *client = malloc(sizeof(client_t));
-    memset(client, 0, sizeof(client_t));
+    client_t *client = calloc(1, sizeof(client_t));
     
     context->max_body_size = MAX_SETUP_BODY_LEN;
     
@@ -382,8 +384,8 @@ static void wifi_scan_done_cb() {
         }
         
         if (!net) {
-            wifi_network_info_t *net = malloc(sizeof(wifi_network_info_t));
-            memset(net, 0, sizeof(*net));
+            wifi_network_info_t *net = calloc(1, sizeof(wifi_network_info_t));
+            
             strncpy(net->ssid, (char*) ap_records[i].ssid, sizeof(net->ssid) - 1);
             memcpy(net->bssid, ap_records[i].bssid, 6);
             itoa(ap_records[i].rssi, net->rssi, 10);
@@ -1181,8 +1183,7 @@ static void wifi_config_station_connect() {
 void wifi_config_init(TaskHandle_t xHandle) {
     INFO("Wifi init");
     
-    context = malloc(sizeof(wifi_config_context_t));
-    memset(context, 0, sizeof(*context));
+    context = calloc(1, sizeof(wifi_config_context_t));
     
     uint8_t macaddr[6];
     sdk_wifi_get_macaddr(STATION_IF, macaddr);

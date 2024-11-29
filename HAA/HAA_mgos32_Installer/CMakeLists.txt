@@ -81,6 +81,12 @@ if(HAA_SHELLY_Plus2PM)
     )
 endif()
 
+if(HAA_SHELLY_S2PMG3)
+    list(APPEND EXTRA_COMPILE_OPTIONS
+        -DHAA_SHELLY_S2PMG3
+    )
+endif()
+
 if(HAA_SHELLY_PlusPlugS)
     list(APPEND EXTRA_COMPILE_OPTIONS
         -DHAA_SHELLY_PlusPlugS

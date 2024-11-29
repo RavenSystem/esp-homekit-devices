@@ -293,8 +293,7 @@ static int ota_get_final_location(char* repo, char* file, uint16_t port, const b
         const struct timeval rcvtimeout = { 2, 0 };
         setsockopt(socket, SOL_SOCKET, SO_RCVTIMEO, &rcvtimeout, sizeof(rcvtimeout));
         
-        recv_buf = malloc(RECV_BUF_LEN);
-        memset(recv_buf, 0, RECV_BUF_LEN);
+        recv_buf = calloc(1, RECV_BUF_LEN);
         
         strcat(strcat(strcat(strcat(strcat(strcat(strcpy(recv_buf,
                                             REQUESTHEAD),
@@ -736,8 +735,7 @@ int ota_get_file(char* repo, char* file, int sector, uint16_t port, const bool i
 char* ota_get_version(char* repo, char* version_file, uint16_t port, const bool is_ssl) {
     INFO(">>> Version from %s", repo);
 
-    uint8_t* version = malloc(VERSIONSTRINGLEN + 1);
-    memset(version, 0, VERSIONSTRINGLEN + 1);
+    uint8_t* version = calloc(1, VERSIONSTRINGLEN + 1);
 
     if (ota_get_file_ex(repo, version_file, 0, version, VERSIONSTRINGLEN, port, is_ssl, NULL) == 0) {
         INFO("**** %s v%s", version_file, (char*) version);
