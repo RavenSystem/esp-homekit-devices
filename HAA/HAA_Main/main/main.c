@@ -1306,19 +1306,13 @@ void hkc_custom_setup_setter(homekit_characteristic_t* ch, const homekit_value_t
         homekit_characteristic_notify(ch);
         
         switch (option) {
-            case '0':   // OTA Update
-#ifdef ESP_PLATFORM
-                setup_set_boot_installer();
-#else
-                rboot_set_temp_rom(1);
-#endif
-                reboot_haa();
-                break;
-                
             case '1':   // Setup Mode
                 sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
                 reboot_haa();
                 break;
+                
+            case '0':   // OTA Update
+                setup_set_boot_installer();
                 
             case '2':   // Reboot
                 reboot_haa();
@@ -1334,6 +1328,94 @@ void hkc_custom_setup_setter(homekit_characteristic_t* ch, const homekit_value_t
                 
             default:
                 break;
+        }
+    }
+}
+
+void hk_destroy_value_timer_worker(TimerHandle_t xTimer) {
+    homekit_value_t* value = (homekit_value_t*) pvTimerGetTimerID(xTimer);
+    
+    homekit_value_destruct(value);
+    
+    rs_esp_timer_delete(xTimer);
+}
+
+void hk_destroy_value_delayed(homekit_value_t* value) {
+    rs_esp_timer_start_forced(rs_esp_timer_create(10000, pdTRUE, (void*) value, hk_destroy_value_timer_worker));
+}
+
+void hkc_custom_setup_advanced_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
+    value.data_value[value.data_size - 1] = 0;
+    char* string_value = (char*) value.data_value;
+    if (value.data_size > strlen(CUSTOM_HAA_COMMAND) + CUSTOM_HAA_ADVANCED_COMMAND_LEN && strncmp(string_value, CUSTOM_HAA_COMMAND, strlen(CUSTOM_HAA_COMMAND)) == 0) {
+        string_value += strlen(CUSTOM_HAA_COMMAND);
+        char selected_advanced_opt_char[3];
+        selected_advanced_opt_char[0] = string_value[0];
+        selected_advanced_opt_char[1] = string_value[1];
+        selected_advanced_opt_char[2] = 0;
+        int selected_advanced_opt = atoi(selected_advanced_opt_char);
+        //INFO("<0> -> %s", string_value);
+        INFO("<0> -> Adv %i", selected_advanced_opt);
+        
+        void save_new_script() {
+            homekit_value_destruct(&ch->value);
+            char* new_script = string_value + CUSTOM_HAA_ADVANCED_COMMAND_LEN;
+            sysparam_set_string(HAA_SCRIPT_SYSPARAM, new_script);
+            haa_remove_saved_states();
+        }
+        
+        if (selected_advanced_opt == 1) {
+            char* txt_config = NULL;
+            sysparam_get_string(HAA_SCRIPT_SYSPARAM, &txt_config);
+            if (txt_config) {
+                ch->value.data_size = strlen(txt_config);
+                ch->value.data_value = (uint8_t*) txt_config;
+                ch->value.is_null = false;
+                
+                hk_destroy_value_delayed(&ch->value);
+            }
+            
+        } else if (selected_advanced_opt == 2 ||
+                   selected_advanced_opt == 3) {
+            save_new_script();
+            if (selected_advanced_opt == 2) {
+                haa_increase_last_hk_config_number();
+            } else {
+                haa_reset_homekit_id();
+            }
+            reboot_haa();
+            
+        } else if (selected_advanced_opt == 4) {
+            char* new_update_server = string_value + CUSTOM_HAA_ADVANCED_COMMAND_LEN;
+            
+            if (strlen(new_update_server) < 7) {
+                sysparam_erase(CUSTOM_REPO_SYSPARAM);
+                
+            } else {
+                sysparam_set_int8(PORT_SECURE_SYSPARAM, new_update_server[0] == '1');
+                
+                new_update_server++;
+                char new_server_port_char[6];
+                for (unsigned int i = 0; i < 5; i++) {
+                    new_server_port_char[i] = new_update_server[i];
+                }
+                new_server_port_char[5] = 0;
+                
+                int new_server_port = atoi(new_server_port_char);
+                if (new_server_port == 0) {
+                    new_server_port = 80;
+                }
+                sysparam_set_int32(PORT_NUMBER_SYSPARAM, new_server_port);
+                
+                new_update_server += 5;
+                sysparam_set_string(CUSTOM_REPO_SYSPARAM, new_update_server);
+            }
+            
+            setup_set_boot_installer();
+            reboot_haa();
+            
+        } else if (selected_advanced_opt == 99) {
+            homekit_value_destruct(&ch->value);
         }
     }
 }
@@ -7063,19 +7145,19 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                 hkc_humidif_setter(HM_DEHUM_TARGET, HOMEKIT_FLOAT(value_int - 2000));
                                 
                             } else if (value_int <= 3100) {             // Reduce humidifier target humidity
-                                hkc_humidif_setter(HM_HUM_TARGET, HOMEKIT_FLOAT(HM_HUM_TARGET_FLOAT - (value_int - 3100)));
+                                hkc_humidif_setter(HM_HUM_TARGET, HOMEKIT_FLOAT(HM_HUM_TARGET_FLOAT - (value_int - 3000)));
                                 homekit_characteristic_notify_safe(HM_HUM_TARGET);
                                 
                             } else if (value_int <= 3200) {             // Increase humidifier target humidity
-                                hkc_humidif_setter(HM_HUM_TARGET, HOMEKIT_FLOAT(HM_HUM_TARGET_FLOAT + (value_int - 3200)));
+                                hkc_humidif_setter(HM_HUM_TARGET, HOMEKIT_FLOAT(HM_HUM_TARGET_FLOAT + (value_int - 3100)));
                                 homekit_characteristic_notify_safe(HM_HUM_TARGET);
                                 
                             } else if (value_int <= 3300) {             // Reduce dehumidifier target humidity
-                                hkc_humidif_setter(HM_DEHUM_TARGET, HOMEKIT_FLOAT(HM_DEHUM_TARGET_FLOAT - (value_int - 3300)));
+                                hkc_humidif_setter(HM_DEHUM_TARGET, HOMEKIT_FLOAT(HM_DEHUM_TARGET_FLOAT - (value_int - 3200)));
                                 homekit_characteristic_notify_safe(HM_DEHUM_TARGET);
                                 
                             } else {    // if (value_int <= 3400)       // Increase dehumidifier target humidity
-                                hkc_humidif_setter(HM_DEHUM_TARGET, HOMEKIT_FLOAT(HM_DEHUM_TARGET_FLOAT + (value_int - 3400)));
+                                hkc_humidif_setter(HM_DEHUM_TARGET, HOMEKIT_FLOAT(HM_DEHUM_TARGET_FLOAT + (value_int - 3300)));
                                 homekit_characteristic_notify_safe(HM_DEHUM_TARGET);
                             }
                             break;
@@ -7325,7 +7407,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
         action_serv_manager = action_serv_manager->next;
     }
     
-    // System actions
+    // System Actions
     action_system_t* action_system = ch_group->action_system;
     while (action_system) {
         if (action_system->action == action) {
@@ -7335,21 +7417,22 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                     setup_mode_call(99, NULL, 0);
                     break;
                     
-                case SYSTEM_ACTION_OTA_UPDATE:
-#ifdef ESP_PLATFORM
-                    setup_set_boot_installer();
-#else
-                    rboot_set_temp_rom(1);
-#endif
-                    reboot_haa();
-                    break;
-                    
                 case SYSTEM_ACTION_WIFI_RECONNECTION_2:
                     main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
                     
                 case SYSTEM_ACTION_WIFI_RECONNECTION:
+                    rs_esp_timer_start(WIFI_WATCHDOG_TIMER);
                     sdk_wifi_station_disconnect();
                     break;
+                    
+                case SYSTEM_ACTION_WIFI_DISCONNECTION:
+                    rs_esp_timer_stop(WIFI_WATCHDOG_TIMER);
+                    main_config.wifi_status = WIFI_STATUS_DISCONNECTED;
+                    sdk_wifi_station_disconnect();
+                    break;
+                
+                case SYSTEM_ACTION_OTA_UPDATE:
+                    setup_set_boot_installer();
                     
                 default:    // case SYSTEM_ACTION_REBOOT:
                     reboot_haa();
@@ -7528,6 +7611,7 @@ homekit_characteristic_t identify_function = HOMEKIT_CHARACTERISTIC_(IDENTIFY, i
 homekit_characteristic_t firmware = HOMEKIT_CHARACTERISTIC_(FIRMWARE_REVISION, HAA_FIRMWARE_VERSION);
 homekit_characteristic_t hap_version = HOMEKIT_CHARACTERISTIC_(VERSION, "1.1.0");
 homekit_characteristic_t haa_custom_setup_option = HOMEKIT_CHARACTERISTIC_(CUSTOM_SETUP_OPTION, .setter_ex=hkc_custom_setup_setter);
+homekit_characteristic_t haa_custom_setup_advanced_option = HOMEKIT_CHARACTERISTIC_(CUSTOM_SETUP_ADVANCED_OPTION, .setter_ex=hkc_custom_setup_advanced_setter);
 
 homekit_server_config_t config;
 
@@ -9597,8 +9681,9 @@ void normal_mode_init() {
             accessories[accessory]->services[services]->id = 65010;
             accessories[accessory]->services[services]->hidden = true;
             accessories[accessory]->services[services]->type = HOMEKIT_SERVICE_CUSTOM_SETUP_OPTIONS;
-            accessories[accessory]->services[services]->characteristics = calloc(2, sizeof(homekit_characteristic_t*));
+            accessories[accessory]->services[services]->characteristics = calloc(3, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[services]->characteristics[0] = &haa_custom_setup_option;
+            accessories[accessory]->services[services]->characteristics[1] = &haa_custom_setup_advanced_option;
         }
         
         if (acc_count == 0) {
@@ -11707,9 +11792,9 @@ void normal_mode_init() {
             //service_iid += 2;
         }
         
-        unsigned int light_sensor_type = LIGHT_SENSOR_TYPE_DEFAULT;
+        int light_sensor_type = LIGHT_SENSOR_TYPE_DEFAULT;
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_TYPE_SET) != NULL) {
-            light_sensor_type = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_TYPE_SET)->valuefloat;
+            light_sensor_type = (int8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_context, LIGHT_SENSOR_TYPE_SET)->valuefloat;
         }
         
         LIGHT_SENSOR_TYPE = light_sensor_type;
@@ -12113,7 +12198,7 @@ void normal_mode_init() {
     
     // *** NEW BATTERY
     void new_battery(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
-        ch_group_t* ch_group = new_ch_group(2, 1, 0, 1);
+        ch_group_t* ch_group = new_ch_group(3, 1, 0, 1);
         ch_group->serv_index = service_numerator;
         unsigned int homekit_enabled = acc_homekit_enabled(json_context);
         ch_group->homekit_enabled = homekit_enabled;
@@ -12133,6 +12218,7 @@ void normal_mode_init() {
         
         BATTERY_LEVEL_CH = NEW_HOMEKIT_CHARACTERISTIC(BATTERY_LEVEL, 0);
         BATTERY_STATUS_LOW_CH = NEW_HOMEKIT_CHARACTERISTIC(STATUS_LOW_BATTERY, 0);
+        BATTERY_CHARGING_STATE = NEW_HOMEKIT_CHARACTERISTIC(CHARGING_STATE, 2);
         
         ch_group->serv_type = SERV_TYPE_BATTERY;
         register_actions(ch_group, json_context, 0);
@@ -12155,8 +12241,9 @@ void normal_mode_init() {
             accessories[accessory]->services[service]->characteristics = calloc(4, sizeof(homekit_characteristic_t*));
             accessories[accessory]->services[service]->characteristics[0] = BATTERY_LEVEL_CH;
             accessories[accessory]->services[service]->characteristics[1] = BATTERY_STATUS_LOW_CH;
+            accessories[accessory]->services[service]->characteristics[2] = BATTERY_CHARGING_STATE;
             
-            //service_iid += 3;
+            //service_iid += 4;
         }
         
         set_killswitch(ch_group, json_context);
@@ -13146,11 +13233,7 @@ void init_task() {
     // Sysparam starter
     sysparam_status_t status = sysparam_init(SYSPARAMSECTOR, 0);
     if (status != SYSPARAM_OK) {
-#ifdef ESP_PLATFORM
         setup_set_boot_installer();
-#else
-        rboot_set_temp_rom(1);
-#endif
         vTaskDelay(MS_TO_TICKS(200));
         sdk_system_restart();
     }

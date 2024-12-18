@@ -42,7 +42,7 @@ void json_object_end(json_stream *json);
 void json_array_start(json_stream *json);
 void json_array_end(json_stream *json);
 
-void json_integer(json_stream *json, long long x);
+void json_integer(json_stream *json, long int x);
 void json_float(json_stream *json, float x);
 void json_string(json_stream *json, const char *x);
 void json_boolean(json_stream *json, bool x);

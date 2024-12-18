@@ -130,6 +130,8 @@ void init_task() {
 }
 
 void ota_task(void *arg) {
+    vTaskDelay(1);
+    
     xTaskCreate(init_task, "INI", (TASK_SIZE_FACTOR * 512), NULL, (tskIDLE_PRIORITY + 2), NULL);
     
     vTaskSuspend(NULL);

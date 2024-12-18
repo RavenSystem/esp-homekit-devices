@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.13.4"
+#define HAA_FIRMWARE_VERSION                "12.14.0"
 #define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -479,6 +479,7 @@
 #define BATTERY_LEVEL_CH_INT                ch_group->ch[0]->value.int_value
 #define BATTERY_STATUS_LOW_CH               ch_group->ch[1]
 #define BATTERY_STATUS_LOW_CH_INT           ch_group->ch[1]->value.int_value
+#define BATTERY_CHARGING_STATE              ch_group->ch[2]
 
 #define PM_SENSOR_TYPE_SET                  "n"
 #define PM_SENSOR_TYPE_DEFAULT              (0)
@@ -728,6 +729,7 @@
 #define SYSTEM_ACTION_OTA_UPDATE            (2)
 #define SYSTEM_ACTION_WIFI_RECONNECTION     (3)
 #define SYSTEM_ACTION_WIFI_RECONNECTION_2   (4)
+#define SYSTEM_ACTION_WIFI_DISCONNECTION    (5)
 #define UART_ACTIONS_ARRAY                  "u"
 #define UART_ACTION_UART                    "n"
 #define UART_ACTION_PAUSE                   "d"
@@ -783,11 +785,11 @@
 
 #define BOOT_EARLY_DELAY                    "v"
 #define NEXT_SERV_CREATION_DELAY            "cd"
-#define EXIT_EMERGENCY_SETUP_MODE_TIME      (2500)
+#define EXIT_EMERGENCY_SETUP_MODE_TIME      (3000)
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
-#define CUSTOM_HAA_COMMAND                  "io"
+#define CUSTOM_HAA_COMMAND                  "pt"
 #define CUSTOM_HAA_ADVANCED_COMMAND_LEN     (2)
 #define HAA_SETUP_ACCESSORY_SET             "s"
 

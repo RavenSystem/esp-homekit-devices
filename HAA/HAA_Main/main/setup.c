@@ -61,6 +61,7 @@
 #include "header.h"
 
 #include "main.h"
+#include "setup.h"
 
 #define SETUP_ANNOUNCER_DESTINATION     "255.255.255.255"
 #define SETUP_ANNOUNCER_PORT            "4567"
@@ -141,7 +142,7 @@ typedef struct _wifi_network_info {
     char rssi[4];
     char channel[3];
     bool secure;    // 1 bit
-
+    
     struct _wifi_network_info *next;
 } wifi_network_info_t;
 
@@ -940,11 +941,7 @@ static void wifi_config_server_on_settings_update_task(void* args) {
             }
             
             if (ota_param || installer_setup_param) {
-#ifdef ESP_PLATFORM
                 setup_set_boot_installer();
-#else
-                rboot_set_temp_rom(1);
-#endif
                 
                 if (installer_setup_param) {
                     sysparam_set_int8(HAA_SETUP_MODE_SYSPARAM, 1);
@@ -1361,9 +1358,8 @@ static void wifi_config_sta_connect_timeout_task() {
         vTaskDelay(MS_TO_TICKS(1000));
 
         if (wifi_config_get_ip() >= 0) {
-#ifndef ESP_PLATFORM
             save_last_working_phy();
-#endif
+            
             if (context->on_wifi_ready) {
                 context->on_wifi_ready();
                 

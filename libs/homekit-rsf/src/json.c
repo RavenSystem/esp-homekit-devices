@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include "json.h"
@@ -22,27 +23,7 @@ void json_init(json_stream *json, void *context) {
     json->nesting_idx = 0;
     json->context = context;
 }
-/*
-json_stream *json_new(size_t buffer_size, uint8_t* buffer_data, json_flush_callback on_flush, void *context) {
-    json_stream* json = malloc(sizeof(json_stream));
-    if (json) {
-        json->size = buffer_size;
-        if (buffer_data) {
-            json->buffer = buffer_data;
-        } else {
-            json->buffer = malloc(json->size);
-        }
-        json->on_flush = on_flush;
-        json_init(json, context);
-        if (!json->buffer) {
-            free(json);
-            json = NULL;
-        }
-    }
-    
-    return json;
-}
-*/
+
 void json_buffer_free(json_stream *json) {
     free(json->buffer);
     free(json);
@@ -63,6 +44,33 @@ void json_flush(json_stream *json) {
     json->pos = 0;
 }
 
+void json_put(json_stream *json, char c) {
+    json->buffer[json->pos++] = c;
+    if (json->pos >= json->size - 1) {
+        json_flush(json);
+    }
+}
+
+void json_write(json_stream *json, const char *data, size_t size) {
+    while (size) {
+        size_t chunk_size = size;
+        if (size > json->size - json->pos) {
+            chunk_size = json->size - json->pos;
+        }
+
+        memcpy((char*) json->buffer + json->pos, data, chunk_size);
+
+        json->pos += chunk_size;
+        if (json->pos >= json->size - 1) {
+            json_flush(json);
+        }
+
+        data += chunk_size;
+        size -= chunk_size;
+    }
+}
+
+/*
 void json_write(json_stream *json, const char *format, ...) {
     va_list arg_ptr;
     
@@ -92,6 +100,7 @@ void json_write(json_stream *json, const char *format, ...) {
         json->pos += len;
     }
 }
+*/
 
 void json_object_start(json_stream *json) {
     if (json->error)
@@ -101,11 +110,11 @@ void json_object_start(json_stream *json) {
 
     switch (json->state) {
         case JSON_STATE_ARRAY_ITEM:
-            json_write(json, ",");
+            json_put(json, ',');
         case JSON_STATE_START:
         case JSON_STATE_OBJECT_KEY:
         case JSON_STATE_ARRAY:
-            json_write(json, "{");
+            json_put(json, '{');
 
             json->state = JSON_STATE_OBJECT;
             json->nesting[json->nesting_idx++] = JSON_NESTING_OBJECT;
@@ -126,7 +135,7 @@ void json_object_end(json_stream *json) {
     switch (json->state) {
         case JSON_STATE_OBJECT:
         case JSON_STATE_OBJECT_VALUE:
-            json_write(json, "}");
+            json_put(json, '}');
 
             json->nesting_idx--;
             if (!json->nesting_idx) {
@@ -157,11 +166,11 @@ void json_array_start(json_stream *json) {
 
     switch (json->state) {
         case JSON_STATE_ARRAY_ITEM:
-            json_write(json, ",");
+            json_put(json, ',');
         case JSON_STATE_START:
         case JSON_STATE_OBJECT_KEY:
         case JSON_STATE_ARRAY:
-            json_write(json, "[");
+            json_put(json, '[');
 
             json->state = JSON_STATE_ARRAY;
             json->nesting[json->nesting_idx++] = JSON_NESTING_ARRAY;
@@ -182,7 +191,7 @@ void json_array_end(json_stream *json) {
     switch (json->state) {
         case JSON_STATE_ARRAY:
         case JSON_STATE_ARRAY_ITEM:
-            json_write(json, "]");
+            json_put(json, ']');
 
             json->nesting_idx--;
             if (!json->nesting_idx) {
@@ -205,14 +214,21 @@ void json_array_end(json_stream *json) {
     }
 }
 
-void json_integer(json_stream *json, long long x) {
+void json_integer(json_stream *json, long int x) {
     if (json->error)
         json->state = JSON_STATE_ERROR;
     if (json->state == JSON_STATE_ERROR)
         return;
 
     void _do_write() {
-        json_write(json, "%ld", x);
+        size_t len = snprintf(NULL, 0, "%ld", x);
+        char *buffer = malloc(len + 1);
+        if (buffer) {
+            snprintf(buffer, len + 1, "%ld", x);
+            
+            json_write(json, buffer, len);
+            free(buffer);
+        }
     }
 
     switch (json->state) {
@@ -221,7 +237,7 @@ void json_integer(json_stream *json, long long x) {
             json->state = JSON_STATE_END;
             break;
         case JSON_STATE_ARRAY_ITEM:
-            json_write(json, ",");
+            json_put(json, ',');
         case JSON_STATE_ARRAY:
             _do_write();
             json->state = JSON_STATE_ARRAY_ITEM;
@@ -244,8 +260,16 @@ void json_float(json_stream *json, float x) {
         return;
 
     void _do_write() {
-        //json_write(json, "%1.15g", x);
-        json_write(json, "%1.7g", x);
+        //snprintf(NULL, 0, "%1.15g", x);
+        size_t len = snprintf(NULL, 0, "%1.7g", x);
+        char *buffer = malloc(len + 1);
+        if (buffer) {
+            char *buffer = malloc(len + 1);
+            snprintf(buffer, len + 1, "%1.7g", x);
+            
+            json_write(json, buffer, len);
+            free(buffer);
+        }
     }
 
     switch (json->state) {
@@ -254,7 +278,7 @@ void json_float(json_stream *json, float x) {
             json->state = JSON_STATE_END;
             break;
         case JSON_STATE_ARRAY_ITEM:
-            json_write(json, ",");
+            json_put(json, ',');
         case JSON_STATE_ARRAY:
             _do_write();
             json->state = JSON_STATE_ARRAY_ITEM;
@@ -278,7 +302,9 @@ void json_string(json_stream *json, const char *x) {
 
     void _do_write() {
         // TODO: escape string
-        json_write(json, "\"%s\"", x);
+        json_put(json, '"');
+        json_write(json, x, strlen(x));
+        json_put(json, '"');
     }
 
     switch (json->state) {
@@ -287,16 +313,16 @@ void json_string(json_stream *json, const char *x) {
             json->state = JSON_STATE_END;
             break;
         case JSON_STATE_ARRAY_ITEM:
-            json_write(json, ",");
+            json_put(json, ',');
         case JSON_STATE_ARRAY:
             _do_write();
             json->state = JSON_STATE_ARRAY_ITEM;
             break;
         case JSON_STATE_OBJECT_VALUE:
-            json_write(json, ",");
+            json_put(json, ',');
         case JSON_STATE_OBJECT:
             _do_write();
-            json_write(json, ":");
+            json_put(json, ':');
             json->state = JSON_STATE_OBJECT_KEY;
             break;
         case JSON_STATE_OBJECT_KEY:
@@ -317,7 +343,11 @@ void json_boolean(json_stream *json, bool x) {
         return;
 
     void _do_write() {
-        json_write(json, (x) ? "true" : "false");
+        if (x) {
+            json_write(json, "true", 4);
+        } else {
+            json_write(json, "false", 5);
+        }
     }
 
     switch (json->state) {
@@ -326,7 +356,7 @@ void json_boolean(json_stream *json, bool x) {
             json->state = JSON_STATE_END;
             break;
         case JSON_STATE_ARRAY_ITEM:
-            json_write(json, ",");
+            json_put(json, ',');
         case JSON_STATE_ARRAY:
             _do_write();
             json->state = JSON_STATE_ARRAY_ITEM;
@@ -349,7 +379,7 @@ void json_null(json_stream *json) {
         return;
 
     void _do_write() {
-        json_write(json, "null");
+        json_write(json, "null", 4);
     }
 
     switch (json->state) {
@@ -358,7 +388,7 @@ void json_null(json_stream *json) {
             json->state = JSON_STATE_END;
             break;
         case JSON_STATE_ARRAY_ITEM:
-            json_write(json, ",");
+            json_put(json, ',');
         case JSON_STATE_ARRAY:
             _do_write();
             json->state = JSON_STATE_ARRAY_ITEM;

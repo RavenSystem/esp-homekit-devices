@@ -749,7 +749,7 @@ static void wifi_config_server_on_settings(client_t *client) {
     
     int8_t int8_value = 0;
     sysparam_get_int8(PORT_SECURE_SYSPARAM, &int8_value);
-    if (int8_value == 1) {
+    if (int8_value != 0) {
         client_send_chunk(client, "checked");
     }
     client_send_chunk(client, html_settings_repossl);

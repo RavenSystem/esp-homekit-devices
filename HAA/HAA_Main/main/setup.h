@@ -23,6 +23,7 @@ void wifi_config_init(void (*on_wifi_ready)(), char* custom_hostname, const int 
 void wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool with_reset);
 void wifi_config_reset();
 void save_last_working_phy();
+#define setup_set_boot_installer()      rboot_set_temp_rom(1)   // Requires: #include <rboot-api.h>
 
 #endif
 
