@@ -13,10 +13,13 @@
 
 #define JSON_MAX_DEPTH              (30)
 
+#ifndef HOMEKIT_JSON_BUFFER_SIZE
+#define HOMEKIT_JSON_BUFFER_SIZE    (1024)
+#endif
+
 typedef int (*json_flush_callback)(uint8_t *buffer, size_t size, void *context);
 typedef struct _json_stream {
     uint8_t* buffer;
-    size_t size;
     size_t pos;
 
     uint8_t state: 7;

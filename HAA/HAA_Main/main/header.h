@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.14.0"
+#define HAA_FIRMWARE_VERSION                "12.14.1"
 #define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -29,7 +29,7 @@
 
 #define INITIAL_SETUP_TASK_SIZE             (TASK_SIZE_FACTOR * (1600))
 #define NTP_TASK_SIZE                       (TASK_SIZE_FACTOR * (512))
-#define PING_TASK_SIZE                      GLOBAL_TASK_SIZE
+#define PING_TASK_SIZE                      (TASK_SIZE_FACTOR * (896))
 #define AUTODIMMER_TASK_SIZE                GLOBAL_TASK_SIZE
 #define IRRF_TX_TASK_SIZE                   (TASK_SIZE_FACTOR * (456))
 #define UART_ACTION_TASK_SIZE               (TASK_SIZE_FACTOR * (384))

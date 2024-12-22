@@ -181,7 +181,7 @@ int rs_ping(ip_addr_t ping_target) {
 
 #endif
     if (s < 0) {
-        printf("ping error creating socket (%i)\n", s);
+        printf("! Ping socket (%i)\n", s);
         return s;
     }
     

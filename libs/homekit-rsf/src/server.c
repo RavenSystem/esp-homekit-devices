@@ -45,6 +45,8 @@
 #include "pairing.h"
 #include "storage.h"
 #include "query_params.h"
+
+#define HOMEKIT_JSON_BUFFER_SIZE                (1024)
 #include "json.h"
 #include "debug.h"
 #include "port.h"
@@ -154,9 +156,8 @@ typedef struct _notification {
     struct _notification* next;
 } notification_t;
 
-#define BUFFER_DATA_SIZE        (1442)
-#define RECEIVED_DATA_SIZE      (1024 + 18)
-#define ENCRYPTED_DATA_SIZE     (768)
+#define BUFFER_DATA_SIZE        (HOMEKIT_JSON_BUFFER_SIZE)  // Used by JSON buffer too. Must be 2 bytes reserved for client_send_chunk() end
+
 typedef struct {
     char *accessory_id;
     ed25519_key* accessory_key;
@@ -180,8 +181,8 @@ typedef struct {
     
     json_stream json;
     
-    byte data[BUFFER_DATA_SIZE + 18];
-    byte encrypted[ENCRYPTED_DATA_SIZE + 18];
+    byte data[BUFFER_DATA_SIZE + 16 + 2];   // Used by JSON buffer too. Must be 2 bytes reserved for client_send_chunk() end; there are 18.
+    byte encrypted[BUFFER_DATA_SIZE + 16 + 2];
     
     fd_set fds;
 } homekit_server_t;
@@ -251,8 +252,6 @@ homekit_server_t *server_new() {
     
     FD_ZERO(&homekit_server->fds);
     
-    json_init(&homekit_server->json, NULL);
-    homekit_server->json.size = BUFFER_DATA_SIZE + (18 - 2);   // 2 bytes reserved for client_send_chunk() end
     homekit_server->json.buffer = homekit_server->data;
     homekit_server->json.on_flush = client_send_chunk;
     
@@ -721,8 +720,8 @@ int client_send_encrypted(client_context_t *context, byte *payload, size_t size)
     
     while (payload_offset < size) {
         size_t chunk_size = size - payload_offset;
-        if (chunk_size > ENCRYPTED_DATA_SIZE)
-            chunk_size = ENCRYPTED_DATA_SIZE;
+        if (chunk_size > sizeof(homekit_server->encrypted) - 16 - 2)
+            chunk_size = sizeof(homekit_server->encrypted) - 16 - 2;
         
         byte aead[2] = {chunk_size % 256, chunk_size / 256};
 
@@ -735,7 +734,7 @@ int client_send_encrypted(client_context_t *context, byte *payload, size_t size)
             x /= 256;
         }
         
-        size_t available = ENCRYPTED_DATA_SIZE + (18 - 2);
+        size_t available = sizeof(homekit_server->encrypted) - 2;
         int r = crypto_chacha20poly1305_encrypt(
             context->read_key, nonce, aead, 2,
             payload + payload_offset, chunk_size,
@@ -2181,6 +2180,8 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
     CLIENT_INFO(context, "Get CH");
     DEBUG_HEAP();
     
+    //unsigned int time_start = sdk_system_get_time_raw();
+    
     query_param_t *qp = context->endpoint_params;
     while (qp) {
         CLIENT_DEBUG(context, "Query paramter %s = %s", qp->name, qp->value);
@@ -2315,6 +2316,8 @@ void homekit_server_on_get_characteristics(client_context_t *context) {
     } else {
         client_send_chunk(NULL, 0, context);
     }
+    
+    //CLIENT_INFO(context, "Time %i", sdk_system_get_time_raw() - time_start);
     
     free(id);
 }
@@ -3308,7 +3311,7 @@ static http_parser_settings homekit_http_parser_settings = {
 static inline void IRAM homekit_client_process(client_context_t *context) {
     int data_len = read(context->socket,
                         homekit_server->data + homekit_server->data_available,
-                        RECEIVED_DATA_SIZE - homekit_server->data_available
+                        sizeof(homekit_server->data) - homekit_server->data_available
                         );
     
     if (data_len > 0) {
@@ -3317,7 +3320,7 @@ static inline void IRAM homekit_client_process(client_context_t *context) {
         size_t payload_size = (size_t) data_len;
         CLIENT_DEBUG(context, "Received Payload:\n%s", (char*) payload);
         
-        size_t decrypted_size = BUFFER_DATA_SIZE - 2;
+        size_t decrypted_size = sizeof(homekit_server->data) - 16 - 2;
         
         if (context->encrypted) {
             CLIENT_DEBUG(context, "Decrypting data");

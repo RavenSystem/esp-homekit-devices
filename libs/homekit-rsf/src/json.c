@@ -46,7 +46,7 @@ void json_flush(json_stream *json) {
 
 void json_put(json_stream *json, char c) {
     json->buffer[json->pos++] = c;
-    if (json->pos >= json->size - 1) {
+    if (json->pos >= HOMEKIT_JSON_BUFFER_SIZE - 1) {
         json_flush(json);
     }
 }
@@ -54,53 +54,21 @@ void json_put(json_stream *json, char c) {
 void json_write(json_stream *json, const char *data, size_t size) {
     while (size) {
         size_t chunk_size = size;
-        if (size > json->size - json->pos) {
-            chunk_size = json->size - json->pos;
+        if (size > HOMEKIT_JSON_BUFFER_SIZE - json->pos) {
+            chunk_size = HOMEKIT_JSON_BUFFER_SIZE - json->pos;
         }
-
+        
         memcpy((char*) json->buffer + json->pos, data, chunk_size);
-
+        
         json->pos += chunk_size;
-        if (json->pos >= json->size - 1) {
+        if (json->pos >= HOMEKIT_JSON_BUFFER_SIZE - 1) {
             json_flush(json);
         }
-
+        
         data += chunk_size;
         size -= chunk_size;
     }
 }
-
-/*
-void json_write(json_stream *json, const char *format, ...) {
-    va_list arg_ptr;
-    
-    va_start(arg_ptr, format);
-    size_t len = vsnprintf((char *)json->buffer + json->pos, json->size - json->pos, format, arg_ptr);
-    va_end(arg_ptr);
-
-    if (len + json->pos > json->size - 1) {
-        json_flush(json);
-        
-        if (json->error) {
-            return;
-        }
-
-        va_start(arg_ptr, format);
-        size_t len2 = vsnprintf((char *)json->buffer + json->pos, json->size - json->pos, format, arg_ptr);
-        va_end(arg_ptr);
-        
-        if (len2 + 1 > json->size) {
-            ERROR("Too large %i/%i", len2, json->size);
-            DEBUG("Format = %s", format);
-            DEBUG("Data = %s", (char *)json->buffer);
-        } else {
-            json->pos += len2;
-        }
-    } else {
-        json->pos += len;
-    }
-}
-*/
 
 void json_object_start(json_stream *json) {
     if (json->error)
@@ -141,7 +109,7 @@ void json_object_end(json_stream *json) {
             if (!json->nesting_idx) {
                 json->state = JSON_STATE_END;
             } else {
-                switch (json->nesting[json->nesting_idx-1]) {
+                switch (json->nesting[json->nesting_idx - 1]) {
                     case JSON_NESTING_OBJECT:
                         json->state = JSON_STATE_OBJECT_VALUE;
                         break;
@@ -197,7 +165,7 @@ void json_array_end(json_stream *json) {
             if (!json->nesting_idx) {
                 json->state = JSON_STATE_END;
             } else {
-                switch (json->nesting[json->nesting_idx-1]) {
+                switch (json->nesting[json->nesting_idx - 1]) {
                     case JSON_NESTING_OBJECT:
                         json->state = JSON_STATE_OBJECT_VALUE;
                         break;
