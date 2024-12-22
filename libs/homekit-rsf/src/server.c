@@ -612,6 +612,11 @@ void write_characteristic_json(json_stream *json, client_context_t *client, cons
                     break;
                 }
                 case HOMEKIT_FORMAT_FLOAT: {
+                    // Check for 'nan' float value
+                    if (v.float_value != v.float_value) {
+                        v.float_value = 0;
+                    }
+                    
                     if (ch->max_value) {
                         int max_value = (int) *ch->max_value;
                         if (v.float_value > max_value) {
