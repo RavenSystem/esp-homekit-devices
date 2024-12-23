@@ -45,8 +45,6 @@
 #include "pairing.h"
 #include "storage.h"
 #include "query_params.h"
-
-#define HOMEKIT_JSON_BUFFER_SIZE                (1024)
 #include "json.h"
 #include "debug.h"
 #include "port.h"
@@ -157,6 +155,7 @@ typedef struct _notification {
 } notification_t;
 
 #define BUFFER_DATA_SIZE        (HOMEKIT_JSON_BUFFER_SIZE)  // Used by JSON buffer too. Must be 2 bytes reserved for client_send_chunk() end
+#define ENCRYPTED_DATA_SIZE     (768)
 
 typedef struct {
     char *accessory_id;
@@ -182,7 +181,7 @@ typedef struct {
     json_stream json;
     
     byte data[BUFFER_DATA_SIZE + 16 + 2];   // Used by JSON buffer too. Must be 2 bytes reserved for client_send_chunk() end; there are 18.
-    byte encrypted[BUFFER_DATA_SIZE + 16 + 2];
+    byte encrypted[ENCRYPTED_DATA_SIZE + 16 + 2];
     
     fd_set fds;
 } homekit_server_t;
