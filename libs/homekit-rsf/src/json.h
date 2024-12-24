@@ -13,7 +13,7 @@
 
 #define JSON_MAX_DEPTH              (30)
 
-#define HOMEKIT_JSON_BUFFER_SIZE    (1442)
+#define HOMEKIT_JSON_BUFFER_SIZE    (1024)
 
 
 typedef int (*json_flush_callback)(uint8_t *buffer, size_t size, void *context);

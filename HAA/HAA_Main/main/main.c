@@ -7718,7 +7718,6 @@ void normal_mode_init() {
     
     cJSON_rsf* json_haa = cJSON_rsf_Parse(txt_config);
     
-    cJSON_rsf* json_config = cJSON_rsf_GetObjectItemCaseSensitive(json_haa, GENERAL_CONFIG);
     cJSON_rsf* json_accessories = cJSON_rsf_GetObjectItemCaseSensitive(json_haa, ACCESSORIES_ARRAY);
     
     const unsigned int total_accessories = cJSON_rsf_GetArraySize(json_accessories);
@@ -7730,6 +7729,8 @@ void normal_mode_init() {
         vTaskDelay(MS_TO_TICKS(200));
         sdk_system_restart();
     }
+    
+    cJSON_rsf* json_config = cJSON_rsf_GetObjectItemCaseSensitive(json_haa, GENERAL_CONFIG);
     
     // Binary Inputs GPIO Setup function
     bool diginput_register(cJSON_rsf* json_buttons, void* callback, ch_group_t* ch_group, const uint8_t param) {

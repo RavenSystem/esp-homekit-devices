@@ -232,7 +232,6 @@ void json_float(json_stream *json, float x) {
         size_t len = snprintf(NULL, 0, "%1.7g", x);
         char *buffer = malloc(len + 1);
         if (buffer) {
-            char *buffer = malloc(len + 1);
             snprintf(buffer, len + 1, "%1.7g", x);
             
             json_write(json, buffer, len);
