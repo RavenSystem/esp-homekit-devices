@@ -40,6 +40,10 @@
 #include "bootloader_esp32c3.h"
 #define BOOTLOADER_OFFSET       (0x0000)
 
+#elif defined(CONFIG_IDF_TARGET_ESP32C6)
+#include "bootloader_esp32c6.h"
+#define BOOTLOADER_OFFSET       (0x0000)
+
 #endif
 
 
