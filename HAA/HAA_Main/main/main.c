@@ -159,6 +159,8 @@ main_config_t main_config = {
     .uart_recv_is_working = false,
     
     .mcp23017s = NULL,
+    
+    .delayed_binary_outputs = NULL,
 };
 
 #ifdef ESP_PLATFORM
@@ -383,6 +385,43 @@ void extended_gpio_write(const int extended_gpio, bool value) {
                 }
             }
         }
+    }
+}
+
+void set_delayed_binary_output(action_binary_output_t* action_binary_output, bool value) {
+    delayed_binary_output_t* delayed_binary_output = main_config.delayed_binary_outputs;
+    while (delayed_binary_output) {
+        if (delayed_binary_output->trigger_gpio == action_binary_output->trigger_gpio &&
+            delayed_binary_output->trigger_gpio_mode == action_binary_output->trigger_gpio_mode &&
+            delayed_binary_output->gpio == action_binary_output->gpio) {
+            delayed_binary_output->value = value;
+            delayed_binary_output->enable = true;
+            return;
+        }
+        
+        delayed_binary_output = delayed_binary_output->next;
+    }
+}
+
+#ifdef ESP_PLATFORM
+static void IRAM_ATTR delayed_binary_output_interrupt(void* args) {
+    const uint8_t gpio = (uint32_t) args;
+#else
+static void IRAM delayed_binary_output_interrupt(const uint8_t gpio) {
+#endif
+    unsigned int gpio_read_value = !gpio_read(gpio);
+    
+    delayed_binary_output_t* delayed_binary_output = main_config.delayed_binary_outputs;
+    while (delayed_binary_output) {
+        if (delayed_binary_output->enable &&
+            delayed_binary_output->trigger_gpio == gpio &&
+            (delayed_binary_output->trigger_gpio_mode == 3 ||
+             (delayed_binary_output->trigger_gpio_mode - 1) == gpio_read_value)) {
+            gpio_write(delayed_binary_output->gpio, delayed_binary_output->value);
+            delayed_binary_output->enable = false;
+        }
+        
+        delayed_binary_output = delayed_binary_output->next;
     }
 }
 
@@ -5118,6 +5157,8 @@ void IRAM fm_pwm_interrupt(const uint8_t gpio) {
 #endif
     const uint32_t time = sdk_system_get_time_raw();
     
+    unsigned int gpio_read_value = gpio_read(gpio);
+    
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
         if ((ch_group->serv_type == SERV_TYPE_FREE_MONITOR ||
@@ -5138,7 +5179,7 @@ void IRAM fm_pwm_interrupt(const uint8_t gpio) {
                     break;
                     
                 default:    // case FM_SENSOR_PWM_DUTY_STATUS_START:
-                    if (gpio_read(gpio)) {
+                    if (gpio_read_value) {
                         FM_SENSOR_PWM_DUTY_TIME_HIGH = time;
                         FM_SENSOR_PWM_DUTY_STATUS = FM_SENSOR_PWM_DUTY_STATUS_HIGH;
                     }
@@ -6936,7 +6977,12 @@ void uart_action_task(void* pvParameters) {
 void autoswitch_timer(TimerHandle_t xTimer) {
     action_binary_output_t* action_binary_output = (action_binary_output_t*) pvTimerGetTimerID(xTimer);
     
-    extended_gpio_write(action_binary_output->gpio, !action_binary_output->value);
+    if (action_binary_output->trigger_gpio_mode == 0) {
+        extended_gpio_write(action_binary_output->gpio, !action_binary_output->value);
+    } else {
+        set_delayed_binary_output(action_binary_output, !action_binary_output->value);
+    }
+    
     INFO("Auto DigO %i->%i", action_binary_output->gpio, !action_binary_output->value);
     
     rs_esp_timer_delete(xTimer);
@@ -6985,7 +7031,11 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     action_binary_output_t* action_binary_output = ch_group->action_binary_output;
     while (action_binary_output) {
         if (action_binary_output->action == action) {
-            extended_gpio_write(action_binary_output->gpio, action_binary_output->value);
+            if (action_binary_output->trigger_gpio_mode == 0) {
+                extended_gpio_write(action_binary_output->gpio, action_binary_output->value);
+            } else {
+                set_delayed_binary_output(action_binary_output, action_binary_output->value);
+            }
             
             INFO("<%i> DigO %i->%i (%"HAA_LONGINT_F")", ch_group->serv_index, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
             
@@ -7950,7 +8000,7 @@ void normal_mode_init() {
                 if (cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), BINARY_OUTPUTS_ARRAY) != NULL) {
                     cJSON_rsf* json_relays = cJSON_rsf_GetObjectItemCaseSensitive(cJSON_rsf_GetObjectItemCaseSensitive(json_accessory, action), BINARY_OUTPUTS_ARRAY);
                     for (int i = cJSON_rsf_GetArraySize(json_relays) - 1; i >= 0; i--) {
-                        int binary_output_data[3] = { 0, 0, 0 };
+                        int binary_output_data[5] = { 0, 0, 0, 0, 0 };
                         
                         cJSON_rsf* json_relay = cJSON_rsf_GetArrayItem(json_relays, i);
                         
@@ -7980,11 +8030,47 @@ void normal_mode_init() {
                         action_binary_output->gpio = binary_output_data[0];
                         action_binary_output->value = binary_output_data[1];
                         action_binary_output->inching = binary_output_data[2];
+                        action_binary_output->trigger_gpio = binary_output_data[3];
+                        action_binary_output->trigger_gpio_mode = binary_output_data[4];
+                        
                         
                         action_binary_output->next = last_action;
                         last_action = action_binary_output;
                         
-                        INFO("A%i DigO g %i, v %i, i %"HAA_LONGINT_F"ms", new_int_action, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching);
+                        if (action_binary_output->trigger_gpio_mode > 0) {
+                            delayed_binary_output_t* delayed_binary_output = main_config.delayed_binary_outputs;
+                            while (delayed_binary_output) {
+                                if (delayed_binary_output->trigger_gpio_mode == action_binary_output->trigger_gpio_mode &&
+                                    delayed_binary_output->trigger_gpio == action_binary_output->trigger_gpio &&
+                                    delayed_binary_output->gpio == action_binary_output->gpio) {
+                                    break;
+                                }
+                                
+                                delayed_binary_output = delayed_binary_output->next;
+                            }
+                            
+                            if (!delayed_binary_output) {
+                                delayed_binary_output = calloc(1, sizeof(delayed_binary_output_t));
+                                
+                                delayed_binary_output->trigger_gpio_mode = action_binary_output->trigger_gpio_mode;
+                                delayed_binary_output->trigger_gpio = action_binary_output->trigger_gpio;
+                                delayed_binary_output->gpio = action_binary_output->gpio;
+                                
+                                delayed_binary_output->next = main_config.delayed_binary_outputs;
+                                main_config.delayed_binary_outputs = delayed_binary_output;
+                                
+#ifdef ESP_PLATFORM
+                                gpio_install_isr_service(0);
+                                gpio_set_intr_type(action_binary_output->trigger_gpio, GPIO_INTR_ANYEDGE);
+                                gpio_isr_handler_add(action_binary_output->trigger_gpio, delayed_binary_output_interrupt, NULL);
+                                gpio_intr_enable(action_binary_output->trigger_gpio);
+#else
+                                gpio_set_interrupt(action_binary_output->trigger_gpio, GPIO_INTTYPE_EDGE_ANY, delayed_binary_output_interrupt);
+#endif
+                            }
+                        }
+                        
+                        INFO("A%i DigO g %i, v %i, i %"HAA_LONGINT_F"ms, tg %i tm %i", new_int_action, action_binary_output->gpio, action_binary_output->value, action_binary_output->inching, action_binary_output->trigger_gpio, action_binary_output->trigger_gpio_mode);
                     }
                 }
             }

@@ -26,13 +26,25 @@ typedef struct _action_copy {
 
 typedef struct _action_binary_output {
     uint8_t action;
-    uint8_t value;
-    uint16_t gpio;
+    uint8_t trigger_gpio_mode: 2;
+    uint8_t trigger_gpio: 6;
+    uint16_t gpio: 15;
+    uint8_t value: 1;
     
     uint32_t inching;
     
     struct _action_binary_output* next;
 } action_binary_output_t;
+
+typedef struct _delayed_binary_output {
+    uint8_t trigger_gpio_mode;  // 2 bits
+    uint8_t trigger_gpio;       // 6 bits
+    uint16_t gpio: 14;
+    uint8_t value: 1;
+    uint8_t enable: 1;
+    
+    struct _delayed_binary_output* next;
+} delayed_binary_output_t;
 
 typedef struct _action_serv_manager {
     uint8_t action;
@@ -394,6 +406,8 @@ typedef struct _main_config {
     last_state_t* last_states;
     
     mcp23017_t* mcp23017s;
+    
+    delayed_binary_output_t* delayed_binary_outputs;
     
     char* ntp_host;
     timetable_action_t* timetable_actions;
