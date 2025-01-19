@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * Copyright 2019-2024 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2025 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.14.6"
+#define HAA_FIRMWARE_VERSION                "12.14.7"
 #define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 

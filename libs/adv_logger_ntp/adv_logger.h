@@ -1,7 +1,7 @@
 /*
  * Advanced ESP Logger with NTP support
  *
- * Copyright 2020-2024 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2020-2025 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 

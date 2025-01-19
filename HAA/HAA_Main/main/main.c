@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * Copyright 2019-2024 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2025 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -405,18 +405,18 @@ void set_delayed_binary_output(action_binary_output_t* action_binary_output, boo
 
 #ifdef ESP_PLATFORM
 static void IRAM_ATTR delayed_binary_output_interrupt(void* args) {
-    const uint8_t gpio = (uint32_t) args;
+    const uint8_t trigger_gpio = (uint32_t) args;
 #else
-static void IRAM delayed_binary_output_interrupt(const uint8_t gpio) {
+static void IRAM delayed_binary_output_interrupt(const uint8_t trigger_gpio) {
 #endif
-    unsigned int gpio_read_value = !gpio_read(gpio);
+    int trigger_gpio_read_inverted_value = !gpio_read(trigger_gpio);
     
     delayed_binary_output_t* delayed_binary_output = main_config.delayed_binary_outputs;
     while (delayed_binary_output) {
         if (delayed_binary_output->enable &&
-            delayed_binary_output->trigger_gpio == gpio &&
+            delayed_binary_output->trigger_gpio == trigger_gpio &&
             (delayed_binary_output->trigger_gpio_mode == 3 ||
-             (delayed_binary_output->trigger_gpio_mode - 1) == gpio_read_value)) {
+             (delayed_binary_output->trigger_gpio_mode - 1) == trigger_gpio_read_inverted_value)) {
             gpio_write(delayed_binary_output->gpio, delayed_binary_output->value);
             delayed_binary_output->enable = false;
         }
@@ -7717,7 +7717,7 @@ void run_homekit_server() {
 }
 
 void printf_header() {
-    INFO("\nHome Accessory Architect "HAA_FIRMWARE_VERSION""HAA_FIRMWARE_BETA_REVISION"\n(c) 2018-2024 José A. Jiménez Campos\n");
+    INFO("\nHome Accessory Architect "HAA_FIRMWARE_VERSION""HAA_FIRMWARE_BETA_REVISION"\n(c) 2018-2025 José A. Jiménez Campos\n");
     
 #ifdef HAA_DEBUG
     INFO("HAA DEBUG ENABLED\n");
@@ -8033,7 +8033,6 @@ void normal_mode_init() {
                         action_binary_output->trigger_gpio = binary_output_data[3];
                         action_binary_output->trigger_gpio_mode = binary_output_data[4];
                         
-                        
                         action_binary_output->next = last_action;
                         last_action = action_binary_output;
                         
@@ -8062,8 +8061,7 @@ void normal_mode_init() {
 #ifdef ESP_PLATFORM
                                 gpio_install_isr_service(0);
                                 gpio_set_intr_type(action_binary_output->trigger_gpio, GPIO_INTR_ANYEDGE);
-                                gpio_isr_handler_add(action_binary_output->trigger_gpio, delayed_binary_output_interrupt, NULL);
-                                gpio_intr_enable(action_binary_output->trigger_gpio);
+                                gpio_isr_handler_add(action_binary_output->trigger_gpio, delayed_binary_output_interrupt, (void*) ((uint32_t) action_binary_output->trigger_gpio));
 #else
                                 gpio_set_interrupt(action_binary_output->trigger_gpio, GPIO_INTTYPE_EDGE_ANY, delayed_binary_output_interrupt);
 #endif

@@ -1,7 +1,7 @@
 /*
  * Advanced ESP Logger with NTP support
  *
- * Copyright 2020-2024 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2020-2025 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -321,7 +321,7 @@ static void adv_logger_init_task(void* args) {
         adv_logger_data->udplogstring = calloc(1, adv_logger_data->udplogstring_size);
     }
     
-    strcat(adv_logger_data->udplogstring, "\r\nAdv Log (c) 2022-2024 José A. Jiménez Campos\r\n\r\n");
+    strcat(adv_logger_data->udplogstring, "\r\nAdv Log (c) 2022-2025 José A. Jiménez Campos\r\n\r\n");
     adv_logger_data->udplogstring_len = strlen(adv_logger_data->udplogstring);
     
     if (adv_logger_data->is_buffered) {
