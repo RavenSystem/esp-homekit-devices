@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect Installer
  *
- * Copyright 2020-2024 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2020-2025 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -98,9 +98,9 @@ void init_task() {
     set_partitions();
     
     uint8_t* flash_buffer = malloc(SPI_FLASH_SECTOR_SIZE);
-    esp_flash_read(NULL, flash_buffer, BOOTLOADER_OFFSET + 0x1000, 4);
+    esp_flash_read(NULL, flash_buffer, BOOTLOADER_OFFSET + 0x1000, 32);
     
-    if (memcmp(flash_buffer, &bootloader_bin[0x1000], 4) != 0) {
+    if (memcmp(flash_buffer, &bootloader_bin[0x1000], 32) != 0) {
         const esp_partition_t* running_partition = esp_ota_get_running_partition();
         
         if (running_partition->subtype != ESP_PARTITION_SUBTYPE_APP_OTA_0) {
