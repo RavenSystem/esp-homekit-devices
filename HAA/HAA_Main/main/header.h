@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.14.7"
+#define HAA_FIRMWARE_VERSION                "12.14.8"
 #define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -776,6 +776,8 @@
 #define SERV_TYPE_FREE_MONITOR_ACCUMULATVE  (81)
 #define SERV_TYPE_DATA_HISTORY              (95)
 #define SERV_TYPE_IAIRZONING                (99)
+
+#define ZERO_CROSS_INTERRUPT_DELAY_MS_SET   "zd"
 
 #define SERIAL_STRING                       "sn"
 #define SERIAL_STRING_LEN                   (11)

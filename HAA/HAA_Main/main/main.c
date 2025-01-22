@@ -161,6 +161,7 @@ main_config_t main_config = {
     .mcp23017s = NULL,
     
     .delayed_binary_outputs = NULL,
+    .zc_delay = 0,
 };
 
 #ifdef ESP_PLATFORM
@@ -411,13 +412,22 @@ static void IRAM delayed_binary_output_interrupt(const uint8_t trigger_gpio) {
 #endif
     int trigger_gpio_read_inverted_value = !gpio_read(trigger_gpio);
     
+    unsigned int delay = true;
+    
     delayed_binary_output_t* delayed_binary_output = main_config.delayed_binary_outputs;
     while (delayed_binary_output) {
         if (delayed_binary_output->enable &&
             delayed_binary_output->trigger_gpio == trigger_gpio &&
             (delayed_binary_output->trigger_gpio_mode == 3 ||
              (delayed_binary_output->trigger_gpio_mode - 1) == trigger_gpio_read_inverted_value)) {
+            
+            if (main_config.zc_delay > 0 && delay) {
+                sdk_os_delay_us(main_config.zc_delay);
+                delay = false;
+            }
+            
             gpio_write(delayed_binary_output->gpio, delayed_binary_output->value);
+            
             delayed_binary_output->enable = false;
         }
         
@@ -9488,6 +9498,11 @@ void normal_mode_init() {
         
         //set_used_gpio(led_gpio);
         led_create(led_gpio, led_inverted);
+    }
+    
+    // Zero-Cross Interrupt delay
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, ZERO_CROSS_INTERRUPT_DELAY_MS_SET) != NULL) {
+        main_config.zc_delay = cJSON_rsf_GetObjectItemCaseSensitive(json_config, ZERO_CROSS_INTERRUPT_DELAY_MS_SET)->valuefloat * 1000.f;
     }
     
     // IR TX LED GPIO

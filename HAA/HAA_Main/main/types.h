@@ -376,6 +376,8 @@ typedef struct _main_config {
     int8_t setup_mode_toggle_counter;
     int8_t setup_mode_toggle_counter_max;
     
+    uint32_t zc_delay;
+    
     uint16_t setup_mode_time;
     uint16_t wifi_roaming_count;
     
