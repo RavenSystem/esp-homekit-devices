@@ -5260,8 +5260,9 @@ void free_monitor_task(void* args) {
     }
     
     while (ch_group) {
-        if (ch_group->serv_type == SERV_TYPE_FREE_MONITOR ||
-            ch_group->serv_type == SERV_TYPE_FREE_MONITOR_ACCUMULATVE) {
+        if ((ch_group->serv_type == SERV_TYPE_FREE_MONITOR ||
+            ch_group->serv_type == SERV_TYPE_FREE_MONITOR_ACCUMULATVE) &&
+            ch_group->main_enabled) {
             float value = 0;
             unsigned int get_value = false;
             
@@ -5827,8 +5828,7 @@ void free_monitor_task(void* args) {
                 INFO("<%i> FM: %g", ch_group->serv_index, value);
                 
                 if (!ch_group->ch[0]->min_value ||
-                    (ch_group->ch[0]->min_value &&
-                    value >= *ch_group->ch[0]->min_value &&
+                    (value >= *ch_group->ch[0]->min_value &&
                     value <= *ch_group->ch[0]->max_value)) {
                     
                     const int old_value = ch_group->ch[0]->value.float_value * 1000;
