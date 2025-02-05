@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * Copyright 2019-2022 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2025 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -37,11 +37,13 @@ typedef struct _action_binary_output {
 } action_binary_output_t;
 
 typedef struct _delayed_binary_output {
-    uint8_t trigger_gpio_mode;  // 2 bits
-    uint8_t trigger_gpio;       // 6 bits
-    uint16_t gpio: 14;
+    uint8_t trigger_gpio_mode: 2;
+    uint8_t trigger_gpio: 6;
+    uint8_t gpio: 6;
     uint8_t value: 1;
     uint8_t enable: 1;
+    
+    uint16_t delay_us;
     
     struct _delayed_binary_output* next;
 } delayed_binary_output_t;
@@ -162,11 +164,12 @@ typedef struct _pattern {
 } pattern_t;
 
 typedef struct _ch_group {
-    uint16_t serv_index: 12;
+    uint16_t serv_index: 11;
     bool main_enabled: 1;
     bool child_enabled: 1;
     bool homekit_enabled: 1;
     bool is_working: 1;
+    bool save_last_state: 1;
     
     uint8_t chs;
     uint8_t serv_type;
@@ -199,9 +202,6 @@ typedef struct _ch_group {
 
 typedef struct _action_task {
     uint8_t action;
-    uint8_t errors;
-    uint8_t type;
-    bool done;      // 1 bit
     
     ch_group_t* ch_group;
 } action_task_t;
@@ -376,7 +376,7 @@ typedef struct _main_config {
     int8_t setup_mode_toggle_counter;
     int8_t setup_mode_toggle_counter_max;
     
-    uint32_t zc_delay;
+    uint32_t zc_delay;  // 16 bits
     
     uint16_t setup_mode_time;
     uint16_t wifi_roaming_count;
