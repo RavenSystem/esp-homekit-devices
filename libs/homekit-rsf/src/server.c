@@ -211,6 +211,7 @@ struct _client_context_t {
     struct _client_context_t *next;
 };
 
+#ifdef HOMEKIT_GET_CLIENTS_INFO
 int32_t homekit_get_unique_client_ipaddr() {
     if (homekit_server && homekit_server->client_count == 1) {
         struct sockaddr_in addr;
@@ -230,6 +231,7 @@ int homekit_get_client_count() {
     
     return -1;
 }
+#endif
 
 void client_context_free(client_context_t *c);
 void pairing_context_free(pairing_context_t *context);

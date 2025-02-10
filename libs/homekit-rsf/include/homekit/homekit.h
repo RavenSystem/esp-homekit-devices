@@ -72,8 +72,10 @@ int homekit_get_accessory_id(char *buffer, size_t size);
 bool homekit_is_pairing();
 bool homekit_is_paired();
 
+#ifdef HOMEKIT_GET_CLIENTS_INFO
 int32_t homekit_get_unique_client_ipaddr();
 int homekit_get_client_count();
+#endif
 
 // Client related stuff
 //homekit_client_id_t homekit_get_client_id();

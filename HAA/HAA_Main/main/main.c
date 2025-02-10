@@ -389,21 +389,6 @@ void extended_gpio_write(const int extended_gpio, bool value) {
     }
 }
 
-void set_delayed_binary_output(action_binary_output_t* action_binary_output, bool value) {
-    delayed_binary_output_t* delayed_binary_output = main_config.delayed_binary_outputs;
-    while (delayed_binary_output) {
-        if (delayed_binary_output->trigger_gpio == action_binary_output->trigger_gpio &&
-            delayed_binary_output->trigger_gpio_mode == action_binary_output->trigger_gpio_mode &&
-            delayed_binary_output->gpio == action_binary_output->gpio) {
-            delayed_binary_output->value = value;
-            delayed_binary_output->enable = true;
-            return;
-        }
-        
-        delayed_binary_output = delayed_binary_output->next;
-    }
-}
-
 #ifdef ESP_PLATFORM
 static void IRAM_ATTR delayed_binary_output_interrupt(void* args) {
     const uint8_t trigger_gpio = (uint32_t) args;
@@ -412,10 +397,33 @@ static void IRAM delayed_binary_output_interrupt(const uint8_t trigger_gpio) {
 #endif
     int trigger_gpio_read_inverted_value = !gpio_read(trigger_gpio);
     
+    unsigned int disable_interrupt = true;
+    
+    delayed_binary_output_t* delayed_binary_output = main_config.delayed_binary_outputs;
+    while (delayed_binary_output) {
+        if (delayed_binary_output->enable &&
+            (delayed_binary_output->trigger_gpio != trigger_gpio ||
+            (delayed_binary_output->trigger_gpio_mode != 3 &&
+            (delayed_binary_output->trigger_gpio_mode - 1) != trigger_gpio_read_inverted_value))) {
+            disable_interrupt = false;
+            break;
+        }
+        
+        delayed_binary_output = delayed_binary_output->next;
+    }
+    
+    if (disable_interrupt) {
+#ifdef ESP_PLATFORM
+        gpio_intr_disable(trigger_gpio);
+#else
+        gpio_set_interrupt(trigger_gpio, GPIO_INTTYPE_NONE, NULL);
+#endif
+    }
+    
     unsigned int main_delay = true;
     unsigned int delay_done_us = 0;
     
-    delayed_binary_output_t* delayed_binary_output = main_config.delayed_binary_outputs;
+    delayed_binary_output = main_config.delayed_binary_outputs;
     while (delayed_binary_output) {
         if (delayed_binary_output->enable &&
             delayed_binary_output->trigger_gpio == trigger_gpio &&
@@ -435,6 +443,28 @@ static void IRAM delayed_binary_output_interrupt(const uint8_t trigger_gpio) {
             gpio_write(delayed_binary_output->gpio, delayed_binary_output->value);
             
             delayed_binary_output->enable = false;
+        }
+        
+        delayed_binary_output = delayed_binary_output->next;
+    }
+}
+    
+void set_delayed_binary_output(action_binary_output_t* action_binary_output, bool value) {
+    delayed_binary_output_t* delayed_binary_output = main_config.delayed_binary_outputs;
+    while (delayed_binary_output) {
+        if (delayed_binary_output->trigger_gpio == action_binary_output->trigger_gpio &&
+            delayed_binary_output->trigger_gpio_mode == action_binary_output->trigger_gpio_mode &&
+            delayed_binary_output->gpio == action_binary_output->gpio) {
+            delayed_binary_output->value = value;
+            delayed_binary_output->enable = true;
+            
+#ifdef ESP_PLATFORM
+            gpio_intr_enable(delayed_binary_output->trigger_gpio);
+#else
+            gpio_set_interrupt(delayed_binary_output->trigger_gpio, GPIO_INTTYPE_EDGE_ANY, delayed_binary_output_interrupt);
+#endif
+            
+            return;
         }
         
         delayed_binary_output = delayed_binary_output->next;
@@ -567,7 +597,7 @@ void free_heap_watchdog() {
 #endif  // HAA_DEBUG
 
 static void _random_task_delay(const uint16_t ticks) {
-    vTaskDelay( ( hwrand() % ticks ) + MS_TO_TICKS(2000) );
+    vTaskDelay( ( hwrand() % ticks ) + MS_TO_TICKS(3000) );
 }
 
 void random_task_short_delay() {
@@ -5364,6 +5394,8 @@ void free_monitor_task(void* args) {
                 } else if (fm_sensor_type == FM_SENSOR_TYPE_MATHS) {
                     unsigned int float_index = FM_MATHS_FLOAT_FIRST + (FM_SENSOR_TYPE < 0 ? 2 : 0);
                     unsigned int int_index = FM_MATHS_FIRST_OPERATION;
+                    get_value = true;
+                    
                     for (int i = 0; i < FM_MATHS_OPERATIONS; i++) {
                         const unsigned int operation = FM_MATHS_INT[int_index];
                         int_index++;
@@ -5452,16 +5484,8 @@ void free_monitor_task(void* args) {
                                         read_value = wifi_rssi;
                                         break;
 #endif
-                                    case FM_MATHS_GET_UPTIME:
+                                    default:    // case FM_MATHS_GET_UPTIME:
                                         read_value = xTaskGetTickCount() / (1000 / portTICK_PERIOD_MS);
-                                        break;
-                                        
-                                    case FM_MATHS_GET_HK_CLIENT_IPADDR:
-                                        read_value = homekit_get_unique_client_ipaddr();
-                                        break;
-                                        
-                                    default:    // case FM_MATHS_GET_HK_CLIENT_COUNT:
-                                        read_value = homekit_get_client_count();
                                         break;
                                 }
                             }
@@ -5512,6 +5536,14 @@ void free_monitor_task(void* args) {
                                 value = fabs(value);
                                 break;
                                 
+                            case FM_MATHS_OPERATION_EMA_LPFILTER:
+                                value = (read_value * value) + ((1.f - read_value) * ch_group->ch[0]->value.float_value);
+                                break;
+                                
+                            case FM_MATHS_OPERATION_EMA_HPFILTER:
+                                value -= (read_value * value) + ((1.f - read_value) * ch_group->ch[0]->value.float_value);
+                                break;
+                                
                             default:    // case FM_MATHS_OPERATION_NONE:
                                         // case FM_MATHS_OPERATION_ADD:
                                 value = value + read_value;
@@ -5520,8 +5552,6 @@ void free_monitor_task(void* args) {
 
                         int_index++;
                         float_index++;
-                        
-                        get_value = true;
                     }
                     
                 } else if (fm_sensor_type == FM_SENSOR_TYPE_ADC ||
@@ -8118,8 +8148,6 @@ void normal_mode_init() {
                                 gpio_install_isr_service(0);
                                 gpio_set_intr_type(action_binary_output->trigger_gpio, GPIO_INTR_ANYEDGE);
                                 gpio_isr_handler_add(action_binary_output->trigger_gpio, delayed_binary_output_interrupt, (void*) ((uint32_t) action_binary_output->trigger_gpio));
-#else
-                                gpio_set_interrupt(action_binary_output->trigger_gpio, GPIO_INTTYPE_EDGE_ANY, delayed_binary_output_interrupt);
 #endif
                             }
                         }

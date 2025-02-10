@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.14.10"
+#define HAA_FIRMWARE_VERSION                "12.14.11"
 #define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -565,6 +565,8 @@
 #define FM_MATHS_OPERATION_POW_INV          (10)
 #define FM_MATHS_OPERATION_INV              (11)
 #define FM_MATHS_OPERATION_ABS              (12)
+#define FM_MATHS_OPERATION_EMA_LPFILTER     (13)
+#define FM_MATHS_OPERATION_EMA_HPFILTER     (14)
 #define FM_MATHS_GET_TIME_HOUR              (-1)
 #define FM_MATHS_GET_TIME_MINUTE            (-2)
 #define FM_MATHS_GET_TIME_SECOND            (-3)
@@ -578,8 +580,6 @@
 #define FM_MATHS_GEN_RANDOM_NUMBER          (-11)
 #define FM_MATHS_GET_UPTIME                 (-12)
 #define FM_MATHS_GET_WIFI_RSSI              (-13)
-#define FM_MATHS_GET_HK_CLIENT_IPADDR       (-14)
-#define FM_MATHS_GET_HK_CLIENT_COUNT        (-15)
 #define FM_MATHS_OPERATIONS                 ch_group->num_i[1]
 #define FM_MATHS_FIRST_OPERATION            (2)
 #define FM_MATHS_INT                        ch_group->num_i
@@ -824,7 +824,7 @@
 #define STATUS_LED_DURATION_OFF             (120)
 
 #define SAVE_STATES_DELAY_MS                (3000)
-#define RANDOM_DELAY_MS                     (3500)
+#define RANDOM_DELAY_MS                     (3000)
 
 #define HOMEKIT_RE_PAIR_TIME_MS             (300000)
 
