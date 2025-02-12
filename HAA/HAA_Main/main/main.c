@@ -156,7 +156,6 @@ main_config_t main_config = {
     .timetable_actions = NULL,
     
     .uart_receiver_data = NULL,
-    .uart_recv_is_working = false,
     
     .mcp23017s = NULL,
     
@@ -395,7 +394,7 @@ static void IRAM_ATTR delayed_binary_output_interrupt(void* args) {
 #else
 static void IRAM delayed_binary_output_interrupt(const uint8_t trigger_gpio) {
 #endif
-    int trigger_gpio_read_inverted_value = !gpio_read(trigger_gpio);
+    int trigger_gpio_read_value = gpio_read(trigger_gpio);
     
     unsigned int disable_interrupt = true;
     
@@ -403,8 +402,7 @@ static void IRAM delayed_binary_output_interrupt(const uint8_t trigger_gpio) {
     while (delayed_binary_output) {
         if (delayed_binary_output->enable &&
             (delayed_binary_output->trigger_gpio != trigger_gpio ||
-            (delayed_binary_output->trigger_gpio_mode != 3 &&
-            (delayed_binary_output->trigger_gpio_mode - 1) != trigger_gpio_read_inverted_value))) {
+            (delayed_binary_output->trigger_gpio_mode - 1) == trigger_gpio_read_value)) {
             disable_interrupt = false;
             break;
         }
@@ -420,6 +418,7 @@ static void IRAM delayed_binary_output_interrupt(const uint8_t trigger_gpio) {
 #endif
     }
     
+    trigger_gpio_read_value = !trigger_gpio_read_value;
     unsigned int main_delay = true;
     unsigned int delay_done_us = 0;
     
@@ -428,7 +427,7 @@ static void IRAM delayed_binary_output_interrupt(const uint8_t trigger_gpio) {
         if (delayed_binary_output->enable &&
             delayed_binary_output->trigger_gpio == trigger_gpio &&
             (delayed_binary_output->trigger_gpio_mode == 3 ||
-             (delayed_binary_output->trigger_gpio_mode - 1) == trigger_gpio_read_inverted_value)) {
+             (delayed_binary_output->trigger_gpio_mode - 1) == trigger_gpio_read_value)) {
             
             if (main_config.zc_delay > 0 && main_delay) {
                 sdk_os_delay_us(main_config.zc_delay);
@@ -5161,8 +5160,6 @@ void reset_uart_buffer() {
         
         uart_receiver_data = uart_receiver_data->next;
     }
-    
-    main_config.uart_recv_is_working = false;
 }
 
 #ifdef ESP_PLATFORM
@@ -5959,8 +5956,14 @@ void recv_uart_task() {
             uart_receiver_data->uart_buffer = malloc(uart_receiver_data->uart_max_len + 1);
             
 #ifdef ESP_PLATFORM
-            uart_receiver_data->uart_buffer_len = uart_read_bytes(uart_receiver_data->uart_port, uart_receiver_data->uart_buffer, uart_receiver_data->uart_max_len + 1, 0);
-            uart_flush(uart_receiver_data->uart_port);
+            int uart_read_len = uart_read_bytes(uart_receiver_data->uart_port, uart_receiver_data->uart_buffer, uart_receiver_data->uart_max_len + 1, 0);
+            uart_flush_input(uart_receiver_data->uart_port);
+            if (uart_read_len < 0) {
+                ERROR("UART%i", uart_receiver_data->uart_port);
+                uart_receiver_data = uart_receiver_data->next;
+                continue;
+            }
+            uart_receiver_data->uart_buffer_len = uart_read_len;
 #else
             int ch;
             unsigned int count = 0;
@@ -6030,9 +6033,10 @@ void recv_uart_timer_worker(TimerHandle_t xTimer) {
         uart_receiver_data = uart_receiver_data->next;
     }
     
-    if (uart_has_data & !main_config.uart_recv_is_working) {
-        if (xTaskCreate(recv_uart_task, "RUA", RECV_UART_TASK_SIZE, NULL, RECV_UART_TASK_PRIORITY, NULL) == pdPASS) {
-            main_config.uart_recv_is_working = true;
+    if (uart_has_data) {
+        if (xTaskCreate(recv_uart_task, "RUA", RECV_UART_TASK_SIZE, NULL, RECV_UART_TASK_PRIORITY, NULL) != pdPASS) {
+            ERROR("RUA");
+            homekit_remove_oldest_client();
         }
     }
 }
@@ -6992,14 +6996,9 @@ void uart_action_task(void* pvParameters) {
     
     while (action_uart) {
         if (action_uart->action == action_task->action) {
-            INFO_NNL("<%i> UART%i -> ", action_task->ch_group->serv_index, action_uart->uart);
-            for (unsigned int i = 0; i < action_uart->len; i++) {
-                INFO_NNL("%02x", action_uart->command[i]);
-            }
-            INFO("");
-            
 #ifdef ESP_PLATFORM
-            uart_write_bytes(action_uart->uart, action_uart->command, action_uart->len);
+            int uart_res = uart_write_bytes(action_uart->uart, action_uart->command, action_uart->len);
+            INFO_NNL("<%i> UART%i (%i) -> ", action_task->ch_group->serv_index, action_uart->uart, uart_res);
 #else
             HAA_ENTER_CRITICAL_TASK();
             
@@ -7010,7 +7009,13 @@ void uart_action_task(void* pvParameters) {
             uart_flush_txfifo(action_uart->uart);
             
             HAA_EXIT_CRITICAL_TASK();
+            
+            INFO_NNL("<%i> UART%i -> ", action_task->ch_group->serv_index, action_uart->uart);
 #endif
+            for (unsigned int i = 0; i < action_uart->len; i++) {
+                INFO_NNL("%02x", action_uart->command[i]);
+            }
+            INFO("");
         }
         
         vTaskDelay(action_uart->pause);
@@ -13253,7 +13258,7 @@ void normal_mode_init() {
 #ifdef ESP_PLATFORM
         uart_receiver_data_t* uart_receiver_data = main_config.uart_receiver_data;
         while (uart_receiver_data) {
-            uart_flush(uart_receiver_data->uart_port);
+            uart_flush_input(uart_receiver_data->uart_port);
             uart_receiver_data = uart_receiver_data->next;
         }
 #else

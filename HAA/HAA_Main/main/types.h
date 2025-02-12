@@ -386,9 +386,8 @@ typedef struct _main_config {
     uint8_t wifi_ip;
     uint8_t wifi_ping_max_errors;
     uint8_t wifi_error_count;
-    uint8_t rf_tx_gpio: 6;
+    uint8_t rf_tx_gpio: 7;
     bool enable_homekit_server: 1;
-    bool uart_recv_is_working: 1;
     
     uint8_t wifi_mode;  // 3 bits
     uint8_t ir_tx_freq; // 6 bits
