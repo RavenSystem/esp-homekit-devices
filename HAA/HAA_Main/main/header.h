@@ -11,7 +11,7 @@
 #include "../../common/common_headers.h"
 
 // Version
-#define HAA_FIRMWARE_VERSION                "12.14.12"
+#define HAA_FIRMWARE_VERSION                "12.14.13"
 #define HAA_FIRMWARE_BETA_REVISION          ""          // Format: "b01"
 #define HAA_FIRMWARE_CODENAME               "Merlin"
 
@@ -663,6 +663,8 @@
 #define HIST_DATA_ARRAY_SET                 "h"
 #define HIST_READ_ON_CLOCK_READY_SET        "x"
 #define HIST_LAST_REGISTER                  ch_group->num_f[0]
+#define HIST_SERVICE                        ch_group->num_f[1]
+#define HIST_CH                             ch_group->num_i[0]
 #define HIST_TIME_SIZE                      (4)     // (sizeof(uint32_t))
 #define HIST_DATA_SIZE                      (4)     // (sizeof(int32_t))
 #define HIST_REGISTER_SIZE                  (HIST_TIME_SIZE + HIST_DATA_SIZE)
@@ -791,16 +793,13 @@
 #define SETUP_MODE_ACTIVATE_COUNT           "z"
 #define SETUP_MODE_DEFAULT_ACTIVATE_COUNT   (8)
 #define SETUP_MODE_TOGGLE_TIME_MS           (1050)
-#define CUSTOM_HAA_COMMAND                  "ks"
+#define CUSTOM_HAA_COMMAND                  "mc"
 #define CUSTOM_HAA_ADVANCED_COMMAND_LEN     (2)
 #define HAA_SETUP_ACCESSORY_SET             "s"
 
 #define IRRF_CAPTURE_BUFFER_SIZE            (2048)
 
-#define ACTION_TASK_TYPE_UART               (0)
-#define ACTION_TASK_TYPE_NETWORK            (1)
-#define ACTION_TASK_TYPE_IRRF               (2)
-#define ACTION_TASK_MAX_ERRORS              (10)
+#define FORCE_ALLOC_MAX_ERRORS              (10)
 
 #define SAVE_STATES_TIMER                   ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE)->timer
 #define WIFI_WATCHDOG_TIMER                 ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE)->timer2

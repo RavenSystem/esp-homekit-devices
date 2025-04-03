@@ -136,11 +136,12 @@ typedef struct _action_pwm {
 typedef struct _action_set_ch {
     uint8_t action;
     
-    uint8_t source_ch;
-    uint8_t target_ch;
+    uint8_t source_ch: 4;
+    uint8_t target_ch: 4;
     
-    uint16_t source_serv;
     uint16_t target_serv;
+    
+    float source_serv;
     
     struct _action_set_ch* next;
 } action_set_ch_t;
@@ -149,6 +150,7 @@ typedef struct _wildcard_action {
     uint8_t index;
     uint8_t target_action;
     bool repeat;    // 1 bit
+    
     float value;
 
     struct _wildcard_action* next;
@@ -366,11 +368,11 @@ typedef struct _pwmh_channel {
 #endif
 
 typedef struct _main_config {
-    uint8_t wifi_status: 2;
-    uint8_t wifi_channel: 4;
+    uint8_t wifi_status: 2;             // 2 bits
+    uint8_t wifi_channel: 4;            // 4 bits
     bool ir_tx_inv: 1;
     bool rf_tx_inv: 1;
-    uint8_t ir_tx_gpio: 6;
+    uint8_t ir_tx_gpio: 6;              // 6 bits
     bool timetable_ready: 1;
     bool clock_ready: 1;
     int8_t setup_mode_toggle_counter;
@@ -386,11 +388,12 @@ typedef struct _main_config {
     uint8_t wifi_ip;
     uint8_t wifi_ping_max_errors;
     uint8_t wifi_error_count;
-    uint8_t rf_tx_gpio: 7;
+    uint8_t rf_tx_gpio: 7;              // 7 bits
     bool enable_homekit_server: 1;
     
-    uint8_t wifi_mode;  // 3 bits
-    uint8_t ir_tx_freq; // 6 bits
+    uint8_t timetable_last_minute: 6;   // 6 bits
+    uint8_t wifi_mode: 3;               // 3 bits
+    uint8_t ir_tx_freq: 7;              // 6 bits
     uint8_t wifi_arp_count;
     uint8_t wifi_arp_count_max;
     

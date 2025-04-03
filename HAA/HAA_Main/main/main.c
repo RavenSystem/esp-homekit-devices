@@ -140,6 +140,7 @@ main_config_t main_config = {
     
     .clock_ready = false,
     .timetable_ready = false,
+    .timetable_last_minute = 60,
     
     //.used_gpio = 0,
     
@@ -821,8 +822,14 @@ void save_data_history(homekit_characteristic_t* ch_target) {
     
     ch_group_t* ch_group = main_config.ch_groups;
     while (ch_group) {
-        if (ch_group->serv_type == SERV_TYPE_DATA_HISTORY && ch_group->ch[ch_group->chs - 1] == ch_target && ch_group->main_enabled) {
+        if (ch_group->serv_type == SERV_TYPE_DATA_HISTORY &&
+            ch_group_find_by_serv(HIST_SERVICE)->ch[HIST_CH] == ch_target &&
+            ch_group->main_enabled) {
             float value = get_hkch_value(ch_target);
+            
+            if (value != value) {
+                continue;
+            }
             
             uint32_t final_time = time;
             int32_t final_data = value * FLOAT_FACTOR_SAVE_AS_INT;
@@ -834,7 +841,7 @@ void save_data_history(homekit_characteristic_t* ch_target) {
             uint32_t current_ch = last_register / HIST_BLOCK_SIZE;
             uint32_t current_pos = last_register % HIST_BLOCK_SIZE;
             
-            if (current_ch + 1 >= ch_group->chs) {
+            if (current_ch >= ch_group->chs) {
                 current_ch = 0;
                 current_pos = 0;
             }
@@ -856,8 +863,8 @@ void save_data_history(homekit_characteristic_t* ch_target) {
 }
 
 void data_history_timer_worker(TimerHandle_t xTimer) {
-    homekit_characteristic_t* ch = (homekit_characteristic_t*) pvTimerGetTimerID(xTimer);
-    save_data_history(ch);
+    ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
+    save_data_history(ch_group_find_by_serv(HIST_SERVICE)->ch[HIST_CH]);
 }
 
 void wifi_resend_arp() {
@@ -986,7 +993,7 @@ void ntp_task() {
                     ch_group_t* ch_group = main_config.ch_groups;
                     while (ch_group) {
                         if (ch_group->serv_type == SERV_TYPE_DATA_HISTORY && ch_group->child_enabled) {
-                            save_data_history(ch_group->ch[ch_group->chs - 1]);
+                            save_data_history(ch_group_find_by_serv(HIST_SERVICE)->ch[HIST_CH]);
                         }
                         
                         ch_group = ch_group->next;
@@ -1412,18 +1419,6 @@ void hkc_custom_setup_setter(homekit_characteristic_t* ch, const homekit_value_t
     }
 }
 
-void hk_destroy_value_timer_worker(TimerHandle_t xTimer) {
-    homekit_value_t* value = (homekit_value_t*) pvTimerGetTimerID(xTimer);
-    
-    homekit_value_destruct(value);
-    
-    rs_esp_timer_delete(xTimer);
-}
-
-void hk_destroy_value_delayed(homekit_value_t* value) {
-    rs_esp_timer_start_forced(rs_esp_timer_create(10000, pdTRUE, (void*) value, hk_destroy_value_timer_worker));
-}
-
 void hkc_custom_setup_advanced_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     value.data_value[value.data_size - 1] = 0;
     char* string_value = (char*) value.data_value;
@@ -1445,14 +1440,13 @@ void hkc_custom_setup_advanced_setter(homekit_characteristic_t* ch, const homeki
         }
         
         if (selected_advanced_opt == 1) {
+            homekit_value_destruct(&ch->value);
             char* txt_config = NULL;
             sysparam_get_string(HAA_SCRIPT_SYSPARAM, &txt_config);
             if (txt_config) {
-                ch->value.data_size = strlen(txt_config);
                 ch->value.data_value = (uint8_t*) txt_config;
+                ch->value.data_size = strlen(txt_config);
                 ch->value.is_null = false;
-                
-                hk_destroy_value_delayed(&ch->value);
             }
             
         } else if (selected_advanced_opt == 2 ||
@@ -5087,7 +5081,7 @@ void* force_alloc(const unsigned int len) {
     unsigned int errors = 0;
     void* new_char = NULL;
     
-    while (errors < ACTION_TASK_MAX_ERRORS) {
+    while (errors < FORCE_ALLOC_MAX_ERRORS) {
         new_char = malloc(len);
         if (new_char) {
             break;
@@ -7446,7 +7440,7 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                             
                         case SERV_TYPE_DATA_HISTORY:
                             //if (value_int == 0) {
-                                save_data_history(ch_group->ch[ch_group->chs - 1]);
+                                save_data_history(ch_group_find_by_serv(HIST_SERVICE)->ch[HIST_CH]);
                             //}
                             break;
                             
@@ -7559,8 +7553,14 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
     action_set_ch_t* action_set_ch = ch_group->action_set_ch;
     while (action_set_ch) {
         if (action_set_ch->action == action) {
-            INFO("<%i> SetCh %i.%i->%i.%i", ch_group->serv_index, action_set_ch->source_serv, action_set_ch->source_ch, action_set_ch->target_serv, action_set_ch->target_ch);
-            const float value = get_hkch_value(ch_group_find_by_serv(action_set_ch->source_serv)->ch[action_set_ch->source_ch]);
+            INFO("<%i> SetCh %g.%i->%i.%i", ch_group->serv_index, action_set_ch->source_serv, action_set_ch->source_ch, action_set_ch->target_serv, action_set_ch->target_ch);
+            float value;
+            if (action_set_ch->source_ch < 15) {
+                value = get_hkch_value(ch_group_find_by_serv(action_set_ch->source_serv)->ch[action_set_ch->source_ch]);
+            } else {
+                value = action_set_ch->source_serv;
+            }
+            
             set_hkch_value(ch_group_find_by_serv(action_set_ch->target_serv)->ch[action_set_ch->target_ch], value);
         }
         
@@ -7680,6 +7680,12 @@ void timetable_actions_timer_worker(TimerHandle_t xTimer) {
             return;
         }
     }
+    
+    if (main_config.timetable_last_minute == timeinfo->tm_min) {
+        return;
+    }
+    
+    main_config.timetable_last_minute = timeinfo->tm_min;
     
     ch_group_t* ch_group = ch_group_find_by_serv(SERV_TYPE_ROOT_DEVICE);
     
@@ -8246,29 +8252,33 @@ void normal_mode_init() {
                         last_action = action_set_ch;
                         
                         cJSON_rsf* json_set_ch = cJSON_rsf_GetArrayItem(json_set_chs, i);
-                        for (unsigned int j = 0; j < 4; j++) {
-                            const int value = (int16_t) cJSON_rsf_GetArrayItem(json_set_ch, j)->valuefloat;
+                        for (int j = 3; j >= 0; j--) {
+                            const float value = cJSON_rsf_GetArrayItem(json_set_ch, j)->valuefloat;
                             
                             switch (j) {
-                                case 0:
-                                    action_set_ch->source_serv = get_absolut_index(ch_group->serv_index, value);
-                                    break;
-                                    
-                                case 1:
-                                    action_set_ch->source_ch = value;
+                                case 3:
+                                    action_set_ch->target_ch = value;
                                     break;
                                     
                                 case 2:
                                     action_set_ch->target_serv = get_absolut_index(ch_group->serv_index, value);
                                     break;
                                     
-                                case 3:
-                                    action_set_ch->target_ch = value;
+                                case 1:
+                                    action_set_ch->source_ch = value;
+                                    break;
+                                    
+                                case 0:
+                                    if (action_set_ch->source_ch < 15) {
+                                        action_set_ch->source_serv = get_absolut_index(ch_group->serv_index, value);
+                                    } else {
+                                        action_set_ch->source_serv = value;
+                                    }
                                     break;
                             }
                         }
                         
-                        INFO("A%i SetCh %i.%i->%i.%i", new_int_action, action_set_ch->source_serv, action_set_ch->source_ch, action_set_ch->target_serv, action_set_ch->target_ch);
+                        INFO("A%i SetCh %g.%i->%i.%i", new_int_action, action_set_ch->source_serv, action_set_ch->source_ch, action_set_ch->target_serv, action_set_ch->target_ch);
                     }
                 }
             }
@@ -12908,16 +12918,19 @@ void normal_mode_init() {
     void new_data_history(const uint16_t accessory, uint16_t service, const uint16_t total_services, cJSON_rsf* json_context) {
         cJSON_rsf* data_array = cJSON_rsf_GetObjectItemCaseSensitive(json_context, HIST_DATA_ARRAY_SET);
         
-        const unsigned int hist_accessory = get_absolut_index(service_numerator, cJSON_rsf_GetArrayItem(data_array, 0)->valuefloat);
+        const unsigned int hist_service = get_absolut_index(service_numerator, cJSON_rsf_GetArrayItem(data_array, 0)->valuefloat);
         const unsigned int hist_ch = cJSON_rsf_GetArrayItem(data_array, 1)->valuefloat;
         const unsigned int hist_size = cJSON_rsf_GetArrayItem(data_array, 2)->valuefloat;
         
-        INFO("Serv %i, Ch %i, Size %i", hist_accessory, hist_ch, hist_size * HIST_REGISTERS_BY_BLOCK);
+        INFO("Serv %i, Ch %i, Size %i", hist_service, hist_ch, hist_size * HIST_REGISTERS_BY_BLOCK);
         
-        ch_group_t* ch_group = new_ch_group(hist_size + 1, 0, 1, 0);
+        ch_group_t* ch_group = new_ch_group(hist_size, 1, 2, 0);
         ch_group->serv_type = SERV_TYPE_DATA_HISTORY;
         ch_group->serv_index = service_numerator;
         ch_group->homekit_enabled = true;
+        
+        HIST_SERVICE = hist_service;
+        HIST_CH = hist_ch;
         
         if (cJSON_rsf_GetObjectItemCaseSensitive(json_context, HIST_READ_ON_CLOCK_READY_SET) != NULL) {
             ch_group->child_enabled = (bool) cJSON_rsf_GetObjectItemCaseSensitive(json_context, HIST_READ_ON_CLOCK_READY_SET)->valuefloat;
@@ -12928,8 +12941,6 @@ void normal_mode_init() {
         }
         
         service++;
-        
-        ch_group->ch[hist_size] = ch_group_find_by_serv(hist_accessory)->ch[hist_ch];
         
         accessories[accessory]->services[service] = calloc(1, sizeof(homekit_service_t));
         accessories[accessory]->services[service]->id = ((service - 1) * 50) + 8;
@@ -12965,7 +12976,7 @@ void normal_mode_init() {
         
         const float poll_period = sensor_poll_period(json_context, 0);
         if (poll_period > 0.f) {
-            rs_esp_timer_start_forced(rs_esp_timer_create(poll_period * 1000, pdTRUE, (void*) ch_group->ch[hist_size], data_history_timer_worker));
+            rs_esp_timer_start_forced(rs_esp_timer_create(poll_period * 1000, pdTRUE, (void*) ch_group, data_history_timer_worker));
         }
         
         set_killswitch(ch_group, json_context);
