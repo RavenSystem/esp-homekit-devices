@@ -64,6 +64,46 @@ int tries_partial_count;
 TaskHandle_t xHandle = NULL;
 
 void init_task() {
+#if defined(GPIO_HOLD_DIS_1)
+    gpio_hold_dis(GPIO_HOLD_DIS_1);
+#endif
+    
+#if defined(GPIO_HOLD_DIS_2)
+    gpio_hold_dis(GPIO_HOLD_DIS_2);
+#endif
+    
+#if defined(GPIO_HOLD_DIS_3)
+    gpio_hold_dis(GPIO_HOLD_DIS_3);
+#endif
+    
+#if defined(GPIO_HOLD_DIS_4)
+    gpio_hold_dis(GPIO_HOLD_DIS_4);
+#endif
+    
+#if defined(GPIO_HOLD_DIS_5)
+    gpio_hold_dis(GPIO_HOLD_DIS_5);
+#endif
+    
+#if defined(GPIO_HOLD_DIS_6)
+    gpio_hold_dis(GPIO_HOLD_DIS_6);
+#endif
+    
+#if defined(GPIO_HOLD_DIS_7)
+    gpio_hold_dis(GPIO_HOLD_DIS_7);
+#endif
+    
+#if defined(GPIO_HOLD_DIS_8)
+    gpio_hold_dis(GPIO_HOLD_DIS_8);
+#endif
+    
+#if defined(GPIO_HOLD_DIS_9)
+    gpio_hold_dis(GPIO_HOLD_DIS_9);
+#endif
+    
+#if defined(GPIO_HOLD_DIS_10)
+    gpio_hold_dis(GPIO_HOLD_DIS_10);
+#endif
+    
     uart_config_t uart_config = {
         .baud_rate = 115200,
         .data_bits = UART_DATA_8_BITS,

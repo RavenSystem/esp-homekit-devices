@@ -63,6 +63,12 @@ if(HAA_XTAL26)
     )
 endif()
 
+if(HAA_SHELLY_EMG3)
+    list(APPEND EXTRA_COMPILE_OPTIONS
+        -DHAA_SHELLY_EMG3
+    )
+endif()
+
 if(HAA_SHELLY_Plus1)
     list(APPEND EXTRA_COMPILE_OPTIONS
         -DHAA_SHELLY_Plus1
