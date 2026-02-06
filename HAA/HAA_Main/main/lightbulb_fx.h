@@ -1,7 +1,7 @@
 /*
  * Lightbulb FX for Home Accessory Architect
  *
- * Copyright 2025 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2025-2026 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 

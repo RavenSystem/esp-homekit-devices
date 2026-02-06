@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect Installer
  *
- * Copyright 2020-2024 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2020-2026 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -11,6 +11,6 @@
 #include "../../common/common_headers.h"
 
 #define INSTALLER_BETA_REVISION     ""      // Format: "b01"
-#define INSTALLER_VERSION           "7.13.0"INSTALLER_BETA_REVISION
+#define INSTALLER_VERSION           "7.13.1"INSTALLER_BETA_REVISION
 
 #endif  // __HAA_OTA_HEADER_H__

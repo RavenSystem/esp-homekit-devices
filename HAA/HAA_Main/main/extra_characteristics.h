@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * Copyright 2019-2020 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2026 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 

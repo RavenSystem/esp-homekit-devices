@@ -46,7 +46,7 @@
 #define HAA_TX_UART_DEFAULT_PIN             (11)
 
 #elif defined(CONFIG_IDF_TARGET_ESP32C6)
-#define HAA_TX_UART_DEFAULT_PIN             (19)
+#define HAA_TX_UART_DEFAULT_PIN             (16)
 
 #elif defined(CONFIG_IDF_TARGET_ESP32C61)
 #define HAA_TX_UART_DEFAULT_PIN             (11)

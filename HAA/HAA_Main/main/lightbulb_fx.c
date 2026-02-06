@@ -1,7 +1,7 @@
 /*
  * Lightbulb FX for Home Accessory Architect
  *
- * Copyright 2025 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2025-2026 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -796,24 +796,23 @@ static void WS2812FX_mode_multi_dynamic() {
 }
 
 /*
- * Does the "standby-breathing" of well known i-Devices. Fixed Speed.
- * Use mode "fade" if you like to have something similar with a different speed.
+ * Does the "standby-breathing" of well known i-Devices.
  */
 static void WS2812FX_mode_breath() {
     int lum = current_lightbulb_fx_data->counter_mode_step;
     if (lum > 255) {
-        lum = 511 - lum; // lum = 15 -> 255 -> 15
+        lum = 511 - lum;    // lum = 15 -> 255 -> 15
     }
     
-    uint16_t delay;
-    if (lum == 15) delay = 970; // 970 pause before each breath
-    else if (lum <=  25) delay = 38; // 19
-    else if (lum <=  50) delay = 36; // 18
-    else if (lum <=  75) delay = 28; // 14
-    else if (lum <= 100) delay = 20; // 10
-    else if (lum <= 125) delay = 14; // 7
-    else if (lum <= 150) delay = 11; // 5
-    else delay = 10; // 4
+    unsigned int delay;
+    if (lum == 15) delay = 970;         // 970ms pause before each breath
+    else if (lum <=  25) delay = 38;    // 19
+    else if (lum <=  50) delay = 36;    // 18
+    else if (lum <=  75) delay = 28;    // 14
+    else if (lum <= 100) delay = 20;    // 10
+    else if (lum <= 125) delay = 14;    // 7
+    else if (lum <= 150) delay = 11;    // 5
+    else delay = 10;                    // 4
     
     uint32_t color = WS2812FX_color_blend(current_lightbulb_fx_data->colors[1], current_lightbulb_fx_data->colors[0], lum);
     WS2812FX_fill(color, 0, current_lightbulb_fx_data->leds_array_size);
@@ -823,7 +822,7 @@ static void WS2812FX_mode_breath() {
         current_lightbulb_fx_data->counter_mode_step = 15;
     }
     
-    set_next_time(delay);
+    set_next_time(delay * current_lightbulb_fx_data->speed / 1000);
 }
 
 /*
@@ -832,7 +831,7 @@ static void WS2812FX_mode_breath() {
 static void WS2812FX_mode_fade() {
     int lum = current_lightbulb_fx_data->counter_mode_step;
     if (lum > 255) {
-        lum = 511 - lum; // lum = 0 -> 255 -> 0
+        lum = 511 - lum;    // lum = 0 -> 255 -> 0
     }
     
     uint32_t color = WS2812FX_color_blend(current_lightbulb_fx_data->colors[1], current_lightbulb_fx_data->colors[0], lum);
@@ -1094,9 +1093,9 @@ static void WS2812FX_mode_chase_rainbow_white() {
  * White running on rainbow.
  */
 static void WS2812FX_mode_chase_rainbow() {
-  uint8_t color_sep = 256 / current_lightbulb_fx_data->leds_array_size;
-  uint8_t color_index = current_lightbulb_fx_data->counter_mode_call & 0xFF;
-  uint32_t color = WS2812FX_color_wheel(((current_lightbulb_fx_data->counter_mode_step * color_sep) + color_index) & 0xFF);
+    uint8_t color_sep = 256 / current_lightbulb_fx_data->leds_array_size;
+    uint8_t color_index = current_lightbulb_fx_data->counter_mode_call & 0xFF;
+    uint32_t color = WS2812FX_color_wheel(((current_lightbulb_fx_data->counter_mode_step * color_sep) + color_index) & 0xFF);
 
     WS2812FX_chase(color, WHITE, WHITE);
 }

@@ -1,7 +1,7 @@
 /*
  * Home Accessory Architect
  *
- * Copyright 2019-2025 José Antonio Jiménez Campos (@RavenSystem)
+ * Copyright 2019-2026 José Antonio Jiménez Campos (@RavenSystem)
  *
  */
 
@@ -651,6 +651,8 @@ int process_hexstr(const char* string, uint8_t** output_hex_string, unistring_t*
 
 ch_group_t* new_ch_group(const uint8_t chs, const uint8_t nums_i, const uint8_t nums_f, const uint8_t last_wildcard_actions) {
     ch_group_t* ch_group = calloc(1, sizeof(ch_group_t));
+    
+    //INFO("new_ch_group(%i, %i, %i, %i)", chs, nums_i, nums_f, last_wildcard_actions);
     
     if (chs > 0) {
         ch_group->chs = chs;
@@ -4108,80 +4110,82 @@ void lightbulb_task_timer(TimerHandle_t xTimer) {
         rs_esp_timer_start(xTimer);
     }
 }
-    
-void hkc_fx_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
-    ch_group_t* ch_group = ch_group_find(ch);
-    if (ch_group->main_enabled) {
-        ch->value = value;
-        
-        lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_group->ch[0]);
-        
-        // Effect
-        if (ch == ch_group->ch[4]) {
-            if (lightbulb_group->lightbulb_fx_data->effect != value.int_value) {
-                lightbulb_group->lightbulb_fx_data->effect = value.int_value;
-                
-                if (lightbulb_group->lightbulb_fx_data->effect != lightbulb_group->lightbulb_fx_data->last_effect &&
-                    lightbulb_group->lightbulb_fx_data->effect != LIGHTBULB_FX_EFFECT_PAUSE) {
-                    lightbulb_group->lightbulb_fx_data->last_effect = value.int_value;
-                    
-                    lightbulb_group->lightbulb_fx_data->counter_mode_step = 0;
-                    lightbulb_group->lightbulb_fx_data->counter_mode_call = 0;
-                    lightbulb_group->lightbulb_fx_data->aux_param = 0;
-                    lightbulb_group->lightbulb_fx_data->aux_param3 = 0;
-                    
-                    //memset(lightbulb_group->lightbulb_fx_data->leds_array, 0, lightbulb_group->lightbulb_fx_data->leds_array_size);
-                }
-                
-                if (ch_group->ch[0]->value.bool_value) {
-                    if (value.int_value == 0) {
-                        if (lightbulb_group->current[0] == 0) {
-                            lightbulb_group->current[0]++;
-                        } else {
-                            lightbulb_group->current[0]--;
-                        }
-                    }
-                    
-                    rs_esp_timer_start(LIGHTBULB_SET_DELAY_TIMER);
-                }
-            }
-        
-        // Speed
-        } else if (ch == ch_group->ch[5]) {
-            set_fx_speed(lightbulb_group->lightbulb_fx_data, value.int_value);
-        
-        // Direction
-        } else if (ch == ch_group->ch[6]) {
-            set_fx_reverse(lightbulb_group->lightbulb_fx_data, value.int_value);
-            
-        // Size
-        } else if (ch == ch_group->ch[7]) {
-            set_fx_size(lightbulb_group->lightbulb_fx_data, value.int_value);
-            
-        // Color2
-        } else if (ch == ch_group->ch[8]) {
-            lightbulb_group->lightbulb_fx_data->colors[1] = value.int_value;
-            
-        // Color3
-        } else {    // if (ch == ch_group->ch[9])
-            lightbulb_group->lightbulb_fx_data->colors[2] = value.int_value;
-        }
-            
-        save_data_history(ch);
-        
-    }
-    
-    homekit_characteristic_notify_safe(ch);
-}
 
 void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch);
     if (!ch_group->main_enabled) {
         homekit_characteristic_notify_safe(ch);
+        return;
+    }
+    
+    lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_group->ch[0]);
+    
+    void _set_value_and_notify() {
+        ch->value = value;
+        homekit_characteristic_notify_safe(ch);
         
+        save_states_callback(ch_group);
+    }
+    
+    // FX Effect
+    if (ch == ch_group->ch[4]) {
+        if (lightbulb_group->lightbulb_fx_data->effect != value.int_value) {
+            lightbulb_group->lightbulb_fx_data->effect = value.int_value;
+            
+            if (lightbulb_group->lightbulb_fx_data->effect != lightbulb_group->lightbulb_fx_data->last_effect &&
+                lightbulb_group->lightbulb_fx_data->effect != LIGHTBULB_FX_EFFECT_PAUSE) {
+                lightbulb_group->lightbulb_fx_data->last_effect = value.int_value;
+                
+                lightbulb_group->lightbulb_fx_data->counter_mode_step = 0;
+                lightbulb_group->lightbulb_fx_data->counter_mode_call = 0;
+                lightbulb_group->lightbulb_fx_data->aux_param = 0;
+                lightbulb_group->lightbulb_fx_data->aux_param3 = 0;
+                
+                //memset(lightbulb_group->lightbulb_fx_data->leds_array, 0, lightbulb_group->lightbulb_fx_data->leds_array_size);
+            }
+            
+            if (ch_group->ch[0]->value.bool_value) {
+                if (value.int_value == 0) {
+                    if (lightbulb_group->current[0] == 0) {
+                        lightbulb_group->current[0]++;
+                    } else {
+                        lightbulb_group->current[0]--;
+                    }
+                }
+                
+                rs_esp_timer_start(LIGHTBULB_SET_DELAY_TIMER);
+            }
+            
+            _set_value_and_notify();
+        }
+    
+    // FX Speed
+    } else if (ch_group->ch[4] && ch == ch_group->ch[5]) {
+        set_fx_speed(lightbulb_group->lightbulb_fx_data, value.int_value);
+        _set_value_and_notify();
+    
+    // FX Direction
+    } else if (ch_group->ch[4] && ch == ch_group->ch[6]) {
+        set_fx_reverse(lightbulb_group->lightbulb_fx_data, value.int_value);
+        _set_value_and_notify();
+        
+    // FX Size
+    } else if (ch_group->ch[4] && ch == ch_group->ch[7]) {
+        set_fx_size(lightbulb_group->lightbulb_fx_data, value.int_value);
+        _set_value_and_notify();
+        
+    // FX Color2
+    } else if (ch_group->ch[4] && ch == ch_group->ch[8]) {
+        lightbulb_group->lightbulb_fx_data->colors[1] = value.int_value;
+        _set_value_and_notify();
+        
+    // FX Color3
+    } else if (ch_group->ch[4] && ch == ch_group->ch[9]) {
+        lightbulb_group->lightbulb_fx_data->colors[2] = value.int_value;
+        _set_value_and_notify();
+    
+    // Stardard Lightbulb Characteristics
     } else if (ch != ch_group->ch[0] || value.bool_value != ch_group->ch[0]->value.bool_value) {
-        lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_group->ch[0]);
-        
         if (ch == ch_group->ch[1] && value.int_value == 0) {
             lightbulb_group->old_on_value = ch_group->ch[0]->value.bool_value;
             ch_group->ch[0]->value.bool_value = false;
@@ -4214,11 +4218,11 @@ void hkc_rgbw_setter(homekit_characteristic_t* ch, const homekit_value_t value) 
             lightbulb_task_timer(LIGHTBULB_SET_DELAY_TIMER);
         }
         
-        save_data_history(ch);
-        
     } else {
         homekit_characteristic_notify_safe(ch_group->ch[0]);
     }
+    
+    save_data_history(ch);
 }
 
 void rgbw_brightness(const uint16_t gpio, void* args, const uint8_t type) {
@@ -4409,7 +4413,7 @@ void garage_door_sensor(const uint16_t gpio, void* args, const uint8_t type) {
 void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch1);
     
-    void run_margin_at_start() {
+    void _run_margin_at_start() {
         rs_esp_timer_stop(AUTOOFF_TIMER);
         rs_esp_timer_start(GARAGE_DOOR_WORKER_TIMER);
         homekit_characteristic_notify_safe(ch1);
@@ -4449,12 +4453,12 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
             } else if (GARAGE_DOOR_TIME_MARGIN > 0 && value.int_value == GARAGE_DOOR_OPENED && GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_CLOSED && GARAGE_DOOR_HAS_F4 == 1) {
                 GARAGE_DOOR_CURRENT_TIME = 0;
                 GD_TARGET_DOOR_STATE_INT = GARAGE_DOOR_OPENED;
-                run_margin_at_start();
+                _run_margin_at_start();
                 
             } else if (GARAGE_DOOR_TIME_MARGIN > 0 && value.int_value == GARAGE_DOOR_CLOSED && GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_OPENED && GARAGE_DOOR_HAS_F5 == 1) {
                 GARAGE_DOOR_CURRENT_TIME = GARAGE_DOOR_WORKING_TIME;
                 GD_TARGET_DOOR_STATE_INT = GARAGE_DOOR_CLOSED;
-                run_margin_at_start();
+                _run_margin_at_start();
                 
             } else {
                 homekit_characteristic_notify_safe(ch1);
@@ -4476,7 +4480,7 @@ void hkc_garage_door_setter(homekit_characteristic_t* ch1, const homekit_value_t
 void garage_door_timer_worker(TimerHandle_t xTimer) {
     ch_group_t* ch_group = (ch_group_t*) pvTimerGetTimerID(xTimer);
     
-    void halt_timer(const bool forced) {
+    void _halt_timer(const bool forced) {
         rs_esp_timer_stop(xTimer);
         
         if (forced || (GARAGE_DOOR_TIME_MARGIN > 0 && GD_CURRENT_DOOR_STATE_INT > 1)) {
@@ -4492,7 +4496,7 @@ void garage_door_timer_worker(TimerHandle_t xTimer) {
             garage_door_sensor(99, ch_group, GARAGE_DOOR_OPENED);
             
         } else if (GARAGE_DOOR_CURRENT_TIME >= GARAGE_DOOR_WORKING_TIME && GARAGE_DOOR_HAS_F2 == 1) {
-            halt_timer(false);
+            _halt_timer(false);
         }
         
     } else if (GD_CURRENT_DOOR_STATE_INT == GARAGE_DOOR_CLOSING) {
@@ -4502,7 +4506,7 @@ void garage_door_timer_worker(TimerHandle_t xTimer) {
             garage_door_sensor(99, ch_group, GARAGE_DOOR_CLOSED);
             
         } else if (GARAGE_DOOR_CURRENT_TIME <= 0 && GARAGE_DOOR_HAS_F3 == 1) {
-            halt_timer(false);
+            _halt_timer(false);
         }
         
     } else if (GARAGE_DOOR_TIME_MARGIN > 0 &&
@@ -4512,7 +4516,7 @@ void garage_door_timer_worker(TimerHandle_t xTimer) {
         GARAGE_DOOR_CURRENT_TIME++;
         
         if (GARAGE_DOOR_CURRENT_TIME > GARAGE_DOOR_TIME_MARGIN) {
-            halt_timer(true);
+            _halt_timer(true);
         }
         
     } else if (GARAGE_DOOR_TIME_MARGIN > 0 &&
@@ -4522,7 +4526,7 @@ void garage_door_timer_worker(TimerHandle_t xTimer) {
         GARAGE_DOOR_CURRENT_TIME -= GARAGE_DOOR_CLOSE_TIME_FACTOR;
         
         if (GARAGE_DOOR_CURRENT_TIME < (GARAGE_DOOR_WORKING_TIME - GARAGE_DOOR_TIME_MARGIN)) {
-            halt_timer(true);
+            _halt_timer(true);
         }
         
     } else {
@@ -4575,12 +4579,12 @@ void window_cover_timer_rearm_stop(TimerHandle_t xTimer) {
 void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_t value) {
     ch_group_t* ch_group = ch_group_find(ch1);
     
-    void disable_stop() {
+    void _disable_stop() {
         WINDOW_COVER_STOP_ENABLE = 0;
         rs_esp_timer_start(ch_group->timer2);
     }
     
-    void start_wc_timer() {
+    void _start_wc_timer() {
         WINDOW_COVER_MUST_STOP = 0;
         if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_STOP) {
             WINDOW_COVER_SEND_CUR_POS_COUNTER = 0;
@@ -4588,7 +4592,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
         }
     }
     
-    void check_obstruction() {
+    void _check_obstruction() {
         if (WINDOW_COVER_CH_OBSTRUCTION->value.bool_value) {
             WINDOW_COVER_CH_OBSTRUCTION->value.bool_value = false;
             homekit_characteristic_notify_safe(WINDOW_COVER_CH_OBSTRUCTION);
@@ -4607,7 +4611,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
         
         // CLOSE
         if (value.int_value < WINDOW_COVER_CH_CURRENT_POSITION->value.int_value) {
-            disable_stop();
+            _disable_stop();
             
             if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_OPENING) {
                 if (WINDOW_COVER_VIRTUAL_STOP == 1 && value.int_value == 0) {
@@ -4616,7 +4620,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
                 } else {
                     do_actions(ch_group, WINDOW_COVER_CLOSING_FROM_MOVING);
                     
-                    start_wc_timer();
+                    _start_wc_timer();
                     
                     WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_CLOSING;
                 }
@@ -4626,16 +4630,16 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
             } else {
                 do_actions(ch_group, WINDOW_COVER_CLOSING);
                 
-                start_wc_timer();
+                _start_wc_timer();
                 
                 WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_CLOSING;
             }
             
-            check_obstruction();
+            _check_obstruction();
             
         // OPEN
         } else if (value.int_value > WINDOW_COVER_CH_CURRENT_POSITION->value.int_value) {
-            disable_stop();
+            _disable_stop();
             
             if (WINDOW_COVER_CH_STATE->value.int_value == WINDOW_COVER_CLOSING) {
                 if (WINDOW_COVER_VIRTUAL_STOP == 1 && value.int_value == 100) {
@@ -4644,7 +4648,7 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
                 } else {
                     do_actions(ch_group, WINDOW_COVER_OPENING_FROM_MOVING);
                     
-                    start_wc_timer();
+                    _start_wc_timer();
                     
                     WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_OPENING;
                 }
@@ -4654,12 +4658,12 @@ void hkc_window_cover_setter(homekit_characteristic_t* ch1, const homekit_value_
             } else {
                 do_actions(ch_group, WINDOW_COVER_OPENING);
                 
-                start_wc_timer();
+                _start_wc_timer();
                 
                 WINDOW_COVER_CH_STATE->value.int_value = WINDOW_COVER_OPENING;
             }
             
-            check_obstruction();
+            _check_obstruction();
             
         // STOP
         } else {
@@ -4692,7 +4696,7 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
         margin = WINDOW_COVER_MARGIN_SYNC;
     }
     
-    void normalize_current_position() {
+    void _normalize_current_position() {
         const int wc_homekit_position = WINDOW_COVER_HOMEKIT_POSITION;
         if (wc_homekit_position < 0) {
             WINDOW_COVER_CH_CURRENT_POSITION->value.int_value = 0;
@@ -4703,11 +4707,11 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
         }
     }
     
-    float window_cover_homekit_position() {
+    float _window_cover_homekit_position() {
         return WINDOW_COVER_MOTOR_POSITION / (1.f + ((100.f - WINDOW_COVER_MOTOR_POSITION) * ((float) WINDOW_COVER_CORRECTION) * 0.0002f));
     }
     
-    void send_hk_current_position() {
+    void _send_hk_current_position() {
         WINDOW_COVER_SEND_CUR_POS_COUNTER++;
         if (((unsigned int) WINDOW_COVER_SEND_CUR_POS_COUNTER) >= WINDOW_COVER_SEND_CUR_POS_MAX) {
             WINDOW_COVER_SEND_CUR_POS_COUNTER = 0;
@@ -4731,34 +4735,34 @@ void window_cover_timer_worker(TimerHandle_t xTimer) {
         case WINDOW_COVER_CLOSING:
             WINDOW_COVER_MOTOR_POSITION -= WINDOW_COVER_TIME_CLOSE_STEP;
             if (WINDOW_COVER_MOTOR_POSITION > 0) {
-                WINDOW_COVER_HOMEKIT_POSITION = window_cover_homekit_position();
+                WINDOW_COVER_HOMEKIT_POSITION = _window_cover_homekit_position();
             } else {
                 WINDOW_COVER_HOMEKIT_POSITION = WINDOW_COVER_MOTOR_POSITION;
             }
             
-            normalize_current_position();
+            _normalize_current_position();
             
             if ((WINDOW_COVER_CH_TARGET_POSITION->value.int_value - margin) >= (signed int) WINDOW_COVER_HOMEKIT_POSITION) {
                 WINDOW_COVER_MUST_STOP = 1;
             } else {
-                send_hk_current_position();
+                _send_hk_current_position();
             }
             break;
             
         case WINDOW_COVER_OPENING:
             WINDOW_COVER_MOTOR_POSITION += WINDOW_COVER_TIME_OPEN_STEP;
             if (WINDOW_COVER_MOTOR_POSITION < 100) {
-                WINDOW_COVER_HOMEKIT_POSITION = window_cover_homekit_position();
+                WINDOW_COVER_HOMEKIT_POSITION = _window_cover_homekit_position();
             } else {
                 WINDOW_COVER_HOMEKIT_POSITION = WINDOW_COVER_MOTOR_POSITION;
             }
             
-            normalize_current_position();
+            _normalize_current_position();
             
             if ((WINDOW_COVER_CH_TARGET_POSITION->value.int_value + margin) <= (signed int) WINDOW_COVER_HOMEKIT_POSITION) {
                 WINDOW_COVER_MUST_STOP = 1;
             } else {
-                send_hk_current_position();
+                _send_hk_current_position();
             }
             break;
             
@@ -5263,8 +5267,6 @@ bool set_hkch_value(homekit_characteristic_t* ch_target, const float value) {
     }
     
     if (has_changed) {
-        homekit_characteristic_notify_safe(ch_target);
-        
         ch_group_t* ch_target_group = ch_group_find(ch_target);
         
         if (ch_target_group->serv_type == SERV_TYPE_THERMOSTAT) {
@@ -5274,14 +5276,13 @@ bool set_hkch_value(homekit_characteristic_t* ch_target, const float value) {
             hkc_humidif_setter(ch_target, ch_target->value);
             
         } else if (ch_target_group->serv_type == SERV_TYPE_LIGHTBULB) {
-            if (ch_target_group->ch[0] == ch_target) {
-                lightbulb_group_t* lightbulb_group = lightbulb_group_find(ch_target);
-                lightbulb_group->old_on_value = ch_target->value.bool_value;
-                lightbulb_group->last_on_action = ch_target->value.bool_value;
-            }
+            hkc_rgbw_setter(ch_target, ch_target->value);
             
         } else if (ch_target_group->serv_type == SERV_TYPE_BATTERY) {
             battery_manager(ch_target, ch_target->value.int_value, true);
+            
+        } else {
+            homekit_characteristic_notify_safe(ch_target);
         }
     }
     
@@ -5586,7 +5587,6 @@ void free_monitor_task(void* args) {
                         value = 100 * FM_SENSOR_PWM_DUTY_TIME_HIGH / (FM_SENSOR_PWM_DUTY_TIME_HIGH + FM_SENSOR_PWM_DUTY_TIME_LOW);
                     } else {
                         value = gpio_read(FM_SENSOR_GPIO) ? 100 : 0;
-                        
                     }
                     
                     if (value >= 0 && value <= 100) {
@@ -6585,7 +6585,7 @@ void net_action_task(void* pvParameters) {
         return len;
     }
     
-    void write_str_ch_values(str_ch_value_t** str_ch_value_ini, char** new_req, char* content) {
+    void _write_str_ch_values(str_ch_value_t** str_ch_value_ini, char** new_req, char* content) {
         if (*str_ch_value_ini) {
             str_ch_value_t* str_ch_value = *str_ch_value_ini;
             char* content_search = content;
@@ -6708,7 +6708,7 @@ void net_action_task(void* pvParameters) {
                             req[0] = 0;
                         }
                         
-                        write_str_ch_values(&str_ch_value_first, &req, action_network->content);
+                        _write_str_ch_values(&str_ch_value_first, &req, action_network->content);
                     }
                     
                     if (action_network->method_n != 4) {
@@ -6794,7 +6794,7 @@ void net_action_task(void* pvParameters) {
                         }
                         
                         req[0] = 0;
-                        write_str_ch_values(&str_ch_value_first, &req, action_network->content);
+                        _write_str_ch_values(&str_ch_value_first, &req, action_network->content);
                         
                         result = new_net_con(action_network->host,
                                              action_network->port_n,
@@ -7069,7 +7069,7 @@ void irrf_tx_task(void* pvParameters) {
                 // Decoding BIT code part
                 unsigned int ir_code_index = 2;
                 
-                void fill_code(const unsigned int count, const unsigned int bit_mark, const unsigned int bit_space) {
+                void _fill_code(const unsigned int count, const unsigned int bit_mark, const unsigned int bit_space) {
                     for (unsigned int j = 0; j < count; j++) {
                         ir_code[ir_code_index] = bit_mark;
                         ir_code_index++;
@@ -7084,24 +7084,24 @@ void irrf_tx_task(void* pvParameters) {
                         switch (ir_action_protocol_len) {
                             case IRRF_ACTION_PROTOCOL_LEN_4BITS:
                                 if (found - baseUC_dic < 13) {
-                                    fill_code(1 + found - baseUC_dic, bit1_mark, bit1_space);
+                                    _fill_code(1 + found - baseUC_dic, bit1_mark, bit1_space);
                                 } else {
-                                    fill_code(found - baseUC_dic - 12, bit3_mark, bit3_space);
+                                    _fill_code(found - baseUC_dic - 12, bit3_mark, bit3_space);
                                 }
                                 break;
                                 
                             case IRRF_ACTION_PROTOCOL_LEN_6BITS:
                                 if (found - baseUC_dic < 9) {
-                                    fill_code(1 + found - baseUC_dic, bit1_mark, bit1_space);
+                                    _fill_code(1 + found - baseUC_dic, bit1_mark, bit1_space);
                                 } else if (found - baseUC_dic < 18) {
-                                    fill_code(found - baseUC_dic - 8, bit3_mark, bit3_space);
+                                    _fill_code(found - baseUC_dic - 8, bit3_mark, bit3_space);
                                 } else {
-                                    fill_code(found - baseUC_dic - 17, bit5_mark, bit5_space);
+                                    _fill_code(found - baseUC_dic - 17, bit5_mark, bit5_space);
                                 }
                                 break;
                                 
                             default:    // case IRRF_ACTION_PROTOCOL_LEN_2BITS:
-                                fill_code(1 + found - baseUC_dic, bit1_mark, bit1_space);
+                                _fill_code(1 + found - baseUC_dic, bit1_mark, bit1_space);
                                 break;
                         }
                         
@@ -7110,24 +7110,24 @@ void irrf_tx_task(void* pvParameters) {
                         switch (ir_action_protocol_len) {
                             case IRRF_ACTION_PROTOCOL_LEN_4BITS:
                                 if (found - baseLC_dic < 13) {
-                                    fill_code(1 + found - baseLC_dic, bit0_mark, bit0_space);
+                                    _fill_code(1 + found - baseLC_dic, bit0_mark, bit0_space);
                                 } else {
-                                    fill_code(found - baseLC_dic - 12, bit2_mark, bit2_space);
+                                    _fill_code(found - baseLC_dic - 12, bit2_mark, bit2_space);
                                 }
                                 break;
                                 
                             case IRRF_ACTION_PROTOCOL_LEN_6BITS:
                                 if (found - baseLC_dic < 9) {
-                                    fill_code(1 + found - baseLC_dic, bit0_mark, bit0_space);
+                                    _fill_code(1 + found - baseLC_dic, bit0_mark, bit0_space);
                                 } else if (found - baseLC_dic < 18) {
-                                    fill_code(found - baseLC_dic - 8, bit2_mark, bit2_space);
+                                    _fill_code(found - baseLC_dic - 8, bit2_mark, bit2_space);
                                 } else {
-                                    fill_code(found - baseLC_dic - 17, bit4_mark, bit4_space);
+                                    _fill_code(found - baseLC_dic - 17, bit4_mark, bit4_space);
                                 }
                                 break;
                                 
                             default:    // case IRRF_ACTION_PROTOCOL_LEN_2BITS:
-                                fill_code(1 + found - baseLC_dic, bit0_mark, bit0_space);
+                                _fill_code(1 + found - baseLC_dic, bit0_mark, bit0_space);
                                 break;
                         }
                     }
@@ -7519,22 +7519,22 @@ void do_actions(ch_group_t* ch_group, uint8_t action) {
                                     hkc_rgbw_setter(ch_group->ch[1], HOMEKIT_INT(value_int - 2));
                                     
                                 } else if (value_int >= 200000000) {    // FX color[2]
-                                    hkc_fx_setter(ch_group->ch[9], HOMEKIT_UINT32(value_int - 200000000));
+                                    hkc_rgbw_setter(ch_group->ch[9], HOMEKIT_UINT32(value_int - 200000000));
                                     
                                 } else if (value_int >= 100000000) {    // FX color[1]
-                                    hkc_fx_setter(ch_group->ch[8], HOMEKIT_UINT32(value_int - 100000000));
+                                    hkc_rgbw_setter(ch_group->ch[8], HOMEKIT_UINT32(value_int - 100000000));
                                     
                                 } else if (value_int >= 8000) {         // FX Size
-                                    hkc_fx_setter(ch_group->ch[7], HOMEKIT_UINT32(value_int - 8000));
+                                    hkc_rgbw_setter(ch_group->ch[7], HOMEKIT_UINT32(value_int - 8000));
                                     
                                 } else if (value_int >= 7000) {         // FX Direction
-                                    hkc_fx_setter(ch_group->ch[6], HOMEKIT_UINT32(value_int - 7000));
+                                    hkc_rgbw_setter(ch_group->ch[6], HOMEKIT_UINT32(value_int - 7000));
                                     
                                 } else if (value_int >= 6000) {         // FX Speed
-                                    hkc_fx_setter(ch_group->ch[5], HOMEKIT_UINT32(value_int - 6000));
+                                    hkc_rgbw_setter(ch_group->ch[5], HOMEKIT_UINT32(value_int - 6000));
                                     
                                 } else if (value_int >= 5000) {         // FX Effect
-                                    hkc_fx_setter(ch_group->ch[4], HOMEKIT_UINT32(value_int - 5000));
+                                    hkc_rgbw_setter(ch_group->ch[4], HOMEKIT_UINT32(value_int - 5000));
                                     
                                 } else if (value_int >= 3000) {         // TEMP
                                     hkc_rgbw_setter(ch_group->ch[2], HOMEKIT_UINT32(value_int - 3000));
@@ -8065,7 +8065,7 @@ void run_homekit_server() {
 }
 
 void printf_header() {
-    INFO("\nHome Accessory Architect "HAA_FIRMWARE_VERSION""HAA_FIRMWARE_BETA_REVISION"\n(c) 2018-2025 José A. Jiménez Campos\n");
+    INFO("\nHome Accessory Architect "HAA_FIRMWARE_VERSION""HAA_FIRMWARE_BETA_REVISION"\n(c) 2018-2026 José A. Jiménez Campos\n");
     
 #ifdef HAA_DEBUG
     INFO("HAA DEBUG ENABLED\n");
@@ -11962,12 +11962,12 @@ void normal_mode_init() {
                 
                 calloc_count += 6;
                 
-                ch_group->ch[4] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_LIGHTBULB_FX_EFFECT,    0, .setter_ex=hkc_fx_setter);
-                ch_group->ch[5] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_LIGHTBULB_FX_SPEED,    70, .setter_ex=hkc_fx_setter);
-                ch_group->ch[6] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_LIGHTBULB_FX_REVERSE,   0, .setter_ex=hkc_fx_setter);
-                ch_group->ch[7] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_LIGHTBULB_FX_SIZE,      0, .setter_ex=hkc_fx_setter);
-                ch_group->ch[8] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_LIGHTBULB_FX_COLOR2,    0, .setter_ex=hkc_fx_setter);
-                ch_group->ch[9] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_LIGHTBULB_FX_COLOR3,    0, .setter_ex=hkc_fx_setter);
+                ch_group->ch[4] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_LIGHTBULB_FX_EFFECT,    0, .setter_ex=hkc_rgbw_setter);
+                ch_group->ch[5] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_LIGHTBULB_FX_SPEED,    70, .setter_ex=hkc_rgbw_setter);
+                ch_group->ch[6] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_LIGHTBULB_FX_REVERSE,   0, .setter_ex=hkc_rgbw_setter);
+                ch_group->ch[7] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_LIGHTBULB_FX_SIZE,      0, .setter_ex=hkc_rgbw_setter);
+                ch_group->ch[8] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_LIGHTBULB_FX_COLOR2,    0, .setter_ex=hkc_rgbw_setter);
+                ch_group->ch[9] = NEW_HOMEKIT_CHARACTERISTIC(CUSTOM_LIGHTBULB_FX_COLOR3,    0, .setter_ex=hkc_rgbw_setter);
                 
                 for (unsigned int s = 4; s <= 9; s++) {
                     ch_group->ch[s]->value.int_value = set_initial_state(ch_group, s, NULL, 5, CH_TYPE_INT);
@@ -13092,6 +13092,7 @@ void normal_mode_init() {
                                             ( fm_sensor_type >= FM_SENSOR_TYPE_NETWORK && fm_sensor_type <= FM_SENSOR_TYPE_NETWORK_PATTERN_HEX ? 2 : 0 ) +
                                             ( fm_sensor_type == FM_SENSOR_TYPE_I2C ? 8 : 0 ) +
                                             ( fm_sensor_type == FM_SENSOR_TYPE_I2C_TRIGGER ? 18 : 0 ) +
+                                            ( fm_sensor_type == FM_SENSOR_TYPE_MATHS ) +
                                             (maths_operations << 1),
                                             
                                             4 +

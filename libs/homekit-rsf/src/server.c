@@ -234,7 +234,7 @@ int homekit_get_client_count() {
 #endif
 
 void client_context_free(client_context_t *c);
-void pairing_context_free(pairing_context_t *context);
+void pairing_context_free();
 void homekit_server_on_reset(client_context_t *context);
 int client_send_chunk(byte *data, size_t size, void *arg);
 
@@ -267,9 +267,7 @@ void server_free() {
         crypto_ed25519_free(homekit_server->accessory_key);
     }
 
-    if (homekit_server->pairing_context) {
-        pairing_context_free(homekit_server->pairing_context);
-    }
+    pairing_context_free();
 
     if (homekit_server->clients) {
         client_context_t *client = homekit_server->clients;
@@ -401,16 +399,20 @@ pairing_context_t *pairing_context_new() {
     return context;
 }
 
-void pairing_context_free(pairing_context_t *context) {
-    if (context->srp) {
-        crypto_srp_free(context->srp);
+void pairing_context_free() {
+    if (homekit_server->pairing_context) {
+        if (homekit_server->pairing_context->srp) {
+            crypto_srp_free(homekit_server->pairing_context->srp);
+        }
+        
+        if (homekit_server->pairing_context->public_key) {
+            free(homekit_server->pairing_context->public_key);
+        }
+        
+        free(homekit_server->pairing_context);
+        
+        homekit_server->pairing_context = NULL;
     }
-    
-    if (context->public_key) {
-        free(context->public_key);
-    }
-    
-    free(context);
 }
 
 static int homekit_low_dram() {
@@ -1166,8 +1168,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             if (r) {
                 CLIENT_ERROR(context, "SPR key (%d). DRAM?", r);
 
-                pairing_context_free(homekit_server->pairing_context);
-                homekit_server->pairing_context = NULL;
+                pairing_context_free();
 
                 send_tlv_error_response(context, 2, TLVError_Unknown);
                 break;
@@ -1183,8 +1184,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
                 CLIENT_ERROR(context, "Get salt (%d)", r);
 
                 free(salt);
-                pairing_context_free(homekit_server->pairing_context);
-                homekit_server->pairing_context = NULL;
+                pairing_context_free();
 
                 send_tlv_error_response(context, 2, TLVError_Unknown);
                 break;
@@ -1244,9 +1244,8 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             
             if (r) {
                 CLIENT_ERROR(context, "Pairing code (%d). DRAM?", r);
+                pairing_context_free();
                 send_tlv_error_response(context, 4, TLVError_Authentication);
-                pairing_context_free(homekit_server->pairing_context);
-                homekit_server->pairing_context = NULL;
                 break;
             }
             
@@ -1618,8 +1617,7 @@ void homekit_server_on_pair_setup(client_context_t *context, const byte *data, s
             
             send_tlv_response(context, response);
             
-            pairing_context_free(homekit_server->pairing_context);
-            homekit_server->pairing_context = NULL;
+            pairing_context_free();
             
             homekit_server->paired = true;
             
@@ -3375,8 +3373,7 @@ void homekit_server_close_client(client_context_t *context) {
     CLIENT_INFO(context, "Closed %i/%i", homekit_server->client_count, homekit_server->config->max_clients);
     
     if (homekit_server->pairing_context && homekit_server->pairing_context->client == context) {
-        pairing_context_free(homekit_server->pairing_context);
-        homekit_server->pairing_context = NULL;
+        pairing_context_free();
     }
     
     homekit_accessories_clear_notify_subscriptions(homekit_server->config->accessories, context);

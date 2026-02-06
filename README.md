@@ -16,7 +16,7 @@ HAA supports many different [HomeKit service types](https://github.com/RavenSyst
 
 Go to the [Wiki](https://github.com/RavenSystem/esp-homekit-devices/wiki) for additional information.
 
-In addition to this firmware, you can obtain [**HAA Home Manager App**](https://apps.apple.com/app/id1556105121), the perfect App companion to manage your HAA devices, with batch updates, enable setup mode, and other extra features (This purchase will help to support the development of this project):
+In addition to this firmware, you can obtain [**HAA Home for HomeKit & Matter App**](https://apps.apple.com/app/id1556105121), the perfect App companion to manage your HAA devices, with batch updates, enable setup mode, and many extra features (This purchase will help to support the development of this project):
 
 <p align="center"><a href="https://apps.apple.com/app/id1556105121"><img src="https://raw.githubusercontent.com/RavenSystem/ravensystem-media/master/haamanager_app.png"></a></p>
 
