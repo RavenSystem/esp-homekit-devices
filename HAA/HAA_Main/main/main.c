@@ -5508,6 +5508,7 @@ void free_monitor_task(void* args) {
                     }
                 }
                 
+                *value = atof(found);
                 return true;
             }
         }
