@@ -165,6 +165,7 @@ typedef struct {
     SemaphoreHandle_t wifi_networks_semaph;
 
     uint8_t check_counter;
+    uint8_t wifi_phy_mode;
 
 #ifdef ESP_PLATFORM
     uint8_t wifi_sleep_mode;
@@ -270,23 +271,28 @@ uint32_t wifi_config_get_full_gw() {
 #endif
 }
 
-#ifndef ESP_PLATFORM
-static void wifi_config_toggle_phy_mode(const uint8_t phy) {
+static void wifi_config_set_phy_mode(const uint8_t phy) {
+#ifdef ESP_PLATFORM
+    if (phy != 0) {
+#ifdef CONFIG_IDF_TARGET_ESP32C5
+        wifi_protocols_t protocols = {
+            .ghz_2g = phy & (WIFI_PROTOCOL_11B | WIFI_PROTOCOL_11G | WIFI_PROTOCOL_11N | WIFI_PROTOCOL_LR | WIFI_PROTOCOL_11AC | WIFI_PROTOCOL_11AX),
+            .ghz_5g = phy & (WIFI_PROTOCOL_11N | WIFI_PROTOCOL_11A | WIFI_PROTOCOL_11AC | WIFI_PROTOCOL_11AX)
+        };
+        esp_wifi_set_protocols(WIFI_IF_STA, &protocols);
+#else
+        esp_wifi_set_protocol(WIFI_IF_STA, phy);
+#endif
+    }
+#else
     switch (phy) {
-        /* Not used
-        case 1:
-            sdk_wifi_set_phy_mode(PHY_MODE_11B);
-            break;
-        */
-        case 2:
-            sdk_wifi_set_phy_mode(PHY_MODE_11G);
+        case 1: // PHY_MODE_11B
+        case 2: // PHY_MODE_11G
+        case 3: // PHY_MODE_11N
+            sdk_wifi_set_phy_mode(phy);
             break;
             
-        case 3:
-            sdk_wifi_set_phy_mode(PHY_MODE_11N);
-            break;
-            
-        case 4:
+        case WIFI_PHY_MODE_WITHFALLBACK:
             if (sdk_wifi_get_phy_mode() == PHY_MODE_11N) {
                 sdk_wifi_set_phy_mode(PHY_MODE_11G);
             } else {
@@ -294,11 +300,12 @@ static void wifi_config_toggle_phy_mode(const uint8_t phy) {
             }
             break;
             
-        default:
+        default:    // case 0:
+            // Do nothing
             break;
     }
-}
 #endif
+}
 
 static void wifi_smart_connect_task(void* arg) {
     uint8_t *best_bssid = arg;
@@ -306,6 +313,13 @@ static void wifi_smart_connect_task(void* arg) {
     INFO("Best %02x%02x%02x%02x%02x%02x", best_bssid[0], best_bssid[1], best_bssid[2], best_bssid[3], best_bssid[4], best_bssid[5]);
     
     sysparam_set_blob(WIFI_STA_BSSID_SYSPARAM, best_bssid, 6);
+    
+#ifdef ESP_PLATFORM
+    uint8_t phy_mode = 0;
+    esp_wifi_get_protocol(WIFI_IF_STA, &phy_mode);
+#else
+    uint8_t phy_mode = sdk_wifi_get_phy_mode();
+#endif
     
     sdk_wifi_station_disconnect();
     
@@ -350,10 +364,9 @@ static void wifi_smart_connect_task(void* arg) {
     
 #ifndef ESP_PLATFORM
     sdk_wifi_station_set_auto_connect(true);
-    int8_t phy_mode = 3;
-    sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
-    wifi_config_toggle_phy_mode(phy_mode);
 #endif
+    
+    wifi_config_set_phy_mode(phy_mode);
     
     sdk_wifi_station_connect();
     
@@ -504,7 +517,7 @@ void wifi_config_smart_connect() {
 }
 
 #ifdef ESP_PLATFORM
-void wifi_config_connect(const uint8_t mode);
+void wifi_config_connect(const uint8_t mode, const uint8_t phy);
 #else
 void wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool with_reset);
 #endif
@@ -1057,7 +1070,7 @@ static int wifi_config_server_on_url(http_parser *parser, const char *data, unsi
 
     if (client->endpoint == ENDPOINT_UNKNOWN) {
         char *url = strndup(data, length);
-        ERROR("Unknown %s %s", http_method_str(parser->method), url);
+        ERROR("? %s %s", http_method_str(parser->method), url);
         free(url);
     }
 
@@ -1255,7 +1268,19 @@ static void wifi_config_softap_start(const int8_t wifi_ap_enable) {
         esp_netif_set_ip_info(ap_netif, &ap_ip);
         
         esp_wifi_set_config(WIFI_IF_AP, &softap_config);
-        esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20);
+        
+#if defined(CONFIG_IDF_TARGET_ESP32C5)
+        esp_wifi_set_band_mode(WIFI_BAND_MODE_AUTO);
+    
+        wifi_bandwidths_t bw = {
+            .ghz_2g = WIFI_BW20,
+            .ghz_5g = WIFI_BW20
+        };
+        esp_wifi_set_bandwidths(WIFI_IF_AP, &bw);
+#else
+        esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW20);
+#endif
+        
 #else
         struct sdk_softap_config softap_config;
         softap_config.ssid_hidden = 0;
@@ -1358,7 +1383,9 @@ static void wifi_config_sta_connect_timeout_task() {
         vTaskDelay(MS_TO_TICKS(1000));
 
         if (wifi_config_get_ip() >= 0) {
+#ifndef ESP_PLATFORM
             save_last_working_phy();
+#endif
             
             if (context->on_wifi_ready) {
                 context->on_wifi_ready();
@@ -1395,9 +1422,14 @@ static void wifi_config_sta_connect_timeout_task() {
             if (context->check_counter > 35) {
                 context->check_counter = 0;
 #ifdef ESP_PLATFORM
-                wifi_config_connect(0);
+                wifi_config_connect(0, 0);
 #else
-                wifi_config_connect(0, 4, true);
+                int8_t phy_mode = WIFI_PHY_MODE_WITHFALLBACK;
+                if (context->on_wifi_ready) {
+                    phy_mode = context->wifi_phy_mode;
+                }
+                
+                wifi_config_connect(0, phy_mode, true);
 #endif
                 
                 vTaskDelay(MS_TO_TICKS(1000));
@@ -1466,7 +1498,7 @@ static void on_wifi_connect(void* arg, esp_event_base_t event_base, int32_t even
         }
 }
 */
-    
+
 static void on_got_ip(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     free_wifi_config_ip_info();
     ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
@@ -1478,14 +1510,44 @@ static void on_got_ip(void* arg, esp_event_base_t event_base, int32_t event_id, 
     snprintf(buf, 16, IPSTR, IP2STR(&event->ip_info.ip));
     adv_logger_set_ip_address(buf);
 }
-        
+
 static void on_wifi_disconnect(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data) {
     ERROR("Wifi disconnected");
     free_wifi_config_ip_info();
     sdk_wifi_station_connect();
 }
 
-void wifi_config_connect(const uint8_t mode) {
+#ifdef ESP_PLATFORM
+static void wifi_config_set_advanced_wifi_params(const uint8_t mode) {
+    if (mode == 0) {
+        uint8_t bandwidth = WIFI_BW20;
+        if (context->bandwidth_40) {
+            bandwidth = WIFI_BW40;
+        }
+        
+#ifdef CONFIG_IDF_TARGET_ESP32C5
+        esp_wifi_set_band_mode(WIFI_BAND_MODE_AUTO);
+        
+        wifi_bandwidths_t bw = {
+            .ghz_2g = bandwidth,
+            .ghz_5g = bandwidth
+        };
+        esp_wifi_set_bandwidths(WIFI_IF_STA, &bw);
+#else
+        esp_wifi_set_bandwidth(WIFI_IF_STA, bandwidth);
+#endif
+        
+        uint8_t sleep_mode = WIFI_PS_MIN_MODEM;
+        if (context->wifi_sleep_mode == 0) {
+            sleep_mode = WIFI_PS_NONE;
+        }
+        
+        esp_wifi_set_ps(sleep_mode);
+    }
+}
+#endif
+
+void wifi_config_connect(const uint8_t mode, const uint8_t phy) {
 #else
 void wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool with_reset) {
 #endif
@@ -1501,25 +1563,7 @@ void wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool with_
     };
     
     sdk_wifi_station_set_config(&sta_config);
-
-#if defined(CONFIG_IDF_TARGET_ESP32C5)
-    esp_wifi_set_band_mode(WIFI_BAND_MODE_AUTO);
-#endif
-    
-    if (mode == 0) {
-        if (!context->bandwidth_40) {
-            esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20);
-        }
-        
-        if (context->wifi_sleep_mode == 0) {
-            esp_wifi_set_ps(WIFI_PS_NONE);
-        } else {
-            esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
-        }
-    }
-    
 #else
-    
     if (with_reset) {
         wifi_config_reset();
         vTaskDelay(MS_TO_TICKS(5000));
@@ -1593,8 +1637,10 @@ void wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool with_
         sdk_wifi_station_set_config(&sta_config);
         sdk_wifi_station_set_auto_connect(true);
 
-#ifndef ESP_PLATFORM
-        wifi_config_toggle_phy_mode(phy);
+        wifi_config_set_phy_mode(phy);
+
+#ifdef ESP_PLATFORM
+        wifi_config_set_advanced_wifi_params(mode);
 #endif
         
         sdk_wifi_station_connect();
@@ -1608,8 +1654,10 @@ void wifi_config_connect(const uint8_t mode, const uint8_t phy, const bool with_
         sdk_wifi_station_set_config(&sta_config);
         sdk_wifi_station_set_auto_connect(true);
         
-#ifndef ESP_PLATFORM
-        wifi_config_toggle_phy_mode(phy);
+        wifi_config_set_phy_mode(phy);
+        
+#ifdef ESP_PLATFORM
+        wifi_config_set_advanced_wifi_params(mode);
 #endif
         
         if (wifi_mode == 4) {
@@ -1637,10 +1685,12 @@ static void wifi_config_station_connect() {
         free(wifi_ssid);
         
 #ifdef ESP_PLATFORM
-        wifi_config_connect(0);
+        wifi_config_connect(0, context->wifi_phy_mode);
 #else
-        int8_t phy_mode = 3;
-        sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
+        int8_t phy_mode = context->wifi_phy_mode;
+        if (phy_mode == WIFI_PHY_MODE_WITHFALLBACK) {
+            sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
+        }
         wifi_config_connect(0, phy_mode, true);
 #endif
         
@@ -1677,9 +1727,9 @@ static void wifi_config_station_connect() {
 }
 
 #ifdef ESP_PLATFORM
-void wifi_config_init(void (*on_wifi_ready)(), char* custom_hostname, const int param, const uint8_t wifi_sleep_mode, const bool bandwidth_40) {
+void wifi_config_init(void (*on_wifi_ready)(), char* custom_hostname, const int param, const int wifi_phy_mode, const uint8_t wifi_sleep_mode, const bool bandwidth_40) {
 #else
-void wifi_config_init(void (*on_wifi_ready)(), char* custom_hostname, const int param) {
+void wifi_config_init(void (*on_wifi_ready)(), char* custom_hostname, const int param, const int wifi_phy_mode) {
 #endif
     INFO("Wifi init");
     
@@ -1710,6 +1760,7 @@ void wifi_config_init(void (*on_wifi_ready)(), char* custom_hostname, const int 
     
     context->on_wifi_ready = on_wifi_ready;
     context->param = param;
+    context->wifi_phy_mode = wifi_phy_mode;
 
     xTaskCreate(wifi_config_station_connect, "WCO", (TASK_SIZE_FACTOR * 512), NULL, (tskIDLE_PRIORITY + 1), NULL);
 }

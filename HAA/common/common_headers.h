@@ -101,8 +101,10 @@
 #define WIFI_AP_ENABLE_SYSPARAM             "wifi_ap"
 #define WIFI_AP_PASSWORD_SYSPARAM           "wifi_ap_pass"
 
+// Wifi PHY Mode fallback only for ESP8266
 #ifndef ESP_PLATFORM
 #define WIFI_LAST_WORKING_PHY_SYSPARAM      "wifi_phy"
+#define WIFI_PHY_MODE_WITHFALLBACK          (4)
 #endif
 
 #define HOMEKIT_RE_PAIR_SYSPARAM            "re_pair"

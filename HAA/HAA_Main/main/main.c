@@ -123,6 +123,7 @@ main_config_t main_config = {
     .wifi_ping_max_errors = 255,
     .wifi_error_count = 0,
     .wifi_roaming_count = 1,
+    .wifi_phy_mode = 0,
     
     .setup_mode_toggle_counter = INT8_MIN,
     .setup_mode_toggle_counter_max = SETUP_MODE_DEFAULT_ACTIVATE_COUNT,
@@ -175,6 +176,10 @@ static unsigned int IRAM private_abs(int number) {
 
 static void show_freeheap() {
     INFO("Free Heap %"HAA_LONGINT_F, xPortGetFreeHeapSize());
+}
+
+uint8_t get_wifi_phy_mode() {
+    return main_config.wifi_phy_mode;
 }
 
 // ESP-IDF ADC
@@ -1090,8 +1095,8 @@ void wifi_reconnection_task() {
             INFO("Wifi recon");
             
 #ifndef ESP_PLATFORM
-            int8_t phy_mode = 4;    // main_config.wifi_status == WIFI_STATUS_LONG_DISCONNECTED
-            if (main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
+            int8_t phy_mode = main_config.wifi_phy_mode;    // main_config.wifi_status == WIFI_STATUS_LONG_DISCONNECTED
+            if (phy_mode == WIFI_PHY_MODE_WITHFALLBACK && main_config.wifi_status == WIFI_STATUS_DISCONNECTED) {
                 phy_mode = 3;
                 sysparam_get_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, &phy_mode);
             }
@@ -1100,7 +1105,7 @@ void wifi_reconnection_task() {
             main_config.wifi_status = WIFI_STATUS_CONNECTING;
             
 #ifdef ESP_PLATFORM
-            wifi_config_connect(1);
+            wifi_config_connect(1, main_config.wifi_phy_mode);
 #else
             wifi_config_connect(1, phy_mode, true);
 #endif
@@ -1126,7 +1131,9 @@ void wifi_reconnection_task() {
             
             main_config.wifi_ip = new_ip;
             
+#ifndef ESP_PLATFORM
             save_last_working_phy();
+#endif
             
             homekit_mdns_announce_start();
             
@@ -5457,12 +5464,42 @@ bool free_monitor_type_is_pattern(const uint8_t fm_sensor_type) {
 
 void free_monitor_task(void* args) {
     int str_to_float(char* found, char* str, float* value) {
-        if (found < str + strlen(str)) {
+        const unsigned int str_end = (unsigned int) str + strlen(str);
+        
+        if ((unsigned int) found < str_end) {
             while (found[0] && !(CHAR_IS_NUMBER(found[0]))) {
+                if ((unsigned int) found + 4 < str_end) {
+                    if (tolower((unsigned char) found[0]) == 't' &&
+                        tolower((unsigned char) found[1]) == 'r' &&
+                        tolower((unsigned char) found[2]) == 'u' &&
+                        tolower((unsigned char) found[3]) == 'e') {     // true
+                        *value = 1.0;
+                        return true;
+                    }
+                    
+                    if (tolower((unsigned char) found[0]) == 'n' &&
+                        tolower((unsigned char) found[1]) == 'u' &&
+                        tolower((unsigned char) found[2]) == 'l' &&
+                        tolower((unsigned char) found[3]) == 'l') {     // null
+                        *value = -1.0;
+                        return true;
+                    }
+                    
+                    if ((unsigned int) found + 5 < str_end &&
+                        tolower((unsigned char) found[0]) == 'f' &&
+                        tolower((unsigned char) found[1]) == 'a' &&
+                        tolower((unsigned char) found[2]) == 'l' &&
+                        tolower((unsigned char) found[3]) == 's' &&
+                        tolower((unsigned char) found[4]) == 'e') {     // false
+                        *value = 0.0;
+                        return true;
+                    }
+                }
+                
                 found++;
             }
             
-            if (found[0]) {
+            if (found[0]) {     // number
                 if (found > str) {
                     found--;
                     
@@ -5471,7 +5508,6 @@ void free_monitor_task(void* args) {
                     }
                 }
                 
-                *value = atof(found);
                 return true;
             }
         }
@@ -5483,6 +5519,7 @@ void free_monitor_task(void* args) {
     
     if (args) {
         ch_group = args;
+        
     } else {
         uart_receiver_data_t* uart_receiver_data = main_config.uart_receiver_data;
         while (uart_receiver_data) {
@@ -5896,7 +5933,7 @@ void free_monitor_task(void* args) {
                                                 strcat(req, action_network->content);
                                             }
                                             
-                                            action_network->len--;
+                                            action_network->len--;  // Remove the last null char, only used for logs
                                         }
                                         
                                         result = new_net_con(action_network->host,
@@ -6712,7 +6749,7 @@ void net_action_task(void* pvParameters) {
                     }
                     
                     if (action_network->method_n != 4) {
-                        action_network->len--;
+                        action_network->len--;  // Remove the last null char, only used for logs
                     }
                     
                     uint8_t rcvtimeout_s = 1;
@@ -9953,6 +9990,11 @@ void normal_mode_init() {
         wifi_bandwidth_40 = (bool) cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_BANDWIDTH_40_SET)->valuefloat;
     }
 #endif
+    
+    // Wifi PHY Mode
+    if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_PHY_MODE_SET) != NULL) {
+        main_config.wifi_phy_mode = (uint8_t) cJSON_rsf_GetObjectItemCaseSensitive(json_config, WIFI_PHY_MODE_SET)->valuefloat;
+    }
     
     // Allowed Setup Mode Time
     if (cJSON_rsf_GetObjectItemCaseSensitive(json_config, ALLOWED_SETUP_MODE_TIME) != NULL) {
@@ -13745,11 +13787,11 @@ void normal_mode_init() {
     //main_config.wifi_status = WIFI_STATUS_CONNECTING;     // Not needed
     
 #ifdef ESP_PLATFORM
-    wifi_config_init(run_homekit_server, custom_hostname, 0, wifi_sleep_mode, wifi_bandwidth_40);
+    wifi_config_init(run_homekit_server, custom_hostname, 0, main_config.wifi_phy_mode, wifi_sleep_mode, wifi_bandwidth_40);
 #else
     int8_t phy_mode = 3;
     sysparam_set_int8(WIFI_LAST_WORKING_PHY_SYSPARAM, phy_mode);
-    wifi_config_init(run_homekit_server, custom_hostname, 0);
+    wifi_config_init(run_homekit_server, custom_hostname, 0, main_config.wifi_phy_mode);
 #endif
     
     led_blink(2);
@@ -13886,9 +13928,9 @@ void init_task() {
         printf_header();
         INFO("SETUP");
 #ifdef ESP_PLATFORM
-        wifi_config_init(NULL, NULL, param, 0, false);
+        wifi_config_init(NULL, NULL, param, 0, 0, false);
 #else
-        wifi_config_init(NULL, NULL, param);
+        wifi_config_init(NULL, NULL, param, 0);
 #endif
     }
     
@@ -13902,9 +13944,9 @@ void init_task() {
             adv_logger_init(ADV_LOGGER_UART0_UDP, NULL, false);
 #ifdef ESP_PLATFORM
             char* custom_hostname = strdup(name.value.string_value);    // ESP-IDF make a copy of the hostname string. This will be freed then
-            wifi_config_init(wifi_done, custom_hostname, 0, 0, false);
+            wifi_config_init(wifi_done, custom_hostname, 0, 0, 0, false);
 #else
-            wifi_config_init(wifi_done, main_config.name_value, 0);
+            wifi_config_init(wifi_done, main_config.name_value, 0, 0);
 #endif
             
 #ifdef ESP_PLATFORM

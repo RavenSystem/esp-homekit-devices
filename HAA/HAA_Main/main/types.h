@@ -382,8 +382,9 @@ typedef struct _main_config {
     int8_t setup_mode_toggle_counter;
     int8_t setup_mode_toggle_counter_max;
     
-    uint32_t zc_delay: 24;              // 16 bits
+    uint16_t zc_delay;
     uint8_t wifi_channel;
+    uint8_t wifi_phy_mode;
     
     uint16_t setup_mode_time;
     uint16_t wifi_roaming_count;
